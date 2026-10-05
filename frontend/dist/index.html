@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0d0f13">
+  <title>Morphorum</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar glass">
+      <div class="brand-block">
+        <div class="brand-mark">M</div>
+        <div>
+          <div class="brand">Morphorum</div>
+          <div class="subtitle">Local image & animation studio</div>
+        </div>
+      </div>
+      <div class="runtime-pill"><span class="status-dot" id="runtime-dot"></span><span id="runtime-text">Connecting…</span></div>
+    </header>
+
+    <nav class="main-nav glass" aria-label="Primary">
+      <button class="nav-button active" data-view="image"><span class="nav-icon">▣</span><span>Image</span></button>
+      <button class="nav-button" data-view="models"><span class="nav-icon">◫</span><span>Models</span></button>
+      <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
+      <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
+    </nav>
+
+    <main class="workspace">
+      <section class="view active" id="view-image">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">FIRST IMAGE MILESTONE</p>
+            <h1>Image Generation</h1>
+            <p class="muted">The UI shell is ready. Model indexing and the first SD/SDXL inference adapter are the next wiring step.</p>
+          </div>
+        </div>
+
+        <div class="grid two-column">
+          <article class="card glass">
+            <div class="card-header"><div><h2>Generation</h2><p class="muted">Model-aware controls will activate as adapters land.</p></div><span class="badge">Scaffold</span></div>
+            <label class="field-label">Prompt</label>
+            <textarea class="text-area" rows="5" placeholder="Describe the image you want to make…"></textarea>
+            <label class="field-label">Negative prompt</label>
+            <textarea class="text-area" rows="3" placeholder="Model dependent"></textarea>
+            <div class="field-grid">
+              <label><span>Model</span><select disabled><option>Configure model paths first</option></select></label>
+              <label><span>Resolution</span><select disabled><option>Model-aware presets</option></select></label>
+              <label><span>Steps</span><input type="number" value="25" disabled></label>
+              <label><span>CFG / Guidance</span><input type="number" value="7" disabled></label>
+              <label><span>Seed</span><input type="number" value="-1" disabled></label>
+              <label><span>Images</span><input type="number" value="1" disabled></label>
+            </div>
+            <button class="primary-button full-width" disabled>Generate <span class="button-note">adapter next</span></button>
+          </article>
+
+          <article class="card glass preview-card">
+            <div class="card-header"><div><h2>Preview</h2><p class="muted">Generated images will appear here immediately.</p></div></div>
+            <div class="preview-placeholder">
+              <div class="preview-glyph">◇</div>
+              <strong>No image yet</strong>
+              <span>Configure your model directories under Settings.</span>
+              <button class="secondary-button" data-jump="settings">Open Settings</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-models">
+        <div class="page-heading">
+          <div><p class="eyebrow">MODEL LIBRARY</p><h1>Models</h1><p class="muted">The path configuration is live now; model indexing is the next backend slice.</p></div>
+        </div>
+        <article class="card glass empty-state">
+          <div class="preview-glyph">◫</div>
+          <h2>Model index coming next</h2>
+          <p class="muted">Morphorum will scan the configured family directories without copying your checkpoints or LoRAs.</p>
+          <button class="secondary-button" data-jump="settings">Configure locations</button>
+        </article>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="page-heading settings-heading">
+          <div><p class="eyebrow">CONFIGURATION</p><h1>Settings</h1><p class="muted">Model and LoRA libraries remain where you already keep them.</p></div>
+          <div class="button-row">
+            <button class="secondary-button busy-button" id="load-settings"><span class="spinner"></span><span class="button-label">Reload</span></button>
+            <button class="primary-button busy-button" id="save-settings"><span class="spinner"></span><span class="button-label">Save Settings</span></button>
+          </div>
+        </div>
+
+        <div class="notice glass subtle">
+          <strong>Server-side paths</strong>
+          <span>Enter folders on the computer running Morphorum, for example <code>D:\AI\models\checkpoints</code>. Multiple directories per model family are supported.</span>
+        </div>
+
+        <div id="settings-loading" class="card glass loading-card"><span class="large-spinner"></span><span>Loading settings…</span></div>
+        <div id="model-path-cards" class="settings-grid" hidden></div>
+      </section>
+
+      <section class="view" id="view-console">
+        <div class="page-heading console-heading">
+          <div><p class="eyebrow">LIVE SERVER ACTIVITY</p><h1>Console</h1><p class="muted">A filtered view of what Morphorum is doing behind the UI.</p></div>
+          <div class="console-status"><span class="status-dot" id="console-dot"></span><span id="console-status">Connecting…</span></div>
+        </div>
+
+        <article class="card glass console-card">
+          <div class="console-toolbar">
+            <div class="filter-group" id="level-filters">
+              <span class="filter-label">Level</span>
+              <label class="chip"><input type="checkbox" value="debug"><span>Debug</span></label>
+              <label class="chip"><input type="checkbox" value="info" checked><span>Info</span></label>
+              <label class="chip"><input type="checkbox" value="warning" checked><span>Warn</span></label>
+              <label class="chip"><input type="checkbox" value="error" checked><span>Error</span></label>
+            </div>
+            <div class="filter-group" id="category-filters">
+              <span class="filter-label">Source</span>
+              <label class="chip"><input type="checkbox" value="api"><span>API</span></label>
+              <label class="chip"><input type="checkbox" value="runtime" checked><span>Runtime</span></label>
+              <label class="chip"><input type="checkbox" value="server" checked><span>Server</span></label>
+              <label class="chip"><input type="checkbox" value="model" checked><span>Models</span></label>
+              <label class="chip"><input type="checkbox" value="generation" checked><span>Generation</span></label>
+              <label class="chip"><input type="checkbox" value="system" checked><span>System</span></label>
+            </div>
+            <div class="console-actions">
+              <label class="chip"><input type="checkbox" id="auto-scroll" checked><span>Auto-scroll</span></label>
+              <button class="secondary-button compact" id="clear-console-view">Clear View</button>
+              <button class="secondary-button compact danger" id="clear-console-server">Clear Buffer</button>
+            </div>
+          </div>
+          <div class="console-window" id="console-window" role="log" aria-live="polite"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>
