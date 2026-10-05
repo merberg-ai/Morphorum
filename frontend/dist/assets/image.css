@@ -100,6 +100,7 @@
 @media (max-width: 640px) {
   .image-gallery { grid-template-columns: 1fr; }
   .generation-actions { flex-wrap: wrap; }
-  .generation-actions #cancel-generation { width: 100%; }
+  .generation-actions #cancel-generation,
+  .generation-actions #unload-model { width: 100%; }
   .progress-meta { align-items: flex-start; flex-direction: column; gap: 2px; }
 }
