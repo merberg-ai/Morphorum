@@ -127,3 +127,54 @@ def test_retired_sd15_family_is_rejected(tmp_path, monkeypatch) -> None:
 
     with pytest.raises(GenerationError, match="not supported"):
         manager._validate_request(GenerationRequest(model_id="model-1", prompt="test"))
+
+
+def test_manual_model_unload_and_busy_guard(tmp_path, monkeypatch) -> None:
+    checkpoint = tmp_path / "model.safetensors"
+    checkpoint.write_bytes(b"fake")
+    manager = GenerationManager()
+    manager._pipeline = object()
+    manager._pipeline_model_id = "model-1"
+    manager._pipeline_device = "cuda"
+
+    cleanup_calls: list[str] = []
+
+    def cleanup() -> None:
+        cleanup_calls.append("cleanup")
+        manager._pipeline = None
+        manager._pipeline_model_id = None
+        manager._pipeline_device = None
+
+    monkeypatch.setattr(manager, "_unload_pipeline", cleanup)
+    result = manager.unload_model()
+    assert result["status"] == "unloaded"
+    assert result["loaded"] is False
+    assert cleanup_calls == ["cleanup"]
+
+    active = GenerationJob(
+        id="active-job",
+        request=GenerationRequest(model_id="model-1", prompt="test"),
+        model=fake_model(checkpoint),
+        status="generating",
+    )
+    manager._jobs[active.id] = active
+    manager._pipeline = object()
+    with pytest.raises(GenerationError, match="while generation is active"):
+        manager.unload_model()
+
+
+def test_unload_after_generation_setting(monkeypatch) -> None:
+    manager = GenerationManager()
+    monkeypatch.setattr(
+        generation,
+        "load_settings",
+        lambda: {"performance": {"unload_after_generation": True}},
+    )
+    assert manager._unload_after_generation_enabled() is True
+
+    monkeypatch.setattr(
+        generation,
+        "load_settings",
+        lambda: {"performance": {"unload_after_generation": False}},
+    )
+    assert manager._unload_after_generation_enabled() is False
