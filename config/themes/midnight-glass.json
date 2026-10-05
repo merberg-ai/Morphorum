@@ -1,0 +1,28 @@
+{
+  "id": "midnight-glass",
+  "name": "Midnight Glass",
+  "appearance": "dark",
+  "colors": {
+    "background": "#0D0F13",
+    "surface": "rgba(24, 27, 34, 0.72)",
+    "surfaceStrong": "rgba(24, 27, 34, 0.90)",
+    "border": "rgba(255, 255, 255, 0.08)",
+    "text": "#EDF3F7",
+    "textMuted": "#87919C",
+    "accent": "#41D9FF",
+    "accentSecondary": "#A46CFF",
+    "success": "#65D68E",
+    "warning": "#F1C66D",
+    "danger": "#F07878"
+  },
+  "glass": {
+    "enabled": true,
+    "blurPx": 14,
+    "opacity": 0.72
+  },
+  "radiusPx": 12,
+  "motion": {
+    "enabled": true,
+    "durationMs": 160
+  }
+}

@@ -1,0 +1,38 @@
+app:
+  name: Morphorum
+  version_file: VERSION
+
+server:
+  host: 127.0.0.1
+  port: 7865
+  allow_lan: false
+  access_token: ""
+
+ui:
+  theme: midnight-glass
+  interface_mode: simple
+  remember_collapsed_cards: true
+
+models:
+  checkpoints: []
+  loras: []
+  vae: []
+  embeddings: []
+  controlnet: []
+
+scan:
+  recursive: true
+  cache_metadata: true
+  hash_new_files: true
+
+performance:
+  profile: auto
+  keep_model_loaded: true
+  unload_after_minutes: 0
+
+output:
+  directory: renders
+  image_format: png
+
+updates:
+  channel: stable

@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Local application state
+config/local.yaml
+config/user.yaml
+data/
+models/
+projects/
+renders/
+output/
+cache/
+logs/
+
+# Large AI/model files
+*.ckpt
+*.safetensors
+*.pt
+*.pth
+*.bin
+*.gguf
+*.onnx
+
+# Generated media
+*.mp4
+*.webm
+*.mov
+*.avi
+*.mkv
+
+# Environment/secrets
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

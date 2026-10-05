@@ -1,0 +1,232 @@
+# Morphorum architecture baseline
+
+This document records the initial architectural contract for Morphorum. It should change deliberately, not accidentally.
+
+## 1. Product shape
+
+Morphorum is a standalone local AI animation studio with a browser UI. The default server binds to localhost; LAN access is opt-in/configurable. The UI must work well on desktop and mobile browsers.
+
+Planned high-level stack:
+
+- Python backend with FastAPI-style HTTP APIs and WebSocket/event streaming
+- React + TypeScript + Vite-style frontend
+- FFmpeg media/encoding layer
+- SQLite for local indexes/job/project metadata where persistence is useful
+- swappable inference/model adapters
+
+The frontend must never own a render job. A browser may disconnect and reconnect while rendering continues server-side.
+
+## 2. Licensing strategy
+
+Morphorum's core is a clean-room implementation released under the Unlicense.
+
+Compatibility with Deforum means preserving useful file formats, prompt conventions, schedule semantics, and observable behavior. It does not mean copying GPL/AGPL implementation source. If the project later chooses to incorporate covered source, that requires an explicit project licensing decision first.
+
+## 3. Legacy project compatibility
+
+Classic Deforum JSON/TXT settings are a first-class input format.
+
+Principles:
+
+- Preserve familiar flat settings where possible.
+- Preserve prompt syntax such as `<lora:name:weight>`.
+- Preserve old schedule expression syntax and interpolation behavior as closely as practical.
+- Preserve unknown imported fields rather than deleting them.
+- Keep the original imported document available for diagnostics/migration.
+- Resolve old checkpoint/LoRA names against configured model directories and remembered mappings.
+- Never silently reinterpret an SD-specific parameter as a different architecture's parameter.
+
+Morphorum-specific additions should be namespaced (for example `_morphorum`) so legacy data remains recognizable.
+
+## 4. Deforum-style animation engine
+
+The animation/orchestration layer owns:
+
+- prompt/keyframe scheduling
+- numeric/expression schedule resolution
+- seeds
+- 2D transforms
+- 3D/depth transforms
+- cadence and intermediate-frame logic
+- masks/init images
+- color/coherence processing
+- optical-flow/hybrid/video workflows
+- frame manifests and resumability
+
+It produces a resolved `FrameContext` for inference instead of calling a model implementation directly.
+
+## 5. Model adapter system
+
+Inference is architecture-specific and lives behind adapters.
+
+Initial families:
+
+- Stable Diffusion 1.x/2.x
+- SDXL
+- Flux variants
+- Z-Image variants
+
+Adapters own model-specific behavior such as:
+
+- loading model bundles/single-file checkpoints
+- txt2img/img2img invocation
+- CFG/guidance/true-CFG/shift semantics
+- supported negative prompts
+- samplers/schedulers
+- steps and recommended ranges
+- precision/quantization/offload strategy
+- token/text-encoder limits
+- VAE handling
+- LoRA application
+- architecture-specific validation
+
+The animation engine must not assume all models expose classic CFG.
+
+## 6. Capability-driven UI
+
+A versioned model capability manifest defines which controls a selected model exposes, their ranges/defaults, whether they are schedulable, and validation rules.
+
+Configuration precedence:
+
+1. engine defaults
+2. family defaults
+3. model/variant defaults
+4. checkpoint profile/metadata
+5. user preset
+6. project settings
+
+Project settings win. User-requested incompatible values should produce warnings rather than mysterious silent changes.
+
+Simple mode presents model-appropriate concepts such as quality/creativity. Advanced mode exposes real architecture-specific parameters.
+
+## 7. Model library
+
+Users may configure multiple recursive directories for:
+
+- checkpoints/model bundles
+- LoRAs
+- VAEs
+- embeddings/textual inversion
+- ControlNet assets
+
+Morphorum indexes external files; it does not require copying them into the application directory.
+
+The index should cache path, size, mtime, hashes when needed, architecture/family, metadata, previews, aliases, and compatibility. It should avoid hashing hundreds of gigabytes on every launch.
+
+LoRA lookup must support legacy `<lora:name:weight>` syntax, extensionless names, relative/nested names, aliases, collision reporting, and architecture compatibility checks.
+
+## 8. Model lifecycle and performance
+
+Models have explicit lifecycle states such as unloaded/loading/ready/busy/unloading/error.
+
+Plan for:
+
+- keep-loaded/idle-unload policies
+- BF16/FP16/FP8/quantized variants where supported
+- CPU/model offload strategies
+- VAE tiling and architecture-specific memory controls
+- observed VRAM peak tracking and future VRAM estimates
+- model/checkpoint profiles storing preferred settings without editing model files
+
+## 9. Render manager
+
+Rendering is a server-side job system with queue support.
+
+Required state/event concepts:
+
+- preparing project
+- resolving/loading model
+- loading LoRAs/components
+- rendering frame N / total
+- diffusion step N / total when available
+- post-processing
+- interpolation
+- audio
+- video encoding
+- finalization
+- completed/failed/paused/cancelled
+
+The UI consumes events over WebSocket or an equivalent persistent event channel.
+
+Required UX:
+
+- live completed-frame preview
+- optional diagnostic preview modes (warped source/depth/flow/etc.)
+- overall progress
+- current-frame progress
+- rolling ETA/estimated finish time
+- elapsed time and frame rate
+- GPU/VRAM telemetry when available
+- collapsible logs
+- pause after current safe unit of work
+- cancel while retaining resumable output
+- crash/interruption recovery from persistent render manifests
+- browser reconnect from desktop/mobile without stopping jobs
+
+## 10. UI / theming / mobile
+
+The default theme is `Midnight Glass`: dark, restrained, translucent panels/cards, blur where supported, rounded surfaces, readable contrast, and touch-friendly controls.
+
+The theme system is token/data driven and switchable live from Settings. Planned themes include Midnight Glass, OLED Black, conventional Dark, Light, and additional community themes.
+
+UI requirements:
+
+- responsive/mobile-first layouts
+- collapsible cards with remembered state
+- bottom navigation/appropriate mobile navigation
+- large touch targets
+- phone-friendly prompt editing
+- mobile timeline/keyframe editor designed for narrow screens rather than shrinking a desktop timeline
+- Simple and Advanced interface modes on the same project data
+- spinners only for truly indeterminate work; real progress bars when measurable
+
+## 11. Installation / maintenance
+
+From the beginning Morphorum ships easy platform wrappers and one-line bootstrap entrypoints.
+
+Windows:
+
+- `install.bat`
+- `run.bat`
+- `run-lan.bat`
+- `update.bat`
+- `repair.bat`
+
+Linux:
+
+- `install.sh`
+- `run.sh`
+- `update.sh`
+- `repair.sh`
+
+Install/update/repair logic lives in scripts rather than duplicating complex logic in wrappers.
+
+A future first-run wizard configures model directories, output directory, hardware profile, and basic server settings.
+
+## 12. Security baseline
+
+- Bind localhost by default.
+- LAN binding is explicit.
+- Plan optional access-token protection for LAN use.
+- Do not expose arbitrary server filesystem browsing to unauthenticated remote clients.
+- Validate project/import paths and uploaded filenames.
+- Keep secrets/tokens out of project files and logs.
+
+## 13. Reproducibility
+
+Each render should save a manifest with enough information to reproduce/debug it, including:
+
+- Morphorum version and git commit
+- project/schema version
+- model path/identifier and hash when available
+- LoRA identifiers/hashes/weights
+- resolved architecture adapter and version
+- sampler/scheduler/guidance settings
+- seeds
+- relevant PyTorch/inference-library versions
+- GPU/device information
+- completed-frame state
+
+## 14. Extensibility
+
+New model families, depth estimators, optical-flow engines, ControlNet implementations, interpolation systems, and future video-model integrations should be attachable without rewriting the core renderer or UI.
