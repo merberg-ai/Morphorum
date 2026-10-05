@@ -1,6 +1,6 @@
 [project]
 name = "morphorum"
-version = "0.1.0a0"
+version = "0.1.0a1"
 description = "Standalone AI image and animation studio with Deforum-style compatibility."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
