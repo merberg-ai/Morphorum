@@ -85,6 +85,7 @@ def scan_models() -> dict[str, Any]:
     model_settings = settings.get("models", {})
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     rows: list[tuple[Any, ...]] = []
+    seen_ids: set[str] = set()
     warnings: list[str] = []
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     scanned_roots = 0
@@ -117,13 +118,17 @@ def scan_models() -> dict[str, Any]:
                     extension = path.suffix.lower()
                     if extension not in extensions:
                         continue
+                    record_id = _model_id(family, kind, path)
+                    if record_id in seen_ids:
+                        continue
                     try:
                         stat = path.stat()
                     except OSError:
                         continue
+                    seen_ids.add(record_id)
                     rows.append(
                         (
-                            _model_id(family, kind, path),
+                            record_id,
                             family,
                             kind,
                             path.stem,
