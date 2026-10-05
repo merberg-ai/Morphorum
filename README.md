@@ -1,8 +1,8 @@
 # Morphorum
 
-Standalone, modern Deforum-style AI image and animation studio with legacy project compatibility, multi-model support for Stable Diffusion, SDXL, Flux, and Z-Image, LoRAs, keyframed motion, live previews, and a mobile-friendly web UI.
+Standalone, modern Deforum-style AI image and animation studio with legacy project compatibility, multi-model support for SDXL, Flux, and Z-Image, LoRAs, keyframed motion, live previews, and a mobile-friendly web UI.
 
-> **Status:** early development. The installer/runtime foundation and health-check API are now implemented; diffusion/model rendering and the full frontend are the next milestones.
+> **Status:** early alpha. Installation, CUDA-backed SDXL image generation, model indexing, settings, telemetry, and the responsive browser UI are working; Flux, Z-Image, LoRA application, and animation are active development milestones.
 
 ## Goals
 
@@ -12,7 +12,7 @@ Core goals:
 
 - Import and preserve classic Deforum JSON/TXT projects.
 - Preserve familiar prompt syntax such as `<lora:name:weight>`.
-- Support SD 1.x/2.x, SDXL, Flux, Z-Image, and compatible LoRAs through model-specific adapters.
+- Support SDXL, Flux, Z-Image, and their compatible LoRAs through model-specific adapters, with an extensible registry for future modern model families.
 - Include a first-class single-image workspace with WebUI-style fixed/increment/random seed behavior, batches, model-aware controls, and easy resolution selection.
 - Scan checkpoints, LoRAs, VAEs, embeddings, and ControlNet assets from configurable directories without copying them into Morphorum.
 - Provide capability-driven model settings instead of pretending every architecture uses the same CFG/sampler/scheduler controls.
@@ -116,13 +116,13 @@ Maintenance:
 ./repair.sh
 ```
 
-The current runtime foundation listens on port `7865`. After launch, `http://127.0.0.1:7865/` displays the temporary Morphorum runtime page and `/api/health` exposes the health check used by the installer self-test.
+Morphorum listens on port `7865` by default. After launch, `http://127.0.0.1:7865/` opens the browser UI and `/api/health` exposes the health check used by the installer self-test.
 
 ## Project philosophy
 
 Morphorum keeps the old Deforum project vocabulary where compatibility matters, but separates animation/orchestration from model inference. The Deforum-style engine owns schedules, prompts, transforms, cadence, depth, frame state, and rendering flow. Model adapters own architecture-specific inference details such as CFG/guidance behavior, compatible samplers/schedulers, text encoders, precision, LoRA application, and VRAM strategy.
 
-The selected model should therefore drive its own configuration UI. SD, SDXL, Flux, and Z-Image are not the same architecture wearing different filenames, despite software occasionally behaving as though they are.
+The selected model should therefore drive its own configuration UI. SDXL, Flux, and Z-Image are not the same architecture wearing different filenames, despite software occasionally behaving as though they are.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/ROADMAP.md](docs/ROADMAP.md) for the current design baseline.
 
