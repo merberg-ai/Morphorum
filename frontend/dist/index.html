@@ -19,7 +19,27 @@
           <div class="subtitle">Local image & animation studio</div>
         </div>
       </div>
-      <div class="runtime-pill"><span class="status-dot" id="runtime-dot"></span><span id="runtime-text">Connecting…</span></div>
+      <div class="topbar-right">
+        <div class="telemetry-strip" id="telemetry-strip" aria-label="System telemetry">
+          <div class="telemetry-item" title="CPU utilization">
+            <div class="telemetry-head"><span>CPU</span><strong id="telemetry-cpu-value">--%</strong></div>
+            <div class="telemetry-track"><div class="telemetry-fill" id="telemetry-cpu-fill"></div></div>
+          </div>
+          <div class="telemetry-item" title="Available system memory">
+            <div class="telemetry-head"><span>RAM free</span><strong id="telemetry-ram-value">--</strong></div>
+            <div class="telemetry-track"><div class="telemetry-fill free" id="telemetry-ram-fill"></div></div>
+          </div>
+          <div class="telemetry-item gpu-telemetry" title="GPU utilization">
+            <div class="telemetry-head"><span>GPU</span><strong id="telemetry-gpu-value">--%</strong></div>
+            <div class="telemetry-track"><div class="telemetry-fill" id="telemetry-gpu-fill"></div></div>
+          </div>
+          <div class="telemetry-item gpu-telemetry" title="Available GPU memory">
+            <div class="telemetry-head"><span>VRAM free</span><strong id="telemetry-vram-value">--</strong></div>
+            <div class="telemetry-track"><div class="telemetry-fill free" id="telemetry-vram-fill"></div></div>
+          </div>
+        </div>
+        <div class="runtime-pill"><span class="status-dot" id="runtime-dot"></span><span id="runtime-text">Connecting…</span></div>
+      </div>
     </header>
 
     <nav class="main-nav glass" aria-label="Primary">
