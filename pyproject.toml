@@ -14,6 +14,12 @@ dependencies = [
   "PyYAML>=6,<7",
 ]
 
+[dependency-groups]
+dev = [
+  "pytest>=8,<10",
+  "ruff>=0.9,<1",
+]
+
 [project.scripts]
 morphorum = "morphorum.cli:main"
 
@@ -26,6 +32,10 @@ package-dir = {"" = "backend"}
 
 [tool.setuptools.packages.find]
 where = ["backend"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
 
 [tool.ruff]
 target-version = "py312"
