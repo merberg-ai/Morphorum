@@ -13,9 +13,11 @@ def test_health_endpoint() -> None:
     assert payload["version"]
 
 
-def test_root_placeholder() -> None:
+def test_root_serves_application_shell() -> None:
     with TestClient(app) as client:
         response = client.get("/")
     assert response.status_code == 200
     assert "Morphorum" in response.text
-    assert "runtime foundation is installed" in response.text
+    assert "Image Generation" in response.text
+    assert "Settings" in response.text
+    assert "Console" in response.text
