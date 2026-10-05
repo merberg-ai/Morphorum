@@ -31,17 +31,17 @@ export UV_NO_MODIFY_PATH=1
 export UV_PYTHON_INSTALL_DIR="$PYTHON_DIR"
 export UV_CACHE_DIR="$UV_CACHE"
 export UV_PROJECT_ENVIRONMENT="$ROOT/.venv"
+export HF_HOME="$ROOT/cache/huggingface"
+export HF_HUB_DISABLE_TELEMETRY=1
 
 mkdir -p "$UV_DIR" "$PYTHON_DIR" "$UV_CACHE" \
   "$ROOT/data" "$ROOT/projects" "$ROOT/outputs" "$ROOT/logs" \
-  "$ROOT/cache" "$ROOT/backups"
+  "$ROOT/cache" "$ROOT/cache/huggingface" "$ROOT/backups"
 
-# Repair executable bits after ZIP downloads or filesystems that do not preserve them.
 chmod +x "$ROOT"/*.sh "$ROOT/scripts"/*.sh 2>/dev/null || true
 
 LOG="$ROOT/logs/$MODE.log"
 exec > >(tee -a "$LOG") 2>&1
-
 trap 'fail "Installer stopped at line $LINENO. See $LOG"' ERR
 
 step "Mode: $MODE"
@@ -49,8 +49,8 @@ step "Installation root: $ROOT"
 
 FREE_KB="$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')"
 if [[ -n "$FREE_KB" && "$FREE_KB" =~ ^[0-9]+$ ]]; then
-  if (( FREE_KB < 2097152 )); then
-    fail "Less than 2 GiB free at the install location."
+  if (( FREE_KB < 8388608 )); then
+    fail "Less than 8 GiB free at the install location. The initial image-generation runtime needs at least 8 GiB."
     exit 1
   fi
   ok "Disk space: $((FREE_KB / 1048576)) GiB free"
@@ -86,9 +86,44 @@ if [[ ! -x "$VENV_PYTHON" ]]; then
   "$UV_BIN" venv --python 3.12 .venv
 fi
 
+TORCH_VERSION="2.14.0"
+TORCH_FLAVOR="cpu"
+NVIDIA_EXPECTED=0
+GPU_INFO=""
+if command -v nvidia-smi >/dev/null 2>&1; then
+  GPU_INFO="$(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null || true)"
+  DRIVER_RAW="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -n1 | tr -d '[:space:]' || true)"
+  DRIVER_MAJOR="${DRIVER_RAW%%.*}"
+  if [[ "$DRIVER_MAJOR" =~ ^[0-9]+$ ]]; then
+    if (( DRIVER_MAJOR >= 580 )); then
+      TORCH_FLAVOR="cu130"
+      NVIDIA_EXPECTED=1
+    elif (( DRIVER_MAJOR >= 560 )); then
+      TORCH_FLAVOR="cu126"
+      NVIDIA_EXPECTED=1
+    else
+      warn "NVIDIA driver $DRIVER_RAW is too old for Morphorum's pinned CUDA wheels; installing CPU PyTorch. Update the NVIDIA driver for GPU generation."
+    fi
+  fi
+  [[ -n "$GPU_INFO" ]] && ok "NVIDIA GPU: $GPU_INFO" || ok "NVIDIA driver tools detected."
+else
+  warn "nvidia-smi not detected; installing CPU PyTorch. NVIDIA generation requires a supported driver."
+fi
+
+step "Installing PyTorch $TORCH_VERSION ($TORCH_FLAVOR)..."
+"$UV_BIN" pip install --python "$VENV_PYTHON" --upgrade "torch==$TORCH_VERSION" \
+  --index-url "https://download.pytorch.org/whl/$TORCH_FLAVOR"
+
 step "Installing/updating Morphorum Python dependencies..."
 "$UV_BIN" pip install --python "$VENV_PYTHON" --upgrade --editable .
 ok "Python: $($VENV_PYTHON --version)"
+
+TORCH_INFO="$($VENV_PYTHON -c "import torch; print(f'PyTorch {torch.__version__}; CUDA build {torch.version.cuda}; CUDA available {torch.cuda.is_available()}')")"
+ok "$TORCH_INFO"
+if (( NVIDIA_EXPECTED == 1 )); then
+  CUDA_AVAILABLE="$($VENV_PYTHON -c "import torch; print('1' if torch.cuda.is_available() else '0')")"
+  [[ "$CUDA_AVAILABLE" == "1" ]] || warn "An NVIDIA GPU was detected, but PyTorch cannot use CUDA. Image generation will fall back to CPU until this is fixed."
+fi
 
 if [[ ! -f "$ROOT/data/config.yaml" ]]; then
   cp "$ROOT/config/default.yaml" "$ROOT/data/config.yaml"
@@ -110,17 +145,10 @@ else
   fi
 fi
 
-if command -v nvidia-smi >/dev/null 2>&1; then
-  GPU_INFO="$(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null || true)"
-  [[ -n "$GPU_INFO" ]] && ok "NVIDIA GPU: $GPU_INFO" || ok "NVIDIA driver tools detected."
-else
-  warn "nvidia-smi not detected. CPU/other backends may still work; NVIDIA rendering requires a supported driver."
-fi
-
 if (( SKIP_SELF_TEST == 0 )); then
-  step "Running Morphorum API self-test..."
+  step "Running Morphorum self-test..."
   "$VENV_PYTHON" -m morphorum self-test
-  ok "API health check passed."
+  ok "Morphorum self-test passed."
 fi
 
 printf '\n'
