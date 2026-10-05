@@ -90,6 +90,80 @@
     return state.settings.models[family];
   }
 
+  function ensurePreferences() {
+    state.settings ||= {};
+    state.settings.ui ||= {};
+    state.settings.performance ||= {};
+    if (!Number.isFinite(Number(state.settings.ui.image_preview_limit))) {
+      state.settings.ui.image_preview_limit = 5;
+    }
+    state.settings.performance.unload_after_generation = Boolean(
+      state.settings.performance.unload_after_generation
+    );
+  }
+
+  function createPreferencesCard() {
+    ensurePreferences();
+    const card = document.createElement('article');
+    card.className = 'card glass settings-preferences-card';
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const headingWrap = document.createElement('div');
+    const heading = document.createElement('h2');
+    heading.textContent = 'Generation Behavior';
+    const sub = document.createElement('p');
+    sub.className = 'muted';
+    sub.textContent = 'Control browser previews and model memory behavior.';
+    headingWrap.append(heading, sub);
+    header.appendChild(headingWrap);
+
+    const grid = document.createElement('div');
+    grid.className = 'field-grid settings-preference-grid';
+
+    const previewLabel = document.createElement('label');
+    const previewTitle = document.createElement('span');
+    previewTitle.textContent = 'Visible image previews';
+    const previewInput = document.createElement('input');
+    previewInput.type = 'number';
+    previewInput.id = 'image-preview-limit';
+    previewInput.min = '1';
+    previewInput.max = '50';
+    previewInput.step = '1';
+    previewInput.value = String(state.settings.ui.image_preview_limit || 5);
+    previewInput.addEventListener('input', () => {
+      const value = Math.max(1, Math.min(50, Number(previewInput.value) || 5));
+      state.settings.ui.image_preview_limit = value;
+    });
+    previewLabel.append(previewTitle, previewInput);
+
+    const unloadLabel = document.createElement('label');
+    unloadLabel.className = 'setting-toggle';
+    const unloadTitle = document.createElement('span');
+    unloadTitle.textContent = 'Model memory';
+    const unloadRow = document.createElement('div');
+    unloadRow.className = 'toggle-row';
+    const unloadInput = document.createElement('input');
+    unloadInput.type = 'checkbox';
+    unloadInput.id = 'unload-after-generation';
+    unloadInput.checked = Boolean(state.settings.performance.unload_after_generation);
+    unloadInput.addEventListener('change', () => {
+      state.settings.performance.unload_after_generation = unloadInput.checked;
+    });
+    const unloadCopy = document.createElement('div');
+    const unloadStrong = document.createElement('strong');
+    unloadStrong.textContent = 'Unload after generation';
+    const unloadHelp = document.createElement('small');
+    unloadHelp.textContent = 'Unload only after the full batch completes.';
+    unloadCopy.append(unloadStrong, unloadHelp);
+    unloadRow.append(unloadInput, unloadCopy);
+    unloadLabel.append(unloadTitle, unloadRow);
+
+    grid.append(previewLabel, unloadLabel);
+    card.append(header, grid);
+    return card;
+  }
+
   function makeButton(label, className = 'secondary-button') {
     const button = document.createElement('button');
     button.type = 'button';
@@ -235,6 +309,7 @@
     if (!container || !state.settings) return;
 
     container.replaceChildren();
+    container.appendChild(createPreferencesCard());
     for (const [family, fallbackLabel] of FAMILY_DEFS) {
       const familyData = ensureFamily(family);
       const card = document.createElement('article');
@@ -277,6 +352,7 @@
       }
       ingestValidation(payload.validation || []);
       renderSettings();
+      window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       if (announce) toast('Settings loaded', 'Configuration reloaded from the Morphorum server.', 'success');
     } catch (error) {
       toast('Could not load settings', error.message, 'error', 7000);
@@ -295,7 +371,16 @@
         loras: (source.loras || []).map(value => String(value).trim()).filter(Boolean),
       };
     }
-    return { models };
+    ensurePreferences();
+    return {
+      models,
+      ui: {
+        image_preview_limit: Math.max(1, Math.min(50, Number(state.settings.ui.image_preview_limit) || 5)),
+      },
+      performance: {
+        unload_after_generation: Boolean(state.settings.performance.unload_after_generation),
+      },
+    };
   }
 
   async function saveSettings() {
@@ -309,6 +394,7 @@
       state.settings = payload.settings || state.settings;
       ingestValidation(payload.validation || []);
       renderSettings();
+      window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       const warnings = (payload.validation || []).filter(item => !(item.exists && item.is_directory && item.readable));
       if (warnings.length) {
         toast('Settings saved', `${warnings.length} configured path${warnings.length === 1 ? '' : 's'} need attention.`, 'warning', 6000);
