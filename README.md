@@ -60,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/b
 You can also use `MORPHORUM_HOME`:
 
 ```bash
-MORPHORUM_HOME=/home/foo/bar curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | MORPHORUM_HOME=/home/foo/bar bash
 ```
 
 Install-location precedence is: explicit command-line path, then `MORPHORUM_HOME`, then the platform default.
