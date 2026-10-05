@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -17,6 +16,7 @@ from .console import (
     snapshot,
     sse_events,
 )
+from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, save_settings, validate_model_paths, validate_path
 from .system_info import doctor_report, install_manifest
@@ -135,6 +135,36 @@ def post_validate_path(payload: dict[str, Any]) -> dict[str, Any]:
 @app.post("/api/settings/validate")
 def post_validate_settings() -> dict[str, Any]:
     return {"validation": validate_model_paths()}
+
+
+@app.get("/api/models")
+def api_models(
+    family: str | None = None,
+    kind: str | None = None,
+    search: str | None = None,
+    limit: int = 500,
+) -> dict[str, Any]:
+    return {
+        "models": list_models(family=family, kind=kind, search=search, limit=limit),
+    }
+
+
+@app.get("/api/models/summary")
+def api_models_summary() -> dict[str, Any]:
+    return model_summary()
+
+
+@app.post("/api/models/scan")
+def api_models_scan() -> dict[str, Any]:
+    return scan_models()
+
+
+@app.get("/api/models/{model_id}")
+def api_model_detail(model_id: str) -> dict[str, Any]:
+    model = get_model(model_id)
+    if model is None:
+        raise HTTPException(status_code=404, detail="Model entry not found")
+    return model
 
 
 @app.get("/api/console")
