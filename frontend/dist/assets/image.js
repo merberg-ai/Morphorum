@@ -7,6 +7,10 @@
     activeJobId: null,
     pollTimer: null,
     renderedResults: new Set(),
+    previewLimit: 5,
+    currentResults: [],
+    currentResultJobId: null,
+    modelLoaded: false,
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -29,6 +33,108 @@
     return payload;
   }
 
+  function resultKey(result) {
+    return `${state.currentResultJobId || 'job'}:${result.filename}`;
+  }
+
+  function syncPreviewVisibility(hasImages) {
+    const gallery = qs('#image-gallery');
+    const empty = qs('#image-empty-preview');
+    if (empty) {
+      empty.hidden = hasImages;
+      empty.style.display = hasImages ? 'none' : '';
+    }
+    if (gallery) {
+      gallery.hidden = !hasImages;
+      gallery.style.display = hasImages ? '' : 'none';
+    }
+  }
+
+  function updateResultBadge(total, visible) {
+    const badge = qs('#result-count-badge');
+    if (!badge) return;
+    if (!total) {
+      badge.textContent = '0 images';
+    } else if (visible < total) {
+      badge.textContent = `${visible} of ${total} previews`;
+    } else {
+      badge.textContent = `${total} image${total === 1 ? '' : 's'}`;
+    }
+  }
+
+  function rebuildPreviewGallery() {
+    const gallery = qs('#image-gallery');
+    if (!gallery) return;
+    gallery.replaceChildren();
+    const visible = state.currentResults.slice(-state.previewLimit);
+    for (const result of visible) gallery.appendChild(resultCard(result));
+    state.renderedResults = new Set(state.currentResults.map(resultKey));
+    syncPreviewVisibility(visible.length > 0);
+    updateResultBadge(state.currentResults.length, visible.length);
+  }
+
+  function applySettings(settings) {
+    const requested = Number(settings?.ui?.image_preview_limit);
+    state.previewLimit = Number.isFinite(requested)
+      ? Math.max(1, Math.min(50, Math.trunc(requested)))
+      : 5;
+    rebuildPreviewGallery();
+  }
+
+  function updateUnloadButton() {
+    const button = qs('#unload-model');
+    if (!button) return;
+    button.disabled = !state.modelLoaded || Boolean(state.activeJobId);
+  }
+
+  async function refreshModelStatus() {
+    try {
+      const status = await api('/api/generation/model');
+      state.modelLoaded = Boolean(status.loaded);
+      const button = qs('#unload-model');
+      if (button) {
+        button.title = status.loaded && status.model_name
+          ? `Unload ${status.model_name} from memory`
+          : 'No model is currently loaded';
+      }
+      updateUnloadButton();
+      return status;
+    } catch (_) {
+      state.modelLoaded = false;
+      updateUnloadButton();
+      return null;
+    }
+  }
+
+  async function unloadModel() {
+    if (state.activeJobId) return;
+    const button = qs('#unload-model');
+    if (!button) return;
+    button.classList.add('busy');
+    button.disabled = true;
+    try {
+      const result = await api('/api/generation/model/unload', {
+        method: 'POST',
+        body: '{}',
+      });
+      state.modelLoaded = false;
+      updateUnloadButton();
+      toast(
+        result.status === 'unloaded' ? 'Model unloaded' : 'No model loaded',
+        result.status === 'unloaded'
+          ? 'The diffusion pipeline was removed from memory and CUDA cache cleanup was requested.'
+          : 'There was no loaded diffusion pipeline to unload.',
+        result.status === 'unloaded' ? 'success' : 'info'
+      );
+    } catch (error) {
+      toast('Could not unload model', error.message, 'error', 7000);
+      await refreshModelStatus();
+    } finally {
+      button.classList.remove('busy');
+      updateUnloadButton();
+    }
+  }
+
   function setEnabled(enabled) {
     for (const id of [
       '#image-resolution-preset', '#image-width', '#image-height', '#swap-resolution',
@@ -49,6 +155,7 @@
     const label = qs('.button-label', button);
     if (label) label.textContent = busy ? 'Generating…' : 'Generate';
     button.disabled = busy || !(state.model && state.capabilities[state.model.family]?.supported);
+    updateUnloadButton();
   }
 
   function populatePresets(capability) {
@@ -210,19 +317,35 @@
 
   function renderResults(job) {
     const gallery = qs('#image-gallery');
-    const empty = qs('#image-empty-preview');
-    const results = job.results || [];
-    if (!results.length) return;
-    empty.hidden = true;
-    gallery.hidden = false;
+    if (!gallery) return;
+    const results = Array.isArray(job.results) ? job.results : [];
 
+    if (state.currentResultJobId !== job.id) {
+      state.currentResultJobId = job.id;
+      state.currentResults = [];
+      state.renderedResults.clear();
+      gallery.replaceChildren();
+    }
+    state.currentResults = results.slice();
+
+    if (!results.length) {
+      syncPreviewVisibility(false);
+      updateResultBadge(0, 0);
+      return;
+    }
+
+    syncPreviewVisibility(true);
     for (const result of results) {
-      const key = `${job.id}:${result.filename}`;
+      const key = resultKey(result);
       if (state.renderedResults.has(key)) continue;
       state.renderedResults.add(key);
       gallery.appendChild(resultCard(result));
     }
-    qs('#result-count-badge').textContent = `${gallery.children.length} image${gallery.children.length === 1 ? '' : 's'}`;
+
+    while (gallery.children.length > state.previewLimit) {
+      gallery.firstElementChild?.remove();
+    }
+    updateResultBadge(results.length, gallery.children.length);
   }
 
   function finishJob(job) {
@@ -233,6 +356,7 @@
     qs('#cancel-generation').hidden = true;
     updateProgress(job);
     renderResults(job);
+    refreshModelStatus();
 
     if (job.status === 'completed') {
       toast('Generation complete', `${job.results.length} image${job.results.length === 1 ? '' : 's'} generated.`, 'success', 5500);
@@ -278,6 +402,8 @@
   async function generate() {
     if (state.activeJobId) return;
     setGenerateBusy(true);
+    const unloadButton = qs('#unload-model');
+    if (unloadButton) unloadButton.disabled = true;
     qs('#cancel-generation').hidden = false;
     qs('#generation-progress').hidden = false;
     qs('#generation-status').textContent = 'Submitting generation job…';
@@ -288,18 +414,21 @@
         body: JSON.stringify(buildPayload()),
       });
       state.activeJobId = job.id;
+      state.currentResultJobId = job.id;
+      state.currentResults = [];
       state.renderedResults.clear();
       const gallery = qs('#image-gallery');
       gallery.replaceChildren();
-      gallery.hidden = true;
-      qs('#image-empty-preview').hidden = false;
-      qs('#result-count-badge').textContent = '0 images';
+      syncPreviewVisibility(false);
+      updateResultBadge(0, 0);
+      updateUnloadButton();
       toast('Generation started', `Job ${job.id} was queued.`, 'info');
       pollJob(job.id);
     } catch (error) {
       state.activeJobId = null;
       setGenerateBusy(false);
       qs('#cancel-generation').hidden = true;
+      refreshModelStatus();
       toast('Could not start generation', error.message, 'error', 8500);
     }
   }
@@ -353,11 +482,14 @@
     qs('#image-seed-mode')?.addEventListener('change', updateSeedMode);
     qs('#generate-image')?.addEventListener('click', generate);
     qs('#cancel-generation')?.addEventListener('click', cancel);
+    qs('#unload-model')?.addEventListener('click', unloadModel);
   }
 
-  window.MorphorumImage = { configureModel, loadCapabilities };
+  window.MorphorumImage = { configureModel, loadCapabilities, refreshModelStatus };
+  window.addEventListener('morphorum:settings-changed', event => applySettings(event.detail || {}));
   window.addEventListener('DOMContentLoaded', async () => {
     bind();
-    await loadCapabilities();
+    syncPreviewVisibility(false);
+    await Promise.all([loadCapabilities(), refreshModelStatus()]);
   });
 })();
