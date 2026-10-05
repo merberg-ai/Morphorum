@@ -2,7 +2,17 @@
 set -euo pipefail
 
 REPO="https://github.com/merberg-ai/Morphorum.git"
-INSTALL_ROOT="${MORPHORUM_HOME:-$HOME/Morphorum}"
+INSTALL_ROOT="${1:-${MORPHORUM_HOME:-$HOME/Morphorum}}"
+
+if [[ "$INSTALL_ROOT" == "~" ]]; then
+  INSTALL_ROOT="$HOME"
+elif [[ "$INSTALL_ROOT" == ~/* ]]; then
+  INSTALL_ROOT="$HOME/${INSTALL_ROOT#~/}"
+fi
+
+if [[ "$INSTALL_ROOT" != /* ]]; then
+  INSTALL_ROOT="$(pwd)/$INSTALL_ROOT"
+fi
 
 echo
 echo "Morphorum bootstrap"
@@ -13,6 +23,9 @@ if ! command -v git >/dev/null 2>&1; then
   echo "Git is required. Install git with your distribution package manager, then rerun this command." >&2
   exit 1
 fi
+
+INSTALL_PARENT="$(dirname "$INSTALL_ROOT")"
+mkdir -p "$INSTALL_PARENT"
 
 if [[ -d "$INSTALL_ROOT/.git" ]]; then
   echo "Existing Morphorum checkout found; updating..."
