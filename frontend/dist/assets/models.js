@@ -175,6 +175,10 @@
     if (model) localStorage.setItem('morphorum.image.modelId', model.id);
   }
 
+  function notifyImageSelection(select) {
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
   function populateImageModelSelect() {
     const select = qs('#image-model-select');
     if (!select) return;
@@ -197,6 +201,7 @@
     select.disabled = models.length === 0;
     if (models.some(model => model.id === previous)) select.value = previous;
     updateImageBadge();
+    notifyImageSelection(select);
   }
 
   function useModel(modelId) {
@@ -205,6 +210,7 @@
     if (!select || !model) return;
     select.value = modelId;
     updateImageBadge();
+    notifyImageSelection(select);
     qs('.nav-button[data-view="image"]')?.click();
     toast('Model selected', `${model.name} is selected for image generation.`, 'success');
   }
@@ -233,7 +239,7 @@
       if (result.warnings?.length) {
         toast('Model scan complete', `${result.total} file(s) indexed with ${result.warnings.length} warning(s).`, 'warning', 6000);
       } else {
-        toast('Model scan complete', `${result.total} file(s) indexed from ${result.scanned_roots} configured directorie(s).`, 'success');
+        toast('Model scan complete', `${result.total} file(s) indexed from ${result.scanned_roots} configured directories.`, 'success');
       }
     } catch (error) {
       toast('Model scan failed', error.message, 'error', 7000);
