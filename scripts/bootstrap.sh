@@ -56,7 +56,18 @@ INSTALL_PARENT="$(dirname "$INSTALL_ROOT")"
 mkdir -p "$INSTALL_PARENT"
 
 if [[ -d "$INSTALL_ROOT/.git" ]]; then
-  echo "Existing Morphorum checkout found; updating..."
+  chmod +x "$INSTALL_ROOT"/*.sh "$INSTALL_ROOT/scripts"/*.sh 2>/dev/null || true
+  if [[ -f "$INSTALL_ROOT/update.sh" ]]; then
+    echo "Existing Morphorum installation found; using guarded updater..."
+    bash "$INSTALL_ROOT/update.sh"
+    echo
+    echo "Morphorum is updated at $INSTALL_ROOT"
+    echo "Local: $INSTALL_ROOT/run.sh"
+    echo "LAN:   $INSTALL_ROOT/run-lan.sh"
+    exit 0
+  fi
+
+  echo "Legacy checkout has no guarded updater yet; performing one-time fast-forward update." >&2
   git -C "$INSTALL_ROOT" pull --ff-only
 elif [[ -d "$INSTALL_ROOT" ]] && [[ -n "$(ls -A "$INSTALL_ROOT" 2>/dev/null || true)" ]]; then
   echo "Install directory exists and is not a Morphorum git checkout: $INSTALL_ROOT" >&2
