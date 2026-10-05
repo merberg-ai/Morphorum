@@ -7,21 +7,26 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# Node / frontend
+# Morphorum-managed runtime
+.runtime/
+
+# Node / frontend developer dependencies
 node_modules/
 dist/
 .vite/
 
-# Local application state
+# Local application state and user data
 config/local.yaml
 config/user.yaml
 data/
 models/
 projects/
+outputs/
 renders/
 output/
 cache/
 logs/
+backups/
 
 # Large AI/model files
 *.ckpt
