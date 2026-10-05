@@ -14,11 +14,30 @@ ui:
   remember_collapsed_cards: true
 
 models:
-  checkpoints: []
-  loras: []
-  vae: []
-  embeddings: []
-  controlnet: []
+  sd15:
+    label: Stable Diffusion 1.x
+    checkpoints: []
+    loras: []
+  sd2:
+    label: Stable Diffusion 2.x
+    checkpoints: []
+    loras: []
+  sdxl:
+    label: SDXL
+    checkpoints: []
+    loras: []
+  flux:
+    label: Flux
+    checkpoints: []
+    loras: []
+  zimage:
+    label: Z-Image
+    checkpoints: []
+    loras: []
+  shared:
+    vae: []
+    embeddings: []
+    controlnet: []
 
 scan:
   recursive: true
