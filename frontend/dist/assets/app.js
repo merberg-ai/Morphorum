@@ -20,6 +20,7 @@
     events: [],
     lastEventId: 0,
     eventSource: null,
+    telemetryTimer: null,
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -405,6 +406,71 @@
     }
   }
 
+  function clampPercent(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.max(0, Math.min(100, number));
+  }
+
+  function formatGiB(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value)) return '--';
+    return (value / (1024 ** 3)).toFixed(value >= 10 * 1024 ** 3 ? 1 : 2);
+  }
+
+  function setTelemetryGauge(fillSelector, valueSelector, percent, label) {
+    const fill = qs(fillSelector);
+    const value = qs(valueSelector);
+    if (fill) fill.style.width = `${clampPercent(percent)}%`;
+    if (value) value.textContent = label;
+  }
+
+  async function loadTelemetry() {
+    try {
+      const data = await api('/api/system/telemetry');
+      setTelemetryGauge('#telemetry-cpu-fill', '#telemetry-cpu-value', data.cpu_percent, `${Math.round(clampPercent(data.cpu_percent))}%`);
+
+      const ram = data.ram || {};
+      setTelemetryGauge(
+        '#telemetry-ram-fill',
+        '#telemetry-ram-value',
+        ram.free_percent,
+        `${formatGiB(ram.available_bytes)} / ${formatGiB(ram.total_bytes)} GiB`
+      );
+
+      const gpuItems = qsa('.gpu-telemetry');
+      const gpu = data.gpu?.devices?.[0];
+      gpuItems.forEach(item => { item.hidden = !gpu; });
+      if (gpu) {
+        setTelemetryGauge(
+          '#telemetry-gpu-fill',
+          '#telemetry-gpu-value',
+          gpu.utilization_percent,
+          `${Math.round(clampPercent(gpu.utilization_percent))}%`
+        );
+        const totalBytes = Number(gpu.memory_total_mib) * 1024 ** 2;
+        const freeBytes = Number(gpu.memory_free_mib) * 1024 ** 2;
+        setTelemetryGauge(
+          '#telemetry-vram-fill',
+          '#telemetry-vram-value',
+          gpu.memory_free_percent,
+          `${formatGiB(freeBytes)} / ${formatGiB(totalBytes)} GiB`
+        );
+        const strip = qs('#telemetry-strip');
+        if (strip) strip.title = `${gpu.name} · ${gpu.temperature_c}°C`;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function telemetryLoop() {
+    const ok = await loadTelemetry();
+    window.clearTimeout(state.telemetryTimer);
+    state.telemetryTimer = window.setTimeout(telemetryLoop, ok ? 2500 : 6000);
+  }
+
   async function loadHealth() {
     const dot = qs('#runtime-dot');
     const text = qs('#runtime-text');
@@ -440,7 +506,7 @@
 
   async function start() {
     bindUi();
-    await Promise.allSettled([loadHealth(), loadSettings(), connectConsole()]);
+    await Promise.allSettled([loadHealth(), loadSettings(), connectConsole(), telemetryLoop()]);
   }
 
   window.MorphorumToast = toast;
