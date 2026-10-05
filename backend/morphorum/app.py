@@ -20,7 +20,7 @@ from .generation import GenerationError, generation_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, save_settings, validate_model_paths, validate_path
-from .system_info import doctor_report, install_manifest
+from .system_info import doctor_report, install_manifest, live_telemetry
 
 FRONTEND_DIR = ROOT / "frontend" / "dist"
 FRONTEND_INDEX = FRONTEND_DIR / "index.html"
@@ -96,6 +96,11 @@ def health() -> dict:
 @app.get("/api/system")
 def system() -> dict:
     return doctor_report()
+
+
+@app.get("/api/system/telemetry")
+def system_telemetry() -> dict:
+    return live_telemetry()
 
 
 @app.get("/api/install")
