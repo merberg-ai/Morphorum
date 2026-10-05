@@ -12,6 +12,7 @@ ui:
   theme: midnight-glass
   interface_mode: simple
   remember_collapsed_cards: true
+  image_preview_limit: 5
 
 models:
   sdxl:
@@ -39,6 +40,7 @@ scan:
 performance:
   profile: auto
   keep_model_loaded: true
+  unload_after_generation: false
   unload_after_minutes: 0
 
 paths:
