@@ -42,16 +42,35 @@ def command_self_test(_: argparse.Namespace) -> int:
     ensure_runtime_dirs()
     try:
         with TestClient(app) as client:
-            response = client.get("/api/health")
-            response.raise_for_status()
-            payload = response.json()
-            if payload.get("status") != "ok":
-                raise RuntimeError(f"unexpected health payload: {payload}")
+            health_response = client.get("/api/health")
+            health_response.raise_for_status()
+            health = health_response.json()
+            if health.get("status") != "ok":
+                raise RuntimeError(f"unexpected health payload: {health}")
+
+            frontend = client.get("/")
+            frontend.raise_for_status()
+            if "Morphorum" not in frontend.text or "Settings" not in frontend.text:
+                raise RuntimeError("frontend shell did not contain expected Morphorum UI markers")
+
+            settings_response = client.get("/api/settings")
+            settings_response.raise_for_status()
+            settings = settings_response.json().get("settings", {})
+            models = settings.get("models", {}) if isinstance(settings, dict) else {}
+            for family in ("sd15", "sd2", "sdxl", "flux", "zimage"):
+                if family not in models:
+                    raise RuntimeError(f"settings schema is missing model family: {family}")
+
+            console_response = client.get("/api/console?limit=10")
+            console_response.raise_for_status()
+            if not isinstance(console_response.json().get("events"), list):
+                raise RuntimeError("console endpoint did not return an events list")
+
         write_install_manifest({"self_test": "passed"})
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API health check OK.")
+    print("Morphorum self-test passed: API, frontend, settings, and console OK.")
     return 0
 
 
