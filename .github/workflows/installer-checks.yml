@@ -1,0 +1,55 @@
+name: Installer checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - '*.sh'
+      - '*.bat'
+      - '.github/workflows/installer-checks.yml'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - '*.sh'
+      - '*.bat'
+      - '.github/workflows/installer-checks.yml'
+
+jobs:
+  powershell-syntax:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Parse PowerShell scripts
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Path scripts -Filter '*.ps1' -Recurse | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Host "Syntax errors in $($_.FullName):" -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host $_.Message -ForegroundColor Red }
+            }
+          }
+          if ($failed) { exit 1 }
+
+  bash-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Parse shell scripts
+        run: |
+          set -e
+          find scripts -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+          find . -maxdepth 1 -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
