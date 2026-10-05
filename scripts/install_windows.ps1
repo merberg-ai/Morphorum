@@ -133,39 +133,46 @@ try {
     }
 
     $torchVersion = '2.14.0'
-    $torchFlavor = 'cpu'
     $nvidiaExpected = $false
     $gpu = $null
     if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
         $gpu = nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>$null
-        $driverRaw = nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>$null | Select-Object -First 1
-        $driverMajor = 0
-        if ($driverRaw -and [int]::TryParse(($driverRaw -split '\.')[0].Trim(), [ref]$driverMajor)) {
-            if ($driverMajor -ge 580) { $torchFlavor = 'cu130'; $nvidiaExpected = $true }
-            elseif ($driverMajor -ge 560) { $torchFlavor = 'cu126'; $nvidiaExpected = $true }
-            else { Warn "NVIDIA driver $driverRaw is too old for Morphorum's pinned CUDA wheels; installing CPU PyTorch. Update the NVIDIA driver for GPU generation." }
-        }
+        $nvidiaExpected = $true
         if ($gpu) { Okay "NVIDIA GPU: $($gpu -join '; ')" } else { Okay 'NVIDIA driver tools detected.' }
     } else {
-        Warn 'nvidia-smi not detected; installing CPU PyTorch. NVIDIA generation requires a supported driver.'
+        Warn 'nvidia-smi not detected; PyTorch backend auto-detection will fall back to CPU if no supported GPU is available.'
     }
 
-    Step "Installing PyTorch $torchVersion ($torchFlavor)..."
-    $torchIndex = "https://download.pytorch.org/whl/$torchFlavor"
-    & $UvExe pip install --python $VenvPython --upgrade "torch==$torchVersion" --index-url $torchIndex
-    if ($LASTEXITCODE -ne 0) { throw "PyTorch $torchVersion ($torchFlavor) installation failed." }
-
+    # Let uv select the most compatible PyTorch backend for the installed hardware.
+    # This also applies while resolving Morphorum dependencies such as accelerate.
+    $env:UV_TORCH_BACKEND = 'auto'
     Step 'Installing/updating Morphorum Python dependencies...'
     & $UvExe pip install --python $VenvPython --upgrade --editable .
     if ($LASTEXITCODE -ne 0) { throw 'Morphorum dependency installation failed.' }
+
+    # Install Torch LAST. Some ordinary PyPI dependency resolutions can otherwise
+    # replace a CUDA wheel with a newer CPU-only torch build.
+    Step "Installing PyTorch $torchVersion with automatic hardware backend selection..."
+    & $UvExe pip install --python $VenvPython --upgrade --reinstall-package torch "torch==$torchVersion" --torch-backend=auto
+    if ($LASTEXITCODE -ne 0) { throw "PyTorch $torchVersion hardware-specific installation failed." }
+
     Okay "Python: $(& $VenvPython --version)"
 
     $torchInfo = & $VenvPython -c "import torch; print(f'PyTorch {torch.__version__}; CUDA build {torch.version.cuda}; CUDA available {torch.cuda.is_available()}')"
     if ($LASTEXITCODE -ne 0) { throw 'PyTorch installed but could not be imported.' }
     Okay $torchInfo
+
     if ($nvidiaExpected) {
-        $cudaAvailable = (& $VenvPython -c "import torch; print('1' if torch.cuda.is_available() else '0')").Trim()
-        if ($cudaAvailable -ne '1') { Warn 'An NVIDIA GPU was detected, but PyTorch cannot use CUDA. Image generation will fall back to CPU until this is fixed.' }
+        $cudaCheck = & $VenvPython -c "import torch,sys; ok=torch.cuda.is_available() and torch.version.cuda is not None; print('1' if ok else '0'); sys.exit(0 if ok else 2)"
+        if ($LASTEXITCODE -ne 0 -or ($cudaCheck | Select-Object -Last 1).Trim() -ne '1') {
+            throw 'NVIDIA GPU detected, but Morphorum ended with a CPU-only or unusable PyTorch build. The installer will not silently continue with CPU generation.'
+        }
+
+        $cudaSmoke = & $VenvPython -c "import torch; x=torch.ones((64,64), device='cuda'); torch.cuda.synchronize(); print(f'{torch.cuda.get_device_name(0)}; CUDA {torch.version.cuda}; tensor OK')"
+        if ($LASTEXITCODE -ne 0) {
+            throw 'CUDA-enabled PyTorch installed, but a simple GPU tensor test failed.'
+        }
+        Okay "CUDA smoke test: $cudaSmoke"
     }
 
     $userConfig = Join-Path $Root 'data\config.yaml'
