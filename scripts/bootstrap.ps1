@@ -4,7 +4,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-
 $repo = 'https://github.com/merberg-ai/Morphorum.git'
 
 if ($InstallDir) {
@@ -19,7 +18,6 @@ if ($installRoot.StartsWith('~')) {
     $relativeHomePath = $installRoot.Substring(1).TrimStart([char[]]'\/')
     $installRoot = if ($relativeHomePath) { Join-Path $HOME $relativeHomePath } else { $HOME }
 }
-
 $installRoot = [System.IO.Path]::GetFullPath($installRoot)
 
 Write-Host ''
@@ -36,7 +34,9 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
             "$env:LocalAppData\Programs\Git\cmd\git.exe"
         )
         $gitExe = $gitCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-        if (-not $gitExe) { throw 'Git was installed but is not visible yet. Open a new PowerShell window and run the Morphorum install command again.' }
+        if (-not $gitExe) {
+            throw 'Git was installed but is not visible yet. Open a new PowerShell window and run the Morphorum install command again.'
+        }
     } else {
         throw 'Git is required and neither Git nor winget was found. Install Git, then rerun this command.'
     }
@@ -50,7 +50,18 @@ if ($installParent -and -not (Test-Path $installParent)) {
 }
 
 if (Test-Path (Join-Path $installRoot '.git')) {
-    Write-Host 'Existing Morphorum checkout found; updating...'
+    Write-Host 'Existing Morphorum installation found; using guarded updater...' -ForegroundColor Cyan
+    $updater = Join-Path $installRoot 'update.bat'
+    if (Test-Path $updater) {
+        & $updater
+        if ($LASTEXITCODE -ne 0) { throw "Morphorum update failed with exit code $LASTEXITCODE." }
+        Write-Host ''
+        Write-Host "Morphorum is updated at $installRoot" -ForegroundColor Green
+        Write-Host "Start it with: $installRoot\run.bat"
+        return
+    }
+
+    Write-Host 'Legacy checkout has no guarded updater yet; performing one-time fast-forward update.' -ForegroundColor Yellow
     & $gitExe -C $installRoot pull --ff-only
     if ($LASTEXITCODE -ne 0) { throw 'git pull failed. Local changes may need attention.' }
 } elseif (Test-Path $installRoot) {
