@@ -35,7 +35,9 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
                 "checkpoints": [str(checkpoint_dir)],
                 "loras": [str(lora_dir)],
             }
-        }
+        },
+        "ui": {"image_preview_limit": 7},
+        "performance": {"unload_after_generation": True},
     }
 
     with TestClient(app) as client:
@@ -48,6 +50,8 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
         settings = loaded.json()["settings"]
         assert settings["models"]["sdxl"]["checkpoints"] == [str(checkpoint_dir)]
         assert settings["models"]["sdxl"]["loras"] == [str(lora_dir)]
+        assert settings["ui"]["image_preview_limit"] == 7
+        assert settings["performance"]["unload_after_generation"] is True
 
         # Enabled modern families must remain present even when only one family is saved.
         for family in ("sdxl", "flux", "zimage"):
@@ -77,3 +81,14 @@ def test_console_snapshot_api() -> None:
     assert match["level"] == "warning"
     assert match["category"] == "model"
     assert match["message"] == "test model message"
+
+
+def test_model_lifecycle_api_when_nothing_is_loaded() -> None:
+    with TestClient(app) as client:
+        status = client.get("/api/generation/model")
+        assert status.status_code == 200
+        assert "loaded" in status.json()
+
+        unloaded = client.post("/api/generation/model/unload", json={})
+        assert unloaded.status_code == 200
+        assert unloaded.json()["loaded"] is False
