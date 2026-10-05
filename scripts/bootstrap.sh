@@ -37,9 +37,10 @@ else
   git clone "$REPO" "$INSTALL_ROOT"
 fi
 
-chmod +x "$INSTALL_ROOT/install.sh" "$INSTALL_ROOT/run.sh" "$INSTALL_ROOT/update.sh" "$INSTALL_ROOT/repair.sh" 2>/dev/null || true
+chmod +x "$INSTALL_ROOT"/*.sh "$INSTALL_ROOT/scripts"/*.sh 2>/dev/null || true
 "$INSTALL_ROOT/install.sh"
 
 echo
 echo "Morphorum is installed at $INSTALL_ROOT"
-echo "Start it with: $INSTALL_ROOT/run.sh"
+echo "Local: $INSTALL_ROOT/run.sh"
+echo "LAN:   $INSTALL_ROOT/run-lan.sh"
