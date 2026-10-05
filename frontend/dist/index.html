@@ -33,26 +33,26 @@
           <div>
             <p class="eyebrow">FIRST IMAGE MILESTONE</p>
             <h1>Image Generation</h1>
-            <p class="muted">The UI shell is ready. Model indexing and the first SD/SDXL inference adapter are the next wiring step.</p>
+            <p class="muted">Model discovery is live. The first SD/SDXL inference adapter is the next layer.</p>
           </div>
         </div>
 
         <div class="grid two-column">
           <article class="card glass">
-            <div class="card-header"><div><h2>Generation</h2><p class="muted">Model-aware controls will activate as adapters land.</p></div><span class="badge">Scaffold</span></div>
+            <div class="card-header"><div><h2>Generation</h2><p class="muted">Model-aware controls will activate as adapters land.</p></div><span class="badge" id="image-model-family-badge">No model</span></div>
             <label class="field-label">Prompt</label>
             <textarea class="text-area" rows="5" placeholder="Describe the image you want to make…"></textarea>
             <label class="field-label">Negative prompt</label>
             <textarea class="text-area" rows="3" placeholder="Model dependent"></textarea>
             <div class="field-grid">
-              <label><span>Model</span><select disabled><option>Configure model paths first</option></select></label>
+              <label><span>Model</span><select id="image-model-select"><option value="">Scan models first</option></select></label>
               <label><span>Resolution</span><select disabled><option>Model-aware presets</option></select></label>
               <label><span>Steps</span><input type="number" value="25" disabled></label>
               <label><span>CFG / Guidance</span><input type="number" value="7" disabled></label>
               <label><span>Seed</span><input type="number" value="-1" disabled></label>
               <label><span>Images</span><input type="number" value="1" disabled></label>
             </div>
-            <button class="primary-button full-width" disabled>Generate <span class="button-note">adapter next</span></button>
+            <button class="primary-button full-width" disabled>Generate <span class="button-note">inference adapter next</span></button>
           </article>
 
           <article class="card glass preview-card">
@@ -60,22 +60,48 @@
             <div class="preview-placeholder">
               <div class="preview-glyph">◇</div>
               <strong>No image yet</strong>
-              <span>Configure your model directories under Settings.</span>
-              <button class="secondary-button" data-jump="settings">Open Settings</button>
+              <span>Configure model folders, scan, and select a checkpoint.</span>
+              <div class="button-row">
+                <button class="secondary-button" data-jump="settings">Settings</button>
+                <button class="secondary-button" data-jump="models">Models</button>
+              </div>
             </div>
           </article>
         </div>
       </section>
 
       <section class="view" id="view-models">
-        <div class="page-heading">
-          <div><p class="eyebrow">MODEL LIBRARY</p><h1>Models</h1><p class="muted">The path configuration is live now; model indexing is the next backend slice.</p></div>
+        <div class="page-heading models-heading">
+          <div><p class="eyebrow">MODEL LIBRARY</p><h1>Models</h1><p class="muted">Morphorum indexes configured files in place. Nothing is copied into the app.</p></div>
+          <button class="primary-button busy-button" id="scan-models"><span class="spinner"></span><span class="button-label">Scan Models</span></button>
         </div>
-        <article class="card glass empty-state">
-          <div class="preview-glyph">◫</div>
-          <h2>Model index coming next</h2>
-          <p class="muted">Morphorum will scan the configured family directories without copying your checkpoints or LoRAs.</p>
-          <button class="secondary-button" data-jump="settings">Configure locations</button>
+
+        <div class="model-summary-row" id="model-summary-row">
+          <div class="mini-stat glass"><span class="mini-stat-value" id="model-total">0</span><span class="mini-stat-label">Indexed files</span></div>
+          <div class="mini-stat glass"><span class="mini-stat-value" id="checkpoint-total">0</span><span class="mini-stat-label">Checkpoints</span></div>
+          <div class="mini-stat glass"><span class="mini-stat-value" id="lora-total">0</span><span class="mini-stat-label">LoRAs</span></div>
+        </div>
+
+        <article class="card glass model-browser-card">
+          <div class="model-toolbar">
+            <input type="search" id="model-search" placeholder="Search models, filenames, or paths…">
+            <select id="model-family-filter">
+              <option value="">All families</option>
+              <option value="sd15">SD 1.x</option>
+              <option value="sd2">SD 2.x</option>
+              <option value="sdxl">SDXL</option>
+              <option value="flux">Flux</option>
+              <option value="zimage">Z-Image</option>
+            </select>
+            <select id="model-kind-filter">
+              <option value="">Models + LoRAs</option>
+              <option value="checkpoints">Checkpoints</option>
+              <option value="loras">LoRAs</option>
+            </select>
+          </div>
+          <div id="model-list" class="model-list">
+            <div class="model-empty"><span class="large-spinner"></span><span>Loading model index…</span></div>
+          </div>
         </article>
       </section>
 
