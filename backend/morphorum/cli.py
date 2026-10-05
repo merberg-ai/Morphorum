@@ -50,7 +50,7 @@ def command_self_test(_: argparse.Namespace) -> int:
 
             frontend = client.get("/")
             frontend.raise_for_status()
-            if "Morphorum" not in frontend.text or "Settings" not in frontend.text:
+            if "Morphorum" not in frontend.text or "Settings" not in frontend.text or "Image Generation" not in frontend.text:
                 raise RuntimeError("frontend shell did not contain expected Morphorum UI markers")
 
             settings_response = client.get("/api/settings")
@@ -61,6 +61,19 @@ def command_self_test(_: argparse.Namespace) -> int:
                 if family not in models:
                     raise RuntimeError(f"settings schema is missing model family: {family}")
 
+            models_response = client.get("/api/models?limit=1")
+            models_response.raise_for_status()
+            if not isinstance(models_response.json().get("models"), list):
+                raise RuntimeError("model index endpoint did not return a models list")
+
+            capabilities_response = client.get("/api/generation/capabilities")
+            capabilities_response.raise_for_status()
+            families = capabilities_response.json().get("families", {})
+            if not families.get("sd15", {}).get("supported"):
+                raise RuntimeError("SD 1.x generation capability is missing")
+            if not families.get("sdxl", {}).get("supported"):
+                raise RuntimeError("SDXL generation capability is missing")
+
             console_response = client.get("/api/console?limit=10")
             console_response.raise_for_status()
             if not isinstance(console_response.json().get("events"), list):
@@ -70,7 +83,7 @@ def command_self_test(_: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API, frontend, settings, and console OK.")
+    print("Morphorum self-test passed: API, frontend, settings, model index, generation capabilities, and console OK.")
     return 0
 
 
