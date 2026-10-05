@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+import copy
+import os
+import tempfile
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from .paths import DEFAULT_CONFIG, USER_CONFIG, ensure_runtime_dirs
+
+MODEL_FAMILIES = ("sd15", "sd2", "sdxl", "flux", "zimage")
+MODEL_PATH_KEYS = ("checkpoints", "loras")
+
+
+def _read_yaml(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    result = copy.deepcopy(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
+def _normalize_model_paths(settings: dict[str, Any]) -> dict[str, Any]:
+    models = settings.setdefault("models", {})
+    if not isinstance(models, dict):
+        models = {}
+        settings["models"] = models
+
+    for family in MODEL_FAMILIES:
+        family_settings = models.setdefault(family, {})
+        if not isinstance(family_settings, dict):
+            family_settings = {}
+            models[family] = family_settings
+        for path_key in MODEL_PATH_KEYS:
+            paths = family_settings.setdefault(path_key, [])
+            if not isinstance(paths, list):
+                paths = []
+                family_settings[path_key] = paths
+            family_settings[path_key] = [str(item) for item in paths if str(item).strip()]
+
+    return settings
+
+
+def load_settings() -> dict[str, Any]:
+    """Load shipped defaults merged with user settings.
+
+    Unknown user keys are preserved so newer/legacy settings survive a UI round-trip.
+    """
+    ensure_runtime_dirs()
+    defaults = _read_yaml(DEFAULT_CONFIG)
+    user = _read_yaml(USER_CONFIG)
+    return _normalize_model_paths(_deep_merge(defaults, user))
+
+
+def save_settings(update: dict[str, Any]) -> dict[str, Any]:
+    """Merge a settings update into the current user configuration and write atomically."""
+    if not isinstance(update, dict):
+        raise ValueError("settings payload must be an object")
+
+    ensure_runtime_dirs()
+    current_user = _read_yaml(USER_CONFIG)
+    merged_user = _normalize_model_paths(_deep_merge(current_user, update))
+
+    USER_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        prefix="config-",
+        suffix=".yaml.tmp",
+        dir=str(USER_CONFIG.parent),
+        text=True,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            yaml.safe_dump(merged_user, handle, sort_keys=False, allow_unicode=True)
+        os.replace(temp_name, USER_CONFIG)
+    finally:
+        try:
+            Path(temp_name).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    return load_settings()
+
+
+def validate_path(raw_path: str) -> dict[str, Any]:
+    value = str(raw_path or "").strip()
+    if not value:
+        return {
+            "path": value,
+            "exists": False,
+            "is_directory": False,
+            "readable": False,
+            "message": "Path is empty.",
+        }
+
+    expanded = Path(os.path.expandvars(os.path.expanduser(value)))
+    try:
+        resolved = expanded.resolve(strict=False)
+    except OSError:
+        resolved = expanded
+
+    exists = resolved.exists()
+    is_directory = resolved.is_dir() if exists else False
+    readable = os.access(resolved, os.R_OK) if exists else False
+
+    if not exists:
+        message = "Directory does not exist yet."
+    elif not is_directory:
+        message = "Path exists but is not a directory."
+    elif not readable:
+        message = "Directory exists but is not readable by Morphorum."
+    else:
+        message = "Directory is available."
+
+    return {
+        "path": value,
+        "resolved_path": str(resolved),
+        "exists": exists,
+        "is_directory": is_directory,
+        "readable": readable,
+        "message": message,
+    }
+
+
+def validate_model_paths(settings: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    source = settings or load_settings()
+    models = source.get("models", {}) if isinstance(source, dict) else {}
+    results: list[dict[str, Any]] = []
+
+    for family in MODEL_FAMILIES:
+        family_settings = models.get(family, {}) if isinstance(models, dict) else {}
+        if not isinstance(family_settings, dict):
+            continue
+        for path_key in MODEL_PATH_KEYS:
+            for raw_path in family_settings.get(path_key, []) or []:
+                result = validate_path(str(raw_path))
+                result.update({"family": family, "kind": path_key})
+                results.append(result)
+
+    return results
