@@ -65,6 +65,28 @@ def _normalize_model_paths(settings: dict[str, Any]) -> dict[str, Any]:
     return settings
 
 
+def _normalize_preferences(settings: dict[str, Any]) -> dict[str, Any]:
+    ui = settings.setdefault("ui", {})
+    if not isinstance(ui, dict):
+        ui = {}
+        settings["ui"] = ui
+    try:
+        preview_limit = int(ui.get("image_preview_limit", 5))
+    except (TypeError, ValueError):
+        preview_limit = 5
+    ui["image_preview_limit"] = max(1, min(preview_limit, 50))
+
+    performance = settings.setdefault("performance", {})
+    if not isinstance(performance, dict):
+        performance = {}
+        settings["performance"] = performance
+    unload = performance.get("unload_after_generation", False)
+    if not isinstance(unload, bool):
+        unload = str(unload).strip().lower() in {"1", "true", "yes", "on"}
+    performance["unload_after_generation"] = unload
+    return settings
+
+
 def load_settings() -> dict[str, Any]:
     """Load shipped defaults merged with user settings.
 
@@ -73,7 +95,7 @@ def load_settings() -> dict[str, Any]:
     ensure_runtime_dirs()
     defaults = _read_yaml(DEFAULT_CONFIG)
     user = _read_yaml(USER_CONFIG)
-    return _normalize_model_paths(_deep_merge(defaults, user))
+    return _normalize_preferences(_normalize_model_paths(_deep_merge(defaults, user)))
 
 
 def save_settings(update: dict[str, Any]) -> dict[str, Any]:
@@ -83,7 +105,7 @@ def save_settings(update: dict[str, Any]) -> dict[str, Any]:
 
     ensure_runtime_dirs()
     current_user = _read_yaml(USER_CONFIG)
-    merged_user = _normalize_model_paths(_deep_merge(current_user, update))
+    merged_user = _normalize_preferences(_normalize_model_paths(_deep_merge(current_user, update)))
 
     USER_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(
