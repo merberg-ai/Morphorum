@@ -1,6 +1,7 @@
 param(
     [switch]$Repair,
-    [switch]$Update
+    [switch]$Update,
+    [switch]$SkipSelfTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,73 +11,137 @@ Set-Location $Root
 function Step($text) { Write-Host "[Morphorum] $text" -ForegroundColor Cyan }
 function Okay($text) { Write-Host "[OK] $text" -ForegroundColor Green }
 function Warn($text) { Write-Host "[!] $text" -ForegroundColor Yellow }
+function Fail($text) { Write-Host "[X] $text" -ForegroundColor Red }
 
-Step "Installation root: $Root"
+$RuntimeDir = Join-Path $Root '.runtime'
+$UvDir = Join-Path $RuntimeDir 'uv'
+$UvExe = Join-Path $UvDir 'uv.exe'
+$PythonDir = Join-Path $RuntimeDir 'python'
+$UvCache = Join-Path $RuntimeDir 'uv-cache'
+$VenvPython = Join-Path $Root '.venv\Scripts\python.exe'
 
-if (Get-Command git -ErrorAction SilentlyContinue) { Okay "Git: $((git --version))" } else { Warn 'Git not found.' }
+$env:UV_INSTALL_DIR = $UvDir
+$env:UV_NO_MODIFY_PATH = '1'
+$env:UV_PYTHON_INSTALL_DIR = $PythonDir
+$env:UV_CACHE_DIR = $UvCache
+$env:UV_PROJECT_ENVIRONMENT = (Join-Path $Root '.venv')
 
-$python = $null
-if (Get-Command py -ErrorAction SilentlyContinue) {
-    try { & py -3.12 -c "import sys; print(sys.executable)" *> $null; if ($LASTEXITCODE -eq 0) { $python = @('py','-3.12') } } catch {}
-}
-if (-not $python -and (Get-Command python -ErrorAction SilentlyContinue)) { $python = @('python') }
+$dirs = @(
+    $RuntimeDir,
+    $UvDir,
+    $PythonDir,
+    $UvCache,
+    (Join-Path $Root 'data'),
+    (Join-Path $Root 'projects'),
+    (Join-Path $Root 'outputs'),
+    (Join-Path $Root 'logs'),
+    (Join-Path $Root 'cache'),
+    (Join-Path $Root 'backups')
+)
+foreach ($dir in $dirs) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
 
-if ($python) {
-    $pythonCmd = $python[0]
-    $pythonArgs = @()
-    if ($python.Count -gt 1) { $pythonArgs = $python[1..($python.Count-1)] }
-    $ver = & $pythonCmd @pythonArgs --version
-    Okay "Python: $ver"
+$mode = if ($Repair) { 'repair' } elseif ($Update) { 'update' } else { 'install' }
+$logPath = Join-Path $Root "logs\$mode.log"
+Start-Transcript -Path $logPath -Append | Out-Null
 
-    if (-not (Test-Path '.venv')) {
-        Step 'Creating Python virtual environment...'
-        & $pythonCmd @pythonArgs -m venv .venv
+try {
+    Step "Mode: $mode"
+    Step "Installation root: $Root"
+
+    try {
+        $driveRoot = [System.IO.Path]::GetPathRoot($Root)
+        $drive = [System.IO.DriveInfo]::new($driveRoot)
+        $freeGiB = [math]::Round($drive.AvailableFreeSpace / 1GB, 1)
+        if ($freeGiB -lt 2) { throw "Only $freeGiB GiB free on $driveRoot. Morphorum needs at least 2 GiB for the base runtime." }
+        Okay "Disk space: $freeGiB GiB free"
+    } catch {
+        if ($_.Exception.Message -like 'Only *') { throw }
+        Warn "Could not determine free disk space: $($_.Exception.Message)"
     }
 
-    $venvPython = Join-Path $Root '.venv\Scripts\python.exe'
-    if (Test-Path $venvPython) {
-        & $venvPython -m pip install --upgrade pip
-        if (Test-Path 'requirements.txt') {
-            Step 'Installing Python requirements...'
-            & $venvPython -m pip install -r requirements.txt
-        } elseif (Test-Path 'pyproject.toml') {
-            Step 'Installing Morphorum Python package...'
-            & $venvPython -m pip install -e .
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+            Step 'Git not found; installing Git with winget...'
+            winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -ne 0) { throw 'Git installation failed.' }
         } else {
-            Warn 'Backend dependency manifest has not landed yet; Python environment is ready.'
+            throw 'Git is required and neither Git nor winget is available.'
         }
-    }
-} else {
-    Warn 'Python was not found. The early repository scaffold can be installed, but rendering will require the supported Python runtime once backend code lands.'
-}
-
-if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { Okay "FFmpeg found." } else { Warn 'FFmpeg not found yet. Video encoding will require it once rendering lands.' }
-if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-    Okay 'NVIDIA driver tools detected.'
-} else {
-    Warn 'nvidia-smi not detected. This is fine for repository setup but GPU rendering requires a supported backend/device.'
-}
-
-New-Item -ItemType Directory -Force -Path projects,renders,data,logs,cache | Out-Null
-Okay 'Runtime directories ready.'
-
-if (Test-Path 'frontend\package.json') {
-    if (Get-Command npm -ErrorAction SilentlyContinue) {
-        Step 'Installing frontend dependencies...'
-        Push-Location frontend
-        npm install
-        if ($LASTEXITCODE -ne 0) { throw 'npm install failed.' }
-        npm run build
-        if ($LASTEXITCODE -ne 0) { throw 'frontend build failed.' }
-        Pop-Location
-        Okay 'Frontend built.'
     } else {
-        Warn 'Frontend exists but npm was not found.'
+        Okay "$(git --version)"
     }
-} else {
-    Warn 'Frontend application has not landed yet; skipping frontend build.'
-}
 
-Write-Host ''
-Okay 'Morphorum repository setup is complete.'
-if (-not (Test-Path 'app')) { Warn 'This is the initial project scaffold; the runnable application server is not implemented yet.' }
+    if (-not (Test-Path $UvExe)) {
+        Step 'Installing Morphorum-owned uv runtime manager...'
+        $installer = Invoke-RestMethod 'https://astral.sh/uv/install.ps1'
+        Invoke-Expression $installer
+        if (-not (Test-Path $UvExe)) { throw "uv installer completed but $UvExe was not found." }
+    }
+    Okay "uv: $(& $UvExe --version)"
+
+    Step 'Ensuring managed Python 3.12 runtime...'
+    & $UvExe python install 3.12
+    if ($LASTEXITCODE -ne 0) { throw 'uv could not install/find Python 3.12.' }
+
+    if (-not (Test-Path $VenvPython)) {
+        Step 'Creating Morphorum virtual environment...'
+        & $UvExe venv --python 3.12 .venv
+        if ($LASTEXITCODE -ne 0) { throw 'uv failed to create .venv.' }
+    }
+
+    Step 'Installing/updating Morphorum Python dependencies...'
+    & $UvExe pip install --python $VenvPython --upgrade --editable .
+    if ($LASTEXITCODE -ne 0) { throw 'Morphorum dependency installation failed.' }
+    Okay "Python: $(& $VenvPython --version)"
+
+    $userConfig = Join-Path $Root 'data\config.yaml'
+    if (-not (Test-Path $userConfig)) {
+        Copy-Item (Join-Path $Root 'config\default.yaml') $userConfig
+        Okay 'Created user configuration: data\config.yaml'
+    } else {
+        Okay 'Existing user configuration preserved.'
+    }
+
+    if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+            Step 'FFmpeg not found; installing Gyan.FFmpeg with winget...'
+            winget install --id Gyan.FFmpeg -e --source winget --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -ne 0) { Warn 'FFmpeg installation failed. Video encoding will not work until FFmpeg is installed.' }
+            else { Okay 'FFmpeg installed. A new terminal may be required before its command alias appears.' }
+        } else {
+            Warn 'FFmpeg not found and winget is unavailable. Video encoding will require FFmpeg.'
+        }
+    } else {
+        Okay 'FFmpeg found.'
+    }
+
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        $gpu = nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>$null
+        if ($gpu) { Okay "NVIDIA GPU: $($gpu -join '; ')" } else { Okay 'NVIDIA driver tools detected.' }
+    } else {
+        Warn 'nvidia-smi not detected. CPU/other backends may still work; NVIDIA rendering will require a supported driver.'
+    }
+
+    if (-not $SkipSelfTest) {
+        Step 'Running Morphorum API self-test...'
+        & $VenvPython -m morphorum self-test
+        if ($LASTEXITCODE -ne 0) { throw 'Morphorum self-test failed.' }
+        Okay 'API health check passed.'
+    }
+
+    Write-Host ''
+    Okay 'Morphorum installation is ready.'
+    Write-Host "Local launch:  $Root\run.bat"
+    Write-Host "LAN launch:    $Root\run-lan.bat"
+    Write-Host "Diagnostics:   $Root\repair.bat"
+    Write-Host "Log:           $logPath"
+}
+catch {
+    Write-Host ''
+    Fail $_.Exception.Message
+    Write-Host "Installer log: $logPath"
+    exit 1
+}
+finally {
+    try { Stop-Transcript | Out-Null } catch {}
+}
