@@ -19,7 +19,7 @@ from .console import (
 from .generation import GenerationError, generation_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
-from .settings import load_settings, save_settings, validate_model_paths, validate_path
+from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
 from .system_info import doctor_report, install_manifest, live_telemetry
 
 FRONTEND_DIR = ROOT / "frontend" / "dist"
@@ -114,7 +114,13 @@ def get_settings() -> dict[str, Any]:
     return {
         "settings": settings,
         "validation": validate_model_paths(settings),
+        "model_families": model_family_definitions(),
     }
+
+
+@app.get("/api/models/families")
+def api_model_families() -> dict[str, Any]:
+    return {"families": model_family_definitions()}
 
 
 @app.put("/api/settings")
