@@ -16,6 +16,7 @@ from .console import (
     snapshot,
     sse_events,
 )
+from .generation import GenerationError, generation_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, save_settings, validate_model_paths, validate_path
@@ -120,11 +121,7 @@ def put_settings(payload: dict[str, Any]) -> dict[str, Any]:
         emit_console("warning", "runtime", f"Settings saved with {bad} model path warning(s).")
     else:
         emit_console("info", "runtime", "Settings saved successfully.")
-    return {
-        "status": "saved",
-        "settings": settings,
-        "validation": validation,
-    }
+    return {"status": "saved", "settings": settings, "validation": validation}
 
 
 @app.post("/api/settings/validate-path")
@@ -144,9 +141,7 @@ def api_models(
     search: str | None = None,
     limit: int = 500,
 ) -> dict[str, Any]:
-    return {
-        "models": list_models(family=family, kind=kind, search=search, limit=limit),
-    }
+    return {"models": list_models(family=family, kind=kind, search=search, limit=limit)}
 
 
 @app.get("/api/models/summary")
@@ -165,6 +160,50 @@ def api_model_detail(model_id: str) -> dict[str, Any]:
     if model is None:
         raise HTTPException(status_code=404, detail="Model entry not found")
     return model
+
+
+@app.get("/api/generation/capabilities")
+def generation_capabilities() -> dict[str, Any]:
+    return {"families": generation_manager.capabilities()}
+
+
+@app.get("/api/generation/jobs")
+def generation_jobs(limit: int = 50) -> dict[str, Any]:
+    return {"jobs": generation_manager.list(limit=limit)}
+
+
+@app.post("/api/generation/jobs", status_code=202)
+def create_generation_job(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return generation_manager.submit(payload)
+    except GenerationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/generation/jobs/{job_id}")
+def generation_job(job_id: str) -> dict[str, Any]:
+    job = generation_manager.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    return job
+
+
+@app.post("/api/generation/jobs/{job_id}/cancel")
+def cancel_generation_job(job_id: str) -> dict[str, Any]:
+    job = generation_manager.cancel(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    return job
+
+
+@app.get("/api/generation/jobs/{job_id}/images/{filename}")
+def generation_image(job_id: str, filename: str):
+    if "/" in filename or "\\" in filename or filename in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid image filename")
+    path = generation_manager.result_path(job_id, filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Generated image not found")
+    return FileResponse(path, media_type="image/png", filename=filename)
 
 
 @app.get("/api/console")
