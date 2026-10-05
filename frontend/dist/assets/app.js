@@ -1,9 +1,7 @@
 (() => {
   'use strict';
 
-  const FAMILY_DEFS = [
-    ['sd15', 'Stable Diffusion 1.x'],
-    ['sd2', 'Stable Diffusion 2.x'],
+  let FAMILY_DEFS = [
     ['sdxl', 'SDXL'],
     ['flux', 'Flux'],
     ['zimage', 'Z-Image'],
@@ -274,6 +272,9 @@
     try {
       const payload = await api('/api/settings');
       state.settings = payload.settings || {};
+      if (Array.isArray(payload.model_families) && payload.model_families.length) {
+        FAMILY_DEFS = payload.model_families.map(item => [item.id, item.label || item.id]);
+      }
       ingestValidation(payload.validation || []);
       renderSettings();
       if (announce) toast('Settings loaded', 'Configuration reloaded from the Morphorum server.', 'success');
