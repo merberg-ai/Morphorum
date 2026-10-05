@@ -178,6 +178,19 @@ def generation_capabilities() -> dict[str, Any]:
     return {"families": generation_manager.capabilities()}
 
 
+@app.get("/api/generation/model")
+def generation_model_status() -> dict[str, Any]:
+    return generation_manager.model_status()
+
+
+@app.post("/api/generation/model/unload")
+def generation_model_unload() -> dict[str, Any]:
+    try:
+        return generation_manager.unload_model()
+    except GenerationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.get("/api/generation/jobs")
 def generation_jobs(limit: int = 50) -> dict[str, Any]:
     return {"jobs": generation_manager.list(limit=limit)}
