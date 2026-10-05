@@ -16,7 +16,7 @@ if ($InstallDir) {
 }
 
 if ($installRoot.StartsWith('~')) {
-    $relativeHomePath = $installRoot.Substring(1).TrimStart([char[]]@('\\', '/'))
+    $relativeHomePath = $installRoot.Substring(1).TrimStart([char[]]'\/')
     $installRoot = if ($relativeHomePath) { Join-Path $HOME $relativeHomePath } else { $HOME }
 }
 
