@@ -33,11 +33,16 @@ Success criterion: import representative legacy projects and resolve schedule va
 - initial SD 1.x inference adapter
 - single-file checkpoint loading
 - LoRA parsing/loading with `<lora:name:weight>`
-- first-class Single Image workspace
+- first-class Single Image/still-image workspace
 - model-aware prompt/negative-prompt controls
 - steps/CFG/sampler/scheduler controls driven by the active adapter
+- WebUI-style seed controls: fixed, random, incrementing, configurable increment step, randomize, and reuse-last-seed
+- multiple-image generation from one prompt/job with explicit per-image resolved seeds
+- batch count/images control plus advanced batch-size control where supported
+- variation/subseed controls where the backend/model supports them
 - easy resolution picker with aspect-ratio presets, exact custom dimensions, orientation swap, divisibility validation, and megapixel feedback
 - image-generation progress, preview, batch status, ETA where meaningful, and lightweight session history
+- per-image metadata including resolved seed, model, LoRAs, dimensions, sampler/scheduler, and guidance settings
 - send generated image/settings into animation as a starting point
 - txt2img first-frame generation
 - img2img subsequent-frame generation
@@ -69,6 +74,7 @@ Success criterion: import representative legacy projects and resolve schedule va
 - LoRA family compatibility detection
 - precision/offload/memory profiles
 - single-image support for each enabled model family using the same adapter/capability layer
+- seed/batch modes normalized across adapters while preserving architecture-specific limitations
 
 ## 0.5.0-alpha.1 — depth and 3D
 
@@ -111,4 +117,5 @@ Throughout development:
 - do not make desktop-only UI decisions that render mobile unusable
 - do not force all architectures through SD-style settings
 - do not maintain separate contradictory model-parameter semantics between Single Image and Animation
+- do not hide the actual resolved seed sequence used for multi-image generation
 - do not copy GPL/AGPL implementation source into the Unlicensed core
