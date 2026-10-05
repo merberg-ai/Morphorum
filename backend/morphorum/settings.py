@@ -10,8 +10,21 @@ import yaml
 
 from .paths import DEFAULT_CONFIG, USER_CONFIG, ensure_runtime_dirs
 
-MODEL_FAMILIES = ("sd15", "sd2", "sdxl", "flux", "zimage")
+MODEL_FAMILY_DEFS = {
+    "sdxl": {"label": "SDXL", "supports_loras": True},
+    "flux": {"label": "Flux", "supports_loras": True},
+    "zimage": {"label": "Z-Image", "supports_loras": True},
+}
+MODEL_FAMILIES = tuple(MODEL_FAMILY_DEFS)
 MODEL_PATH_KEYS = ("checkpoints", "loras")
+
+
+def model_family_definitions() -> list[dict[str, Any]]:
+    """Return the enabled model-family registry in stable UI order."""
+    return [
+        {"id": family, **definition}
+        for family, definition in MODEL_FAMILY_DEFS.items()
+    ]
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
