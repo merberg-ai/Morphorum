@@ -14,14 +14,6 @@ ui:
   remember_collapsed_cards: true
 
 models:
-  sd15:
-    label: Stable Diffusion 1.x
-    checkpoints: []
-    loras: []
-  sd2:
-    label: Stable Diffusion 2.x
-    checkpoints: []
-    loras: []
   sdxl:
     label: SDXL
     checkpoints: []
