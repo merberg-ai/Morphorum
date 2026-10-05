@@ -44,7 +44,7 @@ def test_increment_and_fixed_seed_resolution(tmp_path, monkeypatch) -> None:
 def test_random_seed_resolution_produces_requested_count(tmp_path, monkeypatch) -> None:
     checkpoint = tmp_path / "model.safetensors"
     checkpoint.write_bytes(b"fake")
-    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint, "sd15"))
+    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint, "sdxl"))
     manager = GenerationManager()
     request = GenerationRequest(model_id="model-1", prompt="test", seed_mode="random", images=5)
     manager._validate_request(request)
@@ -117,3 +117,13 @@ def test_failed_job_unloads_pipeline_and_records_friendly_error(tmp_path, monkey
     assert job.eta_seconds is None
     assert job.error is not None
     assert "GPU memory exhausted" in job.error
+
+
+def test_retired_sd15_family_is_rejected(tmp_path, monkeypatch) -> None:
+    checkpoint = tmp_path / "legacy.safetensors"
+    checkpoint.write_bytes(b"fake")
+    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint, "sd15"))
+    manager = GenerationManager()
+
+    with pytest.raises(GenerationError, match="not supported"):
+        manager._validate_request(GenerationRequest(model_id="model-1", prompt="test"))
