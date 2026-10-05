@@ -230,3 +230,52 @@ Each render should save a manifest with enough information to reproduce/debug it
 ## 14. Extensibility
 
 New model families, depth estimators, optical-flow engines, ControlNet implementations, interpolation systems, and future video-model integrations should be attachable without rewriting the core renderer or UI.
+
+## 15. Single Image workspace
+
+Single-image generation is a first-class workspace alongside animation, not a diagnostic afterthought. It uses the same model library, capability manifests, inference adapters, LoRA resolver, presets, job/progress system, and reproducibility metadata as animation.
+
+The selected model drives the available controls. The UI must not show meaningless SD-style controls for architectures that do not use them. Depending on the active model, the workspace may expose:
+
+- positive prompt and model-supported negative prompt controls
+- seed with randomize/reuse controls
+- steps and model-appropriate recommended ranges
+- classic CFG, distilled guidance, true CFG, shift, or other model-specific guidance controls
+- compatible sampler and scheduler selections
+- checkpoint/model profile
+- LoRAs using familiar `<lora:name:weight>` syntax plus a visual LoRA browser
+- VAE/text-encoder/component overrides where supported
+- precision, quantization, offload, and memory controls in Advanced mode
+- batch count and optional variations
+
+### Resolution picker
+
+Resolution selection must be easy on desktop and mobile. It should provide:
+
+- named aspect groups such as Square, Landscape, Portrait, Ultrawide, and Custom
+- model-aware recommended/native presets rather than one universal list
+- common aspect ratios such as 1:1, 4:3, 3:2, 16:9, 9:16, and model-appropriate additional ratios
+- width and height fields for exact custom input
+- swap-orientation button
+- optional aspect-ratio lock
+- architecture-required divisibility snapping/validation
+- megapixel estimate and a warning when the chosen size is unusually expensive or outside the model's recommended range
+- remembered recent/favorite resolutions
+
+Choosing a preset changes ordinary width/height settings; presets are not opaque modes. Advanced users can always enter exact dimensions.
+
+### Generation UX
+
+A single-image job should show the same quality of feedback expected from animation:
+
+- indeterminate spinner while loading models/components
+- denoising-step progress when available
+- overall progress for batches
+- elapsed time and ETA where meaningful
+- GPU/VRAM telemetry when available
+- clear cancel/error state
+- generated image preview as soon as each image completes
+
+The workspace should keep a lightweight session history/gallery showing image, seed, model, LoRAs, resolution, and generation settings. Users should be able to reuse settings/seed, copy prompt metadata, save the image, and send a generated image directly into an animation project as an init/starting image without manually hunting for the file.
+
+Single-image settings and animation inference settings should share underlying schemas wherever semantics truly match, so testing a model in Single Image provides a reliable starting point for animation rather than maintaining two subtly different configuration systems.
