@@ -30,7 +30,7 @@ Success criterion: import representative legacy projects and resolve schedule va
 
 ## 0.2.0-alpha.1 — first real rendering
 
-- initial SD 1.x inference adapter
+- initial SDXL inference adapter
 - single-file checkpoint loading
 - LoRA parsing/loading with `<lora:name:weight>`
 - first-class Single Image/still-image workspace
@@ -62,9 +62,8 @@ Success criterion: import representative legacy projects and resolve schedule va
 - camera/keyframe timeline UI
 - pause/resume/cancel/crash recovery polish
 
-## 0.4.0-alpha.1 — multi-model
+## 0.4.0-alpha.1 — modern multi-model
 
-- SDXL adapter
 - Flux adapter(s)
 - Z-Image adapter(s)
 - capability-driven model configuration UI shared by Single Image and Animation
@@ -111,6 +110,7 @@ Success criterion: import representative legacy projects and resolve schedule va
 
 Throughout development:
 
+- runtime-supported model families are SDXL, Flux, and Z-Image; preserve legacy SD1/2 import metadata for migration without restoring those inference backends
 - do not break classic `<lora:name:weight>` prompt syntax
 - do not discard unknown legacy JSON fields
 - do not couple rendering to a browser session
