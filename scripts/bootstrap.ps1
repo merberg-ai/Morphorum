@@ -1,7 +1,26 @@
+param(
+    [Parameter(Position = 0)]
+    [string]$InstallDir
+)
+
 $ErrorActionPreference = 'Stop'
 
 $repo = 'https://github.com/merberg-ai/Morphorum.git'
-$installRoot = if ($env:MORPHORUM_HOME) { $env:MORPHORUM_HOME } else { Join-Path $HOME 'Morphorum' }
+
+if ($InstallDir) {
+    $installRoot = [Environment]::ExpandEnvironmentVariables($InstallDir)
+} elseif ($env:MORPHORUM_HOME) {
+    $installRoot = [Environment]::ExpandEnvironmentVariables($env:MORPHORUM_HOME)
+} else {
+    $installRoot = Join-Path $HOME 'Morphorum'
+}
+
+if ($installRoot.StartsWith('~')) {
+    $relativeHomePath = $installRoot.Substring(1).TrimStart([char[]]@('\\', '/'))
+    $installRoot = if ($relativeHomePath) { Join-Path $HOME $relativeHomePath } else { $HOME }
+}
+
+$installRoot = [System.IO.Path]::GetFullPath($installRoot)
 
 Write-Host ''
 Write-Host 'Morphorum bootstrap' -ForegroundColor Cyan
@@ -23,6 +42,11 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     }
 } else {
     $gitExe = (Get-Command git).Source
+}
+
+$installParent = Split-Path -Parent $installRoot
+if ($installParent -and -not (Test-Path $installParent)) {
+    New-Item -ItemType Directory -Force -Path $installParent | Out-Null
 }
 
 if (Test-Path (Join-Path $installRoot '.git')) {
