@@ -21,6 +21,7 @@ from .model_index import get_model
 from .paths import CACHE_DIR, OUTPUTS_DIR, ensure_runtime_dirs
 
 SUPPORTED_FAMILIES = {"sd15", "sd2", "sdxl"}
+FIRST_IMAGE_EXTENSIONS = {".safetensors", ".ckpt"}
 LORA_TAG = re.compile(r"<lora:([^:>]+):([+-]?(?:\d+(?:\.\d*)?|\.\d+))>", re.IGNORECASE)
 
 CAPABILITIES: dict[str, dict[str, Any]] = {
@@ -209,8 +210,15 @@ class GenerationManager:
         if family not in SUPPORTED_FAMILIES:
             capability = CAPABILITIES.get(family, {})
             raise GenerationError(capability.get("reason") or f"Model family '{family}' is not supported yet.")
-        if not Path(model["path"]).is_file():
+        model_path = Path(model["path"])
+        if not model_path.is_file():
             raise GenerationError("The selected checkpoint file no longer exists. Rescan Models.")
+        if model_path.suffix.lower() not in FIRST_IMAGE_EXTENSIONS:
+            supported = ", ".join(sorted(FIRST_IMAGE_EXTENSIONS))
+            raise GenerationError(
+                f"The first SD/SDXL adapter only supports {supported} checkpoint files. "
+                f"'{model_path.suffix or '[no extension]'}' is indexed for future adapters but cannot be generated yet."
+            )
         if not request.prompt:
             raise GenerationError("Prompt cannot be empty.")
         if LORA_TAG.search(request.prompt) or LORA_TAG.search(request.negative_prompt):
@@ -290,17 +298,11 @@ class GenerationManager:
             except Exception as exc:
                 with self._lock:
                     job = self._jobs.get(job_id)
-                    if job:
-                        job.status = "failed"
-                        job.error = str(exc)
-                        job.message = "Generation failed"
-                        job.completed_at = _utc_now()
-                emit_console("error", "generation", f"Job {job_id} failed: {exc}")
-                try:
-                    if job:
-                        self._write_manifest(job)
-                except Exception:
-                    pass
+                if job:
+                    self._fail_job(job, exc)
+                else:
+                    self._unload_pipeline()
+                    emit_console("error", "generation", f"Generation worker failed before job lookup: {exc}")
             finally:
                 self._queue.task_done()
 
@@ -308,6 +310,51 @@ class GenerationManager:
         with self._lock:
             job.status = status
             job.message = message
+
+    @staticmethod
+    def _is_cuda_oom(exc: BaseException) -> bool:
+        message = str(exc).lower()
+        if "cuda out of memory" in message or "cuda error: out of memory" in message:
+            return True
+        try:
+            import torch
+
+            oom_type = getattr(torch.cuda, "OutOfMemoryError", None)
+            return bool(oom_type and isinstance(exc, oom_type))
+        except Exception:
+            return False
+
+    def _friendly_error(self, exc: BaseException, *, action: str = "generating the image") -> GenerationError:
+        if isinstance(exc, GenerationError) and not self._is_cuda_oom(exc):
+            return exc
+        if self._is_cuda_oom(exc):
+            return GenerationError(
+                f"GPU memory exhausted while {action}. Morphorum will unload the failed pipeline and clear "
+                "the CUDA cache. Try a lower resolution, close other GPU-heavy applications, generate fewer "
+                "images at once, or use a lower-memory model."
+            )
+        if isinstance(exc, GenerationError):
+            return exc
+        return GenerationError(str(exc) or exc.__class__.__name__)
+
+    def _fail_job(self, job: GenerationJob, exc: BaseException) -> None:
+        error = self._friendly_error(exc)
+        self._unload_pipeline()
+        with self._lock:
+            job.status = "failed"
+            job.error = str(error)
+            job.message = "Generation failed"
+            job.completed_at = _utc_now()
+            job.eta_seconds = None
+        emit_console("error", "generation", f"Job {job.id} failed: {error}")
+        try:
+            self._write_manifest(job)
+        except Exception as manifest_exc:
+            emit_console(
+                "warning",
+                "generation",
+                f"Could not write failure manifest for {job.id}: {manifest_exc}",
+            )
 
     def _load_pipeline(self, job: GenerationJob):
         model = job.model
@@ -344,6 +391,8 @@ class GenerationManager:
             pipe.set_progress_bar_config(disable=True)
             pipe.to(device)
         except Exception as exc:
+            if self._is_cuda_oom(exc):
+                raise self._friendly_error(exc, action=f"loading checkpoint '{model['name']}'") from exc
             raise GenerationError(
                 f"Could not load checkpoint '{model['name']}'. Diffusers may need its matching pipeline config on first load. {exc}"
             ) from exc
@@ -355,17 +404,27 @@ class GenerationManager:
         return pipe, device
 
     def _unload_pipeline(self) -> None:
-        if self._pipeline is None:
-            return
-        emit_console("info", "generation", "Unloading previous diffusion pipeline.")
+        had_pipeline = self._pipeline is not None
+        if had_pipeline:
+            emit_console("info", "generation", "Unloading diffusion pipeline.")
         self._pipeline = None
         self._pipeline_model_id = None
         self._pipeline_device = None
+
+        # Always collect here, even if model loading failed before the pipeline
+        # could be registered on the manager.
         gc.collect()
         try:
             import torch
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                ipc_collect = getattr(torch.cuda, "ipc_collect", None)
+                if callable(ipc_collect):
+                    try:
+                        ipc_collect()
+                    except Exception:
+                        pass
         except Exception:
             pass
 
