@@ -1,20 +1,25 @@
-param([switch]$Lan)
+param(
+    [switch]$Lan,
+    [int]$Port = 7865
+)
+
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
+$Python = Join-Path $Root '.venv\Scripts\python.exe'
 
-$python = Join-Path $Root '.venv\Scripts\python.exe'
-if (-not (Test-Path $python)) {
-    Write-Host 'Morphorum environment is not installed. Run install.bat first.' -ForegroundColor Yellow
+if (-not (Test-Path $Python)) {
+    Write-Host 'Morphorum is not installed yet. Run install.bat first.' -ForegroundColor Yellow
     exit 1
 }
 
-if (Test-Path 'app\main.py') {
-    $env:MORPHORUM_HOST_OVERRIDE = if ($Lan) { '0.0.0.0' } else { '127.0.0.1' }
-    & $python -m app.main
-    exit $LASTEXITCODE
+$hostAddress = if ($Lan) { '0.0.0.0' } else { '127.0.0.1' }
+$displayAddress = if ($Lan) { 'this-computer-ip' } else { '127.0.0.1' }
+
+Write-Host "Morphorum starting at http://${displayAddress}:$Port" -ForegroundColor Cyan
+if ($Lan) {
+    Write-Host 'LAN mode is enabled. Morphorum will listen on all network interfaces.' -ForegroundColor Yellow
 }
 
-Write-Host 'Morphorum application server has not landed yet; this repository currently contains the project foundation.' -ForegroundColor Yellow
-Write-Host 'See docs\ROADMAP.md for the implementation milestones.'
-exit 2
+& $Python -m morphorum serve --host $hostAddress --port $Port
+exit $LASTEXITCODE
