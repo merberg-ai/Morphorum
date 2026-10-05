@@ -50,18 +50,21 @@ if ($installParent -and -not (Test-Path $installParent)) {
 }
 
 if (Test-Path (Join-Path $installRoot '.git')) {
-    Write-Host 'Existing Morphorum installation found; using guarded updater...' -ForegroundColor Cyan
-    $updater = Join-Path $installRoot 'update.bat'
-    if (Test-Path $updater) {
-        & $updater
-        if ($LASTEXITCODE -ne 0) { throw "Morphorum update failed with exit code $LASTEXITCODE." }
-        Write-Host ''
-        Write-Host "Morphorum is updated at $installRoot" -ForegroundColor Green
-        Write-Host "Start it with: $installRoot\run.bat"
-        return
+    $installManifest = Join-Path $installRoot 'data\install.json'
+    if (Test-Path $installManifest) {
+        Write-Host 'Existing Morphorum installation found; using guarded updater...' -ForegroundColor Cyan
+        $updater = Join-Path $installRoot 'update.bat'
+        if (Test-Path $updater) {
+            & $updater
+            if ($LASTEXITCODE -ne 0) { throw "Morphorum update failed with exit code $LASTEXITCODE." }
+            Write-Host ''
+            Write-Host "Morphorum is updated at $installRoot" -ForegroundColor Green
+            Write-Host "Start it with: $installRoot\run.bat"
+            return
+        }
     }
 
-    Write-Host 'Legacy checkout has no guarded updater yet; performing one-time fast-forward update.' -ForegroundColor Yellow
+    Write-Host 'Incomplete or legacy Morphorum checkout found; refreshing source and resuming installation...' -ForegroundColor Yellow
     & $gitExe -C $installRoot pull --ff-only
     if ($LASTEXITCODE -ne 0) { throw 'git pull failed. Local changes may need attention.' }
 } elseif (Test-Path $installRoot) {
