@@ -13,6 +13,61 @@ function Okay($text) { Write-Host "[OK] $text" -ForegroundColor Green }
 function Warn($text) { Write-Host "[!] $text" -ForegroundColor Yellow }
 function Fail($text) { Write-Host "[X] $text" -ForegroundColor Red }
 
+function Download-File([string]$Uri, [string]$Destination) {
+    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+        & curl.exe -fL --retry 3 --connect-timeout 20 -o $Destination $Uri
+        if ($LASTEXITCODE -ne 0) { throw "Download failed: $Uri" }
+        return
+    }
+
+    Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $Destination
+}
+
+function Install-UvStandalone([string]$DestinationDir, [string]$ExpectedExe) {
+    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+    switch ($arch) {
+        'x64'   { $target = 'x86_64-pc-windows-msvc' }
+        'arm64' { $target = 'aarch64-pc-windows-msvc' }
+        default { throw "Unsupported Windows architecture for uv bootstrap: $arch" }
+    }
+
+    $assetName = "uv-$target.zip"
+    $downloadUrl = "https://github.com/astral-sh/uv/releases/latest/download/$assetName"
+    $tempZip = Join-Path ([System.IO.Path]::GetTempPath()) "morphorum-uv-$PID.zip"
+
+    try {
+        Step "Downloading standalone uv for $arch..."
+        Download-File $downloadUrl $tempZip
+
+        if (-not (Test-Path $tempZip)) { throw 'uv archive download did not produce a file.' }
+        if ((Get-Item $tempZip).Length -lt 1024) { throw 'uv archive download appears to be invalid or incomplete.' }
+
+        New-Item -ItemType Directory -Force -Path $DestinationDir | Out-Null
+
+        try {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+        } catch {
+            Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
+        }
+
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $DestinationDir)
+    }
+    finally {
+        Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+    }
+
+    if (-not (Test-Path $ExpectedExe)) {
+        $found = Get-ChildItem -Path $DestinationDir -Filter 'uv.exe' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) {
+            Copy-Item $found.FullName $ExpectedExe -Force
+        }
+    }
+
+    if (-not (Test-Path $ExpectedExe)) {
+        throw "Standalone uv archive extracted, but uv.exe was not found under $DestinationDir."
+    }
+}
+
 $RuntimeDir = Join-Path $Root '.runtime'
 $UvDir = Join-Path $RuntimeDir 'uv'
 $UvExe = Join-Path $UvDir 'uv.exe'
@@ -73,9 +128,7 @@ try {
 
     if (-not (Test-Path $UvExe)) {
         Step 'Installing Morphorum-owned uv runtime manager...'
-        $installer = Invoke-RestMethod 'https://astral.sh/uv/install.ps1'
-        Invoke-Expression $installer
-        if (-not (Test-Path $UvExe)) { throw "uv installer completed but $UvExe was not found." }
+        Install-UvStandalone $UvDir $UvExe
     }
     Okay "uv: $(& $UvExe --version)"
 
