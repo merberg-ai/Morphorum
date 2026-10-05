@@ -34,3 +34,12 @@ def test_system_telemetry_endpoint() -> None:
     assert 0 <= payload["ram"]["free_percent"] <= 100
     assert "gpu" in payload
     assert isinstance(payload["gpu"]["devices"], list)
+
+
+def test_model_family_registry_is_modern_only() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/models/families")
+    assert response.status_code == 200
+    families = response.json()["families"]
+    assert [item["id"] for item in families] == ["sdxl", "flux", "zimage"]
+    assert all(item["supports_loras"] is True for item in families)
