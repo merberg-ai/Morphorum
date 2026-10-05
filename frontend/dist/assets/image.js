@@ -9,7 +9,7 @@
     renderedResults: new Set(),
   };
 
-  const qs = selector => document.querySelector(selector);
+  const qs = (selector, root = document) => root.querySelector(selector);
   const toast = (title, message, type = 'info', timeout) => {
     if (window.MorphorumToast) return window.MorphorumToast(title, message, type, timeout);
     console.log(`[${type}] ${title}: ${message}`);
