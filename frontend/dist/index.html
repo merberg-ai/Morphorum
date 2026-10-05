@@ -7,6 +7,7 @@
   <title>Morphorum</title>
   <link rel="stylesheet" href="/assets/app.css">
   <link rel="stylesheet" href="/assets/models.css">
+  <link rel="stylesheet" href="/assets/image.css">
 </head>
 <body>
   <div class="app-shell">
@@ -34,39 +35,59 @@
           <div>
             <p class="eyebrow">FIRST IMAGE MILESTONE</p>
             <h1>Image Generation</h1>
-            <p class="muted">Model discovery is live. The first SD/SDXL inference adapter is the next layer.</p>
+            <p class="muted">Generate locally from indexed SD 1.x, SD 2.x, and SDXL checkpoints.</p>
           </div>
         </div>
 
-        <div class="grid two-column">
-          <article class="card glass">
-            <div class="card-header"><div><h2>Generation</h2><p class="muted">Model-aware controls will activate as adapters land.</p></div><span class="badge" id="image-model-family-badge">No model</span></div>
-            <label class="field-label">Prompt</label>
-            <textarea class="text-area" rows="5" placeholder="Describe the image you want to make…"></textarea>
-            <label class="field-label">Negative prompt</label>
-            <textarea class="text-area" rows="3" placeholder="Model dependent"></textarea>
+        <div class="grid image-layout">
+          <article class="card glass generation-card">
+            <div class="card-header">
+              <div><h2>Generation</h2><p class="muted" id="image-capability-note">Select an indexed checkpoint to begin.</p></div>
+              <span class="badge" id="image-model-family-badge">No model</span>
+            </div>
+
+            <label class="field-label" for="image-prompt">Prompt</label>
+            <textarea id="image-prompt" class="text-area" rows="5" placeholder="Describe the image you want to make…"></textarea>
+            <label class="field-label" for="image-negative-prompt">Negative prompt</label>
+            <textarea id="image-negative-prompt" class="text-area" rows="3" placeholder="Things you don't want in the image"></textarea>
+
             <div class="field-grid">
               <label><span>Model</span><select id="image-model-select"><option value="">Scan models first</option></select></label>
-              <label><span>Resolution</span><select disabled><option>Model-aware presets</option></select></label>
-              <label><span>Steps</span><input type="number" value="25" disabled></label>
-              <label><span>CFG / Guidance</span><input type="number" value="7" disabled></label>
-              <label><span>Seed</span><input type="number" value="-1" disabled></label>
-              <label><span>Images</span><input type="number" value="1" disabled></label>
+              <label><span>Resolution preset</span><select id="image-resolution-preset" disabled><option value="">Select a model</option></select></label>
+              <label><span>Width</span><input id="image-width" type="number" value="512" min="64" max="4096" step="8" disabled></label>
+              <label><span>Height</span><div class="inline-input"><input id="image-height" type="number" value="512" min="64" max="4096" step="8" disabled><button id="swap-resolution" class="icon-button" type="button" title="Swap width and height" disabled>⇄</button></div></label>
+              <label><span>Steps</span><input id="image-steps" type="number" value="25" min="1" max="150" disabled></label>
+              <label><span id="guidance-label">CFG</span><input id="image-guidance" type="number" value="7" min="0" max="30" step="0.1" disabled></label>
+              <label><span>Seed</span><div class="inline-input"><input id="image-seed" type="number" value="-1" min="-1" step="1" disabled><button id="random-seed" class="icon-button" type="button" title="Random seed" disabled>⚄</button></div></label>
+              <label><span>Seed mode</span><select id="image-seed-mode" disabled><option value="fixed">Fixed</option><option value="increment">Increment</option><option value="random">Random</option></select></label>
+              <label id="seed-increment-field"><span>Increment by</span><input id="image-seed-increment" type="number" value="1" step="1" disabled></label>
+              <label><span>Images</span><input id="image-count" type="number" value="1" min="1" max="32" disabled></label>
             </div>
-            <button class="primary-button full-width" disabled>Generate <span class="button-note">inference adapter next</span></button>
+
+            <div class="generation-actions">
+              <button class="primary-button busy-button full-width" id="generate-image" disabled><span class="spinner"></span><span class="button-label">Generate</span></button>
+              <button class="secondary-button danger" id="cancel-generation" type="button" hidden>Cancel</button>
+            </div>
+
+            <div class="generation-progress" id="generation-progress" hidden>
+              <div class="progress-heading"><span id="generation-status">Preparing…</span><span id="generation-percent">0%</span></div>
+              <div class="progress-track"><div class="progress-fill" id="generation-progress-fill"></div></div>
+              <div class="progress-meta"><span id="generation-step">Waiting for worker</span><span id="generation-eta"></span></div>
+            </div>
           </article>
 
-          <article class="card glass preview-card">
-            <div class="card-header"><div><h2>Preview</h2><p class="muted">Generated images will appear here immediately.</p></div></div>
-            <div class="preview-placeholder">
+          <article class="card glass preview-card image-preview-card">
+            <div class="card-header"><div><h2>Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
+            <div class="preview-placeholder" id="image-empty-preview">
               <div class="preview-glyph">◇</div>
               <strong>No image yet</strong>
-              <span>Configure model folders, scan, and select a checkpoint.</span>
+              <span>Configure model folders, scan, select a checkpoint, and generate.</span>
               <div class="button-row">
                 <button class="secondary-button" data-jump="settings">Settings</button>
                 <button class="secondary-button" data-jump="models">Models</button>
               </div>
             </div>
+            <div class="image-gallery" id="image-gallery" hidden></div>
           </article>
         </div>
       </section>
@@ -163,5 +184,6 @@
   <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
   <script src="/assets/app.js" defer></script>
   <script src="/assets/models.js" defer></script>
+  <script src="/assets/image.js" defer></script>
 </body>
 </html>
