@@ -87,42 +87,40 @@ if [[ ! -x "$VENV_PYTHON" ]]; then
 fi
 
 TORCH_VERSION="2.14.0"
-TORCH_FLAVOR="cpu"
 NVIDIA_EXPECTED=0
 GPU_INFO=""
 if command -v nvidia-smi >/dev/null 2>&1; then
   GPU_INFO="$(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null || true)"
-  DRIVER_RAW="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -n1 | tr -d '[:space:]' || true)"
-  DRIVER_MAJOR="${DRIVER_RAW%%.*}"
-  if [[ "$DRIVER_MAJOR" =~ ^[0-9]+$ ]]; then
-    if (( DRIVER_MAJOR >= 580 )); then
-      TORCH_FLAVOR="cu130"
-      NVIDIA_EXPECTED=1
-    elif (( DRIVER_MAJOR >= 560 )); then
-      TORCH_FLAVOR="cu126"
-      NVIDIA_EXPECTED=1
-    else
-      warn "NVIDIA driver $DRIVER_RAW is too old for Morphorum's pinned CUDA wheels; installing CPU PyTorch. Update the NVIDIA driver for GPU generation."
-    fi
-  fi
+  NVIDIA_EXPECTED=1
   [[ -n "$GPU_INFO" ]] && ok "NVIDIA GPU: $GPU_INFO" || ok "NVIDIA driver tools detected."
 else
-  warn "nvidia-smi not detected; installing CPU PyTorch. NVIDIA generation requires a supported driver."
+  warn "nvidia-smi not detected; PyTorch backend auto-detection will fall back to CPU if no supported GPU is available."
 fi
 
-step "Installing PyTorch $TORCH_VERSION ($TORCH_FLAVOR)..."
-"$UV_BIN" pip install --python "$VENV_PYTHON" --upgrade "torch==$TORCH_VERSION" \
-  --index-url "https://download.pytorch.org/whl/$TORCH_FLAVOR"
+# Let uv choose the most compatible PyTorch backend while resolving application
+# dependencies, then enforce the pinned Torch version as the final package step.
+export UV_TORCH_BACKEND=auto
 
 step "Installing/updating Morphorum Python dependencies..."
 "$UV_BIN" pip install --python "$VENV_PYTHON" --upgrade --editable .
+
+step "Installing PyTorch $TORCH_VERSION with automatic hardware backend selection..."
+"$UV_BIN" pip install --python "$VENV_PYTHON" --upgrade --reinstall-package torch \
+  "torch==$TORCH_VERSION" --torch-backend=auto
+
 ok "Python: $($VENV_PYTHON --version)"
 
 TORCH_INFO="$($VENV_PYTHON -c "import torch; print(f'PyTorch {torch.__version__}; CUDA build {torch.version.cuda}; CUDA available {torch.cuda.is_available()}')")"
 ok "$TORCH_INFO"
+
 if (( NVIDIA_EXPECTED == 1 )); then
-  CUDA_AVAILABLE="$($VENV_PYTHON -c "import torch; print('1' if torch.cuda.is_available() else '0')")"
-  [[ "$CUDA_AVAILABLE" == "1" ]] || warn "An NVIDIA GPU was detected, but PyTorch cannot use CUDA. Image generation will fall back to CPU until this is fixed."
+  if ! "$VENV_PYTHON" -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() and torch.version.cuda is not None else 2)"; then
+    fail "NVIDIA GPU detected, but Morphorum ended with a CPU-only or unusable PyTorch build. Refusing to silently continue with CPU generation."
+    exit 1
+  fi
+
+  CUDA_SMOKE="$($VENV_PYTHON -c "import torch; x=torch.ones((64,64), device='cuda'); torch.cuda.synchronize(); print(f'{torch.cuda.get_device_name(0)}; CUDA {torch.version.cuda}; tensor OK')")"
+  ok "CUDA smoke test: $CUDA_SMOKE"
 fi
 
 if [[ ! -f "$ROOT/data/config.yaml" ]]; then
