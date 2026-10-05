@@ -19,10 +19,38 @@ echo "Morphorum bootstrap"
 echo "==================="
 echo "Install directory: $INSTALL_ROOT"
 
+run_privileged() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    echo "A system package needs to be installed, but sudo is unavailable." >&2
+    return 1
+  fi
+}
+
+install_git() {
+  echo "Git was not found; attempting to install it..."
+  if command -v apt-get >/dev/null 2>&1; then
+    run_privileged apt-get update
+    run_privileged apt-get install -y git
+  elif command -v dnf >/dev/null 2>&1; then
+    run_privileged dnf install -y git
+  elif command -v pacman >/dev/null 2>&1; then
+    run_privileged pacman -Sy --needed --noconfirm git
+  elif command -v zypper >/dev/null 2>&1; then
+    run_privileged zypper --non-interactive install git
+  else
+    echo "No supported package manager was found. Install Git manually, then rerun this command." >&2
+    return 1
+  fi
+}
+
 if ! command -v git >/dev/null 2>&1; then
-  echo "Git is required. Install git with your distribution package manager, then rerun this command." >&2
-  exit 1
+  install_git
 fi
+command -v git >/dev/null 2>&1 || { echo "Git is still unavailable after the install attempt." >&2; exit 1; }
 
 INSTALL_PARENT="$(dirname "$INSTALL_ROOT")"
 mkdir -p "$INSTALL_PARENT"
