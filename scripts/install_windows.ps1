@@ -19,7 +19,6 @@ function Download-File([string]$Uri, [string]$Destination) {
         if ($LASTEXITCODE -ne 0) { throw "Download failed: $Uri" }
         return
     }
-
     Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $Destination
 }
 
@@ -40,9 +39,8 @@ function Install-UvStandalone([string]$DestinationDir, [string]$ExpectedExe) {
     try {
         Step "Downloading standalone uv for $arch..."
         Download-File $downloadUrl $tempZip
-
         if (-not (Test-Path $tempZip)) { throw 'uv archive download did not produce a file.' }
-        if ((Get-Item $tempZip).Length -lt 1024) { throw 'uv archive download appears to be invalid or incomplete.' }
+        if ((Get-Item $tempZip).Length -lt 1024) { throw 'uv archive download appears invalid or incomplete.' }
 
         if (Test-Path $DestinationDir) {
             Get-ChildItem -Force $DestinationDir -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -50,12 +48,8 @@ function Install-UvStandalone([string]$DestinationDir, [string]$ExpectedExe) {
             New-Item -ItemType Directory -Force -Path $DestinationDir | Out-Null
         }
 
-        try {
-            Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
-        } catch {
-            Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
-        }
-
+        try { Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop }
+        catch { Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop }
         [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $DestinationDir)
     }
     finally {
@@ -64,11 +58,8 @@ function Install-UvStandalone([string]$DestinationDir, [string]$ExpectedExe) {
 
     if (-not (Test-Path $ExpectedExe)) {
         $found = Get-ChildItem -Path $DestinationDir -Filter 'uv.exe' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($found) {
-            Copy-Item $found.FullName $ExpectedExe -Force
-        }
+        if ($found) { Copy-Item $found.FullName $ExpectedExe -Force }
     }
-
     if (-not (Test-Path $ExpectedExe)) {
         throw "Standalone uv archive extracted, but uv.exe was not found under $DestinationDir."
     }
@@ -86,17 +77,14 @@ $env:UV_NO_MODIFY_PATH = '1'
 $env:UV_PYTHON_INSTALL_DIR = $PythonDir
 $env:UV_CACHE_DIR = $UvCache
 $env:UV_PROJECT_ENVIRONMENT = (Join-Path $Root '.venv')
+$env:HF_HOME = Join-Path $Root 'cache\huggingface'
+$env:HF_HUB_DISABLE_TELEMETRY = '1'
 
 $dirs = @(
-    $RuntimeDir,
-    $UvDir,
-    $PythonDir,
-    $UvCache,
-    (Join-Path $Root 'data'),
-    (Join-Path $Root 'projects'),
-    (Join-Path $Root 'outputs'),
-    (Join-Path $Root 'logs'),
-    (Join-Path $Root 'cache'),
+    $RuntimeDir, $UvDir, $PythonDir, $UvCache,
+    (Join-Path $Root 'data'), (Join-Path $Root 'projects'),
+    (Join-Path $Root 'outputs'), (Join-Path $Root 'logs'),
+    (Join-Path $Root 'cache'), (Join-Path $Root 'cache\huggingface'),
     (Join-Path $Root 'backups')
 )
 foreach ($dir in $dirs) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
@@ -113,7 +101,7 @@ try {
         $driveRoot = [System.IO.Path]::GetPathRoot($Root)
         $drive = [System.IO.DriveInfo]::new($driveRoot)
         $freeGiB = [math]::Round($drive.AvailableFreeSpace / 1GB, 1)
-        if ($freeGiB -lt 2) { throw "Only $freeGiB GiB free on $driveRoot. Morphorum needs at least 2 GiB for the base runtime." }
+        if ($freeGiB -lt 8) { throw "Only $freeGiB GiB free on $driveRoot. The initial image-generation runtime needs at least 8 GiB free." }
         Okay "Disk space: $freeGiB GiB free"
     } catch {
         if ($_.Exception.Message -like 'Only *') { throw }
@@ -125,12 +113,8 @@ try {
             Step 'Git not found; installing Git with winget...'
             winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements
             if ($LASTEXITCODE -ne 0) { throw 'Git installation failed.' }
-        } else {
-            throw 'Git is required and neither Git nor winget is available.'
-        }
-    } else {
-        Okay "$(git --version)"
-    }
+        } else { throw 'Git is required and neither Git nor winget is available.' }
+    } else { Okay "$(git --version)" }
 
     if (-not (Test-Path $UvExe)) {
         Step 'Installing Morphorum-owned uv runtime manager...'
@@ -148,18 +132,47 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'uv failed to create .venv.' }
     }
 
+    $torchVersion = '2.14.0'
+    $torchFlavor = 'cpu'
+    $nvidiaExpected = $false
+    $gpu = $null
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        $gpu = nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>$null
+        $driverRaw = nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>$null | Select-Object -First 1
+        $driverMajor = 0
+        if ($driverRaw -and [int]::TryParse(($driverRaw -split '\.')[0].Trim(), [ref]$driverMajor)) {
+            if ($driverMajor -ge 580) { $torchFlavor = 'cu130'; $nvidiaExpected = $true }
+            elseif ($driverMajor -ge 560) { $torchFlavor = 'cu126'; $nvidiaExpected = $true }
+            else { Warn "NVIDIA driver $driverRaw is too old for Morphorum's pinned CUDA wheels; installing CPU PyTorch. Update the NVIDIA driver for GPU generation." }
+        }
+        if ($gpu) { Okay "NVIDIA GPU: $($gpu -join '; ')" } else { Okay 'NVIDIA driver tools detected.' }
+    } else {
+        Warn 'nvidia-smi not detected; installing CPU PyTorch. NVIDIA generation requires a supported driver.'
+    }
+
+    Step "Installing PyTorch $torchVersion ($torchFlavor)..."
+    $torchIndex = "https://download.pytorch.org/whl/$torchFlavor"
+    & $UvExe pip install --python $VenvPython --upgrade "torch==$torchVersion" --index-url $torchIndex
+    if ($LASTEXITCODE -ne 0) { throw "PyTorch $torchVersion ($torchFlavor) installation failed." }
+
     Step 'Installing/updating Morphorum Python dependencies...'
     & $UvExe pip install --python $VenvPython --upgrade --editable .
     if ($LASTEXITCODE -ne 0) { throw 'Morphorum dependency installation failed.' }
     Okay "Python: $(& $VenvPython --version)"
 
+    $torchInfo = & $VenvPython -c "import torch; print(f'PyTorch {torch.__version__}; CUDA build {torch.version.cuda}; CUDA available {torch.cuda.is_available()}')"
+    if ($LASTEXITCODE -ne 0) { throw 'PyTorch installed but could not be imported.' }
+    Okay $torchInfo
+    if ($nvidiaExpected) {
+        $cudaAvailable = (& $VenvPython -c "import torch; print('1' if torch.cuda.is_available() else '0')").Trim()
+        if ($cudaAvailable -ne '1') { Warn 'An NVIDIA GPU was detected, but PyTorch cannot use CUDA. Image generation will fall back to CPU until this is fixed.' }
+    }
+
     $userConfig = Join-Path $Root 'data\config.yaml'
     if (-not (Test-Path $userConfig)) {
         Copy-Item (Join-Path $Root 'config\default.yaml') $userConfig
         Okay 'Created user configuration: data\config.yaml'
-    } else {
-        Okay 'Existing user configuration preserved.'
-    }
+    } else { Okay 'Existing user configuration preserved.' }
 
     if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
         if (Get-Command winget -ErrorAction SilentlyContinue) {
@@ -167,25 +180,14 @@ try {
             winget install --id Gyan.FFmpeg -e --source winget --accept-package-agreements --accept-source-agreements
             if ($LASTEXITCODE -ne 0) { Warn 'FFmpeg installation failed. Video encoding will not work until FFmpeg is installed.' }
             else { Okay 'FFmpeg installed. A new terminal may be required before its command alias appears.' }
-        } else {
-            Warn 'FFmpeg not found and winget is unavailable. Video encoding will require FFmpeg.'
-        }
-    } else {
-        Okay 'FFmpeg found.'
-    }
-
-    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-        $gpu = nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>$null
-        if ($gpu) { Okay "NVIDIA GPU: $($gpu -join '; ')" } else { Okay 'NVIDIA driver tools detected.' }
-    } else {
-        Warn 'nvidia-smi not detected. CPU/other backends may still work; NVIDIA rendering will require a supported driver.'
-    }
+        } else { Warn 'FFmpeg not found and winget is unavailable. Video encoding will require FFmpeg.' }
+    } else { Okay 'FFmpeg found.' }
 
     if (-not $SkipSelfTest) {
-        Step 'Running Morphorum API self-test...'
+        Step 'Running Morphorum self-test...'
         & $VenvPython -m morphorum self-test
         if ($LASTEXITCODE -ne 0) { throw 'Morphorum self-test failed.' }
-        Okay 'API health check passed.'
+        Okay 'Morphorum self-test passed.'
     }
 
     Write-Host ''
