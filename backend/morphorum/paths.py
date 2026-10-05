@@ -11,6 +11,7 @@ RUNTIME_DIR = ROOT / ".runtime"
 USER_CONFIG = DATA_DIR / "config.yaml"
 DEFAULT_CONFIG = ROOT / "config" / "default.yaml"
 INSTALL_MANIFEST = DATA_DIR / "install.json"
+MODEL_INDEX_DB = DATA_DIR / "model-index.db"
 
 RUNTIME_DIRS = (
     DATA_DIR,
