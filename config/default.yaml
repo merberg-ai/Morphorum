@@ -30,8 +30,15 @@ performance:
   keep_model_loaded: true
   unload_after_minutes: 0
 
+paths:
+  projects: projects
+  outputs: outputs
+  cache: cache
+  logs: logs
+  backups: backups
+
 output:
-  directory: renders
+  directory: outputs
   image_format: png
 
 updates:
