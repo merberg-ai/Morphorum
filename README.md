@@ -25,17 +25,47 @@ Core goals:
 
 ### Windows PowerShell
 
+Default install location (`$HOME\Morphorum`):
+
 ```powershell
 irm https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1 | iex
 ```
 
+Custom install location, for example `D:\Morphorum`:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1'))) -InstallDir 'D:\Morphorum'
+```
+
+You can also set `MORPHORUM_HOME` before running the normal one-line installer:
+
+```powershell
+$env:MORPHORUM_HOME='D:\Morphorum'; irm https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1 | iex
+```
+
 ### Linux
+
+Default install location (`$HOME/Morphorum`):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash
 ```
 
-The bootstrap scripts install or update Morphorum in a user-local folder, then hand off to the platform installer. During this early scaffold phase they may report that application components have not landed yet instead of pretending there is a finished renderer hiding somewhere.
+Custom install location, for example `/home/foo/bar`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash -s -- /home/foo/bar
+```
+
+You can also use `MORPHORUM_HOME`:
+
+```bash
+MORPHORUM_HOME=/home/foo/bar curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash
+```
+
+Install-location precedence is: explicit command-line path, then `MORPHORUM_HOME`, then the platform default.
+
+The bootstrap scripts install or update Morphorum in the selected folder, then hand off to the platform installer. During this early scaffold phase they may report that application components have not landed yet instead of pretending there is a finished renderer hiding somewhere.
 
 ## Normal usage
 
