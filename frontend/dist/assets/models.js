@@ -1,15 +1,13 @@
 (() => {
   'use strict';
 
-  const FAMILY_LABELS = {
-    sd15: 'SD 1.x',
-    sd2: 'SD 2.x',
+  let FAMILY_LABELS = {
     sdxl: 'SDXL',
     flux: 'Flux',
     zimage: 'Z-Image',
   };
 
-  const state = { models: [] };
+  const state = { models: [], families: [] };
   const qs = (selector, root = document) => root.querySelector(selector);
   const toast = (title, message, type = 'info', timeout) => {
     if (window.MorphorumToast) return window.MorphorumToast(title, message, type, timeout);
@@ -24,6 +22,31 @@
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || `${response.status} ${response.statusText}`);
     return payload;
+  }
+
+  async function loadFamilies() {
+    const payload = await api('/api/models/families');
+    state.families = Array.isArray(payload.families) ? payload.families : [];
+    if (state.families.length) {
+      FAMILY_LABELS = Object.fromEntries(state.families.map(item => [item.id, item.label || item.id]));
+    }
+
+    const filter = qs('#model-family-filter');
+    if (filter) {
+      const previous = filter.value;
+      filter.replaceChildren();
+      const all = document.createElement('option');
+      all.value = '';
+      all.textContent = 'All families';
+      filter.appendChild(all);
+      for (const family of state.families) {
+        const option = document.createElement('option');
+        option.value = family.id;
+        option.textContent = family.label || family.id;
+        filter.appendChild(option);
+      }
+      if ([...filter.options].some(option => option.value === previous)) filter.value = previous;
+    }
   }
 
   function setBusy(button, busy) {
@@ -258,6 +281,11 @@
 
   async function start() {
     bind();
+    try {
+      await loadFamilies();
+    } catch (error) {
+      toast('Model family registry unavailable', error.message, 'warning');
+    }
     await loadModels();
   }
 
