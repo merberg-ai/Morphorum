@@ -36,6 +36,9 @@ mkdir -p "$UV_DIR" "$PYTHON_DIR" "$UV_CACHE" \
   "$ROOT/data" "$ROOT/projects" "$ROOT/outputs" "$ROOT/logs" \
   "$ROOT/cache" "$ROOT/backups"
 
+# Repair executable bits after ZIP downloads or filesystems that do not preserve them.
+chmod +x "$ROOT"/*.sh "$ROOT/scripts"/*.sh 2>/dev/null || true
+
 LOG="$ROOT/logs/$MODE.log"
 exec > >(tee -a "$LOG") 2>&1
 
@@ -123,5 +126,6 @@ fi
 printf '\n'
 ok "Morphorum installation is ready."
 printf 'Local launch:  %s/run.sh\n' "$ROOT"
+printf 'LAN launch:    %s/run-lan.sh\n' "$ROOT"
 printf 'Diagnostics:   %s/repair.sh\n' "$ROOT"
 printf 'Log:           %s\n' "$LOG"
