@@ -55,9 +55,16 @@ def command_self_test(_: argparse.Namespace) -> int:
 
             settings_response = client.get("/api/settings")
             settings_response.raise_for_status()
-            settings = settings_response.json().get("settings", {})
+            settings_payload = settings_response.json()
+            settings = settings_payload.get("settings", {})
             models = settings.get("models", {}) if isinstance(settings, dict) else {}
-            for family in ("sd15", "sd2", "sdxl", "flux", "zimage"):
+
+            family_response = client.get("/api/models/families")
+            family_response.raise_for_status()
+            enabled_families = [item["id"] for item in family_response.json().get("families", [])]
+            if enabled_families != ["sdxl", "flux", "zimage"]:
+                raise RuntimeError(f"unexpected enabled model families: {enabled_families}")
+            for family in enabled_families:
                 if family not in models:
                     raise RuntimeError(f"settings schema is missing model family: {family}")
 
@@ -69,10 +76,11 @@ def command_self_test(_: argparse.Namespace) -> int:
             capabilities_response = client.get("/api/generation/capabilities")
             capabilities_response.raise_for_status()
             families = capabilities_response.json().get("families", {})
-            if not families.get("sd15", {}).get("supported"):
-                raise RuntimeError("SD 1.x generation capability is missing")
             if not families.get("sdxl", {}).get("supported"):
                 raise RuntimeError("SDXL generation capability is missing")
+            for family in ("flux", "zimage"):
+                if family not in families:
+                    raise RuntimeError(f"generation capability registry is missing enabled family: {family}")
 
             console_response = client.get("/api/console?limit=10")
             console_response.raise_for_status()
