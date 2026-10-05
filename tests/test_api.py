@@ -49,9 +49,11 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
         assert settings["models"]["sdxl"]["checkpoints"] == [str(checkpoint_dir)]
         assert settings["models"]["sdxl"]["loras"] == [str(lora_dir)]
 
-        # Default families must remain present even when only one family is saved.
-        for family in ("sd15", "sd2", "sdxl", "flux", "zimage"):
+        # Enabled modern families must remain present even when only one family is saved.
+        for family in ("sdxl", "flux", "zimage"):
             assert family in settings["models"]
+        assert "sd15" not in settings["models"]
+        assert "sd2" not in settings["models"]
 
         checked = client.post("/api/settings/validate-path", json={"path": str(checkpoint_dir)})
         assert checked.status_code == 200
