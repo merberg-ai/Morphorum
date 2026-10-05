@@ -1,0 +1,105 @@
+.image-layout {
+  grid-template-columns: minmax(440px, .92fr) minmax(420px, 1.08fr);
+  max-width: 1320px;
+}
+.generation-card { align-self: start; }
+.inline-input { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px; }
+.inline-input .icon-button { min-height: 43px; }
+.generation-actions { display: flex; gap: 9px; align-items: stretch; }
+.generation-actions .full-width { flex: 1; }
+.generation-progress {
+  margin-top: 16px;
+  padding: 13px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: rgba(4,7,10,.38);
+}
+.progress-heading, .progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+.progress-heading { font-size: .82rem; font-weight: 700; }
+.progress-meta { color: var(--muted); font-size: .72rem; margin-top: 7px; }
+.progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.07);
+  overflow: hidden;
+  margin-top: 9px;
+}
+.progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #8aeaff, var(--accent-2));
+  transition: width .22s ease-out;
+}
+.image-preview-card { min-height: 560px; }
+.image-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 12px;
+}
+.result-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: rgba(5,8,12,.48);
+  border-radius: 12px;
+}
+.result-image-wrap {
+  position: relative;
+  width: 100%;
+  background: #07090c;
+  display: grid;
+  place-items: center;
+  min-height: 190px;
+}
+.result-image {
+  width: 100%;
+  max-height: 580px;
+  display: block;
+  object-fit: contain;
+}
+.result-meta {
+  padding: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+.result-seed { min-width: 0; }
+.result-seed strong { display: block; font-size: .72rem; }
+.result-seed span {
+  color: var(--muted);
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.result-actions { display: flex; gap: 6px; }
+.result-actions button, .result-actions a {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: .68rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.unsupported-note { color: var(--warn) !important; }
+
+@media (max-width: 980px) {
+  .image-layout { grid-template-columns: 1fr; }
+  .image-preview-card { min-height: 390px; }
+}
+
+@media (max-width: 640px) {
+  .image-gallery { grid-template-columns: 1fr; }
+  .generation-actions { flex-wrap: wrap; }
+  .generation-actions #cancel-generation { width: 100%; }
+  .progress-meta { align-items: flex-start; flex-direction: column; gap: 2px; }
+}
