@@ -233,7 +233,7 @@ New model families, depth estimators, optical-flow engines, ControlNet implement
 
 ## 15. Single Image workspace
 
-Single-image generation is a first-class workspace alongside animation, not a diagnostic afterthought. It uses the same model library, capability manifests, inference adapters, LoRA resolver, presets, job/progress system, and reproducibility metadata as animation.
+Single-image generation is a first-class workspace alongside animation, not a diagnostic afterthought. The name refers to still-image generation as a workflow; a job may generate one image or a batch of images. It uses the same model library, capability manifests, inference adapters, LoRA resolver, presets, job/progress system, and reproducibility metadata as animation.
 
 The selected model drives the available controls. The UI must not show meaningless SD-style controls for architectures that do not use them. Depending on the active model, the workspace may expose:
 
@@ -246,7 +246,44 @@ The selected model drives the available controls. The UI must not show meaningle
 - LoRAs using familiar `<lora:name:weight>` syntax plus a visual LoRA browser
 - VAE/text-encoder/component overrides where supported
 - precision, quantization, offload, and memory controls in Advanced mode
-- batch count and optional variations
+- batch count, batch size where supported, and variation controls
+
+### Seed and batch behavior
+
+The still-image workspace should preserve the useful A1111/WebUI-style seed workflow while presenting it more clearly.
+
+Seed controls should include:
+
+- explicit fixed seed
+- Random mode, choosing a fresh seed for each generated image
+- Increment mode, starting from a chosen seed and increasing by a configurable step (default +1) for each image
+- Fixed mode, deliberately reusing the same seed for repeated generations when the model/backend permits meaningful comparison
+- seed randomize button
+- reuse-last-seed button
+- copy seed from any image in the history/gallery
+- visible resolved seed on every generated image, even when the requested seed was random
+
+Batch controls should separate:
+
+- Images: total number of outputs requested
+- Batch size: how many are processed concurrently when the active adapter/device supports it safely
+
+The UI may simplify these to one `Images` control in Simple mode while Advanced mode exposes batch size separately. A batch must never obscure the actual per-image seed sequence used.
+
+Where supported by a model/backend, variation/subseed behavior should be available as an advanced option:
+
+- variation/subseed
+- variation strength
+- optional seed-resize compatibility controls for imported legacy workflows
+
+Seed mode should be represented explicitly in project/job settings rather than encoded through undocumented magic values. Compatibility import/export layers may still understand legacy conventions such as random-seed sentinels.
+
+Example resolved sequences for four requested images:
+
+- Fixed, seed 12345 → `12345, 12345, 12345, 12345`
+- Increment, seed 12345, step 1 → `12345, 12346, 12347, 12348`
+- Increment, seed 12345, step 10 → `12345, 12355, 12365, 12375`
+- Random → four independently generated seeds, all recorded in output metadata
 
 ### Resolution picker
 
@@ -271,11 +308,12 @@ A single-image job should show the same quality of feedback expected from animat
 - indeterminate spinner while loading models/components
 - denoising-step progress when available
 - overall progress for batches
+- per-image position such as `3 / 8`
 - elapsed time and ETA where meaningful
 - GPU/VRAM telemetry when available
 - clear cancel/error state
 - generated image preview as soon as each image completes
 
-The workspace should keep a lightweight session history/gallery showing image, seed, model, LoRAs, resolution, and generation settings. Users should be able to reuse settings/seed, copy prompt metadata, save the image, and send a generated image directly into an animation project as an init/starting image without manually hunting for the file.
+The workspace should keep a lightweight session history/gallery showing image, resolved seed, model, LoRAs, resolution, and generation settings. Users should be able to reuse settings/seed, copy prompt metadata, save the image, and send a generated image directly into an animation project as an init/starting image without manually hunting for the file.
 
 Single-image settings and animation inference settings should share underlying schemas wherever semantics truly match, so testing a model in Single Image provides a reliable starting point for animation rather than maintaining two subtly different configuration systems.
