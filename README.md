@@ -1,18 +1,19 @@
 # Morphorum
 
-Standalone, modern Deforum-style AI animation studio with legacy project compatibility, multi-model support for Stable Diffusion, SDXL, Flux, and Z-Image, LoRAs, keyframed motion, live previews, and a mobile-friendly web UI.
+Standalone, modern Deforum-style AI image and animation studio with legacy project compatibility, multi-model support for Stable Diffusion, SDXL, Flux, and Z-Image, LoRAs, keyframed motion, live previews, and a mobile-friendly web UI.
 
-> **Status:** very early development. The repository is being initialized now; rendering code will land in staged milestones.
+> **Status:** early development. The installer/runtime foundation and health-check API are now implemented; diffusion/model rendering and the full frontend are the next milestones.
 
 ## Goals
 
-Morphorum is intended to be a standalone, browser-based animation environment inspired by the workflow that made Deforum useful, while removing the dependency on Stable Diffusion WebUI/Forge.
+Morphorum is intended to be a standalone, browser-based image and animation environment inspired by the workflow that made Deforum useful, while removing the dependency on Stable Diffusion WebUI/Forge.
 
 Core goals:
 
 - Import and preserve classic Deforum JSON/TXT projects.
 - Preserve familiar prompt syntax such as `<lora:name:weight>`.
 - Support SD 1.x/2.x, SDXL, Flux, Z-Image, and compatible LoRAs through model-specific adapters.
+- Include a first-class single-image workspace with WebUI-style fixed/increment/random seed behavior, batches, model-aware controls, and easy resolution selection.
 - Scan checkpoints, LoRAs, VAEs, embeddings, and ControlNet assets from configurable directories without copying them into Morphorum.
 - Provide capability-driven model settings instead of pretending every architecture uses the same CFG/sampler/scheduler controls.
 - Provide 2D/3D keyframed camera motion, cadence, depth, masks, hybrid/video workflows, and a modern timeline.
@@ -65,13 +66,17 @@ curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/b
 
 Install-location precedence is: explicit command-line path, then `MORPHORUM_HOME`, then the platform default.
 
-The bootstrap scripts install or update Morphorum in the selected folder, then hand off to the platform installer. During this early scaffold phase they may report that application components have not landed yet instead of pretending there is a finished renderer hiding somewhere.
+The bootstrap scripts clone/update Morphorum and hand off to the platform installer. Morphorum owns its own `uv`, managed Python 3.12 runtime, and `.venv`; users do not need to maintain a global Python environment. Normal users will not need Node.js when the frontend lands because release installs will consume prebuilt frontend assets.
+
+See [docs/INSTALLATION.md](docs/INSTALLATION.md) for the runtime layout, update/rollback behavior, logs, repair process, and troubleshooting details.
 
 ## Normal usage
 
 After installation:
 
 ### Windows
+
+Local-only:
 
 ```text
 run.bat
@@ -92,11 +97,26 @@ repair.bat
 
 ### Linux
 
+Local-only:
+
 ```text
 ./run.sh
+```
+
+LAN-accessible mode:
+
+```text
+./run-lan.sh
+```
+
+Maintenance:
+
+```text
 ./update.sh
 ./repair.sh
 ```
+
+The current runtime foundation listens on port `7865`. After launch, `http://127.0.0.1:7865/` displays the temporary Morphorum runtime page and `/api/health` exposes the health check used by the installer self-test.
 
 ## Project philosophy
 
