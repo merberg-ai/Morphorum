@@ -20,37 +20,11 @@ from .console import emit_console
 from .model_index import get_model
 from .paths import CACHE_DIR, OUTPUTS_DIR, ensure_runtime_dirs
 
-SUPPORTED_FAMILIES = {"sd15", "sd2", "sdxl"}
+SUPPORTED_FAMILIES = {"sdxl"}
 FIRST_IMAGE_EXTENSIONS = {".safetensors", ".ckpt"}
 LORA_TAG = re.compile(r"<lora:([^:>]+):([+-]?(?:\d+(?:\.\d*)?|\.\d+))>", re.IGNORECASE)
 
 CAPABILITIES: dict[str, dict[str, Any]] = {
-    "sd15": {
-        "supported": True,
-        "label": "Stable Diffusion 1.x",
-        "steps": {"default": 25, "min": 1, "max": 100},
-        "guidance": {"key": "cfg_scale", "label": "CFG", "default": 7.0, "min": 1.0, "max": 30.0},
-        "negative_prompt": True,
-        "resolutions": [
-            {"label": "Square 512", "width": 512, "height": 512},
-            {"label": "Portrait 2:3", "width": 512, "height": 768},
-            {"label": "Landscape 3:2", "width": 768, "height": 512},
-            {"label": "Portrait Large", "width": 640, "height": 960},
-            {"label": "Landscape Large", "width": 960, "height": 640},
-        ],
-    },
-    "sd2": {
-        "supported": True,
-        "label": "Stable Diffusion 2.x",
-        "steps": {"default": 25, "min": 1, "max": 100},
-        "guidance": {"key": "cfg_scale", "label": "CFG", "default": 7.0, "min": 1.0, "max": 30.0},
-        "negative_prompt": True,
-        "resolutions": [
-            {"label": "Square 768", "width": 768, "height": 768},
-            {"label": "Portrait 2:3", "width": 640, "height": 960},
-            {"label": "Landscape 3:2", "width": 960, "height": 640},
-        ],
-    },
     "sdxl": {
         "supported": True,
         "label": "SDXL",
@@ -68,12 +42,12 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
     "flux": {
         "supported": False,
         "label": "Flux",
-        "reason": "Flux model adapter is planned immediately after the first SD/SDXL image milestone.",
+        "reason": "Flux is an enabled Morphorum model family, but its generation adapter has not landed yet.",
     },
     "zimage": {
         "supported": False,
         "label": "Z-Image",
-        "reason": "Z-Image model adapter is planned immediately after the first SD/SDXL image milestone.",
+        "reason": "Z-Image is an enabled Morphorum model family, but its generation adapter has not landed yet.",
     },
 }
 
@@ -216,7 +190,7 @@ class GenerationManager:
         if model_path.suffix.lower() not in FIRST_IMAGE_EXTENSIONS:
             supported = ", ".join(sorted(FIRST_IMAGE_EXTENSIONS))
             raise GenerationError(
-                f"The first SD/SDXL adapter only supports {supported} checkpoint files. "
+                f"The current SDXL adapter only supports {supported} checkpoint files. "
                 f"'{model_path.suffix or '[no extension]'}' is indexed for future adapters but cannot be generated yet."
             )
         if not request.prompt:
@@ -369,13 +343,13 @@ class GenerationManager:
 
         try:
             import torch
-            from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
+            from diffusers import StableDiffusionXLPipeline
         except Exception as exc:
             raise GenerationError(f"Inference runtime is not installed correctly: {exc}") from exc
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if device == "cuda" else torch.float32
-        pipeline_class = StableDiffusionXLPipeline if model["family"] == "sdxl" else StableDiffusionPipeline
+        pipeline_class = StableDiffusionXLPipeline
         cache_dir = CACHE_DIR / "huggingface"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -383,9 +357,6 @@ class GenerationManager:
             "torch_dtype": dtype,
             "cache_dir": str(cache_dir),
         }
-        if model["family"] in {"sd15", "sd2"}:
-            kwargs.update({"safety_checker": None, "feature_extractor": None, "requires_safety_checker": False})
-
         try:
             pipe = pipeline_class.from_single_file(model["path"], **kwargs)
             pipe.set_progress_bar_config(disable=True)
