@@ -58,7 +58,7 @@ def test_unsupported_family_is_rejected(tmp_path, monkeypatch) -> None:
     checkpoint.write_bytes(b"fake")
     monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint, "flux"))
     manager = GenerationManager()
-    with pytest.raises(GenerationError, match="Flux model adapter"):
+    with pytest.raises(GenerationError, match="Flux is an enabled Morphorum model family"):
         manager._validate_request(GenerationRequest(model_id="model-1", prompt="test"))
 
 
