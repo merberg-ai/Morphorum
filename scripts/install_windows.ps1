@@ -24,10 +24,12 @@ function Download-File([string]$Uri, [string]$Destination) {
 }
 
 function Install-UvStandalone([string]$DestinationDir, [string]$ExpectedExe) {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+    $rawArch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+    $arch = if ($rawArch) { $rawArch.ToUpperInvariant() } else { 'UNKNOWN' }
+
     switch ($arch) {
-        'x64'   { $target = 'x86_64-pc-windows-msvc' }
-        'arm64' { $target = 'aarch64-pc-windows-msvc' }
+        'AMD64' { $target = 'x86_64-pc-windows-msvc' }
+        'ARM64' { $target = 'aarch64-pc-windows-msvc' }
         default { throw "Unsupported Windows architecture for uv bootstrap: $arch" }
     }
 
@@ -42,7 +44,11 @@ function Install-UvStandalone([string]$DestinationDir, [string]$ExpectedExe) {
         if (-not (Test-Path $tempZip)) { throw 'uv archive download did not produce a file.' }
         if ((Get-Item $tempZip).Length -lt 1024) { throw 'uv archive download appears to be invalid or incomplete.' }
 
-        New-Item -ItemType Directory -Force -Path $DestinationDir | Out-Null
+        if (Test-Path $DestinationDir) {
+            Get-ChildItem -Force $DestinationDir -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        } else {
+            New-Item -ItemType Directory -Force -Path $DestinationDir | Out-Null
+        }
 
         try {
             Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
