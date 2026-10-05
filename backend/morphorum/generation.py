@@ -19,6 +19,7 @@ from PIL.PngImagePlugin import PngInfo
 from .console import emit_console
 from .model_index import get_model
 from .paths import CACHE_DIR, OUTPUTS_DIR, ensure_runtime_dirs
+from .settings import load_settings
 
 SUPPORTED_FAMILIES = {"sdxl"}
 FIRST_IMAGE_EXTENSIONS = {".safetensors", ".ckpt"}
@@ -145,6 +146,63 @@ class GenerationManager:
 
     def capabilities(self) -> dict[str, dict[str, Any]]:
         return CAPABILITIES
+
+    def model_status(self) -> dict[str, Any]:
+        with self._lock:
+            loaded = self._pipeline is not None
+            model_id = self._pipeline_model_id
+            device = self._pipeline_device
+            active = any(
+                job.status in {"queued", "loading_model", "generating", "finalizing"}
+                for job in self._jobs.values()
+            )
+
+        model = get_model(model_id) if model_id else None
+        return {
+            "loaded": loaded,
+            "model_id": model_id,
+            "model_name": model.get("name") if model else None,
+            "family": model.get("family") if model else None,
+            "device": device,
+            "busy": active,
+        }
+
+    def unload_model(self) -> dict[str, Any]:
+        with self._lock:
+            active = [
+                job.id
+                for job in self._jobs.values()
+                if job.status in {"queued", "loading_model", "generating", "finalizing"}
+            ]
+            if active:
+                raise GenerationError(
+                    "Cannot unload the model while generation is active. Cancel or wait for the current batch to finish."
+                )
+            was_loaded = self._pipeline is not None
+            model_id = self._pipeline_model_id
+
+        self._unload_pipeline()
+        if was_loaded:
+            emit_console("info", "generation", "Model unloaded manually.")
+        return {
+            "status": "unloaded" if was_loaded else "not_loaded",
+            "model_id": model_id,
+            "loaded": False,
+        }
+
+    @staticmethod
+    def _unload_after_generation_enabled() -> bool:
+        try:
+            settings = load_settings()
+            performance = settings.get("performance", {}) if isinstance(settings, dict) else {}
+            return bool(performance.get("unload_after_generation", False))
+        except Exception as exc:
+            emit_console(
+                "warning",
+                "generation",
+                f"Could not read unload-after-generation setting: {exc}",
+            )
+            return False
 
     def _ensure_worker(self) -> None:
         with self._lock:
@@ -498,6 +556,15 @@ class GenerationManager:
                 job.progress = (image_index + 1) / total_images
                 job.current_step = job.request.steps
             emit_console("info", "generation", f"Saved {filename}.")
+
+        if self._unload_after_generation_enabled():
+            with self._lock:
+                job.status = "finalizing"
+                job.message = "Unloading model after generation"
+                job.progress = 1.0
+                job.eta_seconds = 0.0
+            self._unload_pipeline()
+            emit_console("info", "generation", f"{job.id}: model unloaded after batch completion.")
 
         with self._lock:
             job.status = "completed"
