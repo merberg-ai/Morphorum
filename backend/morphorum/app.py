@@ -1,19 +1,38 @@
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from .console import (
+    clear_console,
+    emit_console,
+    install_logging_handler,
+    snapshot,
+    sse_events,
+)
 from .paths import ROOT, ensure_runtime_dirs
+from .settings import load_settings, save_settings, validate_model_paths, validate_path
 from .system_info import doctor_report, install_manifest
+
+FRONTEND_DIR = ROOT / "frontend" / "dist"
+FRONTEND_INDEX = FRONTEND_DIR / "index.html"
+ASSET_DIR = FRONTEND_DIR / "assets"
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     ensure_runtime_dirs()
+    install_logging_handler()
+    emit_console("info", "server", f"Morphorum {__version__} runtime starting.")
     yield
+    emit_console("info", "server", "Morphorum runtime stopping.")
 
 
 app = FastAPI(
@@ -23,34 +42,44 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+if ASSET_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=ASSET_DIR), name="assets")
 
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-def root() -> str:
-    return f"""<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Morphorum</title>
-  <style>
-    :root {{ color-scheme: dark; }}
-    body {{ margin:0; min-height:100vh; display:grid; place-items:center;
-      font-family:system-ui,sans-serif; background:#0d0f13; color:#edf3f7; }}
-    main {{ width:min(680px,calc(100% - 32px)); padding:28px; border-radius:18px;
-      background:rgba(24,27,34,.72); border:1px solid rgba(255,255,255,.08);
-      box-shadow:0 18px 60px rgba(0,0,0,.35); backdrop-filter:blur(14px); }}
-    h1 {{ margin-top:0; }}
-    code {{ color:#41d9ff; }}
-    .ok {{ color:#72e6a7; }}
-  </style>
-</head>
-<body><main>
-  <h1>Morphorum</h1>
-  <p class="ok">Runtime foundation is installed and the API is alive.</p>
-  <p>Version <code>{__version__}</code></p>
-  <p>The full UI is the next milestone. Health endpoint: <code>/api/health</code></p>
-</main></body>
-</html>"""
+
+@app.middleware("http")
+async def api_console_middleware(request: Request, call_next):
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        if request.url.path != "/api/console/stream":
+            elapsed = (time.perf_counter() - started) * 1000
+            emit_console(
+                "error",
+                "api",
+                f"{request.method} {request.url.path} -> 500 ({elapsed:.0f} ms): {exc}",
+            )
+        raise
+
+    if request.url.path != "/api/console/stream":
+        elapsed = (time.perf_counter() - started) * 1000
+        level = "warning" if response.status_code >= 400 else "info"
+        emit_console(
+            level,
+            "api",
+            f"{request.method} {request.url.path} -> {response.status_code} ({elapsed:.0f} ms)",
+        )
+    return response
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    if FRONTEND_INDEX.exists():
+        return FileResponse(FRONTEND_INDEX)
+    return HTMLResponse(
+        "<h1>Morphorum</h1><p>Frontend assets are missing. Run the Morphorum repair command.</p>",
+        status_code=503,
+    )
 
 
 @app.get("/api/health")
@@ -71,3 +100,62 @@ def system() -> dict:
 @app.get("/api/install")
 def installed() -> dict:
     return install_manifest()
+
+
+@app.get("/api/settings")
+def get_settings() -> dict[str, Any]:
+    settings = load_settings()
+    return {
+        "settings": settings,
+        "validation": validate_model_paths(settings),
+    }
+
+
+@app.put("/api/settings")
+def put_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    settings = save_settings(payload)
+    validation = validate_model_paths(settings)
+    bad = sum(1 for item in validation if not item.get("is_directory") or not item.get("readable"))
+    if bad:
+        emit_console("warning", "runtime", f"Settings saved with {bad} model path warning(s).")
+    else:
+        emit_console("info", "runtime", "Settings saved successfully.")
+    return {
+        "status": "saved",
+        "settings": settings,
+        "validation": validation,
+    }
+
+
+@app.post("/api/settings/validate-path")
+def post_validate_path(payload: dict[str, Any]) -> dict[str, Any]:
+    return validate_path(str(payload.get("path", "")))
+
+
+@app.post("/api/settings/validate")
+def post_validate_settings() -> dict[str, Any]:
+    return {"validation": validate_model_paths()}
+
+
+@app.get("/api/console")
+def get_console(after_id: int = 0, limit: int = 500) -> dict[str, Any]:
+    return {"events": snapshot(after_id=after_id, limit=limit)}
+
+
+@app.get("/api/console/stream")
+def stream_console(after_id: int = 0):
+    return StreamingResponse(
+        sse_events(after_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.delete("/api/console")
+def delete_console() -> dict[str, str]:
+    clear_console()
+    return {"status": "cleared"}
