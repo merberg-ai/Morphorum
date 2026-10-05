@@ -59,12 +59,15 @@ It produces a resolved `FrameContext` for inference instead of calling a model i
 
 Inference is architecture-specific and lives behind adapters.
 
-Initial families:
+Initial supported families:
 
-- Stable Diffusion 1.x/2.x
 - SDXL
 - Flux variants
 - Z-Image variants
+
+The enabled family list is a backend registry consumed by Settings and the model library. New modern families should be added through that registry plus an adapter/capability definition rather than hard-coded separately across UI surfaces.
+
+Stable Diffusion 1.x/2.x are not runtime-supported model families. Legacy project imports may preserve their original fields and model references for provenance/migration, but Morphorum must require an explicit model-family migration or replacement rather than pretending those projects can render unchanged.
 
 Adapters own model-specific behavior such as:
 
