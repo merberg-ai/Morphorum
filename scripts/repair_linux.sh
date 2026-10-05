@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-echo "Morphorum Doctor"
-echo "==============="
-for cmd in git ffmpeg nvidia-smi; do
-  if command -v "$cmd" >/dev/null 2>&1; then echo "[OK] $cmd"; else echo "[!] $cmd not found"; fi
-done
-if [[ -x .venv/bin/python ]]; then
-  echo "[OK] Python virtual environment"
-  .venv/bin/python --version
-  .venv/bin/python -c "import torch; print('PyTorch:', torch.__version__, 'CUDA:', torch.cuda.is_available())" 2>/dev/null || echo "[!] PyTorch not installed yet."
-else
-  echo "[!] Python virtual environment missing."
+echo "Morphorum Repair / Doctor"
+echo "========================"
+
+"$ROOT/scripts/install_linux.sh" --repair
+
+PYTHON="$ROOT/.venv/bin/python"
+if [[ ! -x "$PYTHON" ]]; then
+  echo "[X] Python environment is still missing after repair." >&2
+  exit 1
 fi
 
 echo
-exec "$ROOT/scripts/install_linux.sh"
+exec "$PYTHON" -m morphorum doctor
