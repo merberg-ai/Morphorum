@@ -33,6 +33,12 @@ Success criterion: import representative legacy projects and resolve schedule va
 - initial SD 1.x inference adapter
 - single-file checkpoint loading
 - LoRA parsing/loading with `<lora:name:weight>`
+- first-class Single Image workspace
+- model-aware prompt/negative-prompt controls
+- steps/CFG/sampler/scheduler controls driven by the active adapter
+- easy resolution picker with aspect-ratio presets, exact custom dimensions, orientation swap, divisibility validation, and megapixel feedback
+- image-generation progress, preview, batch status, ETA where meaningful, and lightweight session history
+- send generated image/settings into animation as a starting point
 - txt2img first-frame generation
 - img2img subsequent-frame generation
 - PNG frame output
@@ -56,11 +62,13 @@ Success criterion: import representative legacy projects and resolve schedule va
 - SDXL adapter
 - Flux adapter(s)
 - Z-Image adapter(s)
-- capability-driven model configuration UI
-- architecture-specific CFG/guidance controls
+- capability-driven model configuration UI shared by Single Image and Animation
+- architecture-specific CFG/guidance/true-CFG/shift controls
+- model-aware resolution recommendations/presets
 - model profiles/presets
 - LoRA family compatibility detection
 - precision/offload/memory profiles
+- single-image support for each enabled model family using the same adapter/capability layer
 
 ## 0.5.0-alpha.1 — depth and 3D
 
@@ -91,6 +99,7 @@ Success criterion: import representative legacy projects and resolve schedule va
 - plugin/extension SDK
 - advanced model-family adapters and modern video-model interpolation/tweening
 - camera-path visualization
+- richer single-image gallery/history and comparison workflows
 
 ## Non-negotiable compatibility targets
 
@@ -101,4 +110,5 @@ Throughout development:
 - do not couple rendering to a browser session
 - do not make desktop-only UI decisions that render mobile unusable
 - do not force all architectures through SD-style settings
+- do not maintain separate contradictory model-parameter semantics between Single Image and Animation
 - do not copy GPL/AGPL implementation source into the Unlicensed core
