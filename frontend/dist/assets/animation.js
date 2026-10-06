@@ -99,7 +99,13 @@
       select.appendChild(option);
     }
 
-    select.value = models.some(model => model.id === selected) ? selected : '';
+    if (selected && !models.some(model => model.id === selected)) {
+      const missing = document.createElement('option');
+      missing.value = selected;
+      missing.textContent = `Missing indexed model · ${selected}`;
+      select.appendChild(missing);
+    }
+    select.value = selected;
   }
 
   function renderProjectSelect() {
@@ -292,7 +298,9 @@
 
   function collectProject() {
     if (!state.project) return null;
-    const selectedModel = modelById(qs('#animation-model')?.value || '');
+    const selectedModelId = qs('#animation-model')?.value || '';
+    const selectedModel = modelById(selectedModelId);
+    const existingModel = state.project.model || {};
     const promptMaps = collectPromptMaps();
 
     return {
@@ -306,10 +314,10 @@
         height: Number(qs('#animation-height')?.value || 1024),
       },
       model: {
-        ...(state.project.model || {}),
-        model_id: selectedModel?.id || '',
-        family: selectedModel?.family || '',
-        variant: selectedModel?.variant || '',
+        ...existingModel,
+        model_id: selectedModel?.id || selectedModelId,
+        family: selectedModel?.family || existingModel.family || '',
+        variant: selectedModel?.variant || existingModel.variant || '',
       },
       ...promptMaps,
       motion: {
