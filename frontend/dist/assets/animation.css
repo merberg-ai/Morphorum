@@ -176,3 +176,185 @@
     grid-row: 1;
   }
 }
+
+
+.animation-inspector-card {
+  grid-column: 1 / -1;
+}
+.animation-inspector-controls {
+  display: grid;
+  grid-template-columns: 120px minmax(180px, 1fr) 220px;
+  gap: 10px;
+  align-items: end;
+}
+.animation-frame-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  margin: 0 0 12px;
+}
+.animation-validation-summary {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: rgba(6,9,13,.36);
+  font-size: .74rem;
+  line-height: 1.4;
+}
+.animation-validation-summary.ok {
+  color: #9bdcb8;
+  border-color: rgba(114,230,167,.24);
+  background: rgba(114,230,167,.05);
+}
+.animation-validation-summary.warning {
+  color: #e4c77f;
+  border-color: rgba(243,198,106,.25);
+  background: rgba(243,198,106,.05);
+}
+.animation-validation-summary.error {
+  color: #efaaaa;
+  border-color: rgba(255,115,115,.26);
+  background: rgba(255,115,115,.05);
+}
+
+.animation-schedule.schedule-valid {
+  border-color: rgba(114,230,167,.22);
+}
+.animation-schedule.schedule-warning {
+  border-color: rgba(243,198,106,.48);
+  box-shadow: 0 0 0 2px rgba(243,198,106,.05);
+}
+.animation-schedule.schedule-error {
+  border-color: rgba(255,115,115,.62);
+  box-shadow: 0 0 0 2px rgba(255,115,115,.07);
+}
+
+.animation-curve-wrap {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(rgba(255,255,255,.015), rgba(255,255,255,.005)),
+    rgba(3,5,8,.5);
+  overflow: hidden;
+}
+.animation-curve-chart {
+  display: block;
+  width: 100%;
+  height: 190px;
+}
+.animation-chart-axis {
+  stroke: rgba(255,255,255,.12);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.animation-chart-path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 5px rgba(65,217,255,.22));
+}
+.animation-curve-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 11px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .66rem;
+}
+
+.animation-resolved-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.animation-resolved-grid > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(6,9,13,.36);
+}
+.animation-resolved-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: .65rem;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+}
+.animation-resolved-grid strong {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: .8rem;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.animation-prompt-resolution {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 10px;
+}
+.animation-prompt-resolution > div {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(6,9,13,.32);
+}
+.animation-prompt-resolution-text {
+  color: #cbd3da;
+  font-size: .73rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 980px) {
+  .animation-inspector-controls {
+    grid-template-columns: 110px minmax(140px, 1fr) 180px;
+  }
+  .animation-resolved-grid {
+    grid-template-columns: repeat(3, minmax(0,1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .animation-inspector-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+  .animation-inspector-controls .animation-frame-slider {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0 0 4px;
+  }
+  .animation-resolved-grid {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+  .animation-prompt-resolution {
+    grid-template-columns: 1fr;
+  }
+  .animation-curve-chart {
+    height: 155px;
+  }
+  .animation-curve-meta {
+    flex-direction: column;
+    gap: 3px;
+  }
+}
+
+@media (max-width: 420px) {
+  .animation-inspector-controls {
+    grid-template-columns: 1fr;
+  }
+  .animation-inspector-controls .animation-frame-slider {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
