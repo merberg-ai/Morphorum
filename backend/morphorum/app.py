@@ -16,8 +16,15 @@ from .animation_projects import (
     create_animation_project,
     list_animation_projects,
     load_animation_project,
+    normalize_animation_project,
     save_animation_project,
 )
+from .animation_resolution import (
+    project_schedule_series,
+    resolve_project_frame,
+    validate_project_schedules,
+)
+from .schedules import ScheduleError
 from .console import (
     clear_console,
     emit_console,
@@ -195,6 +202,63 @@ def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
         raise HTTPException(status_code=status, detail=message) from exc
+
+
+@app.post("/api/animation/resolve-frame")
+def api_resolve_animation_frame(payload: dict[str, Any]) -> dict[str, Any]:
+    project_payload = payload.get("project")
+    if not isinstance(project_payload, dict):
+        raise HTTPException(status_code=400, detail="Animation project payload is required.")
+    project_id = str(project_payload.get("id") or "preview-project").strip().lower()
+    try:
+        normalized = normalize_animation_project(
+            project_payload,
+            existing=project_payload,
+            project_id=project_id,
+        )
+        frame = int(payload.get("frame", 0))
+        return {"resolved": resolve_project_frame(normalized, frame)}
+    except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/validate-schedules")
+def api_validate_animation_schedules(payload: dict[str, Any]) -> dict[str, Any]:
+    project_payload = payload.get("project")
+    if not isinstance(project_payload, dict):
+        raise HTTPException(status_code=400, detail="Animation project payload is required.")
+    project_id = str(project_payload.get("id") or "preview-project").strip().lower()
+    try:
+        normalized = normalize_animation_project(
+            project_payload,
+            existing=project_payload,
+            project_id=project_id,
+        )
+        return validate_project_schedules(normalized)
+    except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/schedule-series")
+def api_animation_schedule_series(payload: dict[str, Any]) -> dict[str, Any]:
+    project_payload = payload.get("project")
+    if not isinstance(project_payload, dict):
+        raise HTTPException(status_code=400, detail="Animation project payload is required.")
+    field = str(payload.get("field") or "").strip()
+    project_id = str(project_payload.get("id") or "preview-project").strip().lower()
+    try:
+        normalized = normalize_animation_project(
+            project_payload,
+            existing=project_payload,
+            project_id=project_id,
+        )
+        return project_schedule_series(
+            normalized,
+            field,
+            sample_count=int(payload.get("sample_count", 120)),
+        )
+    except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/models/families")
