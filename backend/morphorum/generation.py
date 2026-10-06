@@ -497,17 +497,7 @@ class GenerationManager:
                 f"Could not write failure manifest for {job.id}: {manifest_exc}",
             )
 
-    def _load_pipeline(self, job: GenerationJob):
-        model = job.model
-        model_id = model["id"]
-        if self._pipeline is not None and self._pipeline_model_id == model_id:
-            emit_console("info", "generation", f"Reusing loaded model: {model['name']}.")
-            return self._pipeline, self._pipeline_device
-
-        self._unload_pipeline()
-        self._set_status(job, "loading_model", f"Loading {model['name']}")
-        emit_console("info", "generation", f"Loading {model['family']} checkpoint: {model['path']}")
-
+    def _load_sdxl_pipeline(self, job: GenerationJob, cache_dir: Path):
         try:
             import torch
             from diffusers import StableDiffusionXLPipeline
@@ -516,75 +506,158 @@ class GenerationManager:
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if device == "cuda" else torch.float32
-        pipeline_class = StableDiffusionXLPipeline
-        cache_dir = CACHE_DIR / "huggingface"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
-        kwargs: dict[str, Any] = {
-            "torch_dtype": dtype,
-            "cache_dir": str(cache_dir),
-        }
         try:
-            pipe = pipeline_class.from_single_file(model["path"], **kwargs)
+            pipe = StableDiffusionXLPipeline.from_single_file(
+                job.model["path"],
+                torch_dtype=dtype,
+                cache_dir=str(cache_dir),
+            )
             pipe.set_progress_bar_config(disable=True)
             pipe.to(device)
         except Exception as exc:
             if self._is_cuda_oom(exc):
-                raise self._friendly_error(exc, action=f"loading checkpoint '{model['name']}'") from exc
+                raise self._friendly_error(exc, action=f"loading checkpoint '{job.model['name']}'") from exc
             raise GenerationError(
-                f"Could not load checkpoint '{model['name']}'. Diffusers may need its matching pipeline config on first load. {exc}"
+                f"Could not load checkpoint '{job.model['name']}'. Diffusers may need its matching pipeline config on first load. {exc}"
             ) from exc
+        return pipe, device, device
+
+    def _load_flux_pipeline(self, job: GenerationJob, cache_dir: Path):
+        try:
+            import torch
+            from diffusers import FluxPipeline, FluxTransformer2DModel
+        except Exception as exc:
+            raise GenerationError(f"Flux inference runtime is not installed correctly: {exc}") from exc
+
+        if not torch.cuda.is_available():
+            raise GenerationError(
+                "The first Flux adapter requires a CUDA-capable NVIDIA GPU. CPU Flux inference is intentionally disabled because it is impractically slow."
+            )
+
+        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        variant = self._model_variant(job.model)
+        self._set_status(
+            job,
+            "loading_model",
+            f"Loading {job.model['name']} and shared Flux components",
+        )
+        emit_console(
+            "info",
+            "generation",
+            f"Loading Flux {variant} transformer: {job.model['path']}",
+        )
+        emit_console(
+            "info",
+            "generation",
+            "Flux uses shared CLIP/T5/VAE components cached by Morphorum. The first Flux load may download several gigabytes.",
+        )
+
+        try:
+            transformer = FluxTransformer2DModel.from_single_file(
+                job.model["path"],
+                torch_dtype=dtype,
+                cache_dir=str(cache_dir),
+            )
+            pipe = FluxPipeline.from_pretrained(
+                FLUX_COMPONENT_REPO,
+                transformer=transformer,
+                torch_dtype=dtype,
+                cache_dir=str(cache_dir),
+            )
+            pipe.set_progress_bar_config(disable=True)
+            if hasattr(pipe.vae, "enable_tiling"):
+                pipe.vae.enable_tiling()
+            if hasattr(pipe.vae, "enable_slicing"):
+                pipe.vae.enable_slicing()
+            pipe.enable_model_cpu_offload()
+        except Exception as exc:
+            if self._is_cuda_oom(exc):
+                raise self._friendly_error(exc, action=f"loading Flux model '{job.model['name']}'") from exc
+            raise GenerationError(
+                f"Could not load Flux model '{job.model['name']}'. The selected file must be a Flux transformer .safetensors checkpoint. "
+                f"Morphorum also needs access to the shared Flux components on first load. {exc}"
+            ) from exc
+
+        return pipe, "cuda-offload", "cpu"
+
+    def _load_pipeline(self, job: GenerationJob):
+        model = job.model
+        model_id = model["id"]
+        family = str(model.get("family", ""))
+
+        if self._pipeline is not None and self._pipeline_model_id == model_id:
+            emit_console("info", "generation", f"Reusing loaded model: {model['name']}.")
+            generator_device = "cpu" if family == "flux" else (self._pipeline_device or "cpu")
+            return self._pipeline, generator_device
+
+        self._unload_pipeline()
+        self._set_status(job, "loading_model", f"Loading {model['name']}")
+        emit_console("info", "generation", f"Loading {family} checkpoint: {model['path']}")
+
+        cache_dir = CACHE_DIR / "huggingface"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        if family == "sdxl":
+            pipe, display_device, generator_device = self._load_sdxl_pipeline(job, cache_dir)
+        elif family == "flux":
+            pipe, display_device, generator_device = self._load_flux_pipeline(job, cache_dir)
+        else:
+            raise GenerationError(f"No pipeline loader is registered for model family '{family}'.")
 
         self._pipeline = pipe
         self._pipeline_model_id = model_id
-        self._pipeline_device = device
+        self._pipeline_device = display_device
         self._pipeline_scheduler_config = dict(pipe.scheduler.config)
         self._pipeline_sampler = None
-        emit_console("info", "generation", f"Model ready on {device}: {model['name']}.")
-        return pipe, device
+        emit_console("info", "generation", f"Model ready on {display_device}: {model['name']}.")
+        return pipe, generator_device
 
     def _configure_sampler(self, pipe: Any, family: str, sampler: str) -> None:
-        if family != "sdxl":
-            raise GenerationError(f"Sampler switching is not implemented for model family '{family}'.")
-
-        try:
-            from diffusers import (
-                DDIMScheduler,
-                DPMSolverMultistepScheduler,
-                EulerAncestralDiscreteScheduler,
-                EulerDiscreteScheduler,
-                HeunDiscreteScheduler,
-                LMSDiscreteScheduler,
-                UniPCMultistepScheduler,
-            )
-        except Exception as exc:
-            raise GenerationError(f"Could not load sampler implementations: {exc}") from exc
-
-        sampler_specs: dict[str, tuple[Any, dict[str, Any]]] = {
-            "euler": (EulerDiscreteScheduler, {}),
-            "euler_a": (EulerAncestralDiscreteScheduler, {}),
-            "dpmpp_2m": (
-                DPMSolverMultistepScheduler,
-                {"algorithm_type": "dpmsolver++", "solver_order": 2},
-            ),
-            "dpmpp_2m_sde": (
-                DPMSolverMultistepScheduler,
-                {"algorithm_type": "sde-dpmsolver++", "solver_order": 2},
-            ),
-            "ddim": (DDIMScheduler, {}),
-            "lms": (LMSDiscreteScheduler, {}),
-            "heun": (HeunDiscreteScheduler, {}),
-            "unipc": (UniPCMultistepScheduler, {}),
-        }
-
-        spec = sampler_specs.get(sampler)
-        if spec is None:
-            raise GenerationError(f"Unknown sampler '{sampler}'.")
-
-        scheduler_class, scheduler_kwargs = spec
         base_config = self._pipeline_scheduler_config or dict(pipe.scheduler.config)
+
         try:
-            pipe.scheduler = scheduler_class.from_config(base_config, **scheduler_kwargs)
+            if family == "flux":
+                from diffusers import FlowMatchEulerDiscreteScheduler
+
+                if sampler != "flowmatch_euler":
+                    raise GenerationError(f"Unknown Flux sampler '{sampler}'.")
+                pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(base_config)
+            elif family == "sdxl":
+                from diffusers import (
+                    DDIMScheduler,
+                    DPMSolverMultistepScheduler,
+                    EulerAncestralDiscreteScheduler,
+                    EulerDiscreteScheduler,
+                    HeunDiscreteScheduler,
+                    LMSDiscreteScheduler,
+                    UniPCMultistepScheduler,
+                )
+
+                sampler_specs: dict[str, tuple[Any, dict[str, Any]]] = {
+                    "euler": (EulerDiscreteScheduler, {}),
+                    "euler_a": (EulerAncestralDiscreteScheduler, {}),
+                    "dpmpp_2m": (
+                        DPMSolverMultistepScheduler,
+                        {"algorithm_type": "dpmsolver++", "solver_order": 2},
+                    ),
+                    "dpmpp_2m_sde": (
+                        DPMSolverMultistepScheduler,
+                        {"algorithm_type": "sde-dpmsolver++", "solver_order": 2},
+                    ),
+                    "ddim": (DDIMScheduler, {}),
+                    "lms": (LMSDiscreteScheduler, {}),
+                    "heun": (HeunDiscreteScheduler, {}),
+                    "unipc": (UniPCMultistepScheduler, {}),
+                }
+                spec = sampler_specs.get(sampler)
+                if spec is None:
+                    raise GenerationError(f"Unknown sampler '{sampler}'.")
+                scheduler_class, scheduler_kwargs = spec
+                pipe.scheduler = scheduler_class.from_config(base_config, **scheduler_kwargs)
+            else:
+                raise GenerationError(f"Sampler switching is not implemented for model family '{family}'.")
+        except GenerationError:
+            raise
         except Exception as exc:
             raise GenerationError(f"Could not configure sampler '{sampler}': {exc}") from exc
 
