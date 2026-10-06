@@ -1217,9 +1217,11 @@
     try {
       const payload = await api(`/api/animation/projects/${encodeURIComponent(projectId)}`);
       clearMotionPreviewResult();
+      resetRenderUi();
       state.project = payload.project;
       state.path = payload.path || '';
       fillForm();
+      await loadRenderHistory();
     } catch (error) {
       toast('Could not load animation project', error.message, 'error', 6500);
     } finally {
@@ -1244,10 +1246,12 @@
         body: JSON.stringify({ name }),
       });
       clearMotionPreviewResult();
+      resetRenderUi();
       state.project = payload.project;
       state.path = payload.path || '';
       await loadProjectList();
       fillForm();
+      await loadRenderHistory();
       toast('Animation project created', `${state.project.name} is ready for editing.`, 'success');
     } catch (error) {
       toast('Could not create animation project', error.message, 'error', 6500);
@@ -1272,6 +1276,7 @@
       state.path = payload.path || state.path;
       await loadProjectList();
       fillForm();
+      await loadRenderHistory();
       toast('Animation project saved', `${state.project.name} was written to project.json.`, 'success');
     } catch (error) {
       toast('Animation project save failed', error.message, 'error', 7000);
@@ -1309,6 +1314,13 @@
     qs('#animation-clear-source')?.addEventListener('click', clearSourceImage);
     qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
 
+    qs('#animation-start-render')?.addEventListener('click', startAnimationRender);
+    qs('#animation-cancel-render')?.addEventListener('click', cancelAnimationRender);
+    qs('#animation-resume-render')?.addEventListener('click', resumeAnimationRender);
+    qs('#animation-render-select')?.addEventListener('change', event => {
+      showRender(event.target.value);
+    });
+
     qs('#animation-project-select')?.addEventListener('change', event => {
       loadProject(event.target.value);
     });
@@ -1316,6 +1328,7 @@
     qs('#animation-model')?.addEventListener('change', () => {
       populateSamplerSelect('');
       markDirty();
+      renderSourceState();
     });
 
     qs('#animation-inspector-frame')?.addEventListener('input', event => {
