@@ -17,6 +17,7 @@ dependencies = [
   "accelerate>=1,<2",
   "safetensors>=0.8,<1",
   "Pillow>=10,<16",
+  "scipy>=1.14,<2",
 ]
 
 [dependency-groups]
