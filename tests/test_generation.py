@@ -240,7 +240,9 @@ def test_flux_dev_and_schnell_capabilities_and_validation(tmp_path, monkeypatch)
     dev = manager._effective_capability(dev_model)
     assert dev["supported"] is True
     assert dev["steps"]["default"] == 28
-    assert dev["guidance"]["default"] == 3.5
+    assert dev["guidance"]["default"] == 1.0
+    assert dev["guidance"]["label"] == "CFG"
+    assert dev["default_resolution"] == {"width": 1024, "height": 1024}
     assert dev["max_sequence_length"] == 512
     assert dev["samplers"]["default"] == "flowmatch_euler"
 
@@ -261,6 +263,7 @@ def test_flux_dev_and_schnell_capabilities_and_validation(tmp_path, monkeypatch)
     schnell = manager._effective_capability(schnell_model)
     assert schnell["steps"]["default"] == 4
     assert schnell["guidance"]["default"] == 0.0
+    assert schnell["default_resolution"] == {"width": 1024, "height": 1024}
     assert schnell["max_sequence_length"] == 256
 
     manager._validate_request(
@@ -408,3 +411,12 @@ def test_generation_job_public_includes_performance_metrics(tmp_path) -> None:
     assert "_started_monotonic" not in payload
     assert "_last_step_monotonic" not in payload
     assert "_step_durations" not in payload
+
+
+def test_sdxl_capability_has_explicit_ui_defaults() -> None:
+    manager = GenerationManager()
+    sdxl = manager.capabilities()["sdxl"]
+    assert sdxl["default_resolution"] == {"width": 1024, "height": 1024}
+    assert sdxl["steps"]["default"] == 25
+    assert sdxl["guidance"]["default"] == 6.0
+    assert sdxl["samplers"]["default"] == "euler"
