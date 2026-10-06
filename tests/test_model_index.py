@@ -57,3 +57,26 @@ def test_model_scan_indexes_configured_files_and_deduplicates(tmp_path, monkeypa
     assert summary["total"] == 2
     assert summary["counts"]["sdxl"]["checkpoints"] == 1
     assert summary["counts"]["sdxl"]["loras"] == 1
+
+
+def test_flux_scan_detects_dev_and_schnell_variants(tmp_path, monkeypatch) -> None:
+    user_config = tmp_path / "config.yaml"
+    index_db = tmp_path / "model-index.db"
+    flux_root = tmp_path / "flux"
+    flux_root.mkdir()
+
+    dev = flux_root / "flux1-dev.safetensors"
+    schnell = flux_root / "flux1-schnell-fp8.safetensors"
+    dev.write_bytes(b"fake-dev")
+    schnell.write_bytes(b"fake-schnell")
+
+    monkeypatch.setattr(settings_module, "USER_CONFIG", user_config)
+    monkeypatch.setattr(model_index, "MODEL_INDEX_DB", index_db)
+
+    save_settings({"models": {"flux": {"checkpoints": [str(flux_root)], "loras": []}}})
+    model_index.scan_models()
+
+    indexed = model_index.list_models(family="flux", kind="checkpoints")
+    variants = {item["filename"]: item["variant"] for item in indexed}
+    assert variants[dev.name] == "dev"
+    assert variants[schnell.name] == "schnell"
