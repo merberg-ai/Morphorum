@@ -14,6 +14,7 @@ from pathlib import Path
 from queue import Queue
 from typing import Any
 
+import numpy as np
 from PIL import Image, ImageOps
 from PIL.PngImagePlugin import PngInfo
 
@@ -229,6 +230,33 @@ def _prompt_conditioning_kwargs(
 
     raise AnimationRenderError(
         f"Prompt blending is not implemented for model family '{family}'."
+    )
+
+
+def _add_uniform_noise(
+    image: Image.Image,
+    *,
+    amount: float,
+    seed: int,
+) -> Image.Image:
+    amount = float(amount)
+    if not 0.0 <= amount <= 1.0:
+        raise AnimationRenderError(
+            f"Noise amount must be between 0 and 1; got {amount:g}."
+        )
+    if amount <= 0:
+        return image
+
+    pixels = np.asarray(image.convert("RGB"), dtype=np.float32)
+    rng = np.random.default_rng((int(seed) ^ 0xA5A5A5A5) % (2**32))
+    noise = rng.uniform(
+        low=-amount * 255.0,
+        high=amount * 255.0,
+        size=pixels.shape,
+    ).astype(np.float32)
+    return Image.fromarray(
+        np.clip(pixels + noise, 0, 255).astype(np.uint8),
+        mode="RGB",
     )
 
 
@@ -776,12 +804,13 @@ class AnimationRenderManager:
             )
 
             generation = resolved["generation"]
-            strength = float(generation["strength"])
-            if not 0.0 <= strength <= 1.0:
+            retention_strength = float(generation["strength"])
+            if not 0.0 <= retention_strength <= 1.0:
                 raise AnimationRenderError(
-                    f"Frame {frame} strength resolved to {strength:g}; "
-                    "img2img strength must be between 0 and 1."
+                    f"Frame {frame} strength resolved to {retention_strength:g}; "
+                    "Deforum-style strength must be between 0 and 1."
                 )
+            denoise_strength = 1.0 - retention_strength
 
             positive = resolved["prompts"]["positive"]
             negative = resolved["prompts"]["negative"]
@@ -789,6 +818,12 @@ class AnimationRenderManager:
             steps = int(generation["steps"])
             guidance = float(generation["guidance"])
             sampler = str(generation["sampler"])
+            noise_amount = float(generation["noise"])
+            transformed = _add_uniform_noise(
+                transformed,
+                amount=noise_amount,
+                seed=seed,
+            )
 
             with self._lock:
                 job.status = "rendering"
@@ -796,7 +831,7 @@ class AnimationRenderManager:
                 job.current_step = 0
                 job.message = f"Rendering frame {frame + 1} of {total}"
 
-            if strength <= 0:
+            if denoise_strength <= 0:
                 image = transformed
             else:
                 request = GenerationRequest(
@@ -834,7 +869,7 @@ class AnimationRenderManager:
                     device=generator_device
                 ).manual_seed(seed)
 
-                effective_steps = max(1, int(round(steps * strength)))
+                effective_steps = max(1, int(round(steps * denoise_strength)))
 
                 def on_step_end(
                     pipeline,
@@ -861,7 +896,7 @@ class AnimationRenderManager:
                     request,
                     validated_model,
                     image=transformed,
-                    strength=strength,
+                    strength=denoise_strength,
                     generator=generator,
                     on_step_end=on_step_end,
                 )
@@ -940,7 +975,8 @@ class AnimationRenderManager:
                 "animation",
                 f"{job.id}: frame {frame}/{total - 1} complete "
                 f"in {frame_seconds:.1f}s, seed {seed}, "
-                f"strength {strength:g}.",
+                f"strength {retention_strength:g} "
+                f"(denoise {denoise_strength:g}), noise {noise_amount:g}.",
             )
 
         if generation_manager.unload_after_job_enabled():
