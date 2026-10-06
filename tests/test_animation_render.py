@@ -47,7 +47,7 @@ def sample_project(max_frames: int = 4) -> dict:
             "border_mode": "replicate",
         },
         "generation": {
-            "strength": "0:(0)",
+            "strength": "0:(1)",
             "noise": "0:(0)",
             "steps": "0:(5)",
             "guidance": "0:(6)",
@@ -84,7 +84,7 @@ def wait_for(manager: AnimationRenderManager, render_id: str) -> dict:
     raise AssertionError(f"render did not finish: {job}")
 
 
-def test_strength_zero_render_persists_frames_manifest_and_preview(
+def test_strength_one_render_persists_frames_manifest_and_preview(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -266,3 +266,15 @@ def test_img2img_runtime_classes_expose_required_api() -> None:
             "callback_on_step_end",
         ):
             assert name in parameters
+
+
+def test_uniform_noise_is_deterministic() -> None:
+    from morphorum.animation_render import _add_uniform_noise
+
+    source = Image.new("RGB", (8, 8), "gray")
+    first = _add_uniform_noise(source, amount=0.02, seed=123)
+    second = _add_uniform_noise(source, amount=0.02, seed=123)
+    third = _add_uniform_noise(source, amount=0.02, seed=124)
+
+    assert list(first.getdata()) == list(second.getdata())
+    assert list(first.getdata()) != list(third.getdata())
