@@ -84,6 +84,11 @@ def command_self_test(_: argparse.Namespace) -> int:
             if not any(item.get("id") == "zimage-turbo" for item in managed_catalog):
                 raise RuntimeError("managed model catalog is missing Z-Image-Turbo")
 
+            animation_projects_response = client.get("/api/animation/projects")
+            animation_projects_response.raise_for_status()
+            if not isinstance(animation_projects_response.json().get("projects"), list):
+                raise RuntimeError("animation projects endpoint did not return a projects list")
+
             models_response = client.get("/api/models?limit=1")
             models_response.raise_for_status()
             if not isinstance(models_response.json().get("models"), list):
@@ -105,7 +110,7 @@ def command_self_test(_: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API, frontend, settings, managed models, model index, generation capabilities, and console OK.")
+    print("Morphorum self-test passed: API, frontend, settings, animation projects, managed models, model index, generation capabilities, and console OK.")
     return 0
 
 
