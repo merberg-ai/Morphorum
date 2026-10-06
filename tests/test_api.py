@@ -327,6 +327,16 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
         assert preview_image.status_code == 200
         assert preview_image.headers["content-type"].startswith("image/gif")
 
+        cleared = client.delete(
+            f"/api/animation/projects/{project_id}/source-image"
+        )
+        assert cleared.status_code == 200
+        assert cleared.json()["project"]["animation"]["source_image"] == ""
+        missing_source = client.get(
+            f"/api/animation/projects/{project_id}/source-image"
+        )
+        assert missing_source.status_code == 404
+
         bad_project = dict(loaded_project)
         bad_project["motion"] = dict(loaded_project["motion"])
         bad_project["motion"]["zoom"] = "0:(totally_not_math(t))"
