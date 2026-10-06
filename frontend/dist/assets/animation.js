@@ -5,6 +5,7 @@
     project: null,
     projects: [],
     models: [],
+    capabilities: {},
     path: '',
     dirty: false,
     loading: false,
@@ -115,6 +116,74 @@
     return state.models.find(model => model.id === modelId) || null;
   }
 
+  function effectiveCapability(model) {
+    const base = state.capabilities[model?.family] || {};
+    const variant = String(model?.variant || '').toLowerCase();
+    const override = base.variants?.[variant] || {};
+    const merged = { ...base, ...override };
+    for (const key of ['steps', 'guidance', 'samplers']) {
+      if (base[key] || override[key]) {
+        merged[key] = { ...(base[key] || {}), ...(override[key] || {}) };
+      }
+    }
+    merged.variant = variant;
+    return merged;
+  }
+
+  function populateSamplerSelect(preferredSampler = '') {
+    const select = qs('#animation-sampler');
+    if (!select) return;
+
+    const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
+    const model = modelById(modelId);
+    const current = String(select.value || '');
+    select.replaceChildren();
+
+    if (!model) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Select a model first';
+      select.appendChild(option);
+      select.disabled = true;
+      return;
+    }
+
+    const capability = effectiveCapability(model);
+    const samplerConfig = capability.samplers || {};
+    const options = Array.isArray(samplerConfig.options) ? samplerConfig.options : [];
+
+    if (!capability.supported || !options.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No compatible samplers';
+      select.appendChild(option);
+      select.disabled = true;
+      return;
+    }
+
+    for (const sampler of options) {
+      const option = document.createElement('option');
+      option.value = sampler.id;
+      option.textContent = sampler.label || sampler.id;
+      select.appendChild(option);
+    }
+
+    const fallback = samplerConfig.default || options[0]?.id || '';
+    const candidates = [
+      preferredSampler,
+      current,
+      state.project?.generation?.sampler || '',
+      fallback,
+    ].filter(Boolean);
+    const valid = new Set(options.map(item => item.id));
+    const selected = candidates.find(value => valid.has(value)) || fallback;
+    select.value = selected;
+    select.disabled = false;
+    select.title = capability.label
+      ? `${capability.label} compatible samplers`
+      : 'Compatible samplers';
+  }
+
   function populateModelSelect() {
     const select = qs('#animation-model');
     if (!select) return;
@@ -142,6 +211,7 @@
       select.appendChild(missing);
     }
     select.value = selected;
+    populateSamplerSelect(state.project?.generation?.sampler || '');
   }
 
   function renderProjectSelect() {
@@ -340,7 +410,6 @@
       qs('#animation-noise').value = project.generation?.noise || '0:(0.02)';
       qs('#animation-steps').value = project.generation?.steps || '0:(20)';
       qs('#animation-guidance').value = project.generation?.guidance || '0:(0)';
-      qs('#animation-sampler').value = project.generation?.sampler || 'flowmatch_euler';
       qs('#animation-seed').value = project.generation?.seed ?? -1;
       qs('#animation-seed-behavior').value = project.generation?.seed_behavior || 'fixed';
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
@@ -354,6 +423,7 @@
       }
 
       populateModelSelect();
+      populateSamplerSelect(project.generation?.sampler || '');
       renderPromptRows();
       syncInspectorBounds();
       clearDirty();
@@ -686,11 +756,23 @@
     await refreshCurve(project, sequence);
   }
 
+  async function loadCapabilities() {
+    try {
+      const payload = await api('/api/generation/capabilities');
+      state.capabilities = payload.families || {};
+      populateSamplerSelect(state.project?.generation?.sampler || '');
+    } catch (error) {
+      state.capabilities = {};
+      toast('Animation generation capabilities unavailable', error.message, 'warning', 6500);
+    }
+  }
+
   async function loadModels() {
     try {
       const payload = await api('/api/models?limit=2000');
       state.models = Array.isArray(payload.models) ? payload.models : [];
       populateModelSelect();
+      populateSamplerSelect(state.project?.generation?.sampler || '');
     } catch (error) {
       toast('Animation model list unavailable', error.message, 'warning', 6000);
     }
@@ -810,6 +892,11 @@
       loadProject(event.target.value);
     });
 
+    qs('#animation-model')?.addEventListener('change', () => {
+      populateSamplerSelect('');
+      markDirty();
+    });
+
     qs('#animation-inspector-frame')?.addEventListener('input', event => {
       setInspectorFrame(event.target.value);
     });
@@ -821,7 +908,11 @@
     qsa(
       '#view-animation input, #view-animation select, #view-animation textarea'
     ).forEach(input => {
-      if (input.id === 'animation-project-select' || INSPECTOR_INPUT_IDS.has(input.id)) {
+      if (
+        input.id === 'animation-project-select' ||
+        input.id === 'animation-model' ||
+        INSPECTOR_INPUT_IDS.has(input.id)
+      ) {
         return;
       }
       const scheduleField = Object.entries(SCHEDULE_INPUTS).find(
@@ -844,7 +935,12 @@
     bind();
     setEditorEnabled(false);
     try {
-      await Promise.all([loadModels(), loadProjectList({ loadFirst: true })]);
+      await Promise.all([
+        loadCapabilities(),
+        loadModels(),
+        loadProjectList({ loadFirst: true }),
+      ]);
+      populateSamplerSelect(state.project?.generation?.sampler || '');
     } catch (error) {
       toast('Animation workspace initialization failed', error.message, 'error', 7000);
     }
