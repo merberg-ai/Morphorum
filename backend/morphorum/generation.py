@@ -273,7 +273,7 @@ class GenerationManager:
             ]
             if active or self._inference_lock.locked():
                 raise GenerationError(
-                    "Cannot unload the model while generation or animation inference is active. "
+                    "Cannot unload the model while generation is active, including animation inference. "
                     "Cancel or wait for the current job to finish."
                 )
             was_loaded = self._pipeline is not None
