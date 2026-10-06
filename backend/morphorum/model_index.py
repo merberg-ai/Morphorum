@@ -11,7 +11,7 @@ from typing import Any
 
 from .console import emit_console
 from .paths import MODEL_INDEX_DB, ensure_runtime_dirs
-from .settings import MODEL_FAMILIES, MODEL_PATH_KEYS, load_settings
+from .settings import EXTERNAL_MODEL_FAMILIES, MODEL_PATH_KEYS, load_settings
 
 CHECKPOINT_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf"}
 LORA_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth"}
@@ -43,6 +43,7 @@ def init_model_index() -> None:
                 mtime_ns INTEGER NOT NULL,
                 extension TEXT NOT NULL,
                 variant TEXT,
+                source TEXT NOT NULL DEFAULT 'external',
                 preview_path TEXT,
                 indexed_at TEXT NOT NULL
             );
@@ -54,6 +55,8 @@ def init_model_index() -> None:
         columns = {row["name"] for row in db.execute("PRAGMA table_info(models)").fetchall()}
         if "variant" not in columns:
             db.execute("ALTER TABLE models ADD COLUMN variant TEXT")
+        if "source" not in columns:
+            db.execute("ALTER TABLE models ADD COLUMN source TEXT NOT NULL DEFAULT 'external'")
 
         stale_rows = db.execute(
             "SELECT id, family, path FROM models WHERE variant IS NULL OR variant = ''"
@@ -116,7 +119,7 @@ def scan_models() -> dict[str, Any]:
 
     emit_console("info", "model", "Scanning configured model and LoRA directories…")
 
-    for family in MODEL_FAMILIES:
+    for family in EXTERNAL_MODEL_FAMILIES:
         family_settings = model_settings.get(family, {}) if isinstance(model_settings, dict) else {}
         if not isinstance(family_settings, dict):
             continue
@@ -162,6 +165,7 @@ def scan_models() -> dict[str, Any]:
                             int(stat.st_mtime_ns),
                             extension,
                             _infer_variant(family, path),
+                            "external",
                             _preview_for(path),
                             now,
                         )
@@ -170,14 +174,14 @@ def scan_models() -> dict[str, Any]:
 
     with _DB_LOCK, _connect() as db:
         db.execute("BEGIN IMMEDIATE")
-        db.execute("DELETE FROM models")
+        db.execute("DELETE FROM models WHERE source = 'external'")
         if rows:
             db.executemany(
                 """
                 INSERT INTO models (
                     id, family, kind, name, filename, path, size_bytes,
-                    mtime_ns, extension, variant, preview_path, indexed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    mtime_ns, extension, variant, source, preview_path, indexed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
@@ -197,6 +201,69 @@ def scan_models() -> dict[str, Any]:
         "counts": {family: dict(kinds) for family, kinds in counts.items()},
         "indexed_at": now,
     }
+
+
+def upsert_managed_model(
+    *,
+    model_id: str,
+    family: str,
+    name: str,
+    path: Path,
+    variant: str,
+    size_bytes: int,
+) -> dict[str, Any]:
+    init_model_index()
+    resolved = path.resolve(strict=False)
+    try:
+        stat = resolved.stat()
+        mtime_ns = int(stat.st_mtime_ns)
+    except OSError:
+        mtime_ns = 0
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    with _DB_LOCK, _connect() as db:
+        db.execute(
+            """
+            INSERT INTO models (
+                id, family, kind, name, filename, path, size_bytes,
+                mtime_ns, extension, variant, source, preview_path, indexed_at
+            ) VALUES (?, ?, 'checkpoints', ?, ?, ?, ?, ?, 'managed', ?, 'managed', NULL, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                family=excluded.family,
+                kind=excluded.kind,
+                name=excluded.name,
+                filename=excluded.filename,
+                path=excluded.path,
+                size_bytes=excluded.size_bytes,
+                mtime_ns=excluded.mtime_ns,
+                extension=excluded.extension,
+                variant=excluded.variant,
+                source=excluded.source,
+                preview_path=excluded.preview_path,
+                indexed_at=excluded.indexed_at
+            """,
+            (
+                model_id,
+                family,
+                name,
+                resolved.name,
+                str(resolved),
+                int(size_bytes),
+                mtime_ns,
+                variant,
+                now,
+            ),
+        )
+        db.commit()
+    model = get_model(model_id)
+    return model or {}
+
+
+def remove_managed_model(model_id: str) -> None:
+    init_model_index()
+    with _DB_LOCK, _connect() as db:
+        db.execute("DELETE FROM models WHERE id = ? AND source = 'managed'", (model_id,))
+        db.commit()
 
 
 def list_models(
