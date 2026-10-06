@@ -722,6 +722,91 @@ class GenerationManager:
 
         return pipe, "cuda-offload", "cpu"
 
+    def _load_zimage_pipeline(self, job: GenerationJob, cache_dir: Path):
+        try:
+            import torch
+            from diffusers import ZImagePipeline
+        except Exception as exc:
+            raise GenerationError(
+                f"Z-Image inference runtime is not installed correctly: {exc}"
+            ) from exc
+
+        if not torch.cuda.is_available():
+            raise GenerationError(
+                "The first Z-Image adapter requires a CUDA-capable NVIDIA GPU. "
+                "CPU Z-Image inference is intentionally disabled because it is impractically slow."
+            )
+
+        model_path = Path(job.model["path"])
+        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        emit_console(
+            "info",
+            "generation",
+            f"Loading managed Z-Image pipeline from: {model_path}",
+        )
+
+        def load_local_pipeline():
+            return ZImagePipeline.from_pretrained(
+                str(model_path),
+                torch_dtype=dtype,
+                low_cpu_mem_usage=False,
+                local_files_only=True,
+                cache_dir=str(cache_dir),
+            )
+
+        try:
+            pipe = load_local_pipeline()
+            pipe.set_progress_bar_config(disable=True)
+            if hasattr(pipe.vae, "enable_tiling"):
+                pipe.vae.enable_tiling()
+            if hasattr(pipe.vae, "enable_slicing"):
+                pipe.vae.enable_slicing()
+
+            try:
+                pipe.to("cuda")
+                self._pipeline_optimization = "bf16-native-gpu"
+                emit_console(
+                    "info",
+                    "generation",
+                    "Z-Image native CUDA path enabled.",
+                )
+                return pipe, "cuda", "cuda"
+            except Exception as native_exc:
+                if not self._is_cuda_oom(native_exc):
+                    raise
+
+                emit_console(
+                    "warning",
+                    "generation",
+                    "Z-Image native CUDA placement exhausted VRAM; retrying with model CPU offload.",
+                )
+                try:
+                    del pipe
+                except Exception:
+                    pass
+                gc.collect()
+                torch.cuda.empty_cache()
+
+                pipe = load_local_pipeline()
+                pipe.set_progress_bar_config(disable=True)
+                if hasattr(pipe.vae, "enable_tiling"):
+                    pipe.vae.enable_tiling()
+                if hasattr(pipe.vae, "enable_slicing"):
+                    pipe.vae.enable_slicing()
+                pipe.enable_model_cpu_offload()
+                self._pipeline_optimization = "bf16-model-cpu-offload"
+                return pipe, "cuda-offload", "cpu"
+        except Exception as exc:
+            if self._is_cuda_oom(exc):
+                raise self._friendly_error(
+                    exc,
+                    action=f"loading Z-Image model '{job.model['name']}'",
+                ) from exc
+            raise GenerationError(
+                f"Could not load managed Z-Image model '{job.model['name']}' from {model_path}. "
+                f"The package may be incomplete or incompatible with this Diffusers runtime. {exc}"
+            ) from exc
+
     def _load_pipeline(self, job: GenerationJob):
         model = job.model
         model_id = model["id"]
@@ -729,7 +814,10 @@ class GenerationManager:
 
         if self._pipeline is not None and self._pipeline_model_id == model_id:
             emit_console("info", "generation", f"Reusing loaded model: {model['name']}.")
-            generator_device = "cpu" if family == "flux" else (self._pipeline_device or "cpu")
+            if family == "flux" or self._pipeline_device == "cuda-offload":
+                generator_device = "cpu"
+            else:
+                generator_device = self._pipeline_device or "cpu"
             return self._pipeline, generator_device
 
         self._unload_pipeline()
@@ -743,6 +831,8 @@ class GenerationManager:
             pipe, display_device, generator_device = self._load_sdxl_pipeline(job, cache_dir)
         elif family == "flux":
             pipe, display_device, generator_device = self._load_flux_pipeline(job, cache_dir)
+        elif family == "zimage":
+            pipe, display_device, generator_device = self._load_zimage_pipeline(job, cache_dir)
         else:
             raise GenerationError(f"No pipeline loader is registered for model family '{family}'.")
 
@@ -751,7 +841,7 @@ class GenerationManager:
         self._pipeline_device = display_device
         self._pipeline_scheduler_config = dict(pipe.scheduler.config)
         self._pipeline_sampler = None
-        if family != "flux":
+        if self._pipeline_optimization is None:
             self._pipeline_optimization = "native-gpu" if "cuda" in display_device else display_device
         emit_console(
             "info",
@@ -764,11 +854,12 @@ class GenerationManager:
         base_config = self._pipeline_scheduler_config or dict(pipe.scheduler.config)
 
         try:
-            if family == "flux":
+            if family in {"flux", "zimage"}:
                 from diffusers import FlowMatchEulerDiscreteScheduler
 
                 if sampler != "flowmatch_euler":
-                    raise GenerationError(f"Unknown Flux sampler '{sampler}'.")
+                    label = "Flux" if family == "flux" else "Z-Image"
+                    raise GenerationError(f"Unknown {label} sampler '{sampler}'.")
                 pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(base_config)
             elif family == "sdxl":
                 from diffusers import (
@@ -863,6 +954,8 @@ class GenerationManager:
         elif family == "flux":
             capability = self._effective_capability(job.model)
             call_args["max_sequence_length"] = int(capability.get("max_sequence_length", 512))
+        elif family == "zimage":
+            pass
         else:
             raise GenerationError(f"No inference call builder is registered for model family '{family}'.")
 
