@@ -167,6 +167,8 @@ class ManagedModelManager:
 
         if installed:
             self._sync_index(entry, destination)
+        elif state.status not in {"checking", "downloading"}:
+            remove_managed_model(str(entry["index_id"]))
         return payload
 
     def catalog(self) -> list[dict[str, Any]]:
