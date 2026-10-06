@@ -138,7 +138,7 @@
   function setEnabled(enabled) {
     for (const id of [
       '#image-resolution-preset', '#image-width', '#image-height', '#swap-resolution',
-      '#image-steps', '#image-guidance', '#image-seed', '#random-seed',
+      '#image-steps', '#image-sampler', '#image-guidance', '#image-seed', '#random-seed',
       '#image-seed-mode', '#image-seed-increment', '#image-count'
     ]) {
       const element = qs(id);
@@ -178,6 +178,22 @@
       qs('#image-width').value = first.width;
       qs('#image-height').value = first.height;
     }
+  }
+
+  function populateSamplers(capability) {
+    const select = qs('#image-sampler');
+    if (!select) return;
+    select.replaceChildren();
+    const samplerConfig = capability.samplers || {};
+    const options = Array.isArray(samplerConfig.options) ? samplerConfig.options : [];
+    for (const sampler of options) {
+      const option = document.createElement('option');
+      option.value = sampler.id;
+      option.textContent = sampler.label || sampler.id;
+      select.appendChild(option);
+    }
+    const preferred = samplerConfig.default || options[0]?.id || '';
+    if (preferred && options.some(item => item.id === preferred)) select.value = preferred;
   }
 
   function updateSeedMode() {
@@ -225,6 +241,7 @@
       qs('#image-guidance').max = capability.guidance?.max ?? 30;
       qs('#image-negative-prompt').disabled = capability.negative_prompt === false;
       populatePresets(capability);
+      populateSamplers(capability);
       setEnabled(true);
       updateSeedMode();
     } catch (error) {
@@ -391,6 +408,7 @@
       width: Number(qs('#image-width').value),
       height: Number(qs('#image-height').value),
       steps: Number(qs('#image-steps').value),
+      sampler: qs('#image-sampler').value,
       guidance_scale: Number(qs('#image-guidance').value),
       seed: Number(qs('#image-seed').value),
       seed_mode: qs('#image-seed-mode').value,
