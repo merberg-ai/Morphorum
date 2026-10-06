@@ -12,6 +12,27 @@
     ['loras', 'LoRA directories'],
   ];
 
+  const THEME_OPTIONS = [
+    ['midnight-glass', 'Midnight Glass'],
+  ];
+  const FONT_STYLE_OPTIONS = [
+    ['modern', 'Modern'],
+    ['humanist', 'Humanist'],
+    ['geometric', 'Geometric'],
+    ['technical', 'Technical'],
+  ];
+  const MONO_FONT_STYLE_OPTIONS = [
+    ['modern-mono', 'Modern Mono'],
+    ['cascadia', 'Cascadia'],
+    ['classic-mono', 'Classic Mono'],
+    ['compact-mono', 'Compact Mono'],
+  ];
+  const UI_SCALE_OPTIONS = [
+    ['compact', 'Compact'],
+    ['standard', 'Standard'],
+    ['comfortable', 'Comfortable'],
+  ];
+
   const state = {
     settings: null,
     validation: new Map(),
@@ -90,10 +111,34 @@
     return state.settings.models[family];
   }
 
+  function applyAppearance(ui = {}) {
+    const root = document.documentElement;
+    const theme = String(ui.theme || 'midnight-glass');
+    const fontStyle = String(ui.font_style || 'modern');
+    const monoStyle = String(ui.mono_font_style || 'modern-mono');
+    const uiScale = String(ui.ui_scale || 'compact');
+
+    root.dataset.theme = theme;
+    root.dataset.fontStyle = fontStyle;
+    root.dataset.monoStyle = monoStyle;
+    root.dataset.uiScale = uiScale;
+
+    try {
+      localStorage.setItem('morphorum.ui.theme', theme);
+      localStorage.setItem('morphorum.ui.fontStyle', fontStyle);
+      localStorage.setItem('morphorum.ui.monoStyle', monoStyle);
+      localStorage.setItem('morphorum.ui.uiScale', uiScale);
+    } catch (_) {}
+  }
+
   function ensurePreferences() {
     state.settings ||= {};
     state.settings.ui ||= {};
     state.settings.performance ||= {};
+    state.settings.ui.theme ||= 'midnight-glass';
+    state.settings.ui.font_style ||= 'modern';
+    state.settings.ui.mono_font_style ||= 'modern-mono';
+    state.settings.ui.ui_scale ||= 'compact';
     if (!Number.isFinite(Number(state.settings.ui.image_preview_limit))) {
       state.settings.ui.image_preview_limit = 5;
     }
@@ -108,6 +153,88 @@
     state.settings.managed_models.locations ||= {};
     state.settings.managed_models.locations.zimage ||= '.\\ckpts\\z-image';
     return state.settings.managed_models;
+  }
+
+  function createSelectField(id, labelText, options, value, onChange) {
+    const label = document.createElement('label');
+    const title = document.createElement('span');
+    title.textContent = labelText;
+    const select = document.createElement('select');
+    select.id = id;
+    for (const [optionValue, optionLabel] of options) {
+      const option = document.createElement('option');
+      option.value = optionValue;
+      option.textContent = optionLabel;
+      select.appendChild(option);
+    }
+    select.value = value;
+    select.addEventListener('change', () => onChange(select.value));
+    label.append(title, select);
+    return label;
+  }
+
+  function createAppearanceCard() {
+    ensurePreferences();
+    const ui = state.settings.ui;
+
+    const card = document.createElement('article');
+    card.className = 'card glass settings-preferences-card appearance-settings-card';
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const headingWrap = document.createElement('div');
+    const heading = document.createElement('h2');
+    heading.textContent = 'Theme & Appearance';
+    const sub = document.createElement('p');
+    sub.className = 'muted';
+    sub.textContent = 'Choose the visual theme, typography, and interface density.';
+    headingWrap.append(heading, sub);
+    header.appendChild(headingWrap);
+
+    const grid = document.createElement('div');
+    grid.className = 'field-grid appearance-grid';
+
+    const apply = () => applyAppearance(ui);
+
+    const themeField = createSelectField(
+      'ui-theme',
+      'Theme',
+      THEME_OPTIONS,
+      ui.theme || 'midnight-glass',
+      value => { ui.theme = value; apply(); }
+    );
+
+    const fontField = createSelectField(
+      'ui-font-style',
+      'Interface font',
+      FONT_STYLE_OPTIONS,
+      ui.font_style || 'modern',
+      value => { ui.font_style = value; apply(); }
+    );
+
+    const monoField = createSelectField(
+      'ui-mono-font-style',
+      'Technical / console font',
+      MONO_FONT_STYLE_OPTIONS,
+      ui.mono_font_style || 'modern-mono',
+      value => { ui.mono_font_style = value; apply(); }
+    );
+
+    const scaleField = createSelectField(
+      'ui-scale',
+      'UI scale',
+      UI_SCALE_OPTIONS,
+      ui.ui_scale || 'compact',
+      value => { ui.ui_scale = value; apply(); }
+    );
+
+    const preview = document.createElement('div');
+    preview.className = 'appearance-preview';
+    preview.innerHTML = '<strong>Morphorum UI Preview</strong><span>Prompt controls, model metadata, paths, and console text update live.</span><code>seed=2745621820 · FlowMatch Euler</code>';
+
+    grid.append(themeField, fontField, monoField, scaleField);
+    card.append(header, grid, preview);
+    return card;
   }
 
   function createManagedModelsCard() {
@@ -360,6 +487,7 @@
     if (!container || !state.settings) return;
 
     container.replaceChildren();
+    container.appendChild(createAppearanceCard());
     container.appendChild(createPreferencesCard());
     container.appendChild(createManagedModelsCard());
     for (const [family, fallbackLabel, source] of FAMILY_DEFS) {
@@ -404,6 +532,8 @@
         FAMILY_DEFS = payload.model_families.map(item => [item.id, item.label || item.id, item.source || 'external']);
       }
       ingestValidation(payload.validation || []);
+      ensurePreferences();
+      applyAppearance(state.settings.ui);
       renderSettings();
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       if (announce) toast('Settings loaded', 'Configuration reloaded from the Morphorum server.', 'success');
@@ -435,6 +565,10 @@
         },
       },
       ui: {
+        theme: state.settings.ui.theme || 'midnight-glass',
+        font_style: state.settings.ui.font_style || 'modern',
+        mono_font_style: state.settings.ui.mono_font_style || 'modern-mono',
+        ui_scale: state.settings.ui.ui_scale || 'compact',
         image_preview_limit: Math.max(1, Math.min(50, Number(state.settings.ui.image_preview_limit) || 5)),
       },
       performance: {
@@ -453,6 +587,8 @@
       });
       state.settings = payload.settings || state.settings;
       ingestValidation(payload.validation || []);
+      ensurePreferences();
+      applyAppearance(state.settings.ui);
       renderSettings();
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       const warnings = (payload.validation || []).filter(item => !(item.exists && item.is_directory && item.readable));
@@ -652,6 +788,16 @@
   }
 
   async function start() {
+    try {
+      applyAppearance({
+        theme: localStorage.getItem('morphorum.ui.theme') || 'midnight-glass',
+        font_style: localStorage.getItem('morphorum.ui.fontStyle') || 'modern',
+        mono_font_style: localStorage.getItem('morphorum.ui.monoStyle') || 'modern-mono',
+        ui_scale: localStorage.getItem('morphorum.ui.uiScale') || 'compact',
+      });
+    } catch (_) {
+      applyAppearance({});
+    }
     bindUi();
     await Promise.allSettled([loadHealth(), loadSettings(), connectConsole(), telemetryLoop()]);
   }
