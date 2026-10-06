@@ -36,6 +36,7 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
         "steps": {"default": 25, "min": 1, "max": 100},
         "guidance": {"key": "cfg_scale", "label": "CFG", "default": 6.0, "min": 1.0, "max": 30.0},
         "negative_prompt": True,
+        "default_resolution": {"width": 1024, "height": 1024},
         "samplers": {
             "default": "euler",
             "options": [
@@ -61,8 +62,9 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
         "supported": True,
         "label": "Flux",
         "steps": {"default": 28, "min": 1, "max": 50},
-        "guidance": {"key": "guidance_scale", "label": "Guidance", "default": 3.5, "min": 0.0, "max": 10.0},
+        "guidance": {"key": "guidance_scale", "label": "CFG", "default": 1.0, "min": 0.0, "max": 10.0},
         "negative_prompt": False,
+        "default_resolution": {"width": 1024, "height": 1024},
         "samplers": {
             "default": "flowmatch_euler",
             "options": [
@@ -80,8 +82,9 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
             "dev": {
                 "label": "Flux Dev",
                 "steps": {"default": 28, "min": 1, "max": 50},
-                "guidance": {"key": "guidance_scale", "label": "Guidance", "default": 3.5, "min": 0.0, "max": 10.0},
+                "guidance": {"key": "guidance_scale", "label": "CFG", "default": 1.0, "min": 0.0, "max": 10.0},
                 "negative_prompt": False,
+                "default_resolution": {"width": 1024, "height": 1024},
                 "max_sequence_length": 512,
             },
             "schnell": {
@@ -89,6 +92,7 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
                 "steps": {"default": 4, "min": 1, "max": 8},
                 "guidance": {"key": "guidance_scale", "label": "Guidance", "default": 0.0, "min": 0.0, "max": 0.0},
                 "negative_prompt": False,
+                "default_resolution": {"width": 1024, "height": 1024},
                 "max_sequence_length": 256,
             },
         },
