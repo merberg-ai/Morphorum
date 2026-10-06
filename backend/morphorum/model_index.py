@@ -55,6 +55,14 @@ def init_model_index() -> None:
         if "variant" not in columns:
             db.execute("ALTER TABLE models ADD COLUMN variant TEXT")
 
+        stale_rows = db.execute(
+            "SELECT id, family, path FROM models WHERE variant IS NULL OR variant = ''"
+        ).fetchall()
+        for row in stale_rows:
+            variant = _infer_variant(str(row["family"]), Path(str(row["path"])))
+            if variant:
+                db.execute("UPDATE models SET variant = ? WHERE id = ?", (variant, row["id"]))
+
 
 def _model_id(family: str, kind: str, path: Path) -> str:
     normalized = os.path.normcase(os.path.abspath(str(path)))
