@@ -382,8 +382,13 @@ class GenerationManager:
                 model_path / "tokenizer",
                 model_path / "transformer",
                 model_path / "vae",
+                model_path / ".morphorum-managed-complete.json",
             )
-            if not model_path.is_dir() or not all(path.exists() for path in required):
+            if (
+                model.get("source") != "managed"
+                or not model_path.is_dir()
+                or not all(path.exists() for path in required)
+            ):
                 raise GenerationError(
                     "The selected Z-Image managed package is missing or incomplete. "
                     "Open Models and repair/re-download Z-Image-Turbo."
