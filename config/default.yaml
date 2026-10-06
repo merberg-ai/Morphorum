@@ -10,6 +10,9 @@ server:
 
 ui:
   theme: midnight-glass
+  font_style: modern
+  mono_font_style: modern-mono
+  ui_scale: compact
   interface_mode: simple
   remember_collapsed_cards: true
   image_preview_limit: 5
