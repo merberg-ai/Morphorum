@@ -53,11 +53,13 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
         assert settings["ui"]["image_preview_limit"] == 7
         assert settings["performance"]["unload_after_generation"] is True
 
-        # Enabled modern families must remain present even when only one family is saved.
-        for family in ("sdxl", "flux", "zimage"):
+        # Only external model families receive scan-path settings.
+        for family in ("sdxl", "flux"):
             assert family in settings["models"]
+        assert "zimage" not in settings["models"]
         assert "sd15" not in settings["models"]
         assert "sd2" not in settings["models"]
+        assert settings["managed_models"]["locations"]["zimage"] == r".\ckpts\z-image"
 
         checked = client.post("/api/settings/validate-path", json={"path": str(checkpoint_dir)})
         assert checked.status_code == 200
@@ -92,3 +94,43 @@ def test_model_lifecycle_api_when_nothing_is_loaded() -> None:
         unloaded = client.post("/api/generation/model/unload", json={})
         assert unloaded.status_code == 200
         assert unloaded.json()["loaded"] is False
+
+
+def test_legacy_zimage_paths_are_preserved_but_not_recreated(tmp_path, monkeypatch) -> None:
+    user_config = tmp_path / "config.yaml"
+    monkeypatch.setattr(settings_module, "USER_CONFIG", user_config)
+
+    legacy_path = str(tmp_path / "old-zimage")
+    saved = settings_module.save_settings(
+        {
+            "models": {
+                "zimage": {
+                    "checkpoints": [legacy_path],
+                    "loras": [],
+                }
+            }
+        }
+    )
+    assert saved["models"]["zimage"]["checkpoints"] == [legacy_path]
+    assert saved["managed_models"]["locations"]["zimage"] == r".\ckpts\z-image"
+
+
+def test_managed_model_catalog_api_lists_zimage_turbo(tmp_path, monkeypatch) -> None:
+    import morphorum.managed_models as managed_models
+
+    monkeypatch.setattr(
+        managed_models,
+        "managed_model_location",
+        lambda family: tmp_path / family,
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/managed-models")
+
+    assert response.status_code == 200
+    models = response.json()["models"]
+    zimage = next(item for item in models if item["id"] == "zimage-turbo")
+    assert zimage["family"] == "zimage"
+    assert zimage["repo_id"] == "Tongyi-MAI/Z-Image-Turbo"
+    assert zimage["installed"] is False
+    assert zimage["status"] == "not_installed"
