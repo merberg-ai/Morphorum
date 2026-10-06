@@ -25,7 +25,8 @@ Example:
     "max_frames": 240,
     "fps": 24.0,
     "width": 1024,
-    "height": 1024
+    "height": 1024,
+    "prompt_transition": "blend"
   },
   "model": {
     "model_id": "managed:zimage-turbo",
@@ -68,6 +69,7 @@ Timeline/output geometry shared by all model adapters:
 - `max_frames`: number of animation frames.
 - `fps`: target playback frame rate.
 - `width`, `height`: requested frame dimensions.
+- `prompt_transition`: `blend` or `hold`; controls how prompt keyframes resolve between frames.
 
 ### `model`
 
@@ -83,7 +85,7 @@ The project keeps this reference even if the model is temporarily unavailable fr
 
 Maps of frame number to raw prompt text. Frame zero is always normalized into both maps.
 
-Phase 2 will define interpolation/transition behavior and frame-by-frame prompt resolution. Phase 1 only stores keyframes.
+Phase 2 resolves these keyframes into explicit from/to prompts and weights. The project stores the transition mode, while model adapters later decide how those weights become conditioning.
 
 ### `motion`
 
@@ -133,3 +135,5 @@ PUT  /api/animation/projects/{project_id}
 ```
 
 Rendering is intentionally not part of this phase.
+
+See [SCHEDULES.md](SCHEDULES.md) for Phase 2 schedule parsing, math expressions, validation, curve sampling, and resolved-frame state.
