@@ -497,19 +497,25 @@ class GenerationManager:
         while True:
             job_id = self._queue.get()
             try:
-                with self._lock:
-                    job = self._jobs.get(job_id)
-                    if not job or job.status == "cancelled":
-                        continue
-                self._run_job(job)
-            except Exception as exc:
-                with self._lock:
-                    job = self._jobs.get(job_id)
-                if job:
-                    self._fail_job(job, exc)
-                else:
-                    self._unload_pipeline()
-                    emit_console("error", "generation", f"Generation worker failed before job lookup: {exc}")
+                with self._inference_lock:
+                    try:
+                        with self._lock:
+                            job = self._jobs.get(job_id)
+                            if not job or job.status == "cancelled":
+                                continue
+                        self._run_job(job)
+                    except Exception as exc:
+                        with self._lock:
+                            job = self._jobs.get(job_id)
+                        if job:
+                            self._fail_job(job, exc)
+                        else:
+                            self._unload_pipeline()
+                            emit_console(
+                                "error",
+                                "generation",
+                                f"Generation worker failed before job lookup: {exc}",
+                            )
             finally:
                 self._queue.task_done()
 
