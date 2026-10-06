@@ -66,7 +66,7 @@ Success criterion: import representative legacy projects and resolve schedule va
 
 - initial Flux Dev/Schnell txt2img adapter using local transformer files plus cached shared components
 - Flux CUDA model-offload path for consumer GPUs
-- Z-Image adapter(s)
+- initial managed Z-Image-Turbo txt2img adapter with 16 GB-class streamed offload path
 - capability-driven model configuration UI shared by Single Image and Animation
 - architecture-specific CFG/guidance/true-CFG/shift controls
 - model-aware resolution recommendations/presets
