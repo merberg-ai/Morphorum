@@ -64,7 +64,8 @@ Success criterion: import representative legacy projects and resolve schedule va
 
 ## 0.4.0-alpha.1 — modern multi-model
 
-- Flux adapter(s)
+- initial Flux Dev/Schnell txt2img adapter using local transformer files plus cached shared components
+- Flux CUDA model-offload path for consumer GPUs
 - Z-Image adapter(s)
 - capability-driven model configuration UI shared by Single Image and Animation
 - architecture-specific CFG/guidance/true-CFG/shift controls
