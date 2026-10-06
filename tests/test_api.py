@@ -8,6 +8,7 @@ from PIL import Image
 
 import morphorum.animation_motion as animation_motion
 import morphorum.animation_projects as animation_projects
+import morphorum.animation_render as animation_render
 import morphorum.settings as settings_module
 from morphorum.app import app
 from morphorum.console import clear_console, emit_console
@@ -29,6 +30,8 @@ def test_frontend_and_health() -> None:
         assert "Animation" in frontend.text
         assert 'id="view-animation"' in frontend.text
         assert '<select id="animation-sampler"' in frontend.text
+        assert 'id="animation-start-render"' in frontend.text
+        assert 'id="animation-resume-render"' in frontend.text
         assert 'id="copy-console-view"' in frontend.text
         assert 'id="copy-console-buffer"' in frontend.text
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
@@ -211,6 +214,24 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(animation_motion, "OUTPUTS_DIR", tmp_path / "outputs")
     monkeypatch.setattr(animation_motion, "PREVIEW_MAX_DIMENSION", 64)
     monkeypatch.setattr(animation_motion, "PREVIEW_MAX_CAPTURE_FRAMES", 8)
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+    monkeypatch.setattr(
+        animation_render,
+        "get_model",
+        lambda _model_id: {
+            "id": "fake-model",
+            "family": "sdxl",
+            "variant": "sdxl",
+            "kind": "checkpoints",
+            "name": "Fake SDXL",
+            "filename": "fake.safetensors",
+            "path": "fake.safetensors",
+            "extension": ".safetensors",
+            "source": "external",
+        },
+    )
 
     with TestClient(app) as client:
         created = client.post(
@@ -326,6 +347,60 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
         preview_image = client.get(job["url"])
         assert preview_image.status_code == 200
         assert preview_image.headers["content-type"].startswith("image/gif")
+
+        render_project = dict(preview_project)
+        render_project["animation"] = dict(preview_project["animation"])
+        render_project["animation"]["max_frames"] = 4
+        render_project["model"] = {
+            "model_id": "fake-model",
+            "family": "sdxl",
+            "variant": "sdxl",
+        }
+        render_project["motion"] = dict(preview_project["motion"])
+        render_project["motion"]["zoom"] = "0:(1.0)"
+        render_project["generation"] = dict(preview_project["generation"])
+        render_project["generation"]["strength"] = "0:(0)"
+        render_project["generation"]["steps"] = "0:(5)"
+        render_project["generation"]["guidance"] = "0:(6)"
+        render_project["generation"]["sampler"] = "euler"
+
+        render_started = client.post(
+            "/api/animation/renders",
+            json={"project": render_project},
+        )
+        assert render_started.status_code == 202
+        render_id = render_started.json()["id"]
+
+        render_job = None
+        for _ in range(120):
+            response = client.get(f"/api/animation/renders/{render_id}")
+            assert response.status_code == 200
+            render_job = response.json()
+            if render_job["status"] in {"completed", "failed", "cancelled"}:
+                break
+            time.sleep(0.05)
+
+        assert render_job is not None
+        assert render_job["status"] == "completed", render_job
+        assert len(render_job["results"]) == 4
+        assert render_job["preview_url"]
+
+        render_preview = client.get(render_job["preview_url"])
+        assert render_preview.status_code == 200
+        assert render_preview.headers["content-type"].startswith("image/gif")
+
+        latest_frame = client.get(render_job["latest_frame_url"])
+        assert latest_frame.status_code == 200
+        assert latest_frame.headers["content-type"].startswith("image/png")
+
+        render_history = client.get(
+            f"/api/animation/projects/{project_id}/renders"
+        )
+        assert render_history.status_code == 200
+        assert any(
+            item["id"] == render_id
+            for item in render_history.json()["renders"]
+        )
 
         cleared = client.delete(
             f"/api/animation/projects/{project_id}/source-image"
