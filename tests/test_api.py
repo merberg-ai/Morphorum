@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+import io
+import time
 
+from fastapi.testclient import TestClient
+from PIL import Image
+
+import morphorum.animation_motion as animation_motion
 import morphorum.animation_projects as animation_projects
 import morphorum.settings as settings_module
 from morphorum.app import app
@@ -203,6 +208,9 @@ def test_invalid_appearance_values_fall_back_to_defaults(tmp_path, monkeypatch) 
 
 def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    monkeypatch.setattr(animation_motion, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_motion, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_motion, "PREVIEW_MAX_CAPTURE_FRAMES", 8)
 
     with TestClient(app) as client:
         created = client.post(
@@ -268,6 +276,56 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
         assert series.json()["field"] == "motion.zoom"
         assert series.json()["samples"][0]["frame"] == 0
         assert series.json()["samples"][-1]["frame"] == 47
+
+        source_bytes = io.BytesIO()
+        Image.new("RGB", (80, 60), "orange").save(source_bytes, format="PNG")
+        uploaded = client.post(
+            f"/api/animation/projects/{project_id}/source-image",
+            content=source_bytes.getvalue(),
+            headers={"content-type": "image/png", "x-filename": "phase3-source.png"},
+        )
+        assert uploaded.status_code == 201
+        assert uploaded.json()["source"]["width"] == 80
+        assert uploaded.json()["source"]["height"] == 60
+        assert uploaded.json()["project"]["animation"]["source_image"] == "assets/source.png"
+
+        source_response = client.get(
+            f"/api/animation/projects/{project_id}/source-image"
+        )
+        assert source_response.status_code == 200
+        assert source_response.headers["content-type"].startswith("image/png")
+
+        preview_project = client.get(
+            f"/api/animation/projects/{project_id}"
+        ).json()["project"]
+        preview_project["animation"]["max_frames"] = 6
+        preview_project["animation"]["width"] = 64
+        preview_project["animation"]["height"] = 64
+        preview_project["motion"]["zoom"] = "0:(1.0), 5:(1.02)"
+        preview_project["motion"]["translation_x"] = "0:(0), 5:(2)"
+
+        started = client.post(
+            "/api/animation/motion-preview",
+            json={"project": preview_project},
+        )
+        assert started.status_code == 202
+        job_id = started.json()["id"]
+
+        job = None
+        for _ in range(100):
+            job_response = client.get(f"/api/animation/motion-preview/{job_id}")
+            assert job_response.status_code == 200
+            job = job_response.json()
+            if job["status"] in {"completed", "failed"}:
+                break
+            time.sleep(0.05)
+
+        assert job is not None
+        assert job["status"] == "completed", job
+        assert job["result"]["source_frames"] == 6
+        preview_image = client.get(job["url"])
+        assert preview_image.status_code == 200
+        assert preview_image.headers["content-type"].startswith("image/gif")
 
         bad_project = dict(loaded_project)
         bad_project["motion"] = dict(loaded_project["motion"])
