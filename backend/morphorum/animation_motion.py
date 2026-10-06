@@ -338,6 +338,7 @@ class MotionPreviewManager:
     def __init__(self) -> None:
         self._jobs: dict[str, MotionPreviewJob] = {}
         self._lock = threading.RLock()
+        self._render_lock = threading.Lock()
 
     def start(
         self,
@@ -386,6 +387,15 @@ class MotionPreviewManager:
         return OUTPUTS_DIR / "motion-previews" / job_id / "preview.gif"
 
     def _run(
+        self,
+        job_id: str,
+        project: dict[str, Any],
+        source_path: Path,
+    ) -> None:
+        with self._render_lock:
+            self._run_serialized(job_id, project, source_path)
+
+    def _run_serialized(
         self,
         job_id: str,
         project: dict[str, Any],
