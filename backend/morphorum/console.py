@@ -48,7 +48,7 @@ def emit_console(level: str, category: str, message: str) -> ConsoleEvent:
 
 
 def snapshot(after_id: int = 0, limit: int = 500) -> list[dict]:
-    limit = max(1, min(int(limit), 1000))
+    limit = max(1, min(int(limit), _MAX_EVENTS))
     with _lock:
         selected = [event for event in _events if event.id > after_id]
     return [event.to_dict() for event in selected[-limit:]]
