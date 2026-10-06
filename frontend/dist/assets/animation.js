@@ -16,6 +16,7 @@
     motionPollTimer: null,
     renderJobId: null,
     renderJob: null,
+    renderHistory: [],
     renderPollTimer: null,
     lastRenderFrameUrl: '',
   };
