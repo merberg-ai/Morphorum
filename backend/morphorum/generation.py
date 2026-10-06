@@ -33,6 +33,7 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
     "sdxl": {
         "supported": True,
         "label": "SDXL",
+        "tasks": {"txt2img": True, "img2img": True},
         "steps": {"default": 25, "min": 1, "max": 100},
         "guidance": {"key": "cfg_scale", "label": "CFG", "default": 6.0, "min": 1.0, "max": 30.0},
         "negative_prompt": True,
@@ -61,6 +62,7 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
     "flux": {
         "supported": True,
         "label": "Flux",
+        "tasks": {"txt2img": True, "img2img": True},
         "steps": {"default": 28, "min": 1, "max": 50},
         "guidance": {"key": "guidance_scale", "label": "CFG", "default": 1.0, "min": 0.0, "max": 10.0},
         "negative_prompt": False,
@@ -100,6 +102,7 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
     "zimage": {
         "supported": True,
         "label": "Z-Image Turbo",
+        "tasks": {"txt2img": True, "img2img": True},
         "steps": {"default": 9, "min": 1, "max": 20},
         "guidance": {"key": "guidance_scale", "label": "Guidance", "default": 0.0, "min": 0.0, "max": 0.0},
         "negative_prompt": False,
@@ -232,6 +235,8 @@ class GenerationManager:
         self._pipeline_scheduler_config: dict[str, Any] | None = None
         self._pipeline_sampler: str | None = None
         self._pipeline_optimization: str | None = None
+        self._pipeline_task: str | None = None
+        self._inference_lock = threading.Lock()
 
     def capabilities(self) -> dict[str, dict[str, Any]]:
         return CAPABILITIES
@@ -255,6 +260,7 @@ class GenerationManager:
             "device": device,
             "sampler": self._pipeline_sampler,
             "optimization": self._pipeline_optimization,
+            "task": self._pipeline_task,
             "busy": active,
         }
 
@@ -897,6 +903,7 @@ class GenerationManager:
         self._pipeline = pipe
         self._pipeline_model_id = model_id
         self._pipeline_device = display_device
+        self._pipeline_task = "txt2img"
         self._pipeline_scheduler_config = dict(pipe.scheduler.config)
         self._pipeline_sampler = None
         if self._pipeline_optimization is None:
@@ -972,6 +979,7 @@ class GenerationManager:
         self._pipeline_scheduler_config = None
         self._pipeline_sampler = None
         self._pipeline_optimization = None
+        self._pipeline_task = None
 
         # Always collect here, even if model loading failed before the pipeline
         # could be registered on the manager.
