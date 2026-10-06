@@ -14,7 +14,7 @@
   gap: 2px;
   box-shadow: none;
 }
-.mini-stat-value { font-size: 1.5rem; font-weight: 800; color: var(--text); }
+.mini-stat-value { font-size: 1.4rem; font-weight: 700; color: var(--text); }
 .mini-stat-label { font-size: .75rem; color: var(--muted); }
 .managed-models-card { max-width: 1260px; margin: 0 auto 16px; padding: 0; overflow: hidden; }
 .managed-model-list { display: flex; flex-direction: column; }
@@ -48,7 +48,7 @@
 .managed-model-path {
   margin-top: 5px;
   color: #69747f;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .66rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -116,7 +116,7 @@
 .model-row:last-child { border-bottom: 0; }
 .model-row:hover { background: rgba(255,255,255,.022); }
 .model-name-wrap { min-width: 0; }
-.model-name { font-size: .86rem; font-weight: 740; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-name { font-size: .84rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-file { color: var(--muted); font-size: .7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
 .model-family-badge, .model-kind-badge {
   justify-self: start;
@@ -128,7 +128,7 @@
   background: rgba(255,255,255,.025);
 }
 .model-family-badge { color: var(--accent); border-color: rgba(65,217,255,.18); }
-.model-path { color: #7f8a96; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-path { color: #7f8a96; font-family: var(--font-mono); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-size { color: var(--muted); font-size: .72rem; white-space: nowrap; text-align: right; }
 .use-model-button { min-height: 33px; padding: 5px 10px; font-size: .74rem; }
 .model-count-note { color: var(--muted); font-size: .72rem; padding: 9px 13px; border-top: 1px solid var(--border); background: rgba(255,255,255,.012); }
