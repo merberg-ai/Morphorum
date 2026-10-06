@@ -172,18 +172,11 @@
     custom.value = 'custom';
     custom.textContent = 'Custom';
     select.appendChild(custom);
-    const first = capability.resolutions?.[0];
-    if (first) {
-      select.value = `${first.width}x${first.height}`;
-      qs('#image-width').value = first.width;
-      qs('#image-height').value = first.height;
-    }
   }
 
   function populateSamplers(capability) {
     const select = qs('#image-sampler');
     if (!select) return;
-    const previous = select.value;
     select.replaceChildren();
     const samplerConfig = capability.samplers || {};
     const options = Array.isArray(samplerConfig.options) ? samplerConfig.options : [];
@@ -193,10 +186,46 @@
       option.textContent = sampler.label || sampler.id;
       select.appendChild(option);
     }
-    const preferred = options.some(item => item.id === previous)
-      ? previous
-      : (samplerConfig.default || options[0]?.id || '');
-    if (preferred && options.some(item => item.id === preferred)) select.value = preferred;
+  }
+
+  function applyModelDefaults(capability) {
+    const steps = qs('#image-steps');
+    steps.value = capability.steps?.default ?? 25;
+    steps.min = capability.steps?.min ?? 1;
+    steps.max = capability.steps?.max ?? 150;
+
+    const guidance = qs('#image-guidance');
+    qs('#guidance-label').textContent = capability.guidance?.label || 'CFG / Guidance';
+    guidance.value = capability.guidance?.default ?? 7;
+    guidance.min = capability.guidance?.min ?? 0;
+    guidance.max = capability.guidance?.max ?? 30;
+    guidance.disabled = Number(capability.guidance?.min) === Number(capability.guidance?.max);
+
+    const sampler = qs('#image-sampler');
+    const samplerOptions = capability.samplers?.options || [];
+    const samplerDefault = capability.samplers?.default || samplerOptions[0]?.id || '';
+    if ([...sampler.options].some(option => option.value === samplerDefault)) {
+      sampler.value = samplerDefault;
+    }
+
+    const resolution = capability.default_resolution || capability.resolutions?.[0];
+    if (resolution) {
+      const width = Number(resolution.width);
+      const height = Number(resolution.height);
+      qs('#image-width').value = width;
+      qs('#image-height').value = height;
+      const presetValue = `${width}x${height}`;
+      const preset = qs('#image-resolution-preset');
+      preset.value = [...preset.options].some(option => option.value === presetValue)
+        ? presetValue
+        : 'custom';
+    }
+
+    const negativePrompt = qs('#image-negative-prompt');
+    negativePrompt.disabled = capability.negative_prompt === false;
+    negativePrompt.title = capability.negative_prompt === false
+      ? 'Negative prompts are not used by this model family.'
+      : '';
   }
 
   function updateSeedMode() {
@@ -247,22 +276,11 @@
 
       qs('#image-capability-note').classList.remove('unsupported-note');
       const variantLabel = capability.label || state.capabilities[model.family]?.label || model.family;
-      qs('#image-capability-note').textContent = `Ready for ${variantLabel} txt2img.`;
-      qs('#image-steps').value = capability.steps?.default ?? 25;
-      qs('#image-steps').min = capability.steps?.min ?? 1;
-      qs('#image-steps').max = capability.steps?.max ?? 150;
-      qs('#guidance-label').textContent = capability.guidance?.label || 'CFG / Guidance';
-      qs('#image-guidance').value = capability.guidance?.default ?? 7;
-      qs('#image-guidance').min = capability.guidance?.min ?? 0;
-      qs('#image-guidance').max = capability.guidance?.max ?? 30;
-      qs('#image-negative-prompt').disabled = capability.negative_prompt === false;
+      qs('#image-capability-note').textContent = `Ready for ${variantLabel} txt2img. Model defaults applied.`;
       populatePresets(capability);
       populateSamplers(capability);
       setEnabled(true);
-      const guidance = qs('#image-guidance');
-      if (guidance && Number(capability.guidance?.min) === Number(capability.guidance?.max)) {
-        guidance.disabled = true;
-      }
+      applyModelDefaults(capability);
       updateSeedMode();
     } catch (error) {
       setEnabled(false);
