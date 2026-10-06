@@ -8,10 +8,11 @@ import morphorum.generation as generation
 from morphorum.generation import GenerationError, GenerationJob, GenerationManager, GenerationRequest
 
 
-def fake_model(path: Path, family: str = "sdxl") -> dict:
+def fake_model(path: Path, family: str = "sdxl", variant: str | None = None) -> dict:
     return {
         "id": "model-1",
         "family": family,
+        "variant": variant or ("dev" if family == "flux" else family),
         "kind": "checkpoints",
         "name": "Test Model",
         "filename": path.name,
@@ -54,11 +55,11 @@ def test_random_seed_resolution_produces_requested_count(tmp_path, monkeypatch) 
 
 
 def test_unsupported_family_is_rejected(tmp_path, monkeypatch) -> None:
-    checkpoint = tmp_path / "flux.safetensors"
+    checkpoint = tmp_path / "zimage.safetensors"
     checkpoint.write_bytes(b"fake")
-    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint, "flux"))
+    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint, "zimage"))
     manager = GenerationManager()
-    with pytest.raises(GenerationError, match="Flux is an enabled Morphorum model family"):
+    with pytest.raises(GenerationError, match="Z-Image"):
         manager._validate_request(GenerationRequest(model_id="model-1", prompt="test"))
 
 
@@ -227,3 +228,154 @@ def test_all_advertised_sdxl_samplers_construct_from_base_config() -> None:
         manager._configure_sampler(pipe, "sdxl", sampler)
         assert manager._pipeline_sampler == sampler
         assert pipe.scheduler is not None
+
+
+def test_flux_dev_and_schnell_capabilities_and_validation(tmp_path, monkeypatch) -> None:
+    checkpoint = tmp_path / "flux1-dev.safetensors"
+    checkpoint.write_bytes(b"fake")
+    manager = GenerationManager()
+
+    dev_model = fake_model(checkpoint, "flux", "dev")
+    monkeypatch.setattr(generation, "get_model", lambda _: dev_model)
+    dev = manager._effective_capability(dev_model)
+    assert dev["supported"] is True
+    assert dev["steps"]["default"] == 28
+    assert dev["guidance"]["default"] == 3.5
+    assert dev["max_sequence_length"] == 512
+    assert dev["samplers"]["default"] == "flowmatch_euler"
+
+    manager._validate_request(
+        GenerationRequest(
+            model_id="model-1",
+            prompt="test",
+            steps=28,
+            guidance_scale=3.5,
+            sampler="flowmatch_euler",
+            width=1024,
+            height=1024,
+        )
+    )
+
+    schnell_model = fake_model(checkpoint, "flux", "schnell")
+    monkeypatch.setattr(generation, "get_model", lambda _: schnell_model)
+    schnell = manager._effective_capability(schnell_model)
+    assert schnell["steps"]["default"] == 4
+    assert schnell["guidance"]["default"] == 0.0
+    assert schnell["max_sequence_length"] == 256
+
+    manager._validate_request(
+        GenerationRequest(
+            model_id="model-1",
+            prompt="test",
+            steps=4,
+            guidance_scale=0.0,
+            sampler="flowmatch_euler",
+            width=1024,
+            height=1024,
+        )
+    )
+    with pytest.raises(GenerationError, match="Flux Schnell requires Guidance = 0"):
+        manager._validate_request(
+            GenerationRequest(
+                model_id="model-1",
+                prompt="test",
+                steps=4,
+                guidance_scale=3.5,
+                sampler="flowmatch_euler",
+            )
+        )
+
+
+def test_flux_requires_safetensors_and_16_pixel_dimensions(tmp_path, monkeypatch) -> None:
+    checkpoint = tmp_path / "flux1-dev.ckpt"
+    checkpoint.write_bytes(b"fake")
+    monkeypatch.setattr(
+        generation,
+        "get_model",
+        lambda _: fake_model(checkpoint, "flux", "dev"),
+    )
+    manager = GenerationManager()
+    request = GenerationRequest(
+        model_id="model-1",
+        prompt="test",
+        sampler="flowmatch_euler",
+        steps=28,
+        guidance_scale=3.5,
+    )
+    with pytest.raises(GenerationError, match="only supports .*safetensors"):
+        manager._validate_request(request)
+
+    safetensors = tmp_path / "flux1-dev.safetensors"
+    safetensors.write_bytes(b"fake")
+    monkeypatch.setattr(
+        generation,
+        "get_model",
+        lambda _: fake_model(safetensors, "flux", "dev"),
+    )
+    request.width = 1032
+    request.height = 1024
+    with pytest.raises(GenerationError, match="divisible by 16"):
+        manager._validate_request(request)
+
+
+def test_flux_call_arguments_are_variant_specific(tmp_path) -> None:
+    checkpoint = tmp_path / "flux.safetensors"
+    checkpoint.write_bytes(b"fake")
+    manager = GenerationManager()
+    generator = object()
+    callback = object()
+
+    dev_job = GenerationJob(
+        id="dev",
+        request=GenerationRequest(
+            model_id="model-1",
+            prompt="flux prompt",
+            negative_prompt="ignored for initial Flux adapter",
+            steps=28,
+            guidance_scale=3.5,
+            sampler="flowmatch_euler",
+        ),
+        model=fake_model(checkpoint, "flux", "dev"),
+    )
+    dev_args = manager._build_call_args(dev_job, generator, callback)
+    assert dev_args["guidance_scale"] == 3.5
+    assert dev_args["max_sequence_length"] == 512
+    assert "negative_prompt" not in dev_args
+
+    schnell_job = GenerationJob(
+        id="schnell",
+        request=GenerationRequest(
+            model_id="model-1",
+            prompt="flux prompt",
+            steps=4,
+            guidance_scale=0.0,
+            sampler="flowmatch_euler",
+        ),
+        model=fake_model(checkpoint, "flux", "schnell"),
+    )
+    schnell_args = manager._build_call_args(schnell_job, generator, callback)
+    assert schnell_args["guidance_scale"] == 0.0
+    assert schnell_args["max_sequence_length"] == 256
+
+
+def test_flux_flowmatch_sampler_constructs() -> None:
+    from diffusers import FlowMatchEulerDiscreteScheduler
+
+    class FakePipe:
+        def __init__(self) -> None:
+            self.scheduler = FlowMatchEulerDiscreteScheduler()
+
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    manager._configure_sampler(pipe, "flux", "flowmatch_euler")
+    assert manager._pipeline_sampler == "flowmatch_euler"
+    assert isinstance(pipe.scheduler, FlowMatchEulerDiscreteScheduler)
+
+
+def test_flux_runtime_exposes_required_loader_methods() -> None:
+    from diffusers import FluxPipeline, FluxTransformer2DModel
+
+    assert callable(getattr(FluxTransformer2DModel, "from_single_file", None))
+    assert callable(getattr(FluxPipeline, "from_pretrained", None))
+    assert callable(getattr(FluxPipeline, "enable_model_cpu_offload", None))
