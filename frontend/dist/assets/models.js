@@ -7,7 +7,12 @@
     zimage: 'Z-Image',
   };
 
-  const state = { models: [], families: [] };
+  const state = {
+    models: [],
+    families: [],
+    managedModels: [],
+    managedPollTimer: null,
+  };
   const qs = (selector, root = document) => root.querySelector(selector);
   const toast = (title, message, type = 'info', timeout) => {
     if (window.MorphorumToast) return window.MorphorumToast(title, message, type, timeout);
@@ -66,6 +71,178 @@
       unit = units[i];
     }
     return `${current >= 10 ? current.toFixed(1) : current.toFixed(2)} ${unit}`;
+  }
+
+  function managedStatusLabel(model) {
+    if (model.status === 'checking') return 'Checking…';
+    if (model.status === 'downloading') return 'Downloading';
+    if (model.status === 'installed') return 'Installed';
+    if (model.status === 'failed') return 'Download failed';
+    return 'Not installed';
+  }
+
+  function managedModelCard(model) {
+    const card = document.createElement('div');
+    card.className = 'managed-model-row';
+
+    const info = document.createElement('div');
+    info.className = 'managed-model-info';
+    const titleRow = document.createElement('div');
+    titleRow.className = 'managed-model-title-row';
+    const title = document.createElement('strong');
+    title.textContent = model.name;
+    const status = document.createElement('span');
+    status.className = `managed-status ${model.status || 'not_installed'}`;
+    status.textContent = managedStatusLabel(model);
+    titleRow.append(title, status);
+
+    const description = document.createElement('p');
+    description.className = 'muted managed-description';
+    description.textContent = model.description || '';
+
+    const meta = document.createElement('div');
+    meta.className = 'managed-model-meta';
+    meta.textContent = `${model.repo_id} · ${model.license || 'Model license'} · ${formatBytes(model.expected_bytes || model.advertised_size_bytes)}`;
+
+    const destination = document.createElement('div');
+    destination.className = 'managed-model-path';
+    destination.textContent = model.destination || '';
+    destination.title = model.destination || '';
+
+    info.append(titleRow, description, meta, destination);
+
+    const progressWrap = document.createElement('div');
+    progressWrap.className = 'managed-progress-wrap';
+    const percent = Math.max(0, Math.min(100, Number(model.progress_percent) || 0));
+    const progressHeading = document.createElement('div');
+    progressHeading.className = 'managed-progress-heading';
+    const progressText = document.createElement('span');
+    if (model.status === 'downloading' || model.status === 'checking') {
+      progressText.textContent = `${formatBytes(model.downloaded_bytes)} / ${formatBytes(model.expected_bytes || model.advertised_size_bytes)}`;
+    } else if (model.installed) {
+      progressText.textContent = `${formatBytes(model.downloaded_bytes)} installed`;
+    } else {
+      progressText.textContent = 'Ready to download';
+    }
+    const progressPercent = document.createElement('span');
+    progressPercent.textContent = model.status === 'downloading' ? `${percent.toFixed(1)}%` : '';
+    progressHeading.append(progressText, progressPercent);
+
+    const track = document.createElement('div');
+    track.className = 'managed-progress-track';
+    const fill = document.createElement('div');
+    fill.className = 'managed-progress-fill';
+    fill.style.width = `${model.installed ? 100 : percent}%`;
+    track.appendChild(fill);
+
+    const error = document.createElement('div');
+    error.className = 'managed-model-error';
+    error.hidden = !model.error;
+    error.textContent = model.error || '';
+
+    progressWrap.append(progressHeading, track, error);
+
+    const actions = document.createElement('div');
+    actions.className = 'managed-model-actions';
+
+    if (model.installed) {
+      const use = document.createElement('button');
+      use.className = 'primary-button';
+      use.type = 'button';
+      use.textContent = 'Use Model';
+      use.addEventListener('click', async () => {
+        await loadModels();
+        if (state.models.some(item => item.id === model.index_id)) {
+          useModel(model.index_id);
+        } else {
+          toast('Model index is updating', 'Refresh the managed model list and try again.', 'warning');
+        }
+      });
+      actions.appendChild(use);
+    } else {
+      const download = document.createElement('button');
+      download.className = 'primary-button busy-button';
+      download.type = 'button';
+      const spinner = document.createElement('span');
+      spinner.className = 'spinner';
+      const label = document.createElement('span');
+      label.className = 'button-label';
+      label.textContent = model.status === 'failed' ? 'Retry Download' : 'Download';
+      download.append(spinner, label);
+      const busy = ['checking', 'downloading'].includes(model.status);
+      download.classList.toggle('busy', busy);
+      download.disabled = busy;
+      download.addEventListener('click', () => startManagedDownload(model.id));
+      actions.appendChild(download);
+    }
+
+    card.append(info, progressWrap, actions);
+    return card;
+  }
+
+  function renderManagedModels() {
+    const list = qs('#managed-model-list');
+    if (!list) return;
+    list.replaceChildren();
+    if (!state.managedModels.length) {
+      const empty = document.createElement('div');
+      empty.className = 'model-empty';
+      empty.innerHTML = '<strong>No managed models available</strong><span>The managed catalog is currently empty.</span>';
+      list.appendChild(empty);
+      return;
+    }
+    state.managedModels.forEach(model => list.appendChild(managedModelCard(model)));
+  }
+
+  function scheduleManagedPoll() {
+    window.clearTimeout(state.managedPollTimer);
+    state.managedPollTimer = null;
+    const active = state.managedModels.some(model => ['checking', 'downloading'].includes(model.status));
+    if (active) {
+      state.managedPollTimer = window.setTimeout(() => loadManagedModels(), 900);
+    }
+  }
+
+  async function loadManagedModels() {
+    const previousInstalled = new Set(
+      state.managedModels.filter(model => model.installed).map(model => model.id)
+    );
+    try {
+      const payload = await api('/api/managed-models');
+      state.managedModels = Array.isArray(payload.models) ? payload.models : [];
+      renderManagedModels();
+      scheduleManagedPoll();
+
+      const newlyInstalled = state.managedModels.some(
+        model => model.installed && !previousInstalled.has(model.id)
+      );
+      if (newlyInstalled) await loadModels();
+    } catch (error) {
+      const list = qs('#managed-model-list');
+      if (list) {
+        list.innerHTML = `<div class="model-empty"><strong>Could not load managed catalog</strong><span>${String(error.message)}</span></div>`;
+      }
+      toast('Managed model catalog unavailable', error.message, 'error', 6500);
+    }
+  }
+
+  async function startManagedDownload(modelId) {
+    const model = state.managedModels.find(item => item.id === modelId);
+    try {
+      await api(`/api/managed-models/${encodeURIComponent(modelId)}/download`, {
+        method: 'POST',
+        body: '{}',
+      });
+      toast(
+        'Model download started',
+        `${model?.name || modelId} is downloading in the background. You can leave this page open to watch progress.`,
+        'info',
+        6000
+      );
+      await loadManagedModels();
+    } catch (error) {
+      toast('Could not start model download', error.message, 'error', 8000);
+    }
   }
 
   function updateSummary() {
@@ -169,7 +346,7 @@
     if (!state.models.length) {
       const empty = document.createElement('div');
       empty.className = 'model-empty';
-      empty.innerHTML = '<strong>No indexed models yet</strong><span>Configure directories under Settings, then press Scan Models.</span>';
+      empty.innerHTML = '<strong>No indexed models yet</strong><span>Configure SDXL/Flux directories or download a managed model above.</span>';
       list.appendChild(empty);
       return;
     }
@@ -286,9 +463,15 @@
     } catch (error) {
       toast('Model family registry unavailable', error.message, 'warning');
     }
+    await loadManagedModels();
     await loadModels();
   }
 
-  window.MorphorumModels = { reload: loadModels, scan: scanModels };
+  window.MorphorumModels = {
+    reload: loadModels,
+    scan: scanModels,
+    reloadManaged: loadManagedModels,
+  };
+  window.addEventListener('morphorum:settings-changed', () => loadManagedModels());
   window.addEventListener('DOMContentLoaded', start);
 })();
