@@ -183,6 +183,7 @@
   function populateSamplers(capability) {
     const select = qs('#image-sampler');
     if (!select) return;
+    const previous = select.value;
     select.replaceChildren();
     const samplerConfig = capability.samplers || {};
     const options = Array.isArray(samplerConfig.options) ? samplerConfig.options : [];
@@ -192,7 +193,9 @@
       option.textContent = sampler.label || sampler.id;
       select.appendChild(option);
     }
-    const preferred = samplerConfig.default || options[0]?.id || '';
+    const preferred = options.some(item => item.id === previous)
+      ? previous
+      : (samplerConfig.default || options[0]?.id || '');
     if (preferred && options.some(item => item.id === preferred)) select.value = preferred;
   }
 
