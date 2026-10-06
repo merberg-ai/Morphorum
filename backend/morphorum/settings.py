@@ -8,14 +8,22 @@ from typing import Any
 
 import yaml
 
-from .paths import DEFAULT_CONFIG, USER_CONFIG, ensure_runtime_dirs
+from .paths import DEFAULT_CONFIG, ROOT, USER_CONFIG, ensure_runtime_dirs
 
 MODEL_FAMILY_DEFS = {
-    "sdxl": {"label": "SDXL", "supports_loras": True},
-    "flux": {"label": "Flux", "supports_loras": True},
-    "zimage": {"label": "Z-Image", "supports_loras": True},
+    "sdxl": {"label": "SDXL", "supports_loras": True, "source": "external"},
+    "flux": {"label": "Flux", "supports_loras": True, "source": "external"},
+    "zimage": {"label": "Z-Image", "supports_loras": True, "source": "managed"},
 }
 MODEL_FAMILIES = tuple(MODEL_FAMILY_DEFS)
+EXTERNAL_MODEL_FAMILIES = tuple(
+    family for family, definition in MODEL_FAMILY_DEFS.items()
+    if definition.get("source") == "external"
+)
+MANAGED_MODEL_FAMILIES = tuple(
+    family for family, definition in MODEL_FAMILY_DEFS.items()
+    if definition.get("source") == "managed"
+)
 MODEL_PATH_KEYS = ("checkpoints", "loras")
 
 
@@ -50,7 +58,7 @@ def _normalize_model_paths(settings: dict[str, Any]) -> dict[str, Any]:
         models = {}
         settings["models"] = models
 
-    for family in MODEL_FAMILIES:
+    for family in EXTERNAL_MODEL_FAMILIES:
         family_settings = models.setdefault(family, {})
         if not isinstance(family_settings, dict):
             family_settings = {}
@@ -63,6 +71,40 @@ def _normalize_model_paths(settings: dict[str, Any]) -> dict[str, Any]:
             family_settings[path_key] = [str(item) for item in paths if str(item).strip()]
 
     return settings
+
+
+def _normalize_managed_models(settings: dict[str, Any]) -> dict[str, Any]:
+    managed = settings.setdefault("managed_models", {})
+    if not isinstance(managed, dict):
+        managed = {}
+        settings["managed_models"] = managed
+
+    locations = managed.setdefault("locations", {})
+    if not isinstance(locations, dict):
+        locations = {}
+        managed["locations"] = locations
+
+    locations.setdefault("zimage", r".\ckpts\z-image")
+    for family in MANAGED_MODEL_FAMILIES:
+        value = str(locations.get(family, "")).strip()
+        if not value:
+            value = rf".\ckpts\{family.replace('zimage', 'z-image')}"
+        locations[family] = value
+
+    return settings
+
+
+def managed_model_location(family: str, settings: dict[str, Any] | None = None) -> Path:
+    source = settings or load_settings()
+    raw = str(
+        source.get("managed_models", {})
+        .get("locations", {})
+        .get(family, rf".\ckpts\{family}")
+    ).strip()
+    expanded = Path(os.path.expandvars(os.path.expanduser(raw)))
+    if not expanded.is_absolute():
+        expanded = ROOT / expanded
+    return expanded.resolve(strict=False)
 
 
 def _normalize_preferences(settings: dict[str, Any]) -> dict[str, Any]:
@@ -95,7 +137,9 @@ def load_settings() -> dict[str, Any]:
     ensure_runtime_dirs()
     defaults = _read_yaml(DEFAULT_CONFIG)
     user = _read_yaml(USER_CONFIG)
-    return _normalize_preferences(_normalize_model_paths(_deep_merge(defaults, user)))
+    return _normalize_preferences(
+        _normalize_managed_models(_normalize_model_paths(_deep_merge(defaults, user)))
+    )
 
 
 def save_settings(update: dict[str, Any]) -> dict[str, Any]:
@@ -105,7 +149,9 @@ def save_settings(update: dict[str, Any]) -> dict[str, Any]:
 
     ensure_runtime_dirs()
     current_user = _read_yaml(USER_CONFIG)
-    merged_user = _normalize_preferences(_normalize_model_paths(_deep_merge(current_user, update)))
+    merged_user = _normalize_preferences(
+        _normalize_managed_models(_normalize_model_paths(_deep_merge(current_user, update)))
+    )
 
     USER_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(
@@ -172,7 +218,7 @@ def validate_model_paths(settings: dict[str, Any] | None = None) -> list[dict[st
     models = source.get("models", {}) if isinstance(source, dict) else {}
     results: list[dict[str, Any]] = []
 
-    for family in MODEL_FAMILIES:
+    for family in EXTERNAL_MODEL_FAMILIES:
         family_settings = models.get(family, {}) if isinstance(models, dict) else {}
         if not isinstance(family_settings, dict):
             continue
