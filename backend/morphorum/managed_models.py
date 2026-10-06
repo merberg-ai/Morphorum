@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import fnmatch
+import json
+import os
 import shutil
 import threading
 from dataclasses import dataclass, field
@@ -21,6 +23,9 @@ _IGNORE_PATTERNS = [
     "*.webp",
     "*.pdf",
 ]
+
+_COMPLETE_MARKER = ".morphorum-managed-complete.json"
+_DOWNLOAD_MARKER = ".morphorum-managed-download.json"
 
 MANAGED_MODEL_CATALOG: dict[str, dict[str, Any]] = {
     "zimage-turbo": {
@@ -76,7 +81,7 @@ class ManagedModelManager:
         return any(fnmatch.fnmatch(normalized, pattern) for pattern in _IGNORE_PATTERNS)
 
     @classmethod
-    def _installed(cls, destination: Path) -> bool:
+    def _runtime_layout_present(cls, destination: Path) -> bool:
         required = (
             destination / "model_index.json",
             destination / "scheduler",
@@ -86,6 +91,36 @@ class ManagedModelManager:
             destination / "vae",
         )
         return all(path.exists() for path in required)
+
+    @classmethod
+    def _has_incomplete_files(cls, destination: Path) -> bool:
+        cache = destination / ".cache"
+        if not cache.exists():
+            return False
+        try:
+            return any(path.is_file() and path.suffix == ".incomplete" for path in cache.rglob("*"))
+        except OSError:
+            return True
+
+    @classmethod
+    def _installed(cls, destination: Path) -> bool:
+        marker = destination / _COMPLETE_MARKER
+        if not marker.is_file() or not cls._runtime_layout_present(destination):
+            return False
+        if cls._has_incomplete_files(destination):
+            return False
+        try:
+            payload = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return False
+        return payload.get("status") == "complete"
+
+    @staticmethod
+    def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_name(path.name + ".tmp")
+        temp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(temp, path)
 
     @classmethod
     def _materialized_size(cls, destination: Path) -> int:
@@ -100,6 +135,8 @@ class ManagedModelManager:
                     relative = path.relative_to(destination).as_posix()
                 except ValueError:
                     relative = path.name
+                if relative in {_COMPLETE_MARKER, _DOWNLOAD_MARKER}:
+                    continue
                 if relative.startswith(".cache/"):
                     if path.suffix == ".incomplete":
                         try:
@@ -207,6 +244,7 @@ class ManagedModelManager:
         entry = self._entry(model_id)
         destination = self._destination(entry)
         destination.mkdir(parents=True, exist_ok=True)
+        (destination / _COMPLETE_MARKER).unlink(missing_ok=True)
 
         emit_console(
             "info",
@@ -230,6 +268,16 @@ class ManagedModelManager:
             )
             if expected <= 0:
                 expected = int(entry["advertised_size_bytes"])
+
+            self._write_json_atomic(
+                destination / _DOWNLOAD_MARKER,
+                {
+                    "status": "downloading",
+                    "model_id": model_id,
+                    "repo_id": str(entry["repo_id"]),
+                    "expected_bytes": expected,
+                },
+            )
 
             free = shutil.disk_usage(destination).free
             current = self._materialized_size(destination)
@@ -261,10 +309,28 @@ class ManagedModelManager:
                 max_workers=8,
             )
 
+            if not self._runtime_layout_present(destination) or self._has_incomplete_files(destination):
+                raise ManagedModelError(
+                    "Download returned but the managed model package is incomplete. "
+                    "Use Download again to resume/repair it."
+                )
+
+            final_size = self._materialized_size(destination)
+            self._write_json_atomic(
+                destination / _COMPLETE_MARKER,
+                {
+                    "status": "complete",
+                    "model_id": model_id,
+                    "repo_id": str(entry["repo_id"]),
+                    "expected_bytes": expected,
+                    "installed_bytes": final_size,
+                },
+            )
+            (destination / _DOWNLOAD_MARKER).unlink(missing_ok=True)
+
             if not self._installed(destination):
                 raise ManagedModelError(
-                    "Download completed but the managed model package is incomplete. "
-                    "Use Download again to resume/repair it."
+                    "Download completed but Morphorum could not verify the managed model package."
                 )
 
             self._sync_index(entry, destination)
@@ -280,6 +346,7 @@ class ManagedModelManager:
                 f"Managed model ready: {entry['name']} at {destination}",
             )
         except Exception as exc:
+            (destination / _COMPLETE_MARKER).unlink(missing_ok=True)
             with self._lock:
                 state = self._states[model_id]
                 state.downloaded_bytes = self._materialized_size(destination)
