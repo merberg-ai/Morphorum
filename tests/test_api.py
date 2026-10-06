@@ -18,6 +18,11 @@ def test_frontend_and_health() -> None:
         assert "Morphorum" in frontend.text
         assert "Settings" in frontend.text
         assert "Console" in frontend.text
+        assert "no-cache" in frontend.headers.get("cache-control", "")
+
+        css = client.get("/assets/app.css")
+        assert css.status_code == 200
+        assert "no-cache" in css.headers.get("cache-control", "")
 
 
 def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
