@@ -42,6 +42,7 @@ def init_model_index() -> None:
                 size_bytes INTEGER NOT NULL,
                 mtime_ns INTEGER NOT NULL,
                 extension TEXT NOT NULL,
+                variant TEXT,
                 preview_path TEXT,
                 indexed_at TEXT NOT NULL
             );
@@ -50,11 +51,26 @@ def init_model_index() -> None:
             """
         )
 
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(models)").fetchall()}
+        if "variant" not in columns:
+            db.execute("ALTER TABLE models ADD COLUMN variant TEXT")
+
 
 def _model_id(family: str, kind: str, path: Path) -> str:
     normalized = os.path.normcase(os.path.abspath(str(path)))
     source = f"{family}|{kind}|{normalized}".encode("utf-8", errors="surrogatepass")
     return hashlib.blake2b(source, digest_size=12).hexdigest()
+
+
+def _infer_variant(family: str, path: Path) -> str | None:
+    name = path.stem.lower()
+    if family == "flux":
+        return "schnell" if "schnell" in name else "dev"
+    if family == "sdxl":
+        return "sdxl"
+    if family == "zimage":
+        return "zimage"
+    return None
 
 
 def _preview_for(path: Path) -> str | None:
@@ -137,6 +153,7 @@ def scan_models() -> dict[str, Any]:
                             int(stat.st_size),
                             int(stat.st_mtime_ns),
                             extension,
+                            _infer_variant(family, path),
                             _preview_for(path),
                             now,
                         )
@@ -151,8 +168,8 @@ def scan_models() -> dict[str, Any]:
                 """
                 INSERT INTO models (
                     id, family, kind, name, filename, path, size_bytes,
-                    mtime_ns, extension, preview_path, indexed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    mtime_ns, extension, variant, preview_path, indexed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
