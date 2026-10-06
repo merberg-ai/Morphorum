@@ -55,7 +55,7 @@
           <div>
             <p class="eyebrow">FIRST IMAGE MILESTONE</p>
             <h1>Image Generation</h1>
-            <p class="muted">Generate locally with modern model families. SDXL is live now; Flux and Z-Image adapters are next.</p>
+            <p class="muted">Generate locally with modern model families. SDXL and Flux are live; Z-Image managed download support is being prepared for the next adapter.</p>
           </div>
         </div>
 
@@ -116,9 +116,22 @@
 
       <section class="view" id="view-models">
         <div class="page-heading models-heading">
-          <div><p class="eyebrow">MODEL LIBRARY</p><h1>Models</h1><p class="muted">Morphorum indexes configured files in place. Nothing is copied into the app.</p></div>
+          <div><p class="eyebrow">MODEL MANAGER</p><h1>Models</h1><p class="muted">Use external SDXL/Flux libraries in place, and let Morphorum download managed model packages such as Z-Image.</p></div>
           <button class="primary-button busy-button" id="scan-models"><span class="spinner"></span><span class="button-label">Scan Models</span></button>
         </div>
+
+        <article class="card glass managed-models-card">
+          <div class="card-header">
+            <div>
+              <h2>Managed Downloads</h2>
+              <p class="muted">Official model packages downloaded and maintained by Morphorum.</p>
+            </div>
+            <span class="badge">Morphorum managed</span>
+          </div>
+          <div id="managed-model-list" class="managed-model-list">
+            <div class="model-empty"><span class="large-spinner"></span><span>Checking managed models…</span></div>
+          </div>
+        </article>
 
         <div class="model-summary-row" id="model-summary-row">
           <div class="mini-stat glass"><span class="mini-stat-value" id="model-total">0</span><span class="mini-stat-label">Indexed files</span></div>
@@ -149,7 +162,7 @@
 
       <section class="view" id="view-settings">
         <div class="page-heading settings-heading">
-          <div><p class="eyebrow">CONFIGURATION</p><h1>Settings</h1><p class="muted">Model and LoRA libraries remain where you already keep them.</p></div>
+          <div><p class="eyebrow">CONFIGURATION</p><h1>Settings</h1><p class="muted">External libraries stay where you keep them; managed models use Morphorum-controlled storage.</p></div>
           <div class="button-row">
             <button class="secondary-button busy-button" id="load-settings"><span class="spinner"></span><span class="button-label">Reload</span></button>
             <button class="primary-button busy-button" id="save-settings"><span class="spinner"></span><span class="button-label">Save Settings</span></button>
@@ -158,7 +171,7 @@
 
         <div class="notice glass subtle">
           <strong>Server-side paths</strong>
-          <span>Enter folders on the computer running Morphorum, for example <code>D:\AI\models\checkpoints</code>. Multiple directories per model family are supported.</span>
+          <span>SDXL and Flux can use folders on the computer running Morphorum, for example <code>D:\AI\models\checkpoints</code>. Managed model packages use the separate download location below.</span>
         </div>
 
         <div id="settings-loading" class="card glass loading-card"><span class="large-spinner"></span><span>Loading settings…</span></div>
