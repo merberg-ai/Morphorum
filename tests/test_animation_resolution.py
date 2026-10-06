@@ -68,6 +68,7 @@ def test_resolve_project_frame_contract() -> None:
     assert resolved["generation"]["seed"]["resolved"] == 1150
 
     positive = resolved["prompts"]["positive"]
+    assert positive["mode"] == "blend"
     assert positive["from_text"] == "forest"
     assert positive["to_text"] == "city"
     assert positive["from_weight"] == pytest.approx(0.5)
