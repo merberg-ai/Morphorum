@@ -775,6 +775,7 @@
     const meta = qs('#animation-source-meta');
     const clear = qs('#animation-clear-source');
     const preview = qs('#animation-generate-motion-preview');
+    const fileInput = qs('#animation-source-file');
     const hasSource = Boolean(state.project?.animation?.source_image);
     if (image) {
       image.hidden = !hasSource;
@@ -783,6 +784,7 @@
     }
     if (empty) empty.hidden = hasSource;
     if (meta) meta.textContent = hasSource ? (state.project.animation.source_image_name || 'Project source image') : 'No source image uploaded.';
+    if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId);
     if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId);
     if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId);
   }
