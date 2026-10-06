@@ -379,3 +379,31 @@ def test_flux_runtime_exposes_required_loader_methods() -> None:
     assert callable(getattr(FluxTransformer2DModel, "from_single_file", None))
     assert callable(getattr(FluxPipeline, "from_pretrained", None))
     assert callable(getattr(FluxPipeline, "enable_model_cpu_offload", None))
+
+
+def test_flux_runtime_exposes_native_fp8_layerwise_casting() -> None:
+    import torch
+    from diffusers import FluxTransformer2DModel
+
+    assert hasattr(torch, "float8_e4m3fn")
+    assert callable(getattr(FluxTransformer2DModel, "enable_layerwise_casting", None))
+
+
+def test_generation_job_public_includes_performance_metrics(tmp_path) -> None:
+    checkpoint = tmp_path / "model.safetensors"
+    checkpoint.write_bytes(b"fake")
+    job = GenerationJob(
+        id="job-perf",
+        request=GenerationRequest(model_id="model-1", prompt="test"),
+        model=fake_model(checkpoint),
+        model_load_seconds=12.5,
+        last_step_seconds=3.2,
+        average_step_seconds=3.8,
+    )
+    payload = job.public()
+    assert payload["model_load_seconds"] == 12.5
+    assert payload["last_step_seconds"] == 3.2
+    assert payload["average_step_seconds"] == 3.8
+    assert "_started_monotonic" not in payload
+    assert "_last_step_monotonic" not in payload
+    assert "_step_durations" not in payload
