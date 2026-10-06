@@ -122,6 +122,10 @@ def resolve_project_frame(
         if key.startswith("motion.")
     }
 
+    motion["border_mode"] = str(
+        project.get("motion", {}).get("border_mode", "replicate") or "replicate"
+    ).strip().lower()
+
     generation = {
         key.split(".", 1)[1]: _resolve_field(project, key, frame)
         for key in SCHEDULE_FIELDS
