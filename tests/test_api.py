@@ -36,7 +36,13 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
                 "loras": [str(lora_dir)],
             }
         },
-        "ui": {"image_preview_limit": 7},
+        "ui": {
+            "theme": "midnight-glass",
+            "font_style": "technical",
+            "mono_font_style": "cascadia",
+            "ui_scale": "compact",
+            "image_preview_limit": 7,
+        },
         "performance": {"unload_after_generation": True},
     }
 
@@ -50,6 +56,10 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
         settings = loaded.json()["settings"]
         assert settings["models"]["sdxl"]["checkpoints"] == [str(checkpoint_dir)]
         assert settings["models"]["sdxl"]["loras"] == [str(lora_dir)]
+        assert settings["ui"]["theme"] == "midnight-glass"
+        assert settings["ui"]["font_style"] == "technical"
+        assert settings["ui"]["mono_font_style"] == "cascadia"
+        assert settings["ui"]["ui_scale"] == "compact"
         assert settings["ui"]["image_preview_limit"] == 7
         assert settings["performance"]["unload_after_generation"] is True
 
@@ -134,3 +144,24 @@ def test_managed_model_catalog_api_lists_zimage_turbo(tmp_path, monkeypatch) -> 
     assert zimage["repo_id"] == "Tongyi-MAI/Z-Image-Turbo"
     assert zimage["installed"] is False
     assert zimage["status"] == "not_installed"
+
+
+def test_invalid_appearance_values_fall_back_to_defaults(tmp_path, monkeypatch) -> None:
+    user_config = tmp_path / "config.yaml"
+    monkeypatch.setattr(settings_module, "USER_CONFIG", user_config)
+
+    saved = settings_module.save_settings(
+        {
+            "ui": {
+                "theme": "future-theme-that-does-not-exist",
+                "font_style": "papyrus-but-worse",
+                "mono_font_style": "typewriter-from-hell",
+                "ui_scale": "microscopic",
+            }
+        }
+    )
+
+    assert saved["ui"]["theme"] == "midnight-glass"
+    assert saved["ui"]["font_style"] == "modern"
+    assert saved["ui"]["mono_font_style"] == "modern-mono"
+    assert saved["ui"]["ui_scale"] == "compact"
