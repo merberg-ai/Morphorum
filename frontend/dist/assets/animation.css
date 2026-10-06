@@ -1,0 +1,178 @@
+.animation-heading { align-items: center; }
+.animation-project-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+.animation-status-row {
+  max-width: 1260px;
+  margin: -7px auto 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.animation-status-row code {
+  color: var(--muted);
+  font-size: .7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.animation-project-status.saved {
+  color: var(--ok);
+  border-color: rgba(114,230,167,.24);
+  background: rgba(114,230,167,.07);
+}
+.animation-project-status.dirty {
+  color: var(--warn);
+  border-color: rgba(243,198,106,.28);
+  background: rgba(243,198,106,.07);
+}
+.animation-project-status.error {
+  color: var(--danger);
+  border-color: rgba(255,115,115,.28);
+  background: rgba(255,115,115,.07);
+}
+
+.animation-layout {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+.animation-span-2 { grid-column: 1 / -1; }
+
+.animation-prompt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.animation-prompt-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0,1fr) minmax(0,.72fr) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(6,9,13,.38);
+}
+.animation-prompt-row textarea {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  color: var(--text);
+  background: rgba(6,9,13,.64);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  outline: none;
+  font: inherit;
+  line-height: 1.4;
+}
+.animation-prompt-row textarea:focus {
+  border-color: rgba(65,217,255,.48);
+  box-shadow: 0 0 0 3px rgba(65,217,255,.07);
+}
+.animation-remove-prompt {
+  align-self: end;
+  min-height: 43px;
+}
+.animation-empty {
+  min-height: 110px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+}
+
+.animation-schedule-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 11px;
+}
+.animation-schedule {
+  font-family: var(--font-mono);
+  font-size: .77rem;
+}
+
+.animation-notes-card textarea { margin-bottom: 0; }
+
+.animation-foundation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 9px;
+}
+.animation-foundation-grid > div {
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(6,9,13,.36);
+}
+.animation-foundation-grid strong {
+  display: block;
+  font-size: .8rem;
+  font-weight: 650;
+}
+.animation-foundation-grid span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: .69rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 980px) {
+  .animation-layout { grid-template-columns: 1fr; }
+  .animation-project-actions { width: 100%; justify-content: stretch; }
+  .animation-project-actions button { flex: 1; }
+}
+
+@media (max-width: 720px) {
+  .animation-prompt-row {
+    grid-template-columns: 88px 1fr auto;
+    align-items: end;
+  }
+  .animation-prompt-row label:nth-child(2),
+  .animation-prompt-row label:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+  .animation-prompt-row label:nth-child(2) { grid-row: 2; }
+  .animation-prompt-row label:nth-child(3) { grid-row: 3; }
+  .animation-remove-prompt {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .animation-status-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .animation-status-row code {
+    width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .animation-project-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+  .animation-project-actions #animation-save { grid-column: 1 / -1; }
+  .animation-foundation-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+  .animation-prompt-row {
+    grid-template-columns: 1fr auto;
+  }
+  .animation-prompt-row label:first-child {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .animation-remove-prompt {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
