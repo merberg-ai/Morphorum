@@ -954,6 +954,220 @@
       toast('Could not start motion preview', error.message, 'error', 7500);
     }
   }
+  function renderIsActive(job = state.renderJob) {
+    return Boolean(job && ['queued', 'loading_model', 'rendering', 'finalizing'].includes(job.status));
+  }
+
+  function formatSeconds(value) {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds) || seconds < 0) return '--';
+    if (seconds < 60) return seconds.toFixed(seconds < 10 ? 1 : 0) + 's';
+    const minutes = Math.floor(seconds / 60);
+    const remain = Math.round(seconds % 60);
+    return minutes + 'm ' + remain + 's';
+  }
+
+  function resetRenderUi() {
+    window.clearTimeout(state.renderPollTimer);
+    state.renderPollTimer = null;
+    state.renderJobId = null;
+    state.renderJob = null;
+    state.renderHistory = [];
+    state.lastRenderFrameUrl = '';
+    const progress = qs('#animation-render-progress');
+    if (progress) progress.hidden = true;
+    const error = qs('#animation-render-error');
+    if (error) { error.hidden = true; error.textContent = ''; }
+    const frame = qs('#animation-render-latest-frame');
+    if (frame) { frame.hidden = true; frame.removeAttribute('src'); }
+    const frameEmpty = qs('#animation-render-frame-empty');
+    if (frameEmpty) frameEmpty.hidden = false;
+    const preview = qs('#animation-render-preview-image');
+    if (preview) { preview.hidden = true; preview.removeAttribute('src'); }
+    const previewEmpty = qs('#animation-render-preview-empty');
+    if (previewEmpty) previewEmpty.hidden = false;
+    const badge = qs('#animation-render-state');
+    if (badge) { badge.textContent = 'Idle'; badge.className = 'badge'; }
+    const select = qs('#animation-render-select');
+    if (select) { select.replaceChildren(); const option = document.createElement('option'); option.value = ''; option.textContent = 'No renders yet'; select.appendChild(option); select.disabled = true; }
+    const resume = qs('#animation-resume-render');
+    if (resume) resume.disabled = true;
+    const cancel = qs('#animation-cancel-render');
+    if (cancel) cancel.disabled = true;
+    const start = qs('#animation-start-render');
+    if (start) { start.classList.remove('busy'); const label = qs('.button-label', start); if (label) label.textContent = 'Render Animation'; }
+    renderSourceState();
+  }
+
+  function renderAnimationJob(job) {
+    state.renderJob = job || null;
+    state.renderJobId = job?.id || null;
+    const active = renderIsActive(job);
+    const progress = qs('#animation-render-progress');
+    if (progress) progress.hidden = !job;
+    const badge = qs('#animation-render-state');
+    if (badge) {
+      badge.textContent = job ? String(job.status || 'unknown').replaceAll('_', ' ') : 'Idle';
+      badge.className = 'badge animation-render-state ' + (job?.status || 'idle');
+    }
+    const percent = Math.max(0, Math.min(100, Math.round(Number(job?.progress || 0) * 100)));
+    const status = qs('#animation-render-status');
+    if (status) status.textContent = job?.message || 'Waiting…';
+    const percentEl = qs('#animation-render-percent');
+    if (percentEl) percentEl.textContent = percent + '%';
+    const fill = qs('#animation-render-progress-fill');
+    if (fill) fill.style.width = percent + '%';
+    const frameStat = qs('#animation-render-frame');
+    if (frameStat) frameStat.textContent = job ? ((Number(job.current_frame || 0) + 1) + ' / ' + Number(job.total_frames || 0)) : '--';
+    const stepStat = qs('#animation-render-step');
+    if (stepStat) stepStat.textContent = job ? String(job.current_step ?? 0) : '--';
+    const frameTime = qs('#animation-render-frame-time');
+    if (frameTime) frameTime.textContent = formatSeconds(job?.frame_seconds);
+    const eta = qs('#animation-render-eta');
+    if (eta) eta.textContent = formatSeconds(job?.eta_seconds);
+
+    const latest = qs('#animation-render-latest-frame');
+    const latestEmpty = qs('#animation-render-frame-empty');
+    if (job?.latest_frame_url) {
+      const url = job.latest_frame_url + '?v=' + encodeURIComponent(String(job.current_frame) + '-' + String(percent));
+      if (state.lastRenderFrameUrl !== url && latest) { latest.src = url; state.lastRenderFrameUrl = url; }
+      if (latest) latest.hidden = false;
+      if (latestEmpty) latestEmpty.hidden = true;
+    } else {
+      if (latest) latest.hidden = true;
+      if (latestEmpty) latestEmpty.hidden = false;
+    }
+
+    const preview = qs('#animation-render-preview-image');
+    const previewEmpty = qs('#animation-render-preview-empty');
+    if (job?.preview_url) {
+      if (preview) { preview.src = job.preview_url + '?v=' + Date.now(); preview.hidden = false; }
+      if (previewEmpty) previewEmpty.hidden = true;
+    } else {
+      if (preview) preview.hidden = true;
+      if (previewEmpty) previewEmpty.hidden = false;
+    }
+
+    const error = qs('#animation-render-error');
+    if (error) {
+      error.hidden = !job?.error;
+      error.textContent = job?.error || '';
+    }
+    const cancel = qs('#animation-cancel-render');
+    if (cancel) cancel.disabled = !active;
+    const resume = qs('#animation-resume-render');
+    if (resume) resume.disabled = !job?.resumable || active;
+    const start = qs('#animation-start-render');
+    if (start) {
+      start.classList.toggle('busy', active);
+      const label = qs('.button-label', start);
+      if (label) label.textContent = active ? 'Rendering…' : 'Render Animation';
+    }
+    renderSourceState();
+  }
+
+  function populateRenderHistory(renders) {
+    state.renderHistory = Array.isArray(renders) ? renders : [];
+    const select = qs('#animation-render-select');
+    if (!select) return;
+    const selected = state.renderJobId || '';
+    select.replaceChildren();
+    if (!state.renderHistory.length) {
+      const option = document.createElement('option'); option.value = ''; option.textContent = 'No renders yet'; select.appendChild(option); select.disabled = true; return;
+    }
+    for (const job of state.renderHistory) {
+      const option = document.createElement('option');
+      option.value = job.id;
+      option.textContent = job.id + ' · ' + job.status + ' · ' + (job.total_frames || 0) + 'f';
+      select.appendChild(option);
+    }
+    select.disabled = false;
+    select.value = state.renderHistory.some(item => item.id === selected) ? selected : state.renderHistory[0].id;
+  }
+
+  async function loadRenderHistory() {
+    if (!state.project?.id) { resetRenderUi(); return; }
+    try {
+      const payload = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) + '/renders');
+      const renders = Array.isArray(payload.renders) ? payload.renders : [];
+      populateRenderHistory(renders);
+      if (!state.renderJobId && renders.length) renderAnimationJob(renders[0]);
+      else if (!renders.length && !state.renderJobId) renderAnimationJob(null);
+    } catch (error) {
+      toast('Could not load animation render history', error.message, 'warning', 6000);
+    }
+  }
+
+  async function showRender(renderId) {
+    if (!renderId) { renderAnimationJob(null); return; }
+    try {
+      const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
+      renderAnimationJob(job);
+      if (renderIsActive(job)) pollAnimationRender(job.id);
+    } catch (error) {
+      toast('Could not load animation render', error.message, 'error', 6500);
+    }
+  }
+
+  async function pollAnimationRender(renderId) {
+    window.clearTimeout(state.renderPollTimer);
+    if (!renderId || renderId !== state.renderJobId) return;
+    try {
+      const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
+      if (renderId !== state.renderJobId) return;
+      renderAnimationJob(job);
+      if (renderIsActive(job)) {
+        state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 700);
+      } else {
+        await loadRenderHistory();
+        if (job.status === 'completed') toast('Animation render complete', job.message || '', 'success');
+        else if (job.status === 'failed') toast('Animation render failed', job.error || job.message || '', 'error', 8000);
+      }
+    } catch (_) {
+      if (renderId === state.renderJobId) state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 1500);
+    }
+  }
+
+  async function startAnimationRender() {
+    if (!state.project || renderIsActive()) return;
+    const button = qs('#animation-start-render');
+    if (button) { button.classList.add('busy'); button.disabled = true; }
+    try {
+      const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project: collectProject() }) });
+      state.renderJobId = job.id;
+      renderAnimationJob(job);
+      await loadRenderHistory();
+      pollAnimationRender(job.id);
+      toast('Animation render queued', 'Current browser project state was frozen into the render manifest.', 'success');
+    } catch (error) {
+      renderAnimationJob(null);
+      toast('Could not start animation render', error.message, 'error', 8000);
+    }
+  }
+
+  async function cancelAnimationRender() {
+    if (!state.renderJobId || !renderIsActive()) return;
+    try {
+      const job = await api('/api/animation/renders/' + encodeURIComponent(state.renderJobId) + '/cancel', { method: 'POST' });
+      renderAnimationJob(job);
+    } catch (error) {
+      toast('Could not cancel animation render', error.message, 'error', 6500);
+    }
+  }
+
+  async function resumeAnimationRender() {
+    const job = state.renderJob;
+    if (!job?.id || !state.project?.id || !job.resumable) return;
+    try {
+      const resumed = await api('/api/animation/renders/' + encodeURIComponent(state.project.id) + '/' + encodeURIComponent(job.id) + '/resume', { method: 'POST' });
+      state.renderJobId = resumed.id;
+      renderAnimationJob(resumed);
+      pollAnimationRender(resumed.id);
+      toast('Animation render resumed', 'Continuing from the last completed frame.', 'success');
+    } catch (error) {
+      toast('Could not resume animation render', error.message, 'error', 7500);
+    }
+  }
   async function loadCapabilities() {
     try {
       const payload = await api('/api/generation/capabilities');
