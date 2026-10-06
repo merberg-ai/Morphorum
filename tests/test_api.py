@@ -237,5 +237,46 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
         assert loaded_project["motion"]["zoom"] == "0:(1.0), 47:(1.02)"
         assert loaded.json()["path"].endswith("project.json")
 
+        validation = client.post(
+            "/api/animation/validate-schedules",
+            json={"project": loaded_project},
+        )
+        assert validation.status_code == 200
+        assert validation.json()["valid"] is True
+
+        resolved = client.post(
+            "/api/animation/resolve-frame",
+            json={"project": loaded_project, "frame": 24},
+        )
+        assert resolved.status_code == 200
+        frame = resolved.json()["resolved"]
+        assert frame["frame"] == 24
+        assert frame["motion"]["zoom"] > 1.0
+        assert frame["prompts"]["positive"]["from_text"] == "start"
+        assert frame["prompts"]["positive"]["to_text"] == "middle"
+
+        series = client.post(
+            "/api/animation/schedule-series",
+            json={
+                "project": loaded_project,
+                "field": "motion.zoom",
+                "sample_count": 12,
+            },
+        )
+        assert series.status_code == 200
+        assert series.json()["field"] == "motion.zoom"
+        assert series.json()["samples"][0]["frame"] == 0
+        assert series.json()["samples"][-1]["frame"] == 47
+
+        bad_project = dict(loaded_project)
+        bad_project["motion"] = dict(loaded_project["motion"])
+        bad_project["motion"]["zoom"] = "0:(totally_not_math(t))"
+        bad_validation = client.post(
+            "/api/animation/validate-schedules",
+            json={"project": bad_project},
+        )
+        assert bad_validation.status_code == 200
+        assert bad_validation.json()["valid"] is False
+
         missing = client.get("/api/animation/projects/not-a-real-project")
         assert missing.status_code == 404
