@@ -23,10 +23,6 @@ models:
     label: Flux
     checkpoints: []
     loras: []
-  zimage:
-    label: Z-Image
-    checkpoints: []
-    loras: []
   shared:
     vae: []
     embeddings: []
@@ -42,6 +38,10 @@ performance:
   keep_model_loaded: true
   unload_after_generation: false
   unload_after_minutes: 0
+
+managed_models:
+  locations:
+    zimage: .\ckpts\z-image
 
 paths:
   projects: projects
