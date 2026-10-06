@@ -61,7 +61,10 @@ def test_hold_schedule_keeps_previous_keyframe() -> None:
 
 
 def test_safe_expression_engine_rejects_python_access() -> None:
-    with pytest.raises(ScheduleError, match="Unknown schedule function|Unsupported"):
+    with pytest.raises(
+        ScheduleError,
+        match="Unknown schedule function|Unsupported|must be called by name",
+    ):
         evaluate_expression(
             "__import__('os').system('echo nope')",
             t=0,
