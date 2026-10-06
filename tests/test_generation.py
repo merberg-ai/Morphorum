@@ -9,16 +9,31 @@ from morphorum.generation import GenerationError, GenerationJob, GenerationManag
 
 
 def fake_model(path: Path, family: str = "sdxl", variant: str | None = None) -> dict:
+    default_variant = "dev" if family == "flux" else ("turbo" if family == "zimage" else family)
     return {
         "id": "model-1",
         "family": family,
-        "variant": variant or ("dev" if family == "flux" else family),
+        "variant": variant or default_variant,
         "kind": "checkpoints",
         "name": "Test Model",
         "filename": path.name,
         "path": str(path),
         "extension": path.suffix,
+        "source": "managed" if family == "zimage" else "external",
     }
+
+
+def create_zimage_layout(path: Path, *, complete: bool = True) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "model_index.json").write_text("{}", encoding="utf-8")
+    for name in ("scheduler", "text_encoder", "tokenizer", "transformer", "vae"):
+        (path / name).mkdir()
+    if complete:
+        (path / ".morphorum-managed-complete.json").write_text(
+            '{"status":"complete"}',
+            encoding="utf-8",
+        )
+    return path
 
 
 def test_increment_and_fixed_seed_resolution(tmp_path, monkeypatch) -> None:
@@ -54,13 +69,23 @@ def test_random_seed_resolution_produces_requested_count(tmp_path, monkeypatch) 
     assert all(0 <= seed <= 2**32 - 1 for seed in seeds)
 
 
-def test_unsupported_family_is_rejected(tmp_path, monkeypatch) -> None:
-    checkpoint = tmp_path / "zimage.safetensors"
-    checkpoint.write_bytes(b"fake")
-    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint, "zimage"))
+def test_incomplete_zimage_managed_package_is_rejected(tmp_path, monkeypatch) -> None:
+    package = create_zimage_layout(tmp_path / "Z-Image-Turbo", complete=False)
+    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(package, "zimage", "turbo"))
     manager = GenerationManager()
-    with pytest.raises(GenerationError, match="Z-Image"):
-        manager._validate_request(GenerationRequest(model_id="model-1", prompt="test"))
+
+    with pytest.raises(GenerationError, match="missing or incomplete"):
+        manager._validate_request(
+            GenerationRequest(
+                model_id="model-1",
+                prompt="test",
+                steps=9,
+                guidance_scale=0.0,
+                sampler="flowmatch_euler",
+                width=1024,
+                height=1024,
+            )
+        )
 
 
 def test_lora_tag_is_recognized_but_rejected_until_loader_lands(tmp_path, monkeypatch) -> None:
@@ -420,3 +445,153 @@ def test_sdxl_capability_has_explicit_ui_defaults() -> None:
     assert sdxl["steps"]["default"] == 25
     assert sdxl["guidance"]["default"] == 6.0
     assert sdxl["samplers"]["default"] == "euler"
+
+
+def test_zimage_turbo_capabilities_and_validation(tmp_path, monkeypatch) -> None:
+    package = create_zimage_layout(tmp_path / "Z-Image-Turbo")
+    model = fake_model(package, "zimage", "turbo")
+    monkeypatch.setattr(generation, "get_model", lambda _: model)
+    manager = GenerationManager()
+
+    capability = manager._effective_capability(model)
+    assert capability["supported"] is True
+    assert capability["label"] == "Z-Image Turbo"
+    assert capability["steps"]["default"] == 9
+    assert capability["guidance"]["default"] == 0.0
+    assert capability["guidance"]["min"] == 0.0
+    assert capability["guidance"]["max"] == 0.0
+    assert capability["negative_prompt"] is False
+    assert capability["default_resolution"] == {"width": 1024, "height": 1024}
+    assert capability["samplers"]["default"] == "flowmatch_euler"
+
+    manager._validate_request(
+        GenerationRequest(
+            model_id="model-1",
+            prompt="a cinematic portrait",
+            steps=9,
+            guidance_scale=0.0,
+            sampler="flowmatch_euler",
+            width=1024,
+            height=1024,
+        )
+    )
+
+    with pytest.raises(GenerationError, match="Z-Image Turbo requires Guidance = 0"):
+        manager._validate_request(
+            GenerationRequest(
+                model_id="model-1",
+                prompt="test",
+                steps=9,
+                guidance_scale=1.0,
+                sampler="flowmatch_euler",
+                width=1024,
+                height=1024,
+            )
+        )
+
+
+def test_zimage_requires_managed_source(tmp_path, monkeypatch) -> None:
+    package = create_zimage_layout(tmp_path / "Z-Image-Turbo")
+    model = fake_model(package, "zimage", "turbo")
+    model["source"] = "external"
+    monkeypatch.setattr(generation, "get_model", lambda _: model)
+
+    with pytest.raises(GenerationError, match="missing or incomplete"):
+        GenerationManager()._validate_request(
+            GenerationRequest(
+                model_id="model-1",
+                prompt="test",
+                steps=9,
+                guidance_scale=0.0,
+                sampler="flowmatch_euler",
+                width=1024,
+                height=1024,
+            )
+        )
+
+
+def test_zimage_requires_16_pixel_dimensions(tmp_path, monkeypatch) -> None:
+    package = create_zimage_layout(tmp_path / "Z-Image-Turbo")
+    monkeypatch.setattr(
+        generation,
+        "get_model",
+        lambda _: fake_model(package, "zimage", "turbo"),
+    )
+    request = GenerationRequest(
+        model_id="model-1",
+        prompt="test",
+        sampler="flowmatch_euler",
+        steps=9,
+        guidance_scale=0.0,
+        width=1032,
+        height=1024,
+    )
+    with pytest.raises(GenerationError, match="divisible by 16"):
+        GenerationManager()._validate_request(request)
+
+
+def test_zimage_call_arguments_use_turbo_contract(tmp_path) -> None:
+    package = create_zimage_layout(tmp_path / "Z-Image-Turbo")
+    manager = GenerationManager()
+    generator = object()
+    callback = object()
+    job = GenerationJob(
+        id="zimage",
+        request=GenerationRequest(
+            model_id="model-1",
+            prompt="z-image prompt",
+            negative_prompt="ignored",
+            steps=9,
+            guidance_scale=0.0,
+            sampler="flowmatch_euler",
+            width=1024,
+            height=1024,
+        ),
+        model=fake_model(package, "zimage", "turbo"),
+    )
+
+    args = manager._build_call_args(job, generator, callback)
+    assert args["prompt"] == "z-image prompt"
+    assert args["num_inference_steps"] == 9
+    assert args["guidance_scale"] == 0.0
+    assert args["width"] == 1024
+    assert args["height"] == 1024
+    assert args["generator"] is generator
+    assert args["callback_on_step_end"] is callback
+    assert "negative_prompt" not in args
+    assert "max_sequence_length" not in args
+
+
+def test_zimage_flowmatch_sampler_constructs() -> None:
+    from diffusers import FlowMatchEulerDiscreteScheduler
+
+    class FakePipe:
+        def __init__(self) -> None:
+            self.scheduler = FlowMatchEulerDiscreteScheduler()
+
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    manager._configure_sampler(pipe, "zimage", "flowmatch_euler")
+    assert manager._pipeline_sampler == "flowmatch_euler"
+    assert isinstance(pipe.scheduler, FlowMatchEulerDiscreteScheduler)
+
+
+def test_zimage_runtime_exposes_required_pipeline_api() -> None:
+    import inspect
+
+    from diffusers import ZImagePipeline
+
+    assert callable(getattr(ZImagePipeline, "from_pretrained", None))
+    assert callable(getattr(ZImagePipeline, "enable_model_cpu_offload", None))
+    parameters = inspect.signature(ZImagePipeline.__call__).parameters
+    for name in (
+        "prompt",
+        "height",
+        "width",
+        "num_inference_steps",
+        "guidance_scale",
+        "generator",
+        "callback_on_step_end",
+    ):
+        assert name in parameters
