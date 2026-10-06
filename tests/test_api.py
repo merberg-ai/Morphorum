@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+import morphorum.animation_projects as animation_projects
 import morphorum.settings as settings_module
 from morphorum.app import app
 from morphorum.console import clear_console, emit_console
@@ -20,6 +21,8 @@ def test_frontend_and_health() -> None:
         assert "Morphorum" in frontend.text
         assert "Settings" in frontend.text
         assert "Console" in frontend.text
+        assert "Animation" in frontend.text
+        assert 'id="view-animation"' in frontend.text
         assert 'id="copy-console-view"' in frontend.text
         assert 'id="copy-console-buffer"' in frontend.text
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
@@ -193,3 +196,44 @@ def test_invalid_appearance_values_fall_back_to_defaults(tmp_path, monkeypatch) 
     assert saved["ui"]["font_style"] == "modern"
     assert saved["ui"]["mono_font_style"] == "modern-mono"
     assert saved["ui"]["ui_scale"] == "compact"
+
+
+def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/animation/projects",
+            json={"name": "API Animation"},
+        )
+        assert created.status_code == 201
+        project = created.json()["project"]
+        project_id = project["id"]
+        assert project["name"] == "API Animation"
+
+        listing = client.get("/api/animation/projects")
+        assert listing.status_code == 200
+        assert any(item["id"] == project_id for item in listing.json()["projects"])
+
+        project["animation"]["max_frames"] = 48
+        project["animation"]["fps"] = 12
+        project["prompts"] = {"0": "start", "24": "middle"}
+        project["motion"]["zoom"] = "0:(1.0), 47:(1.02)"
+
+        saved = client.put(
+            f"/api/animation/projects/{project_id}",
+            json=project,
+        )
+        assert saved.status_code == 200
+        assert saved.json()["project"]["animation"]["max_frames"] == 48
+        assert saved.json()["project"]["prompts"]["24"] == "middle"
+
+        loaded = client.get(f"/api/animation/projects/{project_id}")
+        assert loaded.status_code == 200
+        loaded_project = loaded.json()["project"]
+        assert loaded_project["animation"]["fps"] == 12.0
+        assert loaded_project["motion"]["zoom"] == "0:(1.0), 47:(1.02)"
+        assert loaded.json()["path"].endswith("project.json")
+
+        missing = client.get("/api/animation/projects/not-a-real-project")
+        assert missing.status_code == 404
