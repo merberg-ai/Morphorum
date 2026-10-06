@@ -92,11 +92,9 @@ def command_self_test(_: argparse.Namespace) -> int:
             capabilities_response = client.get("/api/generation/capabilities")
             capabilities_response.raise_for_status()
             families = capabilities_response.json().get("families", {})
-            if not families.get("sdxl", {}).get("supported"):
-                raise RuntimeError("SDXL generation capability is missing")
-            for family in ("flux", "zimage"):
-                if family not in families:
-                    raise RuntimeError(f"generation capability registry is missing enabled family: {family}")
+            for family in ("sdxl", "flux", "zimage"):
+                if not families.get(family, {}).get("supported"):
+                    raise RuntimeError(f"{family} generation capability is missing or disabled")
 
             console_response = client.get("/api/console?limit=10")
             console_response.raise_for_status()
