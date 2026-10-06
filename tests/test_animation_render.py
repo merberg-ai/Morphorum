@@ -295,5 +295,5 @@ def test_uniform_noise_is_deterministic() -> None:
     second = _add_uniform_noise(source, amount=0.02, seed=123)
     third = _add_uniform_noise(source, amount=0.02, seed=124)
 
-    assert list(first.getdata()) == list(second.getdata())
-    assert list(first.getdata()) != list(third.getdata())
+    assert first.tobytes() == second.tobytes()
+    assert first.tobytes() != third.tobytes()
