@@ -32,6 +32,18 @@
     ['standard', 'Standard'],
     ['comfortable', 'Comfortable'],
   ];
+  const UI_FONT_FACES = {
+    modern: 'Inter',
+    humanist: 'Source Sans 3',
+    geometric: 'Space Grotesk',
+    technical: 'IBM Plex Sans Condensed',
+  };
+  const MONO_FONT_FACES = {
+    'modern-mono': 'JetBrains Mono',
+    cascadia: 'Cascadia Code',
+    'classic-mono': 'IBM Plex Mono',
+    'compact-mono': 'Roboto Mono',
+  };
 
   const state = {
     settings: null,
@@ -111,6 +123,32 @@
     return state.settings.models[family];
   }
 
+  function updateAppearanceDiagnostic(ui = {}) {
+    const diagnostic = qs('#appearance-font-diagnostic');
+    const sample = qs('#appearance-ui-sample');
+    const monoSample = qs('#appearance-mono-sample');
+    if (!diagnostic) return;
+
+    const fontStyle = String(ui.font_style || 'modern');
+    const monoStyle = String(ui.mono_font_style || 'modern-mono');
+    const uiFace = UI_FONT_FACES[fontStyle] || UI_FONT_FACES.modern;
+    const monoFace = MONO_FONT_FACES[monoStyle] || MONO_FONT_FACES['modern-mono'];
+    const rootSize = getComputedStyle(document.documentElement).fontSize;
+    const computedUi = getComputedStyle(document.body).fontFamily;
+    const computedMono = monoSample ? getComputedStyle(monoSample).fontFamily : '';
+
+    const uiLoaded = document.fonts?.check ? document.fonts.check('16px "' + uiFace + '"') : null;
+    const monoLoaded = document.fonts?.check ? document.fonts.check('16px "' + monoFace + '"') : null;
+
+    if (sample) sample.textContent = 'Interface sample · ' + uiFace;
+    if (monoSample) monoSample.textContent = 'seed=2745621820 · FlowMatch Euler';
+    diagnostic.textContent =
+      'UI: ' + uiFace + ' ' + (uiLoaded === false ? '(fallback)' : '(loaded)') + ' · ' +
+      'Mono: ' + monoFace + ' ' + (monoLoaded === false ? '(fallback)' : '(loaded)') + ' · ' +
+      'root ' + rootSize;
+    diagnostic.title = 'Computed UI: ' + computedUi + '\nComputed mono: ' + computedMono;
+  }
+
   function applyAppearance(ui = {}) {
     const root = document.documentElement;
     const theme = String(ui.theme || 'midnight-glass');
@@ -129,8 +167,17 @@
       localStorage.setItem('morphorum.ui.monoStyle', monoStyle);
       localStorage.setItem('morphorum.ui.uiScale', uiScale);
     } catch (_) {}
-  }
 
+    requestAnimationFrame(() => updateAppearanceDiagnostic(ui));
+    if (document.fonts?.load) {
+      const uiFace = UI_FONT_FACES[fontStyle] || UI_FONT_FACES.modern;
+      const monoFace = MONO_FONT_FACES[monoStyle] || MONO_FONT_FACES['modern-mono'];
+      Promise.allSettled([
+        document.fonts.load('16px "' + uiFace + '"'),
+        document.fonts.load('16px "' + monoFace + '"'),
+      ]).then(() => updateAppearanceDiagnostic(ui));
+    }
+  }
   function ensurePreferences() {
     state.settings ||= {};
     state.settings.ui ||= {};
@@ -230,10 +277,28 @@
 
     const preview = document.createElement('div');
     preview.className = 'appearance-preview';
-    preview.innerHTML = '<strong>Morphorum UI Preview</strong><span>Prompt controls, model metadata, paths, and console text update live.</span><code>seed=2745621820 · FlowMatch Euler</code>';
+
+    const previewTitle = document.createElement('strong');
+    previewTitle.textContent = 'Morphorum UI Preview';
+
+    const uiSample = document.createElement('span');
+    uiSample.id = 'appearance-ui-sample';
+    uiSample.textContent = 'Interface sample';
+
+    const monoSample = document.createElement('code');
+    monoSample.id = 'appearance-mono-sample';
+    monoSample.textContent = 'seed=2745621820 · FlowMatch Euler';
+
+    const diagnostic = document.createElement('small');
+    diagnostic.id = 'appearance-font-diagnostic';
+    diagnostic.className = 'appearance-diagnostic';
+    diagnostic.textContent = 'Checking active fonts…';
+
+    preview.append(previewTitle, uiSample, monoSample, diagnostic);
 
     grid.append(themeField, fontField, monoField, scaleField);
     card.append(header, grid, preview);
+    window.setTimeout(() => updateAppearanceDiagnostic(ui), 0);
     return card;
   }
 
