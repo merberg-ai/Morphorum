@@ -726,6 +726,7 @@ class GenerationManager:
         try:
             import torch
             from diffusers import ZImagePipeline
+            from diffusers.hooks import apply_group_offloading
         except Exception as exc:
             raise GenerationError(
                 f"Z-Image inference runtime is not installed correctly: {exc}"
@@ -739,6 +740,9 @@ class GenerationManager:
 
         model_path = Path(job.model["path"])
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        total_vram = int(torch.cuda.get_device_properties(0).total_memory)
+        native_threshold = 24 * 1024**3
+
         emit_console(
             "info",
             "generation",
@@ -762,40 +766,89 @@ class GenerationManager:
             if hasattr(pipe.vae, "enable_slicing"):
                 pipe.vae.enable_slicing()
 
-            try:
+            if total_vram >= native_threshold:
                 pipe.to("cuda")
                 self._pipeline_optimization = "bf16-native-gpu"
                 emit_console(
                     "info",
                     "generation",
-                    "Z-Image native CUDA path enabled.",
+                    f"Z-Image native CUDA path enabled ({total_vram / 1024**3:.1f} GiB VRAM).",
                 )
                 return pipe, "cuda", "cuda"
-            except Exception as native_exc:
-                if not self._is_cuda_oom(native_exc):
-                    raise
 
+            emit_console(
+                "info",
+                "generation",
+                f"Z-Image 16 GB-class path enabled ({total_vram / 1024**3:.1f} GiB VRAM): "
+                "using streamed group offloading for VRAM headroom.",
+            )
+
+            onload_device = torch.device("cuda")
+            offload_device = torch.device("cpu")
+            configured = 0
+
+            for component_name in ("transformer", "text_encoder", "vae"):
+                component = getattr(pipe, component_name, None)
+                if component is None:
+                    continue
+                try:
+                    if component_name == "transformer":
+                        try:
+                            apply_group_offloading(
+                                component,
+                                onload_device=onload_device,
+                                offload_device=offload_device,
+                                offload_type="block_level",
+                                num_blocks_per_group=1,
+                                use_stream=True,
+                            )
+                            emit_console(
+                                "info",
+                                "generation",
+                                "Z-Image transformer uses streamed block-level group offload (1 block/group).",
+                            )
+                        except Exception as block_exc:
+                            emit_console(
+                                "warning",
+                                "generation",
+                                f"Z-Image block-level offload unavailable ({block_exc}); "
+                                "falling back to streamed leaf-level offload.",
+                            )
+                            apply_group_offloading(
+                                component,
+                                onload_device=onload_device,
+                                offload_device=offload_device,
+                                offload_type="leaf_level",
+                                use_stream=True,
+                            )
+                    else:
+                        apply_group_offloading(
+                            component,
+                            onload_device=onload_device,
+                            offload_device=offload_device,
+                            offload_type="leaf_level",
+                            use_stream=True,
+                        )
+                    configured += 1
+                except Exception as component_exc:
+                    emit_console(
+                        "warning",
+                        "generation",
+                        f"Z-Image group offload could not configure {component_name}: {component_exc}",
+                    )
+
+            if configured == 0:
                 emit_console(
                     "warning",
                     "generation",
-                    "Z-Image native CUDA placement exhausted VRAM; retrying with model CPU offload.",
+                    "Z-Image group offload was unavailable; using model CPU offload fallback.",
                 )
-                try:
-                    del pipe
-                except Exception:
-                    pass
-                gc.collect()
-                torch.cuda.empty_cache()
-
-                pipe = load_local_pipeline()
-                pipe.set_progress_bar_config(disable=True)
-                if hasattr(pipe.vae, "enable_tiling"):
-                    pipe.vae.enable_tiling()
-                if hasattr(pipe.vae, "enable_slicing"):
-                    pipe.vae.enable_slicing()
                 pipe.enable_model_cpu_offload()
                 self._pipeline_optimization = "bf16-model-cpu-offload"
-                return pipe, "cuda-offload", "cpu"
+            else:
+                self._pipeline_optimization = "bf16-streamed-group-offload"
+
+            return pipe, "cuda-offload", "cpu"
         except Exception as exc:
             if self._is_cuda_oom(exc):
                 raise self._friendly_error(
