@@ -2,7 +2,7 @@
 
 Standalone, modern Deforum-style AI image and animation studio with legacy project compatibility, multi-model support for SDXL, Flux, and Z-Image, LoRAs, keyframed motion, live previews, and a mobile-friendly web UI.
 
-> **Status:** early alpha. Installation, CUDA-backed SDXL and Flux generation, managed Z-Image-Turbo downloads/inference, model indexing, settings, telemetry, and the responsive browser UI are working. LoRA application and animation remain active development milestones.
+> **Status:** early alpha. Installation, CUDA-backed SDXL and Flux generation, managed Z-Image-Turbo downloads/inference, model indexing, settings, telemetry, the responsive browser UI, and the Phase 1 animation project/state editor are working. Schedule evaluation, animation rendering, and LoRA application remain active development milestones.
 
 ## Goals
 
@@ -124,7 +124,7 @@ Morphorum keeps the old Deforum project vocabulary where compatibility matters, 
 
 The selected model should therefore drive its own configuration UI. SDXL, Flux, and Z-Image are not the same architecture wearing different filenames, despite software occasionally behaving as though they are.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/ROADMAP.md](docs/ROADMAP.md) for the current design baseline.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ANIMATION_PROJECTS.md](docs/ANIMATION_PROJECTS.md), and [docs/ROADMAP.md](docs/ROADMAP.md) for the current design baseline.
 
 ## Licensing
 
