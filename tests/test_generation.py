@@ -375,10 +375,11 @@ def test_flux_flowmatch_sampler_constructs() -> None:
 
 def test_flux_runtime_exposes_required_loader_methods() -> None:
     from diffusers import FluxPipeline, FluxTransformer2DModel
+    from diffusers.hooks import apply_group_offloading
 
     assert callable(getattr(FluxTransformer2DModel, "from_single_file", None))
     assert callable(getattr(FluxPipeline, "from_pretrained", None))
-    assert callable(getattr(FluxPipeline, "enable_model_cpu_offload", None))
+    assert callable(apply_group_offloading)
 
 
 def test_flux_runtime_exposes_native_fp8_layerwise_casting() -> None:
