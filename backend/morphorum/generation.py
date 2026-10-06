@@ -535,6 +535,7 @@ class GenerationManager:
         try:
             import torch
             from diffusers import FluxPipeline, FluxTransformer2DModel
+            from diffusers.hooks import apply_group_offloading
         except Exception as exc:
             raise GenerationError(f"Flux inference runtime is not installed correctly: {exc}") from exc
 
@@ -604,8 +605,67 @@ class GenerationManager:
                 pipe.vae.enable_tiling()
             if hasattr(pipe.vae, "enable_slicing"):
                 pipe.vae.enable_slicing()
-            pipe.enable_model_cpu_offload()
+
+            onload_device = torch.device("cuda")
+            offload_device = torch.device("cpu")
+            offloaded_components = 0
+            for component_name in ("transformer", "text_encoder", "text_encoder_2", "vae"):
+                component = getattr(pipe, component_name, None)
+                if component is None:
+                    continue
+                try:
+                    if component_name == "transformer":
+                        try:
+                            apply_group_offloading(
+                                component,
+                                onload_device=onload_device,
+                                offload_device=offload_device,
+                                offload_type="block_level",
+                                num_blocks_per_group=1,
+                                use_stream=True,
+                            )
+                            emit_console(
+                                "info",
+                                "generation",
+                                "Flux transformer uses streamed block-level group offload (1 block/group).",
+                            )
+                        except Exception as block_exc:
+                            emit_console(
+                                "warning",
+                                "generation",
+                                f"Flux block-level offload unavailable ({block_exc}); falling back to streamed leaf-level offload.",
+                            )
+                            apply_group_offloading(
+                                component,
+                                onload_device=onload_device,
+                                offload_device=offload_device,
+                                offload_type="leaf_level",
+                                use_stream=True,
+                            )
+                    else:
+                        apply_group_offloading(
+                            component,
+                            onload_device=onload_device,
+                            offload_device=offload_device,
+                            offload_type="leaf_level",
+                            use_stream=True,
+                        )
+                    offloaded_components += 1
+                except Exception as component_exc:
+                    raise GenerationError(
+                        f"Could not configure Flux group offload for {component_name}: {component_exc}"
+                    ) from component_exc
+
+            if offloaded_components == 0:
+                raise GenerationError("Flux group offload could not find any pipeline components to manage.")
+
+            optimization += "+streamed-group-offload"
             self._pipeline_optimization = optimization
+            emit_console(
+                "info",
+                "generation",
+                "Flux VRAM headroom mode enabled: streamed group offloading keeps working memory available for activations.",
+            )
         except Exception as exc:
             if self._is_cuda_oom(exc):
                 raise self._friendly_error(exc, action=f"loading Flux model '{job.model['name']}'") from exc
