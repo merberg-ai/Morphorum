@@ -679,12 +679,99 @@
     return new Set(qsa(`${containerSelector} input[type="checkbox"]:checked`).map(input => input.value));
   }
 
+  function filteredConsoleEvents(events = state.events) {
+    const levels = checkedValues('#level-filters');
+    const categories = checkedValues('#category-filters');
+    return (events || []).filter(event => levels.has(event.level) && categories.has(event.category));
+  }
+
+  function consoleEventTime(event) {
+    const date = new Date(event.timestamp);
+    return Number.isNaN(date.getTime())
+      ? '--:--:--'
+      : date.toLocaleTimeString([], {
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
+  }
+
+  function consoleEventText(event) {
+    const time = consoleEventTime(event);
+    const level = String(event.level || 'info').toUpperCase().padEnd(7, ' ');
+    const category = String(event.category || 'runtime').padEnd(10, ' ');
+    const message = String(event.message || '');
+    return `${time}  ${level}  ${category}  ${message}`;
+  }
+
+  async function writeClipboardText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '0';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } finally {
+      textarea.remove();
+    }
+    if (!copied) throw new Error('The browser blocked clipboard access.');
+  }
+
+  async function copyConsoleEvents(events, title) {
+    if (!events.length) {
+      toast('Nothing to copy', 'There are no console lines available for this action.', 'warning');
+      return;
+    }
+
+    const text = events.map(consoleEventText).join('\n');
+    await writeClipboardText(text);
+    toast(
+      title,
+      `Copied ${events.length} console line${events.length === 1 ? '' : 's'} to the clipboard.`,
+      'success'
+    );
+  }
+
+  async function copyConsoleView() {
+    try {
+      await copyConsoleEvents(filteredConsoleEvents(), 'Console view copied');
+    } catch (error) {
+      toast('Clipboard copy failed', error.message, 'error', 6500);
+    }
+  }
+
+  async function copyConsoleBuffer() {
+    const button = qs('#copy-console-buffer');
+    setBusy(button, true);
+    try {
+      const payload = await api('/api/console?limit=1500');
+      await copyConsoleEvents(payload.events || [], 'Console buffer copied');
+    } catch (error) {
+      toast('Clipboard copy failed', error.message, 'error', 6500);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
   function renderConsole() {
     const windowEl = qs('#console-window');
     if (!windowEl) return;
-    const levels = checkedValues('#level-filters');
-    const categories = checkedValues('#category-filters');
-    const filtered = state.events.filter(event => levels.has(event.level) && categories.has(event.category));
+    const filtered = filteredConsoleEvents();
 
     if (!filtered.length) {
       windowEl.innerHTML = '<div class="console-empty">No messages match the current filters.</div>';
@@ -692,8 +779,7 @@
     }
 
     windowEl.innerHTML = filtered.map(event => {
-      const date = new Date(event.timestamp);
-      const time = Number.isNaN(date.getTime()) ? '--:--:--' : date.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const time = consoleEventTime(event);
       return `<div class="console-line">
         <span class="console-time">${escapeHtml(time)}</span>
         <span class="console-level ${escapeHtml(event.level)}">${escapeHtml(event.level)}</span>
@@ -841,6 +927,8 @@
     qs('#save-settings')?.addEventListener('click', saveSettings);
     qsa('#level-filters input, #category-filters input').forEach(input => input.addEventListener('change', renderConsole));
     qs('#auto-scroll')?.addEventListener('change', renderConsole);
+    qs('#copy-console-view')?.addEventListener('click', copyConsoleView);
+    qs('#copy-console-buffer')?.addEventListener('click', copyConsoleBuffer);
     qs('#clear-console-view')?.addEventListener('click', () => {
       state.events = [];
       renderConsole();
