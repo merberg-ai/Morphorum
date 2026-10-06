@@ -235,6 +235,59 @@
             </div>
           </article>
 
+          <article class="card glass animation-render-card">
+            <div class="card-header">
+              <div>
+                <h2>Animation Render</h2>
+                <p class="muted">Render the real frame-to-frame img2img loop. Frame 0 is the project source; each later frame transforms the previous rendered frame before diffusion.</p>
+              </div>
+              <div class="button-row animation-render-actions">
+                <button class="secondary-button compact" id="animation-resume-render" type="button" disabled>Resume</button>
+                <button class="secondary-button compact danger" id="animation-cancel-render" type="button" disabled>Cancel</button>
+                <button class="primary-button compact busy-button" id="animation-start-render" type="button" disabled><span class="spinner"></span><span class="button-label">Render Animation</span></button>
+              </div>
+            </div>
+
+            <div class="notice subtle animation-render-notice">
+              <strong>Real diffusion render</strong>
+              <span>This can take a while. Morphorum freezes the current browser project state into a render manifest, saves every completed frame, and can resume interrupted renders.</span>
+            </div>
+
+            <div class="animation-render-history-row">
+              <label><span>Recent render</span><select id="animation-render-select" disabled><option value="">No renders yet</option></select></label>
+              <span class="badge" id="animation-render-state">Idle</span>
+            </div>
+
+            <div class="animation-render-progress" id="animation-render-progress" hidden>
+              <div class="progress-row">
+                <span id="animation-render-status">Waiting…</span>
+                <strong id="animation-render-percent">0%</strong>
+              </div>
+              <div class="progress-track"><div class="progress-fill" id="animation-render-progress-fill"></div></div>
+              <div class="animation-render-stats">
+                <span>Frame <strong id="animation-render-frame">--</strong></span>
+                <span>Step <strong id="animation-render-step">--</strong></span>
+                <span>Frame time <strong id="animation-render-frame-time">--</strong></span>
+                <span>ETA <strong id="animation-render-eta">--</strong></span>
+              </div>
+            </div>
+
+            <div class="animation-render-visuals">
+              <div class="animation-render-frame-wrap">
+                <span class="field-label">Latest rendered frame</span>
+                <img id="animation-render-latest-frame" alt="Latest rendered animation frame" hidden>
+                <div id="animation-render-frame-empty" class="animation-empty">No rendered frames yet.</div>
+              </div>
+              <div class="animation-render-preview-wrap">
+                <span class="field-label">Completed render preview</span>
+                <img id="animation-render-preview-image" alt="Completed animation preview" hidden>
+                <div id="animation-render-preview-empty" class="animation-empty">The animated render preview appears after completion.</div>
+              </div>
+            </div>
+
+            <div class="animation-render-error" id="animation-render-error" hidden></div>
+          </article>
+
           <article class="card glass animation-inspector-card">
             <div class="card-header">
               <div>
@@ -319,6 +372,8 @@
               <div><strong>Inspector</strong><span>Resolved frame values + curve preview</span></div>
               <div><strong>2D Transform</strong><span>Cumulative angle, zoom, translation</span></div>
               <div><strong>Motion Preview</strong><span>CPU-only animated source-image preview</span></div>
+              <div><strong>Img2Img Loop</strong><span>Previous frame → transform → diffusion → next frame</span></div>
+              <div><strong>Resume</strong><span>Per-frame manifest + interrupted render recovery</span></div>
             </div>
           </article>
         </div>
