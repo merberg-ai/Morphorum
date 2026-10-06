@@ -590,6 +590,12 @@ class AnimationRenderManager:
             return []
         renders: list[dict[str, Any]] = []
         for directory in root.iterdir():
+            with self._lock:
+                active = self._jobs.get(directory.name)
+            if active is not None:
+                renders.append(active.public())
+                continue
+
             path = directory / "render-manifest.json"
             if not path.is_file():
                 continue
