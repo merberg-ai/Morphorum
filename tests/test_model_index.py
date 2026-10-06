@@ -80,3 +80,50 @@ def test_flux_scan_detects_dev_and_schnell_variants(tmp_path, monkeypatch) -> No
     variants = {item["filename"]: item["variant"] for item in indexed}
     assert variants[dev.name] == "dev"
     assert variants[schnell.name] == "schnell"
+
+
+def test_external_scan_preserves_managed_model_entries(tmp_path, monkeypatch) -> None:
+    user_config = tmp_path / "config.yaml"
+    index_db = tmp_path / "model-index.db"
+    external_root = tmp_path / "sdxl"
+    managed_root = tmp_path / "z-image" / "Z-Image-Turbo"
+    external_root.mkdir(parents=True)
+    managed_root.mkdir(parents=True)
+
+    checkpoint = external_root / "example-xl.safetensors"
+    checkpoint.write_bytes(b"fake")
+    (managed_root / "model_index.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(settings_module, "USER_CONFIG", user_config)
+    monkeypatch.setattr(model_index, "MODEL_INDEX_DB", index_db)
+
+    settings_module.save_settings(
+        {
+            "models": {
+                "sdxl": {
+                    "checkpoints": [str(external_root)],
+                    "loras": [],
+                }
+            }
+        }
+    )
+
+    model_index.upsert_managed_model(
+        model_id="managed:zimage-turbo",
+        family="zimage",
+        name="Z-Image-Turbo",
+        path=managed_root,
+        variant="turbo",
+        size_bytes=1234,
+    )
+
+    model_index.scan_models()
+
+    managed = model_index.get_model("managed:zimage-turbo")
+    assert managed is not None
+    assert managed["source"] == "managed"
+    assert managed["family"] == "zimage"
+
+    external = model_index.list_models(family="sdxl", kind="checkpoints")
+    assert len(external) == 1
+    assert external[0]["source"] == "external"
