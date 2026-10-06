@@ -209,6 +209,18 @@
     if (randomButton) randomButton.disabled = !state.model || mode === 'random';
   }
 
+  function effectiveCapability(model) {
+    const base = state.capabilities[model?.family] || {};
+    const variant = String(model?.variant || '').toLowerCase();
+    const override = base.variants?.[variant] || {};
+    const merged = { ...base, ...override };
+    for (const key of ['steps', 'guidance', 'samplers']) {
+      if (base[key] || override[key]) merged[key] = { ...(base[key] || {}), ...(override[key] || {}) };
+    }
+    merged.variant = variant;
+    return merged;
+  }
+
   async function configureModel() {
     const select = qs('#image-model-select');
     const modelId = select?.value || '';
@@ -223,7 +235,7 @@
     try {
       const model = await api(`/api/models/${encodeURIComponent(modelId)}`);
       state.model = model;
-      const capability = state.capabilities[model.family];
+      const capability = effectiveCapability(model);
       qs('#image-model-family-badge').textContent = capability?.label || model.family;
       if (!capability?.supported) {
         setEnabled(false);
@@ -234,7 +246,8 @@
       }
 
       qs('#image-capability-note').classList.remove('unsupported-note');
-      qs('#image-capability-note').textContent = `Ready for ${capability.label} txt2img.`;
+      const variantLabel = capability.label || state.capabilities[model.family]?.label || model.family;
+      qs('#image-capability-note').textContent = `Ready for ${variantLabel} txt2img.`;
       qs('#image-steps').value = capability.steps?.default ?? 25;
       qs('#image-steps').min = capability.steps?.min ?? 1;
       qs('#image-steps').max = capability.steps?.max ?? 150;
@@ -246,6 +259,10 @@
       populatePresets(capability);
       populateSamplers(capability);
       setEnabled(true);
+      const guidance = qs('#image-guidance');
+      if (guidance && Number(capability.guidance?.min) === Number(capability.guidance?.max)) {
+        guidance.disabled = true;
+      }
       updateSeedMode();
     } catch (error) {
       setEnabled(false);
