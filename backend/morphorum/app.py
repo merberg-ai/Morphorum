@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -26,6 +27,21 @@ from .system_info import doctor_report, install_manifest, live_telemetry
 FRONTEND_DIR = ROOT / "frontend" / "dist"
 FRONTEND_INDEX = FRONTEND_DIR / "index.html"
 ASSET_DIR = FRONTEND_DIR / "assets"
+
+
+def _frontend_asset_version() -> str:
+    digest = hashlib.sha256()
+    if ASSET_DIR.exists():
+        for path in sorted(item for item in ASSET_DIR.rglob("*") if item.is_file()):
+            digest.update(path.relative_to(ASSET_DIR).as_posix().encode("utf-8"))
+            try:
+                digest.update(path.read_bytes())
+            except OSError:
+                continue
+    return digest.hexdigest()[:12]
+
+
+FRONTEND_ASSET_VERSION = _frontend_asset_version()
 
 
 @asynccontextmanager
@@ -83,7 +99,9 @@ async def api_console_middleware(request: Request, call_next):
 @app.get("/", include_in_schema=False)
 def root():
     if FRONTEND_INDEX.exists():
-        return FileResponse(FRONTEND_INDEX)
+        html = FRONTEND_INDEX.read_text(encoding="utf-8")
+        html = html.replace("__MORPHORUM_ASSET_VERSION__", FRONTEND_ASSET_VERSION)
+        return HTMLResponse(html)
     return HTMLResponse(
         "<h1>Morphorum</h1><p>Frontend assets are missing. Run the Morphorum repair command.</p>",
         status_code=503,
@@ -96,6 +114,7 @@ def health() -> dict:
         "status": "ok",
         "app": "Morphorum",
         "version": __version__,
+        "frontend_asset_version": FRONTEND_ASSET_VERSION,
         "root": str(ROOT),
     }
 
