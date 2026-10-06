@@ -28,6 +28,8 @@ def test_frontend_and_health() -> None:
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
         assert f"/assets/app.css?v={asset_version}" in frontend.text
         assert f"/assets/app.js?v={asset_version}" in frontend.text
+        assert f"/assets/animation.css?v={asset_version}" in frontend.text
+        assert f"/assets/animation.js?v={asset_version}" in frontend.text
         assert "no-cache" in frontend.headers.get("cache-control", "")
 
         css = client.get("/assets/app.css")
