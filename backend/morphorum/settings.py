@@ -26,6 +26,11 @@ MANAGED_MODEL_FAMILIES = tuple(
 )
 MODEL_PATH_KEYS = ("checkpoints", "loras")
 
+UI_THEME_OPTIONS = {"midnight-glass"}
+UI_FONT_STYLE_OPTIONS = {"modern", "humanist", "geometric", "technical"}
+UI_MONO_FONT_STYLE_OPTIONS = {"modern-mono", "cascadia", "classic-mono", "compact-mono"}
+UI_SCALE_OPTIONS = {"compact", "standard", "comfortable"}
+
 
 def model_family_definitions() -> list[dict[str, Any]]:
     """Return the enabled model-family registry in stable UI order."""
@@ -114,6 +119,20 @@ def _normalize_preferences(settings: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(ui, dict):
         ui = {}
         settings["ui"] = ui
+    theme = str(ui.get("theme", "midnight-glass")).strip().lower()
+    ui["theme"] = theme if theme in UI_THEME_OPTIONS else "midnight-glass"
+
+    font_style = str(ui.get("font_style", "modern")).strip().lower()
+    ui["font_style"] = font_style if font_style in UI_FONT_STYLE_OPTIONS else "modern"
+
+    mono_font_style = str(ui.get("mono_font_style", "modern-mono")).strip().lower()
+    ui["mono_font_style"] = (
+        mono_font_style if mono_font_style in UI_MONO_FONT_STYLE_OPTIONS else "modern-mono"
+    )
+
+    ui_scale = str(ui.get("ui_scale", "compact")).strip().lower()
+    ui["ui_scale"] = ui_scale if ui_scale in UI_SCALE_OPTIONS else "compact"
+
     try:
         preview_limit = int(ui.get("image_preview_limit", 5))
     except (TypeError, ValueError):
