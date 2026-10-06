@@ -52,6 +52,21 @@ Success criterion: import representative legacy projects and resolve schedule va
 - live preview/progress/ETA/logs
 - resumable render manifest
 
+## Animation foundation — Phase 1 complete
+
+- native animation project schema v1
+- per-project `projects/<id>/project.json` persistence with atomic writes
+- timeline dimensions, FPS, and frame-count state
+- stable model-index references
+- positive/negative prompt keyframe storage
+- raw Deforum-style 2D motion schedule storage
+- raw strength/noise/steps/guidance schedule storage
+- seed/sampler state
+- responsive Animation workspace with create/load/save/reload controls
+- forward-compatible preservation of unknown project fields
+
+Physical acceptance target: create, edit, save, reload, and switch animation projects from desktop/mobile without losing state. Schedule evaluation intentionally begins in Phase 2.
+
 ## 0.3.0-alpha.1 — classic motion
 
 - 2D transforms
