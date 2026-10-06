@@ -433,6 +433,10 @@ def test_animation_sampler_capabilities_are_model_specific() -> None:
     assert response.status_code == 200
     families = response.json()["families"]
 
+    for family in ("sdxl", "flux", "zimage"):
+        assert families[family]["tasks"]["txt2img"] is True
+        assert families[family]["tasks"]["img2img"] is True
+
     sdxl = {
         item["id"]
         for item in families["sdxl"]["samplers"]["options"]
