@@ -12,6 +12,8 @@
     previewTimer: null,
     validationTimer: null,
     previewSequence: 0,
+    motionJobId: null,
+    motionPollTimer: null,
   };
 
   const SCHEDULE_INPUTS = {
@@ -76,6 +78,8 @@
       'animation-save',
       'animation-reload',
       'animation-validate-schedules',
+      'animation-generate-motion-preview',
+      'animation-clear-source',
     ]) {
       const control = qs(`#${id}`);
       if (control) control.disabled = !enabled;
@@ -406,6 +410,7 @@
       qs('#animation-zoom').value = project.motion?.zoom || '0:(1.0)';
       qs('#animation-translation-x').value = project.motion?.translation_x || '0:(0)';
       qs('#animation-translation-y').value = project.motion?.translation_y || '0:(0)';
+      qs('#animation-border-mode').value = project.motion?.border_mode || 'replicate';
       qs('#animation-strength').value = project.generation?.strength || '0:(0.65)';
       qs('#animation-noise').value = project.generation?.noise || '0:(0.02)';
       qs('#animation-steps').value = project.generation?.steps || '0:(20)';
@@ -425,6 +430,7 @@
       populateModelSelect();
       populateSamplerSelect(project.generation?.sampler || '');
       renderPromptRows();
+      renderSourceState();
       syncInspectorBounds();
       clearDirty();
     } finally {
@@ -484,6 +490,7 @@
         zoom: qs('#animation-zoom')?.value || '0:(1.0)',
         translation_x: qs('#animation-translation-x')?.value || '0:(0)',
         translation_y: qs('#animation-translation-y')?.value || '0:(0)',
+        border_mode: qs('#animation-border-mode')?.value || 'replicate',
       },
       generation: {
         ...(state.project.generation || {}),
@@ -911,6 +918,7 @@
       if (
         input.id === 'animation-project-select' ||
         input.id === 'animation-model' ||
+        input.id === 'animation-source-file' ||
         INSPECTOR_INPUT_IDS.has(input.id)
       ) {
         return;
