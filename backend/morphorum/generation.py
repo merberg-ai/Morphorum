@@ -249,7 +249,7 @@ class GenerationManager:
             active = any(
                 job.status in {"queued", "loading_model", "generating", "finalizing"}
                 for job in self._jobs.values()
-            )
+            ) or self._inference_lock.locked()
 
         model = get_model(model_id) if model_id else None
         return {
@@ -271,9 +271,10 @@ class GenerationManager:
                 for job in self._jobs.values()
                 if job.status in {"queued", "loading_model", "generating", "finalizing"}
             ]
-            if active:
+            if active or self._inference_lock.locked():
                 raise GenerationError(
-                    "Cannot unload the model while generation is active. Cancel or wait for the current batch to finish."
+                    "Cannot unload the model while generation or animation inference is active. "
+                    "Cancel or wait for the current job to finish."
                 )
             was_loaded = self._pipeline is not None
             model_id = self._pipeline_model_id
