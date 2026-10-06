@@ -295,7 +295,9 @@
     qs('#generation-percent').textContent = `${percent}%`;
     qs('#generation-progress-fill').style.width = `${percent}%`;
     if (job.status === 'generating') {
-      qs('#generation-step').textContent = `Image ${job.current_image}/${job.request.images} · Step ${job.current_step}/${job.total_steps}`;
+      const speed = Number(job.average_step_seconds);
+      const speedText = Number.isFinite(speed) && speed > 0 ? ` · ${speed.toFixed(1)}s/step` : '';
+      qs('#generation-step').textContent = `Image ${job.current_image}/${job.request.images} · Step ${job.current_step}/${job.total_steps}${speedText}`;
     } else if (job.status === 'loading_model') {
       qs('#generation-step').textContent = 'Loading checkpoint and pipeline configuration…';
     } else if (job.status === 'queued') {
