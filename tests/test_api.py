@@ -359,7 +359,7 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
         render_project["motion"] = dict(preview_project["motion"])
         render_project["motion"]["zoom"] = "0:(1.0)"
         render_project["generation"] = dict(preview_project["generation"])
-        render_project["generation"]["strength"] = "0:(0)"
+        render_project["generation"]["strength"] = "0:(1)"
         render_project["generation"]["steps"] = "0:(5)"
         render_project["generation"]["guidance"] = "0:(6)"
         render_project["generation"]["sampler"] = "euler"
