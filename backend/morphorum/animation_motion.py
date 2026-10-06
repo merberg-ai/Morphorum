@@ -208,10 +208,15 @@ def render_motion_preview(
     source: Image.Image,
     destination: Path,
     *,
-    max_dimension: int = PREVIEW_MAX_DIMENSION,
-    max_capture_frames: int = PREVIEW_MAX_CAPTURE_FRAMES,
+    max_dimension: int | None = None,
+    max_capture_frames: int | None = None,
     progress_callback=None,
 ) -> dict[str, Any]:
+    if max_dimension is None:
+        max_dimension = PREVIEW_MAX_DIMENSION
+    if max_capture_frames is None:
+        max_capture_frames = PREVIEW_MAX_CAPTURE_FRAMES
+
     animation = project.get("animation", {})
     motion = project.get("motion", {})
     max_frames = max(1, int(animation.get("max_frames", 120)))
