@@ -21,8 +21,12 @@ from .model_index import get_model
 from .paths import CACHE_DIR, OUTPUTS_DIR, ensure_runtime_dirs
 from .settings import load_settings
 
-SUPPORTED_FAMILIES = {"sdxl"}
-FIRST_IMAGE_EXTENSIONS = {".safetensors", ".ckpt"}
+SUPPORTED_FAMILIES = {"sdxl", "flux"}
+FAMILY_IMAGE_EXTENSIONS = {
+    "sdxl": {".safetensors", ".ckpt"},
+    "flux": {".safetensors"},
+}
+FLUX_COMPONENT_REPO = "black-forest-labs/FLUX.1-schnell"
 LORA_TAG = re.compile(r"<lora:([^:>]+):([+-]?(?:\d+(?:\.\d*)?|\.\d+))>", re.IGNORECASE)
 
 CAPABILITIES: dict[str, dict[str, Any]] = {
@@ -54,9 +58,40 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
         ],
     },
     "flux": {
-        "supported": False,
+        "supported": True,
         "label": "Flux",
-        "reason": "Flux is an enabled Morphorum model family, but its generation adapter has not landed yet.",
+        "steps": {"default": 28, "min": 1, "max": 50},
+        "guidance": {"key": "guidance_scale", "label": "Guidance", "default": 3.5, "min": 0.0, "max": 10.0},
+        "negative_prompt": False,
+        "samplers": {
+            "default": "flowmatch_euler",
+            "options": [
+                {"id": "flowmatch_euler", "label": "FlowMatch Euler"},
+            ],
+        },
+        "resolutions": [
+            {"label": "Square 1:1", "width": 1024, "height": 1024},
+            {"label": "Portrait 2:3", "width": 832, "height": 1216},
+            {"label": "Landscape 3:2", "width": 1216, "height": 832},
+            {"label": "Portrait 9:16", "width": 768, "height": 1360},
+            {"label": "Landscape 16:9", "width": 1360, "height": 768},
+        ],
+        "variants": {
+            "dev": {
+                "label": "Flux Dev",
+                "steps": {"default": 28, "min": 1, "max": 50},
+                "guidance": {"key": "guidance_scale", "label": "Guidance", "default": 3.5, "min": 0.0, "max": 10.0},
+                "negative_prompt": False,
+                "max_sequence_length": 512,
+            },
+            "schnell": {
+                "label": "Flux Schnell",
+                "steps": {"default": 4, "min": 1, "max": 8},
+                "guidance": {"key": "guidance_scale", "label": "Guidance", "default": 0.0, "min": 0.0, "max": 0.0},
+                "negative_prompt": False,
+                "max_sequence_length": 256,
+            },
+        },
     },
     "zimage": {
         "supported": False,
@@ -248,6 +283,33 @@ class GenerationManager:
         emit_console("info", "generation", f"Queued image job {job_id}: {model['name']} × {request.images}.")
         return job.public()
 
+    @staticmethod
+    def _model_variant(model: dict[str, Any]) -> str:
+        variant = str(model.get("variant") or "").strip().lower()
+        if variant:
+            return variant
+        if str(model.get("family", "")).lower() == "flux":
+            name = f"{model.get('name', '')} {model.get('filename', '')}".lower()
+            return "schnell" if "schnell" in name else "dev"
+        return str(model.get("family", "")).lower()
+
+    def _effective_capability(self, model: dict[str, Any]) -> dict[str, Any]:
+        family = str(model.get("family", ""))
+        base = dict(CAPABILITIES.get(family, {}))
+        variant = self._model_variant(model)
+        variant_config = base.get("variants", {}).get(variant, {})
+        if variant_config:
+            merged = dict(base)
+            for key, value in variant_config.items():
+                if isinstance(value, dict) and isinstance(base.get(key), dict):
+                    merged[key] = {**base[key], **value}
+                else:
+                    merged[key] = value
+            merged["variant"] = variant
+            return merged
+        base["variant"] = variant
+        return base
+
     def _validate_request(self, request: GenerationRequest) -> dict[str, Any]:
         if not request.model_id:
             raise GenerationError("Select a model before generating.")
@@ -261,7 +323,7 @@ class GenerationManager:
             capability = CAPABILITIES.get(family, {})
             raise GenerationError(capability.get("reason") or f"Model family '{family}' is not supported yet.")
 
-        capability = CAPABILITIES.get(family, {})
+        capability = self._effective_capability(model)
         sampler_config = capability.get("samplers", {})
         sampler_ids = {
             str(item.get("id"))
@@ -276,11 +338,12 @@ class GenerationManager:
         model_path = Path(model["path"])
         if not model_path.is_file():
             raise GenerationError("The selected checkpoint file no longer exists. Rescan Models.")
-        if model_path.suffix.lower() not in FIRST_IMAGE_EXTENSIONS:
-            supported = ", ".join(sorted(FIRST_IMAGE_EXTENSIONS))
+        allowed_extensions = FAMILY_IMAGE_EXTENSIONS.get(family, set())
+        if model_path.suffix.lower() not in allowed_extensions:
+            supported = ", ".join(sorted(allowed_extensions)) or "(none)"
             raise GenerationError(
-                f"The current SDXL adapter only supports {supported} checkpoint files. "
-                f"'{model_path.suffix or '[no extension]'}' is indexed for future adapters but cannot be generated yet."
+                f"The current {capability.get('label', family)} adapter only supports {supported} model files. "
+                f"'{model_path.suffix or '[no extension]'}' is indexed but cannot be generated by this adapter yet."
             )
         if not request.prompt:
             raise GenerationError("Prompt cannot be empty.")
@@ -290,12 +353,27 @@ class GenerationManager:
             )
         if request.width < 64 or request.height < 64 or request.width > 4096 or request.height > 4096:
             raise GenerationError("Width and height must be between 64 and 4096 pixels.")
-        if request.width % 8 or request.height % 8:
-            raise GenerationError("Width and height must be divisible by 8.")
-        if not 1 <= request.steps <= 150:
-            raise GenerationError("Steps must be between 1 and 150.")
-        if not 0.0 <= request.guidance_scale <= 30.0:
-            raise GenerationError("CFG/guidance must be between 0 and 30.")
+        divisor = 16 if family == "flux" else 8
+        if request.width % divisor or request.height % divisor:
+            raise GenerationError(f"Width and height must be divisible by {divisor} for {capability.get('label', family)}.")
+
+        steps_config = capability.get("steps", {})
+        min_steps = int(steps_config.get("min", 1))
+        max_steps = int(steps_config.get("max", 150))
+        if not min_steps <= request.steps <= max_steps:
+            raise GenerationError(
+                f"Steps must be between {min_steps} and {max_steps} for {capability.get('label', family)}."
+            )
+
+        guidance_config = capability.get("guidance", {})
+        min_guidance = float(guidance_config.get("min", 0.0))
+        max_guidance = float(guidance_config.get("max", 30.0))
+        if not min_guidance <= request.guidance_scale <= max_guidance:
+            if family == "flux" and self._model_variant(model) == "schnell":
+                raise GenerationError("Flux Schnell requires Guidance = 0.")
+            raise GenerationError(
+                f"Guidance must be between {min_guidance:g} and {max_guidance:g} for {capability.get('label', family)}."
+            )
         if request.seed_mode not in {"fixed", "increment", "random"}:
             raise GenerationError("Seed mode must be fixed, increment, or random.")
         if not 1 <= request.images <= 32:
