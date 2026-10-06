@@ -17,6 +17,7 @@ from .console import (
     sse_events,
 )
 from .generation import GenerationError, generation_manager
+from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
@@ -121,6 +122,27 @@ def get_settings() -> dict[str, Any]:
 @app.get("/api/models/families")
 def api_model_families() -> dict[str, Any]:
     return {"families": model_family_definitions()}
+
+
+@app.get("/api/managed-models")
+def api_managed_models() -> dict[str, Any]:
+    return {"models": managed_model_manager.catalog()}
+
+
+@app.get("/api/managed-models/{model_id}")
+def api_managed_model(model_id: str) -> dict[str, Any]:
+    try:
+        return managed_model_manager.status(model_id)
+    except ManagedModelError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/managed-models/{model_id}/download", status_code=202)
+def api_managed_model_download(model_id: str) -> dict[str, Any]:
+    try:
+        return managed_model_manager.start_download(model_id)
+    except ManagedModelError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.put("/api/settings")
