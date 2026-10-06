@@ -90,6 +90,8 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "width": 1024,
             "height": 1024,
             "prompt_transition": "blend",
+            "source_image": "",
+            "source_image_name": "",
         },
         "model": {
             "model_id": "",
@@ -107,6 +109,7 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "zoom": "0:(1.0)",
             "translation_x": "0:(0)",
             "translation_y": "0:(0)",
+            "border_mode": "replicate",
         },
         "generation": {
             "strength": "0:(0.65)",
@@ -186,6 +189,8 @@ def normalize_animation_project(
     animation["prompt_transition"] = (
         prompt_transition if prompt_transition in {"blend", "hold"} else "blend"
     )
+    animation["source_image"] = str(animation.get("source_image") or "").strip()
+    animation["source_image_name"] = str(animation.get("source_image_name") or "").strip()
     project["animation"] = animation
 
     model_source = payload.get("model", project.get("model", {}))
@@ -213,7 +218,12 @@ def normalize_animation_project(
             "zoom": "0:(1.0)",
             "translation_x": "0:(0)",
             "translation_y": "0:(0)",
+            "border_mode": "replicate",
         },
+    )
+    border_mode = str(project["motion"].get("border_mode") or "replicate").strip().lower()
+    project["motion"]["border_mode"] = (
+        border_mode if border_mode in {"replicate", "wrap"} else "replicate"
     )
 
     generation_source = payload.get("generation", project.get("generation", {}))
@@ -330,6 +340,10 @@ def list_animation_projects() -> list[dict[str, Any]]:
 
     projects.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
     return projects
+
+
+def animation_project_directory(project_id: str) -> Path:
+    return _project_dir(project_id)
 
 
 def animation_project_path(project_id: str) -> str:
