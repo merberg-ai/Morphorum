@@ -62,6 +62,7 @@ def test_resolve_project_frame_contract() -> None:
     assert resolved["motion"]["angle"] == pytest.approx(5)
     assert resolved["motion"]["zoom"] == pytest.approx(1.05)
     assert resolved["motion"]["translation_x"] == pytest.approx(10)
+    assert resolved["motion"]["border_mode"] == "replicate"
     assert resolved["generation"]["strength"] == pytest.approx(0.7)
     assert resolved["generation"]["steps"] == 9
     assert resolved["generation"]["sampler"] == "flowmatch_euler"
