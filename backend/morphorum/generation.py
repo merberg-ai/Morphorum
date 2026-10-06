@@ -692,6 +692,33 @@ class GenerationManager:
         except Exception:
             pass
 
+    def _build_call_args(
+        self,
+        job: GenerationJob,
+        generator: Any,
+        on_step_end: Any,
+    ) -> dict[str, Any]:
+        family = str(job.model.get("family", ""))
+        call_args: dict[str, Any] = {
+            "prompt": job.request.prompt,
+            "width": job.request.width,
+            "height": job.request.height,
+            "num_inference_steps": job.request.steps,
+            "guidance_scale": job.request.guidance_scale,
+            "generator": generator,
+            "callback_on_step_end": on_step_end,
+        }
+
+        if family == "sdxl":
+            call_args["negative_prompt"] = job.request.negative_prompt or None
+        elif family == "flux":
+            capability = self._effective_capability(job.model)
+            call_args["max_sequence_length"] = int(capability.get("max_sequence_length", 512))
+        else:
+            raise GenerationError(f"No inference call builder is registered for model family '{family}'.")
+
+        return call_args
+
     def _run_job(self, job: GenerationJob) -> None:
         if job.cancel_requested:
             return
@@ -737,16 +764,7 @@ class GenerationManager:
                     pipeline._interrupt = True
                 return callback_kwargs
 
-            call_args = {
-                "prompt": job.request.prompt,
-                "negative_prompt": job.request.negative_prompt or None,
-                "width": job.request.width,
-                "height": job.request.height,
-                "num_inference_steps": job.request.steps,
-                "guidance_scale": job.request.guidance_scale,
-                "generator": generator,
-                "callback_on_step_end": on_step_end,
-            }
+            call_args = self._build_call_args(job, generator, on_step_end)
 
             with torch.inference_mode():
                 result = pipe(**call_args)
@@ -768,6 +786,7 @@ class GenerationManager:
                 "model": job.model["name"],
                 "model_path": job.model["path"],
                 "family": job.model["family"],
+                "variant": self._model_variant(job.model),
                 "prompt": job.request.prompt,
                 "negative_prompt": job.request.negative_prompt,
                 "seed": seed,
@@ -776,6 +795,11 @@ class GenerationManager:
                 "steps": job.request.steps,
                 "guidance_scale": job.request.guidance_scale,
                 "sampler": job.request.sampler,
+                "max_sequence_length": (
+                    self._effective_capability(job.model).get("max_sequence_length")
+                    if job.model.get("family") == "flux"
+                    else None
+                ),
             }
             pnginfo.add_text("Morphorum", json.dumps(metadata, ensure_ascii=False))
             image.save(image_path, pnginfo=pnginfo)
