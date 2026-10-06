@@ -463,6 +463,7 @@ def test_zimage_turbo_capabilities_and_validation(tmp_path, monkeypatch) -> None
     assert capability["negative_prompt"] is False
     assert capability["default_resolution"] == {"width": 1024, "height": 1024}
     assert capability["samplers"]["default"] == "flowmatch_euler"
+    assert capability["resolutions"][0] == {"label": "Square 1:1", "width": 1024, "height": 1024}
 
     manager._validate_request(
         GenerationRequest(
