@@ -2,7 +2,7 @@
 
 Standalone, modern Deforum-style AI image and animation studio with legacy project compatibility, multi-model support for SDXL, Flux, and Z-Image, LoRAs, keyframed motion, live previews, and a mobile-friendly web UI.
 
-> **Status:** early alpha. Installation, CUDA-backed SDXL image generation, model indexing, settings, telemetry, and the responsive browser UI are working; Flux, Z-Image, LoRA application, and animation are active development milestones.
+> **Status:** early alpha. Installation, CUDA-backed SDXL image generation, model indexing, settings, telemetry, and the responsive browser UI are working. The first Flux txt2img adapter is implemented and awaiting real-GPU validation; Z-Image, LoRA application, and animation remain active development milestones.
 
 ## Goals
 
