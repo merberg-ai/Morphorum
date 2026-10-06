@@ -86,6 +86,23 @@ Physical acceptance target: create, edit, save, reload, and switch animation pro
 
 Physical acceptance target: edit schedules on mobile, scrub frames, verify known interpolated values and prompt weights, validate expression schedules, and confirm malformed schedules are reported without corrupting the project.
 
+## Motion preview — Phase 3 implemented
+
+- project-owned starting-image upload/replace/clear workflow
+- RGB PNG source normalization with original filename metadata
+- cumulative center-based 2D affine transform engine
+- angle, zoom, translation X, and translation Y schedule application
+- classic replicate/wrap border modes
+- project-resolution translation scaling into preview resolution
+- matrix accumulation without repeated source-image degradation
+- evenly sampled preview rasterization for long animations
+- animated GIF output with project-timing-aware frame durations
+- serialized background preview jobs with browser progress
+- responsive mobile source/preview workspace
+- no diffusion/GPU model load required
+
+Physical acceptance target: upload a source image, preview obvious cumulative camera motion, verify replicate and wrap edges differ as expected, and confirm schedule edits can be previewed without saving or loading a model.
+
 ## 0.3.0-alpha.1 — classic motion
 
 - 2D transforms
