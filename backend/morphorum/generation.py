@@ -871,18 +871,164 @@ class GenerationManager:
                 f"The package may be incomplete or incompatible with this Diffusers runtime. {exc}"
             ) from exc
 
+    @property
+    def inference_lock(self) -> threading.Lock:
+        return self._inference_lock
+
+    def reset_inference_pipeline(self) -> None:
+        self._unload_pipeline()
+
+    def unload_after_job_enabled(self) -> bool:
+        return self._unload_after_generation_enabled()
+
+    def _generator_device(self, family: str) -> str:
+        if family == "flux" or self._pipeline_device == "cuda-offload":
+            return "cpu"
+        return self._pipeline_device or "cpu"
+
+    def _convert_pipeline_task(self, pipe: Any, family: str, task: str):
+        try:
+            if task == "txt2img":
+                from diffusers import FluxPipeline, StableDiffusionXLPipeline, ZImagePipeline
+
+                classes = {
+                    "sdxl": StableDiffusionXLPipeline,
+                    "flux": FluxPipeline,
+                    "zimage": ZImagePipeline,
+                }
+            elif task == "img2img":
+                from diffusers import (
+                    FluxImg2ImgPipeline,
+                    StableDiffusionXLImg2ImgPipeline,
+                    ZImageImg2ImgPipeline,
+                )
+
+                classes = {
+                    "sdxl": StableDiffusionXLImg2ImgPipeline,
+                    "flux": FluxImg2ImgPipeline,
+                    "zimage": ZImageImg2ImgPipeline,
+                }
+            else:
+                raise GenerationError(f"Unknown diffusion pipeline task '{task}'.")
+
+            pipeline_class = classes.get(family)
+            if pipeline_class is None:
+                raise GenerationError(
+                    f"No {task} pipeline wrapper is registered for model family '{family}'."
+                )
+
+            converted = pipeline_class.from_pipe(pipe)
+            converted.set_progress_bar_config(disable=True)
+            return converted
+        except GenerationError:
+            raise
+        except Exception as exc:
+            raise GenerationError(
+                f"Could not switch {family} pipeline to {task}: {exc}"
+            ) from exc
+
+    def _switch_loaded_pipeline_task(self, model: dict[str, Any], task: str):
+        family = str(model.get("family", ""))
+        if self._pipeline is None:
+            raise GenerationError("No diffusion pipeline is loaded.")
+        if self._pipeline_task == task:
+            return self._pipeline
+
+        previous = self._pipeline_task or "unknown"
+        emit_console(
+            "info",
+            "generation",
+            f"Switching loaded {model['name']} pipeline from {previous} to {task}.",
+        )
+        self._pipeline = self._convert_pipeline_task(self._pipeline, family, task)
+        self._pipeline_task = task
+        return self._pipeline
+
+    def _load_img2img_pipeline(self, job: GenerationJob):
+        model = job.model
+        model_id = model["id"]
+        family = str(model.get("family", ""))
+
+        if self._pipeline is not None and self._pipeline_model_id == model_id:
+            pipe = self._switch_loaded_pipeline_task(model, "img2img")
+            emit_console(
+                "info",
+                "generation",
+                f"Reusing loaded model for img2img: {model['name']}.",
+            )
+            return pipe, self._generator_device(family)
+
+        pipe, generator_device = self._load_pipeline(job)
+        pipe = self._switch_loaded_pipeline_task(model, "img2img")
+        return pipe, generator_device
+
+    def prepare_img2img(
+        self,
+        request: GenerationRequest,
+    ) -> tuple[Any, str, dict[str, Any]]:
+        model = self._validate_request(request)
+        job = GenerationJob(
+            id="animation-img2img",
+            request=request,
+            model=model,
+            total_steps=request.steps,
+        )
+        pipe, generator_device = self._load_img2img_pipeline(job)
+        self._configure_sampler(pipe, model["family"], request.sampler)
+        return pipe, generator_device, model
+
+    def build_img2img_call_args(
+        self,
+        request: GenerationRequest,
+        model: dict[str, Any],
+        *,
+        image: Any,
+        strength: float,
+        generator: Any,
+        on_step_end: Any,
+    ) -> dict[str, Any]:
+        strength = float(strength)
+        if not 0.0 < strength <= 1.0:
+            raise GenerationError("Img2img strength must be greater than 0 and at most 1.")
+
+        family = str(model.get("family", ""))
+        call_args: dict[str, Any] = {
+            "prompt": request.prompt,
+            "image": image,
+            "strength": strength,
+            "width": request.width,
+            "height": request.height,
+            "num_inference_steps": request.steps,
+            "guidance_scale": request.guidance_scale,
+            "generator": generator,
+            "callback_on_step_end": on_step_end,
+        }
+
+        if family == "sdxl":
+            call_args["negative_prompt"] = request.negative_prompt or None
+        elif family == "flux":
+            capability = self._effective_capability(model)
+            call_args["max_sequence_length"] = int(
+                capability.get("max_sequence_length", 512)
+            )
+        elif family == "zimage":
+            call_args["max_sequence_length"] = 512
+        else:
+            raise GenerationError(
+                f"No img2img call builder is registered for model family '{family}'."
+            )
+
+        return call_args
+
     def _load_pipeline(self, job: GenerationJob):
         model = job.model
         model_id = model["id"]
         family = str(model.get("family", ""))
 
         if self._pipeline is not None and self._pipeline_model_id == model_id:
+            pipe = self._switch_loaded_pipeline_task(model, "txt2img")
             emit_console("info", "generation", f"Reusing loaded model: {model['name']}.")
-            if family == "flux" or self._pipeline_device == "cuda-offload":
-                generator_device = "cpu"
-            else:
-                generator_device = self._pipeline_device or "cpu"
-            return self._pipeline, generator_device
+            return pipe, self._generator_device(family)
 
         self._unload_pipeline()
         self._set_status(job, "loading_model", f"Loading {model['name']}")
