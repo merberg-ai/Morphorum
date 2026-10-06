@@ -61,12 +61,28 @@ def command_self_test(_: argparse.Namespace) -> int:
 
             family_response = client.get("/api/models/families")
             family_response.raise_for_status()
-            enabled_families = [item["id"] for item in family_response.json().get("families", [])]
+            family_defs = family_response.json().get("families", [])
+            enabled_families = [item["id"] for item in family_defs]
             if enabled_families != ["sdxl", "flux", "zimage"]:
                 raise RuntimeError(f"unexpected enabled model families: {enabled_families}")
-            for family in enabled_families:
+
+            external_families = [
+                item["id"] for item in family_defs if item.get("source") == "external"
+            ]
+            managed_families = [
+                item["id"] for item in family_defs if item.get("source") == "managed"
+            ]
+            for family in external_families:
                 if family not in models:
-                    raise RuntimeError(f"settings schema is missing model family: {family}")
+                    raise RuntimeError(f"settings schema is missing external model family: {family}")
+            if managed_families != ["zimage"]:
+                raise RuntimeError(f"unexpected managed model families: {managed_families}")
+
+            managed_response = client.get("/api/managed-models")
+            managed_response.raise_for_status()
+            managed_catalog = managed_response.json().get("models", [])
+            if not any(item.get("id") == "zimage-turbo" for item in managed_catalog):
+                raise RuntimeError("managed model catalog is missing Z-Image-Turbo")
 
             models_response = client.get("/api/models?limit=1")
             models_response.raise_for_status()
@@ -91,7 +107,7 @@ def command_self_test(_: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API, frontend, settings, model index, generation capabilities, and console OK.")
+    print("Morphorum self-test passed: API, frontend, settings, managed models, model index, generation capabilities, and console OK.")
     return 0
 
 
