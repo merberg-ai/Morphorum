@@ -273,7 +273,11 @@
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
       qs('#animation-notes').value = project.notes || '';
       qs('#animation-schema-badge').textContent = `Schema ${project.schema_version || 1}`;
-      qs('#animation-project-path').textContent = state.path || project.id;
+      const projectFile = qs('#animation-project-path');
+      if (projectFile) {
+        projectFile.textContent = `${project.name || 'Untitled Animation'} · project.json`;
+        projectFile.title = state.path || project.id;
+      }
 
       populateModelSelect();
       renderPromptRows();
@@ -385,20 +389,26 @@
   }
 
   async function createProject() {
+    const requestedName = window.prompt('New animation project name:', 'New Animation');
+    if (requestedName === null) return;
+    const name = String(requestedName).trim();
+    if (!name) {
+      toast('Project name required', 'Enter a name before creating the animation project.', 'warning');
+      return;
+    }
+
     const button = qs('#animation-new');
     setBusy(button, true);
     try {
       const payload = await api('/api/animation/projects', {
         method: 'POST',
-        body: JSON.stringify({ name: 'Untitled Animation' }),
+        body: JSON.stringify({ name }),
       });
       state.project = payload.project;
       state.path = payload.path || '';
       await loadProjectList();
       fillForm();
-      qs('#animation-name')?.focus();
-      qs('#animation-name')?.select();
-      toast('Animation project created', 'Project state is ready for editing.', 'success');
+      toast('Animation project created', `${state.project.name} is ready for editing.`, 'success');
     } catch (error) {
       toast('Could not create animation project', error.message, 'error', 6500);
     } finally {
