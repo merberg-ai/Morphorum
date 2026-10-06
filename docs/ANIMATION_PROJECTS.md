@@ -26,7 +26,9 @@ Example:
     "fps": 24.0,
     "width": 1024,
     "height": 1024,
-    "prompt_transition": "blend"
+    "prompt_transition": "blend",
+    "source_image": "assets/source.png",
+    "source_image_name": "starting-frame.png"
   },
   "model": {
     "model_id": "managed:zimage-turbo",
@@ -44,7 +46,8 @@ Example:
     "angle": "0:(0), 120:(4), 239:(-3)",
     "zoom": "0:(1.002), 239:(1.008)",
     "translation_x": "0:(0), 120:(8), 239:(-4)",
-    "translation_y": "0:(0)"
+    "translation_y": "0:(0)",
+    "border_mode": "replicate"
   },
   "generation": {
     "strength": "0:(0.65), 239:(0.55)",
@@ -70,6 +73,8 @@ Timeline/output geometry shared by all model adapters:
 - `fps`: target playback frame rate.
 - `width`, `height`: requested frame dimensions.
 - `prompt_transition`: `blend` or `hold`; controls how prompt keyframes resolve between frames.
+- `source_image`: project-relative normalized source-image asset used by motion preview and future animation rendering.
+- `source_image_name`: original user-facing filename for the uploaded source.
 
 ### `model`
 
@@ -95,6 +100,7 @@ Raw Deforum-style 2D schedule strings:
 - `zoom`
 - `translation_x`
 - `translation_y`
+- `border_mode`: `replicate` or `wrap` for pixels exposed by 2D camera motion.
 
 The project format allows additional motion keys to survive round trips so future 3D/depth fields do not require destructive migrations.
 
