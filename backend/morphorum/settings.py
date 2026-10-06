@@ -101,6 +101,8 @@ def managed_model_location(family: str, settings: dict[str, Any] | None = None) 
         .get("locations", {})
         .get(family, rf".\ckpts\{family}")
     ).strip()
+    if os.name != "nt":
+        raw = raw.replace("\\", "/")
     expanded = Path(os.path.expandvars(os.path.expanduser(raw)))
     if not expanded.is_absolute():
         expanded = ROOT / expanded
