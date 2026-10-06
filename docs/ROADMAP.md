@@ -67,6 +67,25 @@ Success criterion: import representative legacy projects and resolve schedule va
 
 Physical acceptance target: create, edit, save, reload, and switch animation projects from desktop/mobile without losing state. Schedule evaluation intentionally begins in Phase 2.
 
+## Schedule engine — Phase 2 implemented
+
+- clean-room Deforum-style numeric keyframe parser
+- linear numeric interpolation
+- continuously evaluated math expressions using `t` / `max_f`
+- expression-based frame positions such as `max_f-1`
+- safe restricted expression evaluator with common math functions
+- blend/hold prompt-transition state
+- project-wide schedule validation with warnings/errors
+- renderer-facing resolved frame-state contract
+- deterministic fixed/incrementing seed resolution
+- random-at-render seed state
+- live Resolved Frame Inspector in the Animation workspace
+- schedule curve preview without diffusion
+- live validation styling for motion/generation schedules
+- APIs for unsaved-project frame resolution, validation, and curve sampling
+
+Physical acceptance target: edit schedules on mobile, scrub frames, verify known interpolated values and prompt weights, validate expression schedules, and confirm malformed schedules are reported without corrupting the project.
+
 ## 0.3.0-alpha.1 — classic motion
 
 - 2D transforms
