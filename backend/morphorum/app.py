@@ -10,6 +10,14 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from .animation_projects import (
+    AnimationProjectError,
+    animation_project_path,
+    create_animation_project,
+    list_animation_projects,
+    load_animation_project,
+    save_animation_project,
+)
 from .console import (
     clear_console,
     emit_console,
@@ -142,6 +150,51 @@ def get_settings() -> dict[str, Any]:
         "validation": validate_model_paths(settings),
         "model_families": model_family_definitions(),
     }
+
+
+@app.get("/api/animation/projects")
+def api_animation_projects() -> dict[str, Any]:
+    return {"projects": list_animation_projects()}
+
+
+@app.post("/api/animation/projects", status_code=201)
+def api_create_animation_project(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        project = create_animation_project(payload)
+        return {
+            "status": "created",
+            "project": project,
+            "path": animation_project_path(project["id"]),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}")
+def api_animation_project(project_id: str) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        return {
+            "project": project,
+            "path": animation_project_path(project_id),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}")
+def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        project = save_animation_project(project_id, payload)
+        return {
+            "status": "saved",
+            "project": project,
+            "path": animation_project_path(project_id),
+        }
+    except AnimationProjectError as exc:
+        message = str(exc)
+        status = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status, detail=message) from exc
 
 
 @app.get("/api/models/families")
