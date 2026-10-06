@@ -8,10 +8,31 @@
     path: '',
     dirty: false,
     loading: false,
+    previewTimer: null,
+    validationTimer: null,
+    previewSequence: 0,
   };
+
+  const SCHEDULE_INPUTS = {
+    'motion.angle': '#animation-angle',
+    'motion.zoom': '#animation-zoom',
+    'motion.translation_x': '#animation-translation-x',
+    'motion.translation_y': '#animation-translation-y',
+    'generation.strength': '#animation-strength',
+    'generation.noise': '#animation-noise',
+    'generation.steps': '#animation-steps',
+    'generation.guidance': '#animation-guidance',
+  };
+
+  const INSPECTOR_INPUT_IDS = new Set([
+    'animation-inspector-frame',
+    'animation-inspector-slider',
+    'animation-curve-field',
+  ]);
 
   const qs = (selector, root = document) => root.querySelector(selector);
   const qsa = (selector, root = document) => [...root.querySelectorAll(selector)];
+
   const toast = (title, message = '', type = 'info', timeout = 4200) => {
     if (window.MorphorumToast) {
       window.MorphorumToast(title, message, type, timeout);
@@ -48,12 +69,16 @@
         input.disabled = !enabled;
       }
     });
-    const addPrompt = qs('#animation-add-prompt');
-    const save = qs('#animation-save');
-    const reload = qs('#animation-reload');
-    if (addPrompt) addPrompt.disabled = !enabled;
-    if (save) save.disabled = !enabled;
-    if (reload) reload.disabled = !enabled;
+
+    for (const id of [
+      'animation-add-prompt',
+      'animation-save',
+      'animation-reload',
+      'animation-validate-schedules',
+    ]) {
+      const control = qs(`#${id}`);
+      if (control) control.disabled = !enabled;
+    }
   }
 
   function setStatus(text, kind = '') {
@@ -64,10 +89,21 @@
     if (kind) badge.classList.add(kind);
   }
 
-  function markDirty() {
+  function scheduleInspectorRefresh({ validate = false } = {}) {
+    window.clearTimeout(state.previewTimer);
+    state.previewTimer = window.setTimeout(() => refreshInspector(), 260);
+
+    if (validate) {
+      window.clearTimeout(state.validationTimer);
+      state.validationTimer = window.setTimeout(() => validateSchedules(false), 520);
+    }
+  }
+
+  function markDirty({ validate = false } = {}) {
     if (!state.project || state.loading) return;
     state.dirty = true;
     setStatus('Unsaved changes', 'dirty');
+    scheduleInspectorRefresh({ validate });
   }
 
   function clearDirty() {
@@ -130,7 +166,9 @@
       select.appendChild(option);
     }
     select.disabled = false;
-    if (state.projects.some(project => project.id === selected)) select.value = selected;
+    if (state.projects.some(project => project.id === selected)) {
+      select.value = selected;
+    }
   }
 
   function sortedPromptFrames(project) {
@@ -191,7 +229,9 @@
       markDirty();
     });
 
-    qsa('input, textarea', row).forEach(input => input.addEventListener('input', markDirty));
+    qsa('input, textarea', row).forEach(input => {
+      input.addEventListener('input', () => markDirty());
+    });
     frameInput.addEventListener('input', () => {
       remove.disabled = Number(frameInput.value) === 0;
     });
@@ -232,12 +272,43 @@
       .filter(Number.isFinite);
     const maxFrames = Math.max(1, Number(qs('#animation-max-frames')?.value || 120));
     const last = frames.length ? Math.max(...frames) : 0;
-    const candidate = Math.min(maxFrames - 1, Math.max(1, last + Math.max(1, Math.round(maxFrames / 4))));
+    const candidate = Math.min(
+      maxFrames - 1,
+      Math.max(1, last + Math.max(1, Math.round(maxFrames / 4)))
+    );
 
     const list = qs('#animation-prompt-list');
     list?.appendChild(createPromptRow(candidate, '', ''));
     markDirty();
     list?.lastElementChild?.querySelector('.animation-prompt-text')?.focus();
+  }
+
+  function inspectorFrameMax() {
+    return Math.max(0, Number(qs('#animation-max-frames')?.value || 1) - 1);
+  }
+
+  function syncInspectorBounds() {
+    const max = inspectorFrameMax();
+    const frameInput = qs('#animation-inspector-frame');
+    const slider = qs('#animation-inspector-slider');
+    if (frameInput) {
+      frameInput.max = String(max);
+      if (Number(frameInput.value) > max) frameInput.value = String(max);
+    }
+    if (slider) {
+      slider.max = String(max);
+      if (Number(slider.value) > max) slider.value = String(max);
+    }
+  }
+
+  function setInspectorFrame(value, source = '') {
+    const max = inspectorFrameMax();
+    const frame = Math.max(0, Math.min(max, Math.trunc(Number(value) || 0)));
+    const frameInput = qs('#animation-inspector-frame');
+    const slider = qs('#animation-inspector-slider');
+    if (frameInput && source !== 'number') frameInput.value = String(frame);
+    if (slider && source !== 'slider') slider.value = String(frame);
+    refreshInspector();
   }
 
   function fillForm() {
@@ -250,6 +321,7 @@
         renderPromptRows();
         qs('#animation-project-path').textContent = 'Create or select an animation project.';
         qs('#animation-schema-badge').textContent = 'Schema 1';
+        clearInspector();
         clearDirty();
         return;
       }
@@ -259,6 +331,7 @@
       qs('#animation-fps').value = project.animation?.fps ?? 24;
       qs('#animation-width').value = project.animation?.width ?? 1024;
       qs('#animation-height').value = project.animation?.height ?? 1024;
+      qs('#animation-prompt-transition').value = project.animation?.prompt_transition || 'blend';
       qs('#animation-angle').value = project.motion?.angle || '0:(0)';
       qs('#animation-zoom').value = project.motion?.zoom || '0:(1.0)';
       qs('#animation-translation-x').value = project.motion?.translation_x || '0:(0)';
@@ -273,6 +346,7 @@
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
       qs('#animation-notes').value = project.notes || '';
       qs('#animation-schema-badge').textContent = `Schema ${project.schema_version || 1}`;
+
       const projectFile = qs('#animation-project-path');
       if (projectFile) {
         projectFile.textContent = `${project.name || 'Untitled Animation'} · project.json`;
@@ -281,17 +355,26 @@
 
       populateModelSelect();
       renderPromptRows();
+      syncInspectorBounds();
       clearDirty();
     } finally {
       state.loading = false;
     }
+
+    window.setTimeout(() => {
+      validateSchedules(false);
+      refreshInspector();
+    }, 0);
   }
 
   function collectPromptMaps() {
     const prompts = {};
     const negativePrompts = {};
     for (const row of qsa('.animation-prompt-row')) {
-      const frame = Math.max(0, Math.trunc(Number(qs('.animation-prompt-frame', row)?.value || 0)));
+      const frame = Math.max(
+        0,
+        Math.trunc(Number(qs('.animation-prompt-frame', row)?.value || 0))
+      );
       prompts[String(frame)] = qs('.animation-prompt-text', row)?.value || '';
       negativePrompts[String(frame)] = qs('.animation-negative-text', row)?.value || '';
     }
@@ -316,6 +399,7 @@
         fps: Number(qs('#animation-fps')?.value || 24),
         width: Number(qs('#animation-width')?.value || 1024),
         height: Number(qs('#animation-height')?.value || 1024),
+        prompt_transition: qs('#animation-prompt-transition')?.value || 'blend',
       },
       model: {
         ...existingModel,
@@ -346,6 +430,262 @@
     };
   }
 
+  function formatNumber(value, digits = 5) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '--';
+    if (Number.isInteger(number)) return String(number);
+    return number.toFixed(digits).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
+  function formatPromptTransition(transition) {
+    if (!transition) return '--';
+    const from = transition.from_text || '(empty)';
+    const to = transition.to_text || '(empty)';
+    if (
+      transition.from_frame === transition.to_frame ||
+      Number(transition.to_weight) <= 0
+    ) {
+      return `F${transition.from_frame} · 100% · ${from}`;
+    }
+    const fromPct = Math.round(Number(transition.from_weight) * 100);
+    const toPct = Math.round(Number(transition.to_weight) * 100);
+    return `F${transition.from_frame} ${fromPct}% · ${from}  →  F${transition.to_frame} ${toPct}% · ${to}`;
+  }
+
+  function renderResolved(resolved) {
+    const set = (id, text) => {
+      const element = qs(id);
+      if (element) element.textContent = text;
+    };
+
+    set('#resolved-time', `${formatNumber(resolved.time_seconds, 3)}s · F${resolved.frame}`);
+    set('#resolved-zoom', formatNumber(resolved.motion?.zoom));
+    set('#resolved-angle', `${formatNumber(resolved.motion?.angle)}°`);
+    set('#resolved-translation-x', `${formatNumber(resolved.motion?.translation_x)} px`);
+    set('#resolved-translation-y', `${formatNumber(resolved.motion?.translation_y)} px`);
+    set('#resolved-strength', formatNumber(resolved.generation?.strength));
+    set('#resolved-noise', formatNumber(resolved.generation?.noise));
+    set('#resolved-steps', formatNumber(resolved.generation?.steps));
+    set('#resolved-guidance', formatNumber(resolved.generation?.guidance));
+
+    const seed = resolved.generation?.seed || {};
+    set(
+      '#resolved-seed',
+      seed.random_at_render
+        ? `${seed.behavior || 'random'} · resolved at render`
+        : String(seed.resolved)
+    );
+
+    set('#resolved-positive-prompt', formatPromptTransition(resolved.prompts?.positive));
+    set('#resolved-negative-prompt', formatPromptTransition(resolved.prompts?.negative));
+  }
+
+  function clearInspector(message = 'Load a project to inspect resolved frame state.') {
+    for (const id of [
+      '#resolved-time',
+      '#resolved-zoom',
+      '#resolved-angle',
+      '#resolved-translation-x',
+      '#resolved-translation-y',
+      '#resolved-strength',
+      '#resolved-noise',
+      '#resolved-steps',
+      '#resolved-guidance',
+      '#resolved-seed',
+      '#resolved-positive-prompt',
+      '#resolved-negative-prompt',
+    ]) {
+      const element = qs(id);
+      if (element) element.textContent = '--';
+    }
+    const summary = qs('#animation-validation-summary');
+    if (summary) {
+      summary.className = 'animation-validation-summary';
+      summary.textContent = message;
+    }
+    const path = qs('#animation-curve-path');
+    if (path) path.setAttribute('d', '');
+    const range = qs('#animation-curve-range');
+    if (range) range.textContent = 'No curve loaded';
+    const keyframes = qs('#animation-curve-keyframes');
+    if (keyframes) keyframes.textContent = '';
+  }
+
+  function applyValidation(result) {
+    for (const selector of Object.values(SCHEDULE_INPUTS)) {
+      qs(selector)?.classList.remove('schedule-valid', 'schedule-warning', 'schedule-error');
+    }
+
+    for (const [field, info] of Object.entries(result.fields || {})) {
+      const input = qs(SCHEDULE_INPUTS[field]);
+      if (!input) continue;
+      const hasError = (info.issues || []).some(issue => issue.severity === 'error');
+      const hasWarning = (info.issues || []).some(issue => issue.severity === 'warning');
+      input.classList.add(
+        hasError ? 'schedule-error' : hasWarning ? 'schedule-warning' : 'schedule-valid'
+      );
+    }
+
+    const summary = qs('#animation-validation-summary');
+    if (!summary) return;
+
+    const errors = (result.issues || []).filter(issue => issue.severity === 'error');
+    const warnings = (result.issues || []).filter(issue => issue.severity === 'warning');
+
+    summary.className = 'animation-validation-summary';
+    if (errors.length) {
+      summary.classList.add('error');
+      const first = errors[0];
+      summary.textContent = `${errors.length} schedule error${errors.length === 1 ? '' : 's'} · ${first.field}: ${first.message}`;
+    } else if (warnings.length) {
+      summary.classList.add('warning');
+      const first = warnings[0];
+      summary.textContent = `Schedules valid with ${warnings.length} warning${warnings.length === 1 ? '' : 's'} · ${first.message}`;
+    } else {
+      summary.classList.add('ok');
+      summary.textContent = 'All animation schedules are valid.';
+    }
+  }
+
+  async function validateSchedules(announce = false) {
+    if (!state.project) return;
+    const button = qs('#animation-validate-schedules');
+    if (announce) setBusy(button, true);
+    try {
+      const result = await api('/api/animation/validate-schedules', {
+        method: 'POST',
+        body: JSON.stringify({ project: collectProject() }),
+      });
+      applyValidation(result);
+      if (announce) {
+        if (result.valid && !(result.issues || []).length) {
+          toast('Schedules valid', 'All animation schedules resolved successfully.', 'success');
+        } else if (result.valid) {
+          toast('Schedules valid with warnings', result.issues[0]?.message || '', 'warning', 6500);
+        } else {
+          toast('Schedule validation failed', result.issues[0]?.message || '', 'error', 7000);
+        }
+      }
+    } catch (error) {
+      const summary = qs('#animation-validation-summary');
+      if (summary) {
+        summary.className = 'animation-validation-summary error';
+        summary.textContent = error.message;
+      }
+      if (announce) toast('Schedule validation failed', error.message, 'error', 7000);
+    } finally {
+      if (announce) {
+        setBusy(button, false);
+        if (button) button.disabled = !state.project;
+      }
+    }
+  }
+
+  function drawCurve(series) {
+    const path = qs('#animation-curve-path');
+    const range = qs('#animation-curve-range');
+    const keyframeText = qs('#animation-curve-keyframes');
+    const samples = Array.isArray(series?.samples) ? series.samples : [];
+
+    if (!path || !samples.length) {
+      if (path) path.setAttribute('d', '');
+      if (range) range.textContent = 'No curve loaded';
+      return;
+    }
+
+    const values = samples.map(sample => Number(sample.value)).filter(Number.isFinite);
+    if (!values.length) {
+      path.setAttribute('d', '');
+      return;
+    }
+
+    let minimum = Math.min(...values);
+    let maximum = Math.max(...values);
+    if (Math.abs(maximum - minimum) < 1e-12) {
+      minimum -= 0.5;
+      maximum += 0.5;
+    }
+
+    const left = 42;
+    const right = 625;
+    const top = 15;
+    const bottom = 162;
+    const maxFrame = Math.max(1, Number(series.max_frames || 1) - 1);
+    const x = frame => left + (Number(frame) / maxFrame) * (right - left);
+    const y = value => bottom - ((Number(value) - minimum) / (maximum - minimum)) * (bottom - top);
+
+    const d = samples
+      .map((sample, index) => `${index === 0 ? 'M' : 'L'}${x(sample.frame).toFixed(2)},${y(sample.value).toFixed(2)}`)
+      .join(' ');
+    path.setAttribute('d', d);
+
+    if (range) {
+      range.textContent = `${series.field} · ${formatNumber(minimum)} → ${formatNumber(maximum)}`;
+    }
+    if (keyframeText) {
+      const frames = (series.keyframes || []).map(item => item.frame).join(', ');
+      keyframeText.textContent = frames ? `Keyframes: ${frames}` : '';
+    }
+  }
+
+  async function refreshCurve(project, sequence) {
+    const field = qs('#animation-curve-field')?.value || 'motion.zoom';
+    try {
+      const series = await api('/api/animation/schedule-series', {
+        method: 'POST',
+        body: JSON.stringify({
+          project,
+          field,
+          sample_count: 140,
+        }),
+      });
+      if (sequence !== state.previewSequence) return;
+      drawCurve(series);
+    } catch (error) {
+      if (sequence !== state.previewSequence) return;
+      const path = qs('#animation-curve-path');
+      if (path) path.setAttribute('d', '');
+      const range = qs('#animation-curve-range');
+      if (range) range.textContent = `${field} · ${error.message}`;
+      const keyframes = qs('#animation-curve-keyframes');
+      if (keyframes) keyframes.textContent = '';
+    }
+  }
+
+  async function refreshInspector() {
+    if (!state.project) return;
+    const project = collectProject();
+    if (!project) return;
+
+    syncInspectorBounds();
+    const frame = Math.max(
+      0,
+      Math.min(
+        inspectorFrameMax(),
+        Math.trunc(Number(qs('#animation-inspector-frame')?.value || 0))
+      )
+    );
+
+    const sequence = ++state.previewSequence;
+    try {
+      const payload = await api('/api/animation/resolve-frame', {
+        method: 'POST',
+        body: JSON.stringify({ project, frame }),
+      });
+      if (sequence !== state.previewSequence) return;
+      renderResolved(payload.resolved);
+    } catch (error) {
+      if (sequence !== state.previewSequence) return;
+      const summary = qs('#animation-validation-summary');
+      if (summary) {
+        summary.className = 'animation-validation-summary error';
+        summary.textContent = `Frame ${frame} cannot resolve · ${error.message}`;
+      }
+    }
+
+    await refreshCurve(project, sequence);
+  }
+
   async function loadModels() {
     try {
       const payload = await api('/api/models?limit=2000');
@@ -369,7 +709,11 @@
 
   async function loadProject(projectId, { confirmDirty = true } = {}) {
     if (!projectId) return;
-    if (confirmDirty && state.dirty && !window.confirm('Discard unsaved animation project changes?')) {
+    if (
+      confirmDirty &&
+      state.dirty &&
+      !window.confirm('Discard unsaved animation project changes?')
+    ) {
       renderProjectSelect();
       return;
     }
@@ -447,7 +791,9 @@
     setBusy(button, true);
     try {
       await loadProject(state.project.id, { confirmDirty: true });
-      if (!state.dirty) toast('Animation project reloaded', 'Saved project state restored.', 'success');
+      if (!state.dirty) {
+        toast('Animation project reloaded', 'Saved project state restored.', 'success');
+      }
     } finally {
       setBusy(button, false);
     }
@@ -458,21 +804,39 @@
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
     qs('#animation-add-prompt')?.addEventListener('click', addPromptKeyframe);
+    qs('#animation-validate-schedules')?.addEventListener('click', () => validateSchedules(true));
+
     qs('#animation-project-select')?.addEventListener('change', event => {
       loadProject(event.target.value);
     });
 
+    qs('#animation-inspector-frame')?.addEventListener('input', event => {
+      setInspectorFrame(event.target.value, 'number');
+    });
+    qs('#animation-inspector-slider')?.addEventListener('input', event => {
+      setInspectorFrame(event.target.value, 'slider');
+    });
+    qs('#animation-curve-field')?.addEventListener('change', refreshInspector);
+
     qsa(
       '#view-animation input, #view-animation select, #view-animation textarea'
     ).forEach(input => {
-      if (input.id === 'animation-project-select') return;
-      input.addEventListener('input', markDirty);
-      input.addEventListener('change', markDirty);
+      if (input.id === 'animation-project-select' || INSPECTOR_INPUT_IDS.has(input.id)) {
+        return;
+      }
+      const scheduleField = Object.entries(SCHEDULE_INPUTS).find(
+        ([, selector]) => qs(selector) === input
+      );
+      input.addEventListener('input', () => markDirty({ validate: Boolean(scheduleField) }));
+      input.addEventListener('change', () => markDirty({ validate: Boolean(scheduleField) }));
     });
 
     qs('#animation-max-frames')?.addEventListener('input', () => {
-      const max = Math.max(0, Number(qs('#animation-max-frames')?.value || 1) - 1);
-      qsa('.animation-prompt-frame').forEach(input => { input.max = String(max); });
+      const max = inspectorFrameMax();
+      qsa('.animation-prompt-frame').forEach(input => {
+        input.max = String(max);
+      });
+      syncInspectorBounds();
     });
   }
 
