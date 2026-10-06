@@ -32,6 +32,19 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
         "steps": {"default": 25, "min": 1, "max": 100},
         "guidance": {"key": "cfg_scale", "label": "CFG", "default": 6.0, "min": 1.0, "max": 30.0},
         "negative_prompt": True,
+        "samplers": {
+            "default": "euler",
+            "options": [
+                {"id": "euler", "label": "Euler"},
+                {"id": "euler_a", "label": "Euler a"},
+                {"id": "dpmpp_2m", "label": "DPM++ 2M"},
+                {"id": "dpmpp_2m_sde", "label": "DPM++ 2M SDE"},
+                {"id": "ddim", "label": "DDIM"},
+                {"id": "lms", "label": "LMS"},
+                {"id": "heun", "label": "Heun"},
+                {"id": "unipc", "label": "UniPC"},
+            ],
+        },
         "resolutions": [
             {"label": "Square 1:1", "width": 1024, "height": 1024},
             {"label": "Portrait 2:3", "width": 832, "height": 1216},
@@ -84,6 +97,7 @@ class GenerationRequest:
     height: int = 512
     steps: int = 25
     guidance_scale: float = 7.0
+    sampler: str = "euler"
     seed: int = -1
     seed_mode: str = "fixed"
     seed_increment: int = 1
@@ -99,6 +113,7 @@ class GenerationRequest:
             height=_safe_int(payload.get("height"), 512),
             steps=_safe_int(payload.get("steps"), 25),
             guidance_scale=_safe_float(payload.get("guidance_scale"), 7.0),
+            sampler=str(payload.get("sampler", "euler")).strip().lower(),
             seed=_safe_int(payload.get("seed"), -1),
             seed_mode=str(payload.get("seed_mode", "fixed")).strip().lower(),
             seed_increment=_safe_int(payload.get("seed_increment"), 1),
@@ -143,6 +158,8 @@ class GenerationManager:
         self._pipeline: Any = None
         self._pipeline_model_id: str | None = None
         self._pipeline_device: str | None = None
+        self._pipeline_scheduler_config: dict[str, Any] | None = None
+        self._pipeline_sampler: str | None = None
 
     def capabilities(self) -> dict[str, dict[str, Any]]:
         return CAPABILITIES
@@ -242,6 +259,19 @@ class GenerationManager:
         if family not in SUPPORTED_FAMILIES:
             capability = CAPABILITIES.get(family, {})
             raise GenerationError(capability.get("reason") or f"Model family '{family}' is not supported yet.")
+
+        capability = CAPABILITIES.get(family, {})
+        sampler_config = capability.get("samplers", {})
+        sampler_ids = {
+            str(item.get("id"))
+            for item in sampler_config.get("options", [])
+            if isinstance(item, dict) and item.get("id")
+        }
+        if request.sampler not in sampler_ids:
+            raise GenerationError(
+                f"Sampler '{request.sampler}' is not supported for {capability.get('label', family)}."
+            )
+
         model_path = Path(model["path"])
         if not model_path.is_file():
             raise GenerationError("The selected checkpoint file no longer exists. Rescan Models.")
@@ -429,8 +459,59 @@ class GenerationManager:
         self._pipeline = pipe
         self._pipeline_model_id = model_id
         self._pipeline_device = device
+        self._pipeline_scheduler_config = dict(pipe.scheduler.config)
+        self._pipeline_sampler = None
         emit_console("info", "generation", f"Model ready on {device}: {model['name']}.")
         return pipe, device
+
+    def _configure_sampler(self, pipe: Any, family: str, sampler: str) -> None:
+        if family != "sdxl":
+            raise GenerationError(f"Sampler switching is not implemented for model family '{family}'.")
+
+        try:
+            from diffusers import (
+                DDIMScheduler,
+                DPMSolverMultistepScheduler,
+                EulerAncestralDiscreteScheduler,
+                EulerDiscreteScheduler,
+                HeunDiscreteScheduler,
+                LMSDiscreteScheduler,
+                UniPCMultistepScheduler,
+            )
+        except Exception as exc:
+            raise GenerationError(f"Could not load sampler implementations: {exc}") from exc
+
+        sampler_specs: dict[str, tuple[Any, dict[str, Any]]] = {
+            "euler": (EulerDiscreteScheduler, {}),
+            "euler_a": (EulerAncestralDiscreteScheduler, {}),
+            "dpmpp_2m": (
+                DPMSolverMultistepScheduler,
+                {"algorithm_type": "dpmsolver++", "solver_order": 2},
+            ),
+            "dpmpp_2m_sde": (
+                DPMSolverMultistepScheduler,
+                {"algorithm_type": "sde-dpmsolver++", "solver_order": 2},
+            ),
+            "ddim": (DDIMScheduler, {}),
+            "lms": (LMSDiscreteScheduler, {}),
+            "heun": (HeunDiscreteScheduler, {}),
+            "unipc": (UniPCMultistepScheduler, {}),
+        }
+
+        spec = sampler_specs.get(sampler)
+        if spec is None:
+            raise GenerationError(f"Unknown sampler '{sampler}'.")
+
+        scheduler_class, scheduler_kwargs = spec
+        base_config = self._pipeline_scheduler_config or dict(pipe.scheduler.config)
+        try:
+            pipe.scheduler = scheduler_class.from_config(base_config, **scheduler_kwargs)
+        except Exception as exc:
+            raise GenerationError(f"Could not configure sampler '{sampler}': {exc}") from exc
+
+        if self._pipeline_sampler != sampler:
+            emit_console("info", "generation", f"Sampler configured: {sampler}.")
+        self._pipeline_sampler = sampler
 
     def _unload_pipeline(self) -> None:
         had_pipeline = self._pipeline is not None
@@ -439,6 +520,8 @@ class GenerationManager:
         self._pipeline = None
         self._pipeline_model_id = None
         self._pipeline_device = None
+        self._pipeline_scheduler_config = None
+        self._pipeline_sampler = None
 
         # Always collect here, even if model loading failed before the pipeline
         # could be registered on the manager.
@@ -463,6 +546,7 @@ class GenerationManager:
         job.started_at = _utc_now()
         job._started_monotonic = time.monotonic()
         pipe, device = self._load_pipeline(job)
+        self._configure_sampler(pipe, job.model["family"], job.request.sampler)
         if job.cancel_requested:
             self._finish_cancelled(job)
             return
@@ -539,6 +623,7 @@ class GenerationManager:
                 "height": job.request.height,
                 "steps": job.request.steps,
                 "guidance_scale": job.request.guidance_scale,
+                "sampler": job.request.sampler,
             }
             pnginfo.add_text("Morphorum", json.dumps(metadata, ensure_ascii=False))
             image.save(image_path, pnginfo=pnginfo)
