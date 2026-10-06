@@ -89,6 +89,7 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "fps": 24.0,
             "width": 1024,
             "height": 1024,
+            "prompt_transition": "blend",
         },
         "model": {
             "model_id": "",
@@ -181,6 +182,10 @@ def normalize_animation_project(
     animation["fps"] = _safe_float(animation.get("fps"), 24.0, 1.0, 240.0)
     animation["width"] = _safe_int(animation.get("width"), 1024, 64, 8192)
     animation["height"] = _safe_int(animation.get("height"), 1024, 64, 8192)
+    prompt_transition = str(animation.get("prompt_transition", "blend") or "blend").strip().lower()
+    animation["prompt_transition"] = (
+        prompt_transition if prompt_transition in {"blend", "hold"} else "blend"
+    )
     project["animation"] = animation
 
     model_source = payload.get("model", project.get("model", {}))
