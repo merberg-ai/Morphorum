@@ -246,11 +246,11 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
 
         resolved = client.post(
             "/api/animation/resolve-frame",
-            json={"project": loaded_project, "frame": 24},
+            json={"project": loaded_project, "frame": 12},
         )
         assert resolved.status_code == 200
         frame = resolved.json()["resolved"]
-        assert frame["frame"] == 24
+        assert frame["frame"] == 12
         assert frame["motion"]["zoom"] > 1.0
         assert frame["prompts"]["positive"]["from_text"] == "start"
         assert frame["prompts"]["positive"]["to_text"] == "middle"
