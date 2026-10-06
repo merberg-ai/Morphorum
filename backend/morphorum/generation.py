@@ -171,15 +171,22 @@ class GenerationJob:
     total_steps: int = 0
     progress: float = 0.0
     eta_seconds: float | None = None
+    model_load_seconds: float | None = None
+    last_step_seconds: float | None = None
+    average_step_seconds: float | None = None
     seeds: list[int] = field(default_factory=list)
     results: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
     cancel_requested: bool = False
     _started_monotonic: float | None = field(default=None, repr=False)
+    _last_step_monotonic: float | None = field(default=None, repr=False)
+    _step_durations: list[float] = field(default_factory=list, repr=False)
 
     def public(self) -> dict[str, Any]:
         data = asdict(self)
         data.pop("_started_monotonic", None)
+        data.pop("_last_step_monotonic", None)
+        data.pop("_step_durations", None)
         data["request"] = asdict(self.request)
         return data
 
@@ -195,6 +202,7 @@ class GenerationManager:
         self._pipeline_device: str | None = None
         self._pipeline_scheduler_config: dict[str, Any] | None = None
         self._pipeline_sampler: str | None = None
+        self._pipeline_optimization: str | None = None
 
     def capabilities(self) -> dict[str, dict[str, Any]]:
         return CAPABILITIES
@@ -217,6 +225,7 @@ class GenerationManager:
             "family": model.get("family") if model else None,
             "device": device,
             "sampler": self._pipeline_sampler,
+            "optimization": self._pipeline_optimization,
             "busy": active,
         }
 
@@ -558,6 +567,32 @@ class GenerationManager:
                 torch_dtype=dtype,
                 cache_dir=str(cache_dir),
             )
+
+            optimization = "bf16-cpu-offload"
+            compute_capability = torch.cuda.get_device_capability(0)
+            supports_native_fp8 = (
+                compute_capability >= (8, 9)
+                and hasattr(torch, "float8_e4m3fn")
+                and hasattr(transformer, "enable_layerwise_casting")
+            )
+            if supports_native_fp8:
+                transformer.enable_layerwise_casting(
+                    storage_dtype=torch.float8_e4m3fn,
+                    compute_dtype=dtype,
+                )
+                optimization = "fp8-layerwise-bf16-compute"
+                emit_console(
+                    "info",
+                    "generation",
+                    "Flux fast path enabled: FP8 layerwise weight storage with BF16 compute.",
+                )
+            else:
+                emit_console(
+                    "warning",
+                    "generation",
+                    "Flux FP8 layerwise fast path unavailable; using BF16 with CPU offload.",
+                )
+
             pipe = FluxPipeline.from_pretrained(
                 FLUX_COMPONENT_REPO,
                 transformer=transformer,
@@ -570,6 +605,7 @@ class GenerationManager:
             if hasattr(pipe.vae, "enable_slicing"):
                 pipe.vae.enable_slicing()
             pipe.enable_model_cpu_offload()
+            self._pipeline_optimization = optimization
         except Exception as exc:
             if self._is_cuda_oom(exc):
                 raise self._friendly_error(exc, action=f"loading Flux model '{job.model['name']}'") from exc
@@ -609,7 +645,13 @@ class GenerationManager:
         self._pipeline_device = display_device
         self._pipeline_scheduler_config = dict(pipe.scheduler.config)
         self._pipeline_sampler = None
-        emit_console("info", "generation", f"Model ready on {display_device}: {model['name']}.")
+        if family != "flux":
+            self._pipeline_optimization = "native-gpu" if "cuda" in display_device else display_device
+        emit_console(
+            "info",
+            "generation",
+            f"Model ready on {display_device}: {model['name']} ({self._pipeline_optimization or 'default'}).",
+        )
         return pipe, generator_device
 
     def _configure_sampler(self, pipe: Any, family: str, sampler: str) -> None:
@@ -674,6 +716,7 @@ class GenerationManager:
         self._pipeline_device = None
         self._pipeline_scheduler_config = None
         self._pipeline_sampler = None
+        self._pipeline_optimization = None
 
         # Always collect here, even if model loading failed before the pipeline
         # could be registered on the manager.
@@ -723,9 +766,21 @@ class GenerationManager:
         if job.cancel_requested:
             return
         job.started_at = _utc_now()
-        job._started_monotonic = time.monotonic()
+        load_started = time.monotonic()
         pipe, device = self._load_pipeline(job)
         self._configure_sampler(pipe, job.model["family"], job.request.sampler)
+        job.model_load_seconds = max(0.0, time.monotonic() - load_started)
+        job._started_monotonic = time.monotonic()
+        job._last_step_monotonic = None
+        job._step_durations.clear()
+        job.last_step_seconds = None
+        job.average_step_seconds = None
+        job.eta_seconds = None
+        emit_console(
+            "info",
+            "generation",
+            f"{job.id}: pipeline ready in {job.model_load_seconds:.1f}s; denoising timer starts now.",
+        )
         if job.cancel_requested:
             self._finish_cancelled(job)
             return
@@ -752,13 +807,29 @@ class GenerationManager:
             generator = torch.Generator(device=device).manual_seed(seed)
 
             def on_step_end(pipeline, step: int, timestep, callback_kwargs):
+                now = time.monotonic()
                 with self._lock:
                     job.current_step = step + 1
                     image_fraction = min(1.0, (step + 1) / max(1, job.request.steps))
                     job.progress = min(0.999, (image_index + image_fraction) / total_images)
-                    elapsed = time.monotonic() - (job._started_monotonic or time.monotonic())
-                    if job.progress > 0.01:
-                        job.eta_seconds = max(0.0, elapsed * (1.0 - job.progress) / job.progress)
+
+                    if job._last_step_monotonic is None:
+                        step_seconds = now - (job._started_monotonic or now)
+                    else:
+                        step_seconds = now - job._last_step_monotonic
+                    job._last_step_monotonic = now
+                    if step_seconds >= 0:
+                        job._step_durations.append(step_seconds)
+                        recent = job._step_durations[-8:]
+                        job.last_step_seconds = step_seconds
+                        job.average_step_seconds = sum(recent) / len(recent)
+
+                    completed_steps = image_index * job.request.steps + (step + 1)
+                    total_steps_all = total_images * job.request.steps
+                    remaining_steps = max(0, total_steps_all - completed_steps)
+                    if job.average_step_seconds is not None:
+                        job.eta_seconds = max(0.0, job.average_step_seconds * remaining_steps)
+
                     cancelled = job.cancel_requested
                 if cancelled:
                     pipeline._interrupt = True
