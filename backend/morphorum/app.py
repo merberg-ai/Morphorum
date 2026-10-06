@@ -30,6 +30,10 @@ from .animation_motion import (
     motion_preview_manager,
     save_source_image,
 )
+from .animation_render import (
+    AnimationRenderError,
+    animation_render_manager,
+)
 from .schedules import ScheduleError
 from .console import (
     clear_console,
@@ -314,6 +318,96 @@ def api_motion_preview_image(job_id: str):
         path = motion_preview_manager.result_path(job_id)
         return FileResponse(path, media_type="image/gif", filename="motion-preview.gif")
     except MotionPreviewError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/renders", status_code=202)
+def api_start_animation_render(payload: dict[str, Any]) -> dict[str, Any]:
+    project_payload = payload.get("project")
+    if not isinstance(project_payload, dict):
+        raise HTTPException(status_code=400, detail="Animation project payload is required.")
+    project_id = str(project_payload.get("id") or "").strip().lower()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="Save the animation project before rendering.")
+
+    try:
+        normalized = normalize_animation_project(
+            project_payload,
+            existing=project_payload,
+            project_id=project_id,
+        )
+        source_path = animation_project_directory(project_id) / "assets" / "source.png"
+        return animation_render_manager.submit(
+            project=normalized,
+            source_path=source_path,
+        )
+    except (AnimationProjectError, AnimationRenderError, ScheduleError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/renders/{render_id}")
+def api_animation_render(render_id: str) -> dict[str, Any]:
+    try:
+        return animation_render_manager.get(render_id)
+    except AnimationRenderError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/renders/{render_id}/cancel")
+def api_cancel_animation_render(render_id: str) -> dict[str, Any]:
+    try:
+        return animation_render_manager.cancel(render_id)
+    except AnimationRenderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/renders")
+def api_animation_project_renders(project_id: str) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return {"renders": animation_render_manager.list_project(project_id)}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/renders/{project_id}/{render_id}/resume", status_code=202)
+def api_resume_animation_render(project_id: str, render_id: str) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return animation_render_manager.resume(project_id, render_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AnimationRenderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/renders/{project_id}/{render_id}/frames/{frame}")
+def api_animation_render_frame(project_id: str, render_id: str, frame: int):
+    try:
+        path = animation_render_manager.frame_path(
+            project_id,
+            render_id,
+            frame,
+        )
+        return FileResponse(
+            path,
+            media_type="image/png",
+            filename=path.name,
+        )
+    except AnimationRenderError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/renders/{project_id}/{render_id}/preview")
+def api_animation_render_preview(project_id: str, render_id: str):
+    try:
+        path = animation_render_manager.preview_path(project_id, render_id)
+        return FileResponse(
+            path,
+            media_type="image/gif",
+            filename="animation-preview.gif",
+        )
+    except AnimationRenderError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
