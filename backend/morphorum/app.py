@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .animation_projects import (
     AnimationProjectError,
+    animation_project_directory,
     animation_project_path,
     create_animation_project,
     list_animation_projects,
@@ -23,6 +24,11 @@ from .animation_resolution import (
     project_schedule_series,
     resolve_project_frame,
     validate_project_schedules,
+)
+from .animation_motion import (
+    MotionPreviewError,
+    motion_preview_manager,
+    save_source_image,
 )
 from .schedules import ScheduleError
 from .console import (
@@ -202,6 +208,113 @@ def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
         raise HTTPException(status_code=status, detail=message) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/source-image", status_code=201)
+async def api_upload_animation_source_image(project_id: str, request: Request) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        data = await request.body()
+        destination = animation_project_directory(project_id) / "assets" / "source.png"
+        info = save_source_image(data, destination)
+        filename = str(request.headers.get("x-filename") or "source-image").strip()[:255]
+        project.setdefault("animation", {})["source_image"] = "assets/source.png"
+        project["animation"]["source_image_name"] = filename
+        saved = save_animation_project(project_id, project)
+        emit_console(
+            "info",
+            "animation",
+            f"Updated source image for animation project {project_id}: "
+            f"{info['width']}x{info['height']}.",
+        )
+        return {
+            "status": "uploaded",
+            "source": {
+                "url": f"/api/animation/projects/{project_id}/source-image",
+                "name": filename,
+                "width": info["width"],
+                "height": info["height"],
+                "bytes": info["bytes"],
+            },
+            "project": saved,
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MotionPreviewError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/source-image")
+def api_animation_source_image(project_id: str):
+    try:
+        load_animation_project(project_id)
+        path = animation_project_directory(project_id) / "assets" / "source.png"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Animation source image not found.")
+        return FileResponse(path, media_type="image/png", filename="source.png")
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/animation/projects/{project_id}/source-image")
+def api_delete_animation_source_image(project_id: str) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        path = animation_project_directory(project_id) / "assets" / "source.png"
+        path.unlink(missing_ok=True)
+        project.setdefault("animation", {})["source_image"] = ""
+        project["animation"]["source_image_name"] = ""
+        saved = save_animation_project(project_id, project)
+        emit_console("info", "animation", f"Cleared source image for animation project {project_id}.")
+        return {"status": "cleared", "project": saved}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/motion-preview", status_code=202)
+def api_start_motion_preview(payload: dict[str, Any]) -> dict[str, Any]:
+    project_payload = payload.get("project")
+    if not isinstance(project_payload, dict):
+        raise HTTPException(status_code=400, detail="Animation project payload is required.")
+    project_id = str(project_payload.get("id") or "").strip().lower()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="Save the animation project before previewing motion.")
+
+    try:
+        normalized = normalize_animation_project(
+            project_payload,
+            existing=project_payload,
+            project_id=project_id,
+        )
+        validation = validate_project_schedules(normalized)
+        if not validation["valid"]:
+            first = next(
+                issue for issue in validation["issues"] if issue["severity"] == "error"
+            )
+            raise MotionPreviewError(
+                f"Cannot preview invalid schedule {first['field']}: {first['message']}"
+            )
+        source_path = animation_project_directory(project_id) / "assets" / "source.png"
+        return motion_preview_manager.start(project=normalized, source_path=source_path)
+    except (AnimationProjectError, MotionPreviewError, ScheduleError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/motion-preview/{job_id}")
+def api_motion_preview_job(job_id: str) -> dict[str, Any]:
+    try:
+        return motion_preview_manager.get(job_id)
+    except MotionPreviewError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/motion-preview/{job_id}/image")
+def api_motion_preview_image(job_id: str):
+    try:
+        path = motion_preview_manager.result_path(job_id)
+        return FileResponse(path, media_type="image/gif", filename="motion-preview.gif")
+    except MotionPreviewError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/animation/resolve-frame")
