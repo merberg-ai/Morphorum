@@ -30,3 +30,4 @@ jobs:
           node --check frontend/dist/assets/app.js
           node --check frontend/dist/assets/models.js
           node --check frontend/dist/assets/image.js
+          node --check frontend/dist/assets/animation.js
