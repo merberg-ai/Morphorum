@@ -178,3 +178,52 @@ def test_unload_after_generation_setting(monkeypatch) -> None:
         lambda: {"performance": {"unload_after_generation": False}},
     )
     assert manager._unload_after_generation_enabled() is False
+
+
+def test_sampler_capability_and_validation(tmp_path, monkeypatch) -> None:
+    checkpoint = tmp_path / "model.safetensors"
+    checkpoint.write_bytes(b"fake")
+    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint, "sdxl"))
+    manager = GenerationManager()
+
+    sampler_config = manager.capabilities()["sdxl"]["samplers"]
+    sampler_ids = [item["id"] for item in sampler_config["options"]]
+    assert sampler_config["default"] == "euler"
+    assert sampler_ids == [
+        "euler",
+        "euler_a",
+        "dpmpp_2m",
+        "dpmpp_2m_sde",
+        "ddim",
+        "lms",
+        "heun",
+        "unipc",
+    ]
+
+    request = GenerationRequest(model_id="model-1", prompt="test", sampler="dpmpp_2m")
+    manager._validate_request(request)
+
+    with pytest.raises(GenerationError, match="Sampler 'made_up' is not supported"):
+        manager._validate_request(
+            GenerationRequest(model_id="model-1", prompt="test", sampler="made_up")
+        )
+
+
+def test_all_advertised_sdxl_samplers_construct_from_base_config() -> None:
+    from diffusers import EulerDiscreteScheduler
+
+    class FakePipe:
+        def __init__(self) -> None:
+            self.scheduler = EulerDiscreteScheduler()
+
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+
+    for sampler in [
+        item["id"]
+        for item in manager.capabilities()["sdxl"]["samplers"]["options"]
+    ]:
+        manager._configure_sampler(pipe, "sdxl", sampler)
+        assert manager._pipeline_sampler == sampler
+        assert pipe.scheduler is not None
