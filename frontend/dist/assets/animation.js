@@ -763,6 +763,182 @@
     await refreshCurve(project, sequence);
   }
 
+  function sourceImageUrl() {
+    if (!state.project?.id || !state.project?.animation?.source_image) return '';
+    const version = encodeURIComponent(state.project.updated_at || 'source');
+    return '/api/animation/projects/' + encodeURIComponent(state.project.id) + '/source-image?v=' + version;
+  }
+
+  function renderSourceState() {
+    const image = qs('#animation-source-preview');
+    const empty = qs('#animation-source-empty');
+    const meta = qs('#animation-source-meta');
+    const clear = qs('#animation-clear-source');
+    const preview = qs('#animation-generate-motion-preview');
+    const hasSource = Boolean(state.project?.animation?.source_image);
+    if (image) {
+      image.hidden = !hasSource;
+      if (hasSource) image.src = sourceImageUrl();
+      else image.removeAttribute('src');
+    }
+    if (empty) empty.hidden = hasSource;
+    if (meta) meta.textContent = hasSource ? (state.project.animation.source_image_name || 'Project source image') : 'No source image uploaded.';
+    if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId);
+    if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId);
+  }
+
+  function clearMotionPreviewResult() {
+    window.clearTimeout(state.motionPollTimer);
+    state.motionPollTimer = null;
+    state.motionJobId = null;
+    const panel = qs('#animation-motion-progress');
+    if (panel) panel.hidden = true;
+    const result = qs('#animation-motion-result');
+    if (result) result.hidden = true;
+    const image = qs('#animation-motion-preview-image');
+    if (image) image.removeAttribute('src');
+    const meta = qs('#animation-motion-result-meta');
+    if (meta) meta.textContent = '';
+    const button = qs('#animation-generate-motion-preview');
+    if (button) {
+      button.classList.remove('busy');
+      const label = qs('.button-label', button);
+      if (label) label.textContent = 'Preview Motion';
+    }
+    renderSourceState();
+  }
+
+  async function uploadSourceImage(file) {
+    if (!state.project || !file) return;
+    const input = qs('#animation-source-file');
+    if (input) input.disabled = true;
+    try {
+      const response = await fetch('/api/animation/projects/' + encodeURIComponent(state.project.id) + '/source-image', {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': file.name || 'source-image' },
+        body: file,
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || (response.status + ' ' + response.statusText));
+      state.project = {
+        ...state.project,
+        updated_at: payload.project?.updated_at || state.project.updated_at,
+        animation: {
+          ...(state.project.animation || {}),
+          source_image: payload.project?.animation?.source_image || 'assets/source.png',
+          source_image_name: payload.project?.animation?.source_image_name || file.name,
+        },
+      };
+      clearMotionPreviewResult();
+      renderSourceState();
+      toast('Source image uploaded', payload.source.width + ' × ' + payload.source.height + ' · ' + file.name, 'success');
+    } catch (error) {
+      toast('Source image upload failed', error.message, 'error', 7000);
+    } finally {
+      if (input) { input.disabled = !state.project; input.value = ''; }
+    }
+  }
+
+  async function clearSourceImage() {
+    if (!state.project?.animation?.source_image) return;
+    const button = qs('#animation-clear-source');
+    if (button) button.disabled = true;
+    try {
+      const payload = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) + '/source-image', { method: 'DELETE' });
+      state.project = {
+        ...state.project,
+        updated_at: payload.project?.updated_at || state.project.updated_at,
+        animation: { ...(state.project.animation || {}), source_image: '', source_image_name: '' },
+      };
+      clearMotionPreviewResult();
+      renderSourceState();
+      toast('Source image cleared', 'The project source image was removed.', 'success');
+    } catch (error) {
+      toast('Could not clear source image', error.message, 'error', 6500);
+    } finally {
+      renderSourceState();
+    }
+  }
+
+  function updateMotionProgress(job) {
+    const panel = qs('#animation-motion-progress');
+    if (panel) panel.hidden = false;
+    const percent = Math.max(0, Math.min(100, Math.round(Number(job.progress || 0) * 100)));
+    const status = qs('#animation-motion-status');
+    if (status) status.textContent = job.message || job.status;
+    const percentEl = qs('#animation-motion-percent');
+    if (percentEl) percentEl.textContent = percent + '%';
+    const fill = qs('#animation-motion-progress-fill');
+    if (fill) fill.style.width = percent + '%';
+  }
+
+  function finishMotionPreview(job) {
+    state.motionJobId = null;
+    window.clearTimeout(state.motionPollTimer);
+    state.motionPollTimer = null;
+    const button = qs('#animation-generate-motion-preview');
+    if (button) {
+      button.classList.remove('busy');
+      const label = qs('.button-label', button);
+      if (label) label.textContent = 'Preview Motion';
+    }
+    if (job.status === 'completed') {
+      const result = qs('#animation-motion-result');
+      const image = qs('#animation-motion-preview-image');
+      const meta = qs('#animation-motion-result-meta');
+      if (result) result.hidden = false;
+      if (image) image.src = job.url + '?v=' + Date.now();
+      if (meta && job.result) meta.textContent = job.result.preview_width + ' × ' + job.result.preview_height + ' · ' + job.result.captured_frames + ' preview frames from ' + job.result.source_frames + ' project frames · ' + Number(job.result.duration_seconds || 0).toFixed(2) + 's · ' + job.result.border_mode;
+      toast('Motion preview complete', 'No diffusion model was loaded.', 'success');
+    } else if (job.status === 'failed') {
+      toast('Motion preview failed', job.error || job.message || 'Unknown preview error.', 'error', 8000);
+    }
+    renderSourceState();
+  }
+
+  async function pollMotionPreview(jobId) {
+    try {
+      const job = await api('/api/animation/motion-preview/' + encodeURIComponent(jobId));
+      updateMotionProgress(job);
+      if (job.status === 'completed' || job.status === 'failed') { finishMotionPreview(job); return; }
+      state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 350);
+    } catch (_) {
+      state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 1000);
+    }
+  }
+
+  async function generateMotionPreview() {
+    if (!state.project?.animation?.source_image || state.motionJobId) return;
+    const button = qs('#animation-generate-motion-preview');
+    if (button) {
+      button.classList.add('busy');
+      button.disabled = true;
+      const label = qs('.button-label', button);
+      if (label) label.textContent = 'Previewing…';
+    }
+    const result = qs('#animation-motion-result');
+    if (result) result.hidden = true;
+    const panel = qs('#animation-motion-progress');
+    if (panel) panel.hidden = false;
+    const fill = qs('#animation-motion-progress-fill');
+    if (fill) fill.style.width = '0%';
+    try {
+      const job = await api('/api/animation/motion-preview', { method: 'POST', body: JSON.stringify({ project: collectProject() }) });
+      state.motionJobId = job.id;
+      updateMotionProgress(job);
+      renderSourceState();
+      pollMotionPreview(job.id);
+    } catch (error) {
+      state.motionJobId = null;
+      if (button) {
+        button.classList.remove('busy');
+        const label = qs('.button-label', button);
+        if (label) label.textContent = 'Preview Motion';
+      }
+      renderSourceState();
+      toast('Could not start motion preview', error.message, 'error', 7500);
+    }
+  }
   async function loadCapabilities() {
     try {
       const payload = await api('/api/generation/capabilities');
