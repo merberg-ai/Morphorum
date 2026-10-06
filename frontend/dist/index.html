@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/assets/app.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/models.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/image.css?v=__MORPHORUM_ASSET_VERSION__">
+  <link rel="stylesheet" href="/assets/animation.css?v=__MORPHORUM_ASSET_VERSION__">
 </head>
 <body>
   <div class="app-shell">
@@ -47,6 +48,7 @@
 
     <nav class="main-nav glass" aria-label="Primary">
       <button class="nav-button active" data-view="image"><span class="nav-icon">▣</span><span>Image</span></button>
+      <button class="nav-button" data-view="animation"><span class="nav-icon">▶</span><span>Animation</span></button>
       <button class="nav-button" data-view="models"><span class="nav-icon">◫</span><span>Models</span></button>
       <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
       <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
@@ -113,6 +115,99 @@
               </div>
             </div>
             <div class="image-gallery" id="image-gallery" hidden></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-animation">
+        <div class="page-heading animation-heading">
+          <div>
+            <p class="eyebrow">ANIMATION PROJECT FOUNDATION</p>
+            <h1>Animation</h1>
+            <p class="muted">Build and persist Deforum-style animation projects. Schedule evaluation and rendering land in the next phases.</p>
+          </div>
+          <div class="button-row animation-project-actions">
+            <button class="secondary-button busy-button" id="animation-reload" type="button" disabled><span class="spinner"></span><span class="button-label">Reload</span></button>
+            <button class="secondary-button busy-button" id="animation-new" type="button"><span class="spinner"></span><span class="button-label">New Project</span></button>
+            <button class="primary-button busy-button" id="animation-save" type="button" disabled><span class="spinner"></span><span class="button-label">Save Project</span></button>
+          </div>
+        </div>
+
+        <div class="animation-status-row">
+          <span class="badge" id="animation-project-status">No project loaded</span>
+          <code id="animation-project-path">Create or select an animation project.</code>
+        </div>
+
+        <div class="grid animation-layout">
+          <article class="card glass animation-project-card">
+            <div class="card-header">
+              <div><h2>Project</h2><p class="muted">Core timeline and output dimensions.</p></div>
+              <span class="badge" id="animation-schema-badge">Schema 1</span>
+            </div>
+            <div class="field-grid">
+              <label class="animation-span-2"><span>Project</span><select id="animation-project-select"><option value="">No projects yet</option></select></label>
+              <label class="animation-span-2"><span>Name</span><input id="animation-name" type="text" placeholder="Untitled Animation" disabled></label>
+              <label><span>Max frames</span><input id="animation-max-frames" type="number" min="1" max="1000000" value="120" disabled></label>
+              <label><span>FPS</span><input id="animation-fps" type="number" min="1" max="240" step="0.01" value="24" disabled></label>
+              <label><span>Width</span><input id="animation-width" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
+              <label><span>Height</span><input id="animation-height" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
+              <label class="animation-span-2"><span>Model</span><select id="animation-model" disabled><option value="">No model selected</option></select></label>
+            </div>
+          </article>
+
+          <article class="card glass animation-prompts-card">
+            <div class="card-header">
+              <div><h2>Prompt Keyframes</h2><p class="muted">Prompt changes are stored by frame. Phase 2 will resolve transitions frame-by-frame.</p></div>
+              <button class="secondary-button compact" id="animation-add-prompt" type="button" disabled>+ Keyframe</button>
+            </div>
+            <div class="animation-prompt-list" id="animation-prompt-list">
+              <div class="animation-empty">Create or load a project to edit prompt keyframes.</div>
+            </div>
+          </article>
+
+          <article class="card glass">
+            <div class="card-header">
+              <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style schedule strings. Stored now; evaluated in Phase 2.</p></div>
+            </div>
+            <div class="animation-schedule-grid">
+              <label><span>Angle</span><input id="animation-angle" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Zoom</span><input id="animation-zoom" class="animation-schedule" type="text" value="0:(1.0)" disabled></label>
+              <label><span>Translation X</span><input id="animation-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Translation Y</span><input id="animation-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+            </div>
+          </article>
+
+          <article class="card glass">
+            <div class="card-header">
+              <div><h2>Generation State</h2><p class="muted">Model-independent animation controls. Adapter-specific interpretation comes later.</p></div>
+            </div>
+            <div class="field-grid">
+              <label><span>Strength schedule</span><input id="animation-strength" class="animation-schedule" type="text" value="0:(0.65)" disabled></label>
+              <label><span>Noise schedule</span><input id="animation-noise" class="animation-schedule" type="text" value="0:(0.02)" disabled></label>
+              <label><span>Steps schedule</span><input id="animation-steps" class="animation-schedule" type="text" value="0:(20)" disabled></label>
+              <label><span>Guidance schedule</span><input id="animation-guidance" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Sampler</span><input id="animation-sampler" type="text" value="flowmatch_euler" disabled></label>
+              <label><span>Seed</span><input id="animation-seed" type="number" min="-1" max="4294967295" value="-1" disabled></label>
+              <label><span>Seed behavior</span><select id="animation-seed-behavior" disabled><option value="fixed">Fixed</option><option value="increment">Increment</option><option value="random">Random</option></select></label>
+              <label><span>Seed increment</span><input id="animation-seed-increment" type="number" value="1" disabled></label>
+            </div>
+          </article>
+
+          <article class="card glass animation-notes-card">
+            <div class="card-header"><div><h2>Notes</h2><p class="muted">Project notes travel with the animation file.</p></div></div>
+            <textarea id="animation-notes" class="text-area" rows="5" placeholder="Notes about this animation…" disabled></textarea>
+          </article>
+
+          <article class="card glass animation-foundation-card">
+            <div class="card-header"><div><h2>Phase 1 Foundation</h2><p class="muted">What this milestone stores before any frame is rendered.</p></div></div>
+            <div class="animation-foundation-grid">
+              <div><strong>Timeline</strong><span>Frames, FPS, dimensions</span></div>
+              <div><strong>Prompts</strong><span>Positive + negative keyframes</span></div>
+              <div><strong>Motion</strong><span>Raw 2D schedule strings</span></div>
+              <div><strong>Generation</strong><span>Strength, noise, steps, guidance, seeds</span></div>
+              <div><strong>Model</strong><span>Stable indexed model reference</span></div>
+              <div><strong>Persistence</strong><span>Atomic human-readable project.json</span></div>
+            </div>
           </article>
         </div>
       </section>
@@ -223,5 +318,6 @@
   <script src="/assets/app.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>
