@@ -268,7 +268,10 @@ def load_animation_project(project_id: str) -> dict[str, Any]:
         raise AnimationProjectError(f"Could not read animation project: {exc}") from exc
     if not isinstance(payload, dict):
         raise AnimationProjectError("Animation project file does not contain an object.")
-    return normalize_animation_project(payload, existing=payload, project_id=project_id)
+    project = normalize_animation_project(payload, existing=payload, project_id=project_id)
+    project["created_at"] = str(payload.get("created_at") or project["created_at"])
+    project["updated_at"] = str(payload.get("updated_at") or project["updated_at"])
+    return project
 
 
 def save_animation_project(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
