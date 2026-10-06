@@ -181,6 +181,7 @@ class GenerationManager:
             "model_name": model.get("name") if model else None,
             "family": model.get("family") if model else None,
             "device": device,
+            "sampler": self._pipeline_sampler,
             "busy": active,
         }
 
