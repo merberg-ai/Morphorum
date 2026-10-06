@@ -103,6 +103,27 @@ Physical acceptance target: edit schedules on mobile, scrub frames, verify known
 
 Physical acceptance target: upload a source image, preview obvious cumulative camera motion, verify replicate and wrap edges differ as expected, and confirm schedule edits can be previewed without saving or loading a model.
 
+## Diffusion frame loop — Phase 4 implemented
+
+- frozen render-local project/source snapshots
+- persistent per-frame seed plan
+- previous-frame cumulative 2D transform feedback
+- Deforum strength → Diffusers denoise-strength mapping
+- deterministic uniform noise schedule application
+- SDXL / Flux / Z-Image img2img task wrappers
+- loaded-weight reuse via Diffusers `from_pipe()`
+- real Blend prompt-conditioning interpolation per architecture
+- per-frame PNG metadata
+- atomic render manifest after every completed frame
+- cancel support
+- interrupted/failed/cancelled render resume
+- live render history/progress/latest-frame UI
+- completed low-resolution GIF render preview
+- shared inference lock with still-image generation
+- automatic img2img ↔ txt2img task switching
+
+Physical acceptance target: render a short 6–10 frame Z-Image sequence, verify frame-to-frame motion and diffusion continuity, verify prompt/strength/noise behavior, then cancel/resume a second short render.
+
 ## 0.3.0-alpha.1 — classic motion
 
 - 2D transforms
