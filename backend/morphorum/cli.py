@@ -89,6 +89,46 @@ def command_self_test(_: argparse.Namespace) -> int:
             if not isinstance(animation_projects_response.json().get("projects"), list):
                 raise RuntimeError("animation projects endpoint did not return a projects list")
 
+            preview_project = {
+                "schema_version": 1,
+                "id": "self-test-animation",
+                "name": "Self Test Animation",
+                "animation": {
+                    "max_frames": 11,
+                    "fps": 24,
+                    "width": 512,
+                    "height": 512,
+                    "prompt_transition": "blend",
+                },
+                "model": {"model_id": "", "family": "", "variant": ""},
+                "prompts": {"0": "start", "10": "end"},
+                "negative_prompts": {"0": ""},
+                "motion": {
+                    "angle": "0:(0), 10:(10)",
+                    "zoom": "0:(1.0), 10:(1.1)",
+                    "translation_x": "0:(0)",
+                    "translation_y": "0:(0)",
+                },
+                "generation": {
+                    "strength": "0:(0.6)",
+                    "noise": "0:(0.02)",
+                    "steps": "0:(9)",
+                    "guidance": "0:(0)",
+                    "sampler": "flowmatch_euler",
+                    "seed": 123,
+                    "seed_behavior": "fixed",
+                    "seed_increment": 1,
+                },
+            }
+            resolved_response = client.post(
+                "/api/animation/resolve-frame",
+                json={"project": preview_project, "frame": 5},
+            )
+            resolved_response.raise_for_status()
+            resolved = resolved_response.json().get("resolved", {})
+            if abs(float(resolved.get("motion", {}).get("angle", -999)) - 5.0) > 1e-6:
+                raise RuntimeError("animation schedule resolver returned an unexpected frame state")
+
             models_response = client.get("/api/models?limit=1")
             models_response.raise_for_status()
             if not isinstance(models_response.json().get("models"), list):
@@ -110,7 +150,7 @@ def command_self_test(_: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API, frontend, settings, animation projects, managed models, model index, generation capabilities, and console OK.")
+    print("Morphorum self-test passed: API, frontend, settings, animation projects/schedules, managed models, model index, generation capabilities, and console OK.")
     return 0
 
 
