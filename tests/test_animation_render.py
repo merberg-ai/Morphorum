@@ -268,6 +268,25 @@ def test_img2img_runtime_classes_expose_required_api() -> None:
             assert name in parameters
 
 
+    sdxl_encode = inspect.signature(
+        StableDiffusionXLImg2ImgPipeline.encode_prompt
+    ).parameters
+    assert "negative_prompt" in sdxl_encode
+    assert "do_classifier_free_guidance" in sdxl_encode
+
+    flux_encode = inspect.signature(
+        FluxImg2ImgPipeline.encode_prompt
+    ).parameters
+    assert "pooled_prompt_embeds" in flux_encode
+    assert "max_sequence_length" in flux_encode
+
+    zimage_encode = inspect.signature(
+        ZImageImg2ImgPipeline.encode_prompt
+    ).parameters
+    assert "do_classifier_free_guidance" in zimage_encode
+    assert "max_sequence_length" in zimage_encode
+
+
 def test_uniform_noise_is_deterministic() -> None:
     from morphorum.animation_render import _add_uniform_noise
 
