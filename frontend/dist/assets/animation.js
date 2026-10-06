@@ -987,6 +987,7 @@
     if (select) select.disabled = true;
     try {
       const payload = await api(`/api/animation/projects/${encodeURIComponent(projectId)}`);
+      clearMotionPreviewResult();
       state.project = payload.project;
       state.path = payload.path || '';
       fillForm();
@@ -1013,6 +1014,7 @@
         method: 'POST',
         body: JSON.stringify({ name }),
       });
+      clearMotionPreviewResult();
       state.project = payload.project;
       state.path = payload.path || '';
       await loadProjectList();
@@ -1070,6 +1072,13 @@
     qs('#animation-reload')?.addEventListener('click', reloadProject);
     qs('#animation-add-prompt')?.addEventListener('click', addPromptKeyframe);
     qs('#animation-validate-schedules')?.addEventListener('click', () => validateSchedules(true));
+
+    qs('#animation-source-file')?.addEventListener('change', event => {
+      const file = event.target.files?.[0];
+      if (file) uploadSourceImage(file);
+    });
+    qs('#animation-clear-source')?.addEventListener('click', clearSourceImage);
+    qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
 
     qs('#animation-project-select')?.addEventListener('change', event => {
       loadProject(event.target.value);
