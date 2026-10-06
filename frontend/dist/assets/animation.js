@@ -14,6 +14,10 @@
     previewSequence: 0,
     motionJobId: null,
     motionPollTimer: null,
+    renderJobId: null,
+    renderJob: null,
+    renderPollTimer: null,
+    lastRenderFrameUrl: '',
   };
 
   const SCHEDULE_INPUTS = {
@@ -777,6 +781,9 @@
     const preview = qs('#animation-generate-motion-preview');
     const fileInput = qs('#animation-source-file');
     const hasSource = Boolean(state.project?.animation?.source_image);
+    const renderActive = ['queued', 'loading_model', 'rendering', 'finalizing'].includes(
+      state.renderJob?.status
+    );
     if (image) {
       image.hidden = !hasSource;
       if (hasSource) image.src = sourceImageUrl();
@@ -784,9 +791,14 @@
     }
     if (empty) empty.hidden = hasSource;
     if (meta) meta.textContent = hasSource ? (state.project.animation.source_image_name || 'Project source image') : 'No source image uploaded.';
-    if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId);
-    if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId);
-    if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId);
+    if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive;
+    if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive;
+    if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive;
+    const renderButton = qs('#animation-start-render');
+    if (renderButton) {
+      const hasModel = Boolean(qs('#animation-model')?.value);
+      renderButton.disabled = !state.project || !hasSource || !hasModel || renderActive;
+    }
   }
 
   function clearMotionPreviewResult() {
@@ -1106,6 +1118,7 @@
         input.id === 'animation-project-select' ||
         input.id === 'animation-model' ||
         input.id === 'animation-source-file' ||
+        input.id === 'animation-render-select' ||
         INSPECTOR_INPUT_IDS.has(input.id)
       ) {
         return;
