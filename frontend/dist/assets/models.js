@@ -125,6 +125,7 @@
       progressText.textContent = 'Ready to download';
     }
     const progressPercent = document.createElement('span');
+    progressPercent.className = 'managed-progress-percent';
     progressPercent.textContent = model.status === 'downloading' ? `${percent.toFixed(1)}%` : '';
     progressHeading.append(progressText, progressPercent);
 
@@ -145,7 +146,8 @@
     const actions = document.createElement('div');
     actions.className = 'managed-model-actions';
 
-    if (model.installed) {
+    const verifiedInstalled = model.installed === true && model.status === 'installed';
+    if (verifiedInstalled) {
       const use = document.createElement('button');
       use.className = 'primary-button';
       use.type = 'button';
@@ -159,6 +161,18 @@
         }
       });
       actions.appendChild(use);
+    } else if (['checking', 'downloading'].includes(model.status)) {
+      const downloading = document.createElement('button');
+      downloading.className = 'secondary-button busy-button busy';
+      downloading.type = 'button';
+      downloading.disabled = true;
+      const spinner = document.createElement('span');
+      spinner.className = 'spinner';
+      const label = document.createElement('span');
+      label.className = 'button-label';
+      label.textContent = model.status === 'checking' ? 'Preparing…' : 'Downloading…';
+      downloading.append(spinner, label);
+      actions.appendChild(downloading);
     } else {
       const download = document.createElement('button');
       download.className = 'primary-button busy-button';
@@ -169,9 +183,6 @@
       label.className = 'button-label';
       label.textContent = model.status === 'failed' ? 'Retry Download' : 'Download';
       download.append(spinner, label);
-      const busy = ['checking', 'downloading'].includes(model.status);
-      download.classList.toggle('busy', busy);
-      download.disabled = busy;
       download.addEventListener('click', () => startManagedDownload(model.id));
       actions.appendChild(download);
     }
