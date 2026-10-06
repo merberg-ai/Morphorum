@@ -2,9 +2,9 @@
   'use strict';
 
   let FAMILY_DEFS = [
-    ['sdxl', 'SDXL'],
-    ['flux', 'Flux'],
-    ['zimage', 'Z-Image'],
+    ['sdxl', 'SDXL', 'external'],
+    ['flux', 'Flux', 'external'],
+    ['zimage', 'Z-Image', 'managed'],
   ];
 
   const PATH_KINDS = [
@@ -100,6 +100,57 @@
     state.settings.performance.unload_after_generation = Boolean(
       state.settings.performance.unload_after_generation
     );
+  }
+
+  function ensureManagedModels() {
+    state.settings ||= {};
+    state.settings.managed_models ||= {};
+    state.settings.managed_models.locations ||= {};
+    state.settings.managed_models.locations.zimage ||= '.\\ckpts\\z-image';
+    return state.settings.managed_models;
+  }
+
+  function createManagedModelsCard() {
+    const managed = ensureManagedModels();
+    const card = document.createElement('article');
+    card.className = 'card glass settings-preferences-card managed-settings-card';
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const headingWrap = document.createElement('div');
+    const heading = document.createElement('h2');
+    heading.textContent = 'Managed Models';
+    const sub = document.createElement('p');
+    sub.className = 'muted';
+    sub.textContent = 'Storage used by models downloaded and maintained by Morphorum.';
+    headingWrap.append(heading, sub);
+    header.appendChild(headingWrap);
+
+    const body = document.createElement('div');
+    body.className = 'path-section';
+
+    const label = document.createElement('label');
+    label.className = 'field-label';
+    label.htmlFor = 'managed-zimage-path';
+    label.textContent = 'Z-Image storage';
+
+    const input = document.createElement('input');
+    input.id = 'managed-zimage-path';
+    input.className = 'path-input';
+    input.type = 'text';
+    input.value = managed.locations.zimage || '.\\ckpts\\z-image';
+    input.placeholder = '.\\ckpts\\z-image';
+    input.addEventListener('input', () => {
+      managed.locations.zimage = input.value;
+    });
+
+    const help = document.createElement('div');
+    help.className = 'path-message';
+    help.textContent = 'Z-Image packages downloaded from Model Manager are stored here. Relative paths are resolved from the Morphorum install folder.';
+
+    body.append(label, input, help);
+    card.append(header, body);
+    return card;
   }
 
   function createPreferencesCard() {
@@ -310,7 +361,9 @@
 
     container.replaceChildren();
     container.appendChild(createPreferencesCard());
-    for (const [family, fallbackLabel] of FAMILY_DEFS) {
+    container.appendChild(createManagedModelsCard());
+    for (const [family, fallbackLabel, source] of FAMILY_DEFS) {
+      if (source === 'managed') continue;
       const familyData = ensureFamily(family);
       const card = document.createElement('article');
       card.className = 'card glass family-card';
@@ -348,7 +401,7 @@
       const payload = await api('/api/settings');
       state.settings = payload.settings || {};
       if (Array.isArray(payload.model_families) && payload.model_families.length) {
-        FAMILY_DEFS = payload.model_families.map(item => [item.id, item.label || item.id]);
+        FAMILY_DEFS = payload.model_families.map(item => [item.id, item.label || item.id, item.source || 'external']);
       }
       ingestValidation(payload.validation || []);
       renderSettings();
@@ -364,7 +417,8 @@
 
   function modelSettingsPayload() {
     const models = {};
-    for (const [family] of FAMILY_DEFS) {
+    for (const [family, , familySource] of FAMILY_DEFS) {
+      if (familySource === 'managed') continue;
       const source = ensureFamily(family);
       models[family] = {
         checkpoints: (source.checkpoints || []).map(value => String(value).trim()).filter(Boolean),
@@ -372,8 +426,14 @@
       };
     }
     ensurePreferences();
+    const managed = ensureManagedModels();
     return {
       models,
+      managed_models: {
+        locations: {
+          zimage: String(managed.locations.zimage || '.\\ckpts\\z-image').trim() || '.\\ckpts\\z-image',
+        },
+      },
       ui: {
         image_preview_limit: Math.max(1, Math.min(50, Number(state.settings.ui.image_preview_limit) || 5)),
       },
