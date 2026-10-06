@@ -207,8 +207,10 @@
             </div>
             <div class="console-actions">
               <label class="chip"><input type="checkbox" id="auto-scroll" checked><span>Auto-scroll</span></label>
-              <button class="secondary-button compact" id="clear-console-view">Clear View</button>
-              <button class="secondary-button compact danger" id="clear-console-server">Clear Buffer</button>
+              <button class="secondary-button compact" id="copy-console-view" type="button" title="Copy the currently filtered console view">Copy View</button>
+              <button class="secondary-button compact" id="copy-console-buffer" type="button" title="Copy the full server console buffer">Copy Buffer</button>
+              <button class="secondary-button compact" id="clear-console-view" type="button">Clear View</button>
+              <button class="secondary-button compact danger" id="clear-console-server" type="button">Clear Buffer</button>
             </div>
           </div>
           <div class="console-window" id="console-window" role="log" aria-live="polite"></div>
