@@ -122,9 +122,9 @@
       <section class="view" id="view-animation">
         <div class="page-heading animation-heading">
           <div>
-            <p class="eyebrow">ANIMATION PROJECT FOUNDATION</p>
+            <p class="eyebrow">DEFORUM-STYLE SCHEDULE ENGINE</p>
             <h1>Animation</h1>
-            <p class="muted">Build and persist Deforum-style animation projects. Schedule evaluation and rendering land in the next phases.</p>
+            <p class="muted">Build projects, resolve keyframed schedules, inspect exact frame state, and preview motion curves before rendering.</p>
           </div>
           <div class="button-row animation-project-actions">
             <button class="secondary-button busy-button" id="animation-reload" type="button" disabled><span class="spinner"></span><span class="button-label">Reload</span></button>
@@ -152,12 +152,13 @@
               <label><span>Width</span><input id="animation-width" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
               <label><span>Height</span><input id="animation-height" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
               <label class="animation-span-2"><span>Model</span><select id="animation-model" disabled><option value="">No model selected</option></select></label>
+              <label class="animation-span-2"><span>Prompt transition</span><select id="animation-prompt-transition" disabled><option value="blend">Blend between keyframes</option><option value="hold">Hold until next keyframe</option></select></label>
             </div>
           </article>
 
           <article class="card glass animation-prompts-card">
             <div class="card-header">
-              <div><h2>Prompt Keyframes</h2><p class="muted">Prompt changes are stored by frame. Phase 2 will resolve transitions frame-by-frame.</p></div>
+              <div><h2>Prompt Keyframes</h2><p class="muted">Positive and negative prompts resolve into per-frame transition weights.</p></div>
               <button class="secondary-button compact" id="animation-add-prompt" type="button" disabled>+ Keyframe</button>
             </div>
             <div class="animation-prompt-list" id="animation-prompt-list">
@@ -167,7 +168,7 @@
 
           <article class="card glass">
             <div class="card-header">
-              <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style schedule strings. Stored now; evaluated in Phase 2.</p></div>
+              <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style keyframes and safe math expressions using t, max_f, sin(), cos(), and related functions.</p></div>
             </div>
             <div class="animation-schedule-grid">
               <label><span>Angle</span><input id="animation-angle" class="animation-schedule" type="text" value="0:(0)" disabled></label>
@@ -193,13 +194,79 @@
             </div>
           </article>
 
+          <article class="card glass animation-inspector-card">
+            <div class="card-header">
+              <div>
+                <h2>Resolved Frame Inspector</h2>
+                <p class="muted">See the exact state Morphorum will hand to the future frame renderer.</p>
+              </div>
+              <button class="secondary-button compact busy-button" id="animation-validate-schedules" type="button" disabled><span class="spinner"></span><span class="button-label">Validate</span></button>
+            </div>
+
+            <div class="animation-inspector-controls">
+              <label><span>Frame</span><input id="animation-inspector-frame" type="number" min="0" value="0" disabled></label>
+              <input id="animation-inspector-slider" class="animation-frame-slider" type="range" min="0" max="119" value="0" disabled aria-label="Frame inspector slider">
+              <label><span>Curve</span><select id="animation-curve-field" disabled>
+                <option value="motion.zoom">Zoom</option>
+                <option value="motion.angle">Angle</option>
+                <option value="motion.translation_x">Translation X</option>
+                <option value="motion.translation_y">Translation Y</option>
+                <option value="generation.strength">Strength</option>
+                <option value="generation.noise">Noise</option>
+                <option value="generation.steps">Steps</option>
+                <option value="generation.guidance">Guidance</option>
+              </select></label>
+            </div>
+
+            <div class="animation-validation-summary" id="animation-validation-summary">
+              Load a project to validate its schedules.
+            </div>
+
+            <div class="animation-curve-wrap">
+              <svg id="animation-curve-chart" class="animation-curve-chart" viewBox="0 0 640 190" preserveAspectRatio="none" aria-label="Schedule curve preview">
+                <line class="animation-chart-axis" x1="42" y1="162" x2="625" y2="162"></line>
+                <line class="animation-chart-axis" x1="42" y1="15" x2="42" y2="162"></line>
+                <path id="animation-curve-path" class="animation-chart-path" d=""></path>
+                <g id="animation-curve-points"></g>
+              </svg>
+              <div class="animation-curve-meta">
+                <span id="animation-curve-range">No curve loaded</span>
+                <span id="animation-curve-keyframes"></span>
+              </div>
+            </div>
+
+            <div class="animation-resolved-grid" id="animation-resolved-grid">
+              <div><span>Time</span><strong id="resolved-time">--</strong></div>
+              <div><span>Zoom</span><strong id="resolved-zoom">--</strong></div>
+              <div><span>Angle</span><strong id="resolved-angle">--</strong></div>
+              <div><span>Translate X</span><strong id="resolved-translation-x">--</strong></div>
+              <div><span>Translate Y</span><strong id="resolved-translation-y">--</strong></div>
+              <div><span>Strength</span><strong id="resolved-strength">--</strong></div>
+              <div><span>Noise</span><strong id="resolved-noise">--</strong></div>
+              <div><span>Steps</span><strong id="resolved-steps">--</strong></div>
+              <div><span>Guidance</span><strong id="resolved-guidance">--</strong></div>
+              <div><span>Seed</span><strong id="resolved-seed">--</strong></div>
+            </div>
+
+            <div class="animation-prompt-resolution">
+              <div>
+                <span class="field-label">Positive prompt transition</span>
+                <div id="resolved-positive-prompt" class="animation-prompt-resolution-text">--</div>
+              </div>
+              <div>
+                <span class="field-label">Negative prompt transition</span>
+                <div id="resolved-negative-prompt" class="animation-prompt-resolution-text">--</div>
+              </div>
+            </div>
+          </article>
+
           <article class="card glass animation-notes-card">
             <div class="card-header"><div><h2>Notes</h2><p class="muted">Project notes travel with the animation file.</p></div></div>
             <textarea id="animation-notes" class="text-area" rows="5" placeholder="Notes about this animation…" disabled></textarea>
           </article>
 
           <article class="card glass animation-foundation-card">
-            <div class="card-header"><div><h2>Phase 1 Foundation</h2><p class="muted">What this milestone stores before any frame is rendered.</p></div></div>
+            <div class="card-header"><div><h2>Phase 2 Schedule Engine</h2><p class="muted">Project state is now resolvable into exact per-frame values without running diffusion.</p></div></div>
             <div class="animation-foundation-grid">
               <div><strong>Timeline</strong><span>Frames, FPS, dimensions</span></div>
               <div><strong>Prompts</strong><span>Positive + negative keyframes</span></div>
@@ -207,6 +274,8 @@
               <div><strong>Generation</strong><span>Strength, noise, steps, guidance, seeds</span></div>
               <div><strong>Model</strong><span>Stable indexed model reference</span></div>
               <div><strong>Persistence</strong><span>Atomic human-readable project.json</span></div>
+              <div><strong>Expressions</strong><span>Safe t/max_f math evaluation</span></div>
+              <div><strong>Inspector</strong><span>Resolved frame values + curve preview</span></div>
             </div>
           </article>
         </div>
