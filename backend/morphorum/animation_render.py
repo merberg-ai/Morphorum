@@ -625,10 +625,16 @@ class AnimationRenderManager:
             for key, value in payload.items()
             if key not in {"project", "seed_plan", "schema_version"}
         }
-        public.setdefault(
-            "resumable",
-            public.get("status") in {"failed", "cancelled", "interrupted"},
-        )
+        status = str(public.get("status") or "")
+        if status in {"queued", "loading_model", "rendering", "finalizing"}:
+            public["status"] = "interrupted"
+            public["message"] = "Render interrupted; resume available"
+            public["resumable"] = True
+        else:
+            public.setdefault(
+                "resumable",
+                status in {"failed", "cancelled", "interrupted"},
+            )
         return public
 
     def _write_manifest(self, job: AnimationRenderJob) -> None:
