@@ -12,12 +12,17 @@ def test_frontend_and_health() -> None:
         health = client.get("/api/health")
         assert health.status_code == 200
         assert health.json()["status"] == "ok"
+        asset_version = health.json()["frontend_asset_version"]
+        assert len(asset_version) == 12
 
         frontend = client.get("/")
         assert frontend.status_code == 200
         assert "Morphorum" in frontend.text
         assert "Settings" in frontend.text
         assert "Console" in frontend.text
+        assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
+        assert f"/assets/app.css?v={asset_version}" in frontend.text
+        assert f"/assets/app.js?v={asset_version}" in frontend.text
         assert "no-cache" in frontend.headers.get("cache-control", "")
 
         css = client.get("/assets/app.css")
