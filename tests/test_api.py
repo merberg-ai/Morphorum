@@ -20,6 +20,8 @@ def test_frontend_and_health() -> None:
         assert "Morphorum" in frontend.text
         assert "Settings" in frontend.text
         assert "Console" in frontend.text
+        assert 'id="copy-console-view"' in frontend.text
+        assert 'id="copy-console-buffer"' in frontend.text
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
         assert f"/assets/app.css?v={asset_version}" in frontend.text
         assert f"/assets/app.js?v={asset_version}" in frontend.text
@@ -103,6 +105,22 @@ def test_console_snapshot_api() -> None:
     assert match["level"] == "warning"
     assert match["category"] == "model"
     assert match["message"] == "test model message"
+
+
+def test_console_api_can_return_full_server_buffer() -> None:
+    clear_console()
+    for index in range(1105):
+        emit_console("info", "runtime", f"bulk-{index:04d}")
+
+    with TestClient(app) as client:
+        response = client.get("/api/console?limit=1500")
+        assert response.status_code == 200
+        events = response.json()["events"]
+
+    bulk = [item for item in events if item["message"].startswith("bulk-")]
+    assert len(bulk) == 1105
+    assert bulk[0]["message"] == "bulk-0000"
+    assert bulk[-1]["message"] == "bulk-1104"
 
 
 def test_model_lifecycle_api_when_nothing_is_loaded() -> None:
