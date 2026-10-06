@@ -2,7 +2,7 @@
 
 Standalone, modern Deforum-style AI image and animation studio with legacy project compatibility, multi-model support for SDXL, Flux, and Z-Image, LoRAs, keyframed motion, live previews, and a mobile-friendly web UI.
 
-> **Status:** early alpha. Installation, CUDA-backed SDXL and Flux generation, managed Z-Image-Turbo downloads/inference, model indexing, settings, telemetry, the responsive browser UI, animation project persistence, the Deforum-style schedule/frame-resolution engine, and Phase 3 CPU 2D motion previews are working. Diffusion-driven animation frames, 3D/depth motion, and LoRA application remain active development milestones.
+> **Status:** early alpha. Installation, CUDA-backed SDXL/Flux/Z-Image generation, model indexing, settings, telemetry, the responsive browser UI, animation project persistence, Deforum-style schedules, CPU motion previews, and the Phase 4 resumable img2img animation frame loop are implemented. Final video encoding, 3D/depth motion, cadence/coherence features, and LoRA application remain active development milestones.
 
 ## Goals
 
@@ -124,7 +124,7 @@ Morphorum keeps the old Deforum project vocabulary where compatibility matters, 
 
 The selected model should therefore drive its own configuration UI. SDXL, Flux, and Z-Image are not the same architecture wearing different filenames, despite software occasionally behaving as though they are.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ANIMATION_PROJECTS.md](docs/ANIMATION_PROJECTS.md), [docs/SCHEDULES.md](docs/SCHEDULES.md), [docs/MOTION_PREVIEW.md](docs/MOTION_PREVIEW.md), and [docs/ROADMAP.md](docs/ROADMAP.md) for the current design baseline.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ANIMATION_PROJECTS.md](docs/ANIMATION_PROJECTS.md), [docs/SCHEDULES.md](docs/SCHEDULES.md), [docs/MOTION_PREVIEW.md](docs/MOTION_PREVIEW.md), [docs/ANIMATION_RENDERING.md](docs/ANIMATION_RENDERING.md), and [docs/ROADMAP.md](docs/ROADMAP.md) for the current design baseline.
 
 ## Licensing
 
