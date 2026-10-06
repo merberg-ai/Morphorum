@@ -33,6 +33,7 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
     assert project["prompts"] == {"0": ""}
     assert project["motion"]["zoom"] == "0:(1.0)"
     assert project["generation"]["strength"] == "0:(0.65)"
+    assert project["id"].startswith("my-first-morph-")
 
 
 def test_animation_project_save_normalizes_and_preserves_unknown_fields(tmp_path, monkeypatch) -> None:
@@ -99,6 +100,11 @@ def test_animation_project_save_normalizes_and_preserves_unknown_fields(tmp_path
     assert loaded["id"] == created["id"]
     assert loaded["created_at"] == created["created_at"]
     assert loaded["future_extension"] == {"hello": "future"}
+
+    summaries = list_animation_projects()
+    summary = next(item for item in summaries if item["id"] == created["id"])
+    assert summary["name"] == "Compatibility Test Revised"
+    assert summary["id"] == created["id"]
 
 
 def test_animation_project_list_returns_summaries(tmp_path, monkeypatch) -> None:
