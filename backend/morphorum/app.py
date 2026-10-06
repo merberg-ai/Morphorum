@@ -71,6 +71,12 @@ async def api_console_middleware(request: Request, call_next):
             "api",
             f"{request.method} {request.url.path} -> {response.status_code} ({elapsed:.0f} ms)",
         )
+
+    if request.url.path == "/" or request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
     return response
 
 
