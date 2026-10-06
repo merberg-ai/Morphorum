@@ -7,8 +7,10 @@ import sys
 
 import uvicorn
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from . import __version__
+from .animation_motion import _frame_transform_matrix, render_affine
 from .app import app
 from .paths import ensure_runtime_dirs
 from .system_info import doctor_report, write_install_manifest
@@ -129,6 +131,23 @@ def command_self_test(_: argparse.Namespace) -> int:
             if abs(float(resolved.get("motion", {}).get("angle", -999)) - 5.0) > 1e-6:
                 raise RuntimeError("animation schedule resolver returned an unexpected frame state")
 
+            motion_source = Image.new("RGB", (16, 16), "black")
+            motion_matrix = _frame_transform_matrix(
+                width=16,
+                height=16,
+                angle=0,
+                zoom=1,
+                translation_x=1,
+                translation_y=0,
+            )
+            motion_result = render_affine(
+                motion_source,
+                motion_matrix,
+                border_mode="replicate",
+            )
+            if motion_result.size != (16, 16):
+                raise RuntimeError("2D motion transform returned an unexpected image size")
+
             models_response = client.get("/api/models?limit=1")
             models_response.raise_for_status()
             if not isinstance(models_response.json().get("models"), list):
@@ -150,7 +169,7 @@ def command_self_test(_: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API, frontend, settings, animation projects/schedules, managed models, model index, generation capabilities, and console OK.")
+    print("Morphorum self-test passed: API, frontend, settings, animation projects/schedules/2D motion, managed models, model index, generation capabilities, and console OK.")
     return 0
 
 
