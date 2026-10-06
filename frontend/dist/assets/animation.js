@@ -301,13 +301,13 @@
     }
   }
 
-  function setInspectorFrame(value, source = '') {
+  function setInspectorFrame(value) {
     const max = inspectorFrameMax();
     const frame = Math.max(0, Math.min(max, Math.trunc(Number(value) || 0)));
     const frameInput = qs('#animation-inspector-frame');
     const slider = qs('#animation-inspector-slider');
-    if (frameInput && source !== 'number') frameInput.value = String(frame);
-    if (slider && source !== 'slider') slider.value = String(frame);
+    if (frameInput) frameInput.value = String(frame);
+    if (slider) slider.value = String(frame);
     refreshInspector();
   }
 
@@ -811,10 +811,10 @@
     });
 
     qs('#animation-inspector-frame')?.addEventListener('input', event => {
-      setInspectorFrame(event.target.value, 'number');
+      setInspectorFrame(event.target.value);
     });
     qs('#animation-inspector-slider')?.addEventListener('input', event => {
-      setInspectorFrame(event.target.value, 'slider');
+      setInspectorFrame(event.target.value);
     });
     qs('#animation-curve-field')?.addEventListener('change', refreshInspector);
 
