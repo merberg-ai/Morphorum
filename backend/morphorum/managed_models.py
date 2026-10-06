@@ -123,6 +123,41 @@ class ManagedModelManager:
         os.replace(temp, path)
 
     @classmethod
+    def _migrate_legacy_completion(
+        cls,
+        entry: dict[str, Any],
+        destination: Path,
+    ) -> bool:
+        marker = destination / _COMPLETE_MARKER
+        if marker.exists():
+            return cls._installed(destination)
+        if not cls._runtime_layout_present(destination) or cls._has_incomplete_files(destination):
+            return False
+
+        size = cls._materialized_size(destination)
+        advertised = int(entry.get("advertised_size_bytes") or 0)
+        if advertised <= 0 or size < int(advertised * 0.98):
+            return False
+
+        cls._write_json_atomic(
+            marker,
+            {
+                "status": "complete",
+                "model_id": str(entry["id"]),
+                "repo_id": str(entry["repo_id"]),
+                "expected_bytes": advertised,
+                "installed_bytes": size,
+                "migrated_from_legacy_download": True,
+            },
+        )
+        emit_console(
+            "info",
+            "model",
+            f"Verified existing managed model and created completion marker: {entry['name']}",
+        )
+        return True
+
+    @classmethod
     def _materialized_size(cls, destination: Path) -> int:
         if not destination.exists():
             return 0
@@ -176,6 +211,8 @@ class ManagedModelManager:
             state = self._states.setdefault(model_id, DownloadState(model_id=model_id))
             thread_alive = bool(state.thread and state.thread.is_alive())
             installed = self._installed(destination)
+            if not installed and not thread_alive:
+                installed = self._migrate_legacy_completion(entry, destination)
 
             if installed and not thread_alive:
                 state.status = "installed"
