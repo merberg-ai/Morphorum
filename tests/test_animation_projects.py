@@ -30,7 +30,10 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
         "width": 1024,
         "height": 1024,
         "prompt_transition": "blend",
+        "source_image": "",
+        "source_image_name": "",
     }
+    assert project["motion"]["border_mode"] == "replicate"
     assert project["prompts"] == {"0": ""}
     assert project["motion"]["zoom"] == "0:(1.0)"
     assert project["generation"]["strength"] == "0:(0.65)"
