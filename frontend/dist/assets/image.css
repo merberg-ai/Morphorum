@@ -75,7 +75,7 @@
 .result-seed span {
   color: var(--muted);
   display: block;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .68rem;
   overflow: hidden;
   text-overflow: ellipsis;
