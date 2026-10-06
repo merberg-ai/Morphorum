@@ -171,10 +171,51 @@
               <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style keyframes and safe math expressions using t, max_f, sin(), cos(), and related functions.</p></div>
             </div>
             <div class="animation-schedule-grid">
+              <label><span>Border mode</span><select id="animation-border-mode" disabled><option value="replicate">Replicate edges</option><option value="wrap">Wrap opposite edge</option></select></label>
               <label><span>Angle</span><input id="animation-angle" class="animation-schedule" type="text" value="0:(0)" disabled></label>
               <label><span>Zoom</span><input id="animation-zoom" class="animation-schedule" type="text" value="0:(1.0)" disabled></label>
               <label><span>Translation X</span><input id="animation-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
               <label><span>Translation Y</span><input id="animation-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+            </div>
+          </article>
+
+          <article class="card glass animation-motion-preview-card">
+            <div class="card-header">
+              <div>
+                <h2>Motion Preview</h2>
+                <p class="muted">CPU-only preview of cumulative 2D camera motion. No diffusion, no GPU model load.</p>
+              </div>
+              <button class="primary-button compact busy-button" id="animation-generate-motion-preview" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Motion</span></button>
+            </div>
+
+            <div class="animation-source-grid">
+              <div class="animation-source-controls">
+                <label>
+                  <span>Starting image</span>
+                  <input id="animation-source-file" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" disabled>
+                </label>
+                <div class="button-row">
+                  <button class="secondary-button compact" id="animation-clear-source" type="button" disabled>Clear Source</button>
+                </div>
+                <div class="animation-source-meta" id="animation-source-meta">No source image uploaded.</div>
+              </div>
+              <div class="animation-source-preview-wrap">
+                <img id="animation-source-preview" class="animation-source-preview" alt="Animation source preview" hidden>
+                <div id="animation-source-empty" class="animation-empty">Upload a starting image to preview camera motion.</div>
+              </div>
+            </div>
+
+            <div class="animation-motion-progress" id="animation-motion-progress" hidden>
+              <div class="progress-row">
+                <span id="animation-motion-status">Preparing motion preview…</span>
+                <strong id="animation-motion-percent">0%</strong>
+              </div>
+              <div class="progress-track"><div class="progress-fill" id="animation-motion-progress-fill"></div></div>
+            </div>
+
+            <div class="animation-motion-result" id="animation-motion-result" hidden>
+              <img id="animation-motion-preview-image" alt="Motion-only animation preview">
+              <div class="animation-motion-result-meta" id="animation-motion-result-meta"></div>
             </div>
           </article>
 
@@ -266,7 +307,7 @@
           </article>
 
           <article class="card glass animation-foundation-card">
-            <div class="card-header"><div><h2>Phase 2 Schedule Engine</h2><p class="muted">Project state is now resolvable into exact per-frame values without running diffusion.</p></div></div>
+            <div class="card-header"><div><h2>Phase 3 Motion Preview</h2><p class="muted">Resolved 2D schedules now drive real cumulative pixel transforms before diffusion enters the loop.</p></div></div>
             <div class="animation-foundation-grid">
               <div><strong>Timeline</strong><span>Frames, FPS, dimensions</span></div>
               <div><strong>Prompts</strong><span>Positive + negative keyframes</span></div>
@@ -276,6 +317,8 @@
               <div><strong>Persistence</strong><span>Atomic human-readable project.json</span></div>
               <div><strong>Expressions</strong><span>Safe t/max_f math evaluation</span></div>
               <div><strong>Inspector</strong><span>Resolved frame values + curve preview</span></div>
+              <div><strong>2D Transform</strong><span>Cumulative angle, zoom, translation</span></div>
+              <div><strong>Motion Preview</strong><span>CPU-only animated source-image preview</span></div>
             </div>
           </article>
         </div>
