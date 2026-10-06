@@ -23,6 +23,7 @@ def test_frontend_and_health() -> None:
         assert "Console" in frontend.text
         assert "Animation" in frontend.text
         assert 'id="view-animation"' in frontend.text
+        assert '<select id="animation-sampler"' in frontend.text
         assert 'id="copy-console-view"' in frontend.text
         assert 'id="copy-console-buffer"' in frontend.text
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
@@ -280,3 +281,37 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
 
         missing = client.get("/api/animation/projects/not-a-real-project")
         assert missing.status_code == 404
+
+
+def test_animation_sampler_capabilities_are_model_specific() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/generation/capabilities")
+
+    assert response.status_code == 200
+    families = response.json()["families"]
+
+    sdxl = {
+        item["id"]
+        for item in families["sdxl"]["samplers"]["options"]
+    }
+    assert {
+        "euler",
+        "euler_a",
+        "dpmpp_2m",
+        "dpmpp_2m_sde",
+        "ddim",
+        "lms",
+        "heun",
+        "unipc",
+    } <= sdxl
+
+    flux = {
+        item["id"]
+        for item in families["flux"]["samplers"]["options"]
+    }
+    zimage = {
+        item["id"]
+        for item in families["zimage"]["samplers"]["options"]
+    }
+    assert flux == {"flowmatch_euler"}
+    assert zimage == {"flowmatch_euler"}
