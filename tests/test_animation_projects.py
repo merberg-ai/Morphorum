@@ -29,6 +29,7 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
         "fps": 24.0,
         "width": 1024,
         "height": 1024,
+        "prompt_transition": "blend",
     }
     assert project["prompts"] == {"0": ""}
     assert project["motion"]["zoom"] == "0:(1.0)"
