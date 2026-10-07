@@ -377,10 +377,16 @@ class AnimationRenderJob:
         payload.pop("_frame_times", None)
         payload.pop("project", None)
         payload.pop("seed_plan", None)
+        latest_frame = (
+            max(int(item.get("frame", -1)) for item in self.results)
+            if self.results
+            else None
+        )
+        payload["latest_completed_frame"] = latest_frame
         payload["latest_frame_url"] = (
             f"/api/animation/renders/{self.project_id}/{self.id}/frames/"
-            f"{self.current_frame}"
-            if self.results
+            f"{latest_frame}"
+            if latest_frame is not None and latest_frame >= 0
             else None
         )
         payload["preview_url"] = (
@@ -440,9 +446,17 @@ class AnimationRenderManager:
             raise AnimationRenderError(
                 f"Animation renders support 1 to {MAX_RENDER_FRAMES} frames."
             )
-        if not source_path.is_file():
+        start_mode = str(
+            project.get("animation", {}).get("start_mode", "prompt")
+            or "prompt"
+        ).strip().lower()
+        if start_mode not in {"prompt", "source"}:
             raise AnimationRenderError(
-                "Upload a project starting image before rendering animation."
+                f"Unknown animation start mode '{start_mode}'."
+            )
+        if start_mode == "source" and not source_path.is_file():
+            raise AnimationRenderError(
+                "Start Mode is 'Use starting image', but no starting image is uploaded."
             )
 
         validation = validate_project_schedules(project)
@@ -479,7 +493,8 @@ class AnimationRenderManager:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         copied_source = output_dir / "source.png"
-        shutil.copy2(source_path, copied_source)
+        if source_path.is_file():
+            shutil.copy2(source_path, copied_source)
 
         seed_plan = self._resolve_seed_plan(project)
         job = AnimationRenderJob(
