@@ -20,7 +20,15 @@ def command_serve(args: argparse.Namespace) -> int:
     ensure_runtime_dirs()
     host = args.host or os.getenv("MORPHORUM_HOST_OVERRIDE", "127.0.0.1")
     port = args.port or int(os.getenv("MORPHORUM_PORT_OVERRIDE", "7865"))
-    uvicorn.run("morphorum.app:app", host=host, port=port, reload=False)
+    env_access_log = str(os.getenv("MORPHORUM_ACCESS_LOG", "")).strip().lower()
+    access_log = bool(args.access_log) or env_access_log in {"1", "true", "yes", "on"}
+    uvicorn.run(
+        "morphorum.app:app",
+        host=host,
+        port=port,
+        reload=False,
+        access_log=access_log,
+    )
     return 0
 
 
@@ -181,6 +189,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="Start the Morphorum API server.")
     serve.add_argument("--host")
     serve.add_argument("--port", type=int)
+    serve.add_argument(
+        "--access-log",
+        action="store_true",
+        help="Enable Uvicorn per-request access logging in the terminal.",
+    )
     serve.set_defaults(func=command_serve)
 
     doctor = sub.add_parser("doctor", help="Run installation and runtime diagnostics.")
