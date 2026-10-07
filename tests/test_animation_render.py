@@ -349,7 +349,9 @@ class FakePromptStartGenerationManager:
     def _effective_capability(self, _model):
         return {}
 
-    def prepare_txt2img(self, _request):
+    def prepare_txt2img(self, _request, load_progress_callback=None):
+        if load_progress_callback is not None:
+            load_progress_callback(1.0, "ready", "Fake pipeline ready", "test")
         return self.pipe, "cpu", fake_model()
 
     def build_txt2img_call_args(
@@ -375,6 +377,18 @@ class FakePromptStartGenerationManager:
 
     def reset_inference_pipeline(self):
         return None
+
+    def pipeline_optimization(self):
+        return None
+
+    def release_inference_memory(self, **_kwargs):
+        return None
+
+    def cuda_memory_status(self):
+        return None
+
+    def _is_cuda_oom(self, _exc):
+        return False
 
     def _friendly_error(self, exc, **_kwargs):
         return exc
@@ -485,3 +499,75 @@ def test_zimage_prompt_transition_blends_unequal_sequence_lengths() -> None:
     assert blended.shape == (4, 3)
     assert torch.allclose(blended[:2], torch.full((2, 3), 1.5))
     assert torch.allclose(blended[2:], torch.full((2, 3), 0.75))
+
+
+def test_zimage_conditioning_cache_encodes_each_keyframe_once() -> None:
+    class CountingPipe(FakeZImageBlendPipe):
+        def __init__(self):
+            self.calls = []
+
+        def encode_prompt(self, **kwargs):
+            self.calls.append(kwargs["prompt"])
+            return super().encode_prompt(**kwargs)
+
+    pipe = CountingPipe()
+    cache = {}
+    positive = {
+        "from_frame": 0,
+        "to_frame": 10,
+        "from_text": "short prompt",
+        "to_text": "a much longer prompt",
+        "from_weight": 0.75,
+        "to_weight": 0.25,
+    }
+    negative = {
+        "from_frame": 0,
+        "to_frame": 0,
+        "from_text": "",
+        "to_text": "",
+        "from_weight": 1.0,
+        "to_weight": 0.0,
+    }
+
+    first = _prompt_conditioning_kwargs(
+        pipe,
+        "zimage",
+        positive,
+        negative,
+        guidance_scale=0.0,
+        conditioning_cache=cache,
+        cache_zimage_on_cpu=True,
+    )
+    second = _prompt_conditioning_kwargs(
+        pipe,
+        "zimage",
+        positive,
+        negative,
+        guidance_scale=0.0,
+        conditioning_cache=cache,
+        cache_zimage_on_cpu=True,
+    )
+
+    assert pipe.calls == ["short prompt", "a much longer prompt"]
+    assert len(cache) == 2
+    assert first["prompt_embeds"][0].device.type == "cpu"
+    assert second["prompt_embeds"][0].device.type == "cpu"
+
+
+def test_animation_job_exposes_model_load_progress() -> None:
+    job = AnimationRenderJob(
+        id="load-test",
+        project_id="project",
+        project={},
+        seed_plan=[1],
+        total_frames=1,
+        status="loading_model",
+        load_progress=0.68,
+        load_phase="pipeline",
+        load_message="Pipeline components loaded",
+        load_detail="7 local safetensors files",
+    )
+    public = job.public()
+    assert public["load_progress"] == pytest.approx(0.68)
+    assert public["load_phase"] == "pipeline"
+    assert "safetensors" in public["load_detail"]
