@@ -236,3 +236,36 @@ def test_validate_project_schedules_rejects_wrong_family_lora(monkeypatch) -> No
     )
     assert "found for sdxl" in issue["message"]
     assert "active model family is flux" in issue["message"]
+
+
+
+def test_zoom_validation_rejects_zero_and_negative_deforum_factors() -> None:
+    for schedule in ("0:(0)", "0:(-0.5)"):
+        project = sample_project()
+        project["motion"]["zoom"] = schedule
+        result = validate_project_schedules(project)
+
+        assert result["valid"] is False
+        issue = next(
+            item for item in result["issues"]
+            if item["field"] == "motion.zoom" and item["severity"] == "error"
+        )
+        assert "positive multiplicative factor" in issue["message"]
+        assert "0.995" in issue["message"]
+
+
+def test_zoom_validation_warns_when_compounding_becomes_extreme() -> None:
+    project = sample_project()
+    project["animation"]["max_frames"] = 60
+    project["motion"]["zoom"] = "0:(1.05)"
+
+    result = validate_project_schedules(project)
+
+    assert result["valid"] is True
+    issue = next(
+        item for item in result["issues"]
+        if item["field"] == "motion.zoom" and item["severity"] == "warning"
+    )
+    assert "compounds every frame" in issue["message"]
+    assert "1.005" in issue["message"]
+    assert "0.995" in issue["message"]
