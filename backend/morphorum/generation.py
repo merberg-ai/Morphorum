@@ -779,6 +779,22 @@ class GenerationManager:
     def pipeline_optimization(self) -> str | None:
         return self._pipeline_optimization
 
+    def cuda_memory_status(self) -> dict[str, float] | None:
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                return None
+            free_bytes, total_bytes = torch.cuda.mem_get_info()
+            return {
+                "free_gib": free_bytes / 1024**3,
+                "total_gib": total_bytes / 1024**3,
+                "allocated_gib": torch.cuda.memory_allocated() / 1024**3,
+                "reserved_gib": torch.cuda.memory_reserved() / 1024**3,
+            }
+        except Exception:
+            return None
+
     def _load_zimage_pipeline(
         self,
         job: GenerationJob,
@@ -937,14 +953,22 @@ class GenerationManager:
                             emit_console(
                                 "info",
                                 "generation",
-                                "Z-Image transformer uses streamed block-level group offload (1 block/group).",
+                                (
+                                    "Z-Image transformer uses streamed block-level group offload (1 block/group)."
+                                    if use_stream_prefetch
+                                    else "Z-Image transformer uses conservative block-level group offload (1 block/group, no CUDA prefetch)."
+                                ),
                             )
                         except Exception as block_exc:
                             emit_console(
                                 "warning",
                                 "generation",
                                 f"Z-Image block-level offload unavailable ({block_exc}); "
-                                "falling back to streamed leaf-level offload.",
+                                + (
+                                    "falling back to streamed leaf-level offload."
+                                    if use_stream_prefetch
+                                    else "falling back to conservative leaf-level offload."
+                                ),
                             )
                             apply_group_offloading(
                                 component,
