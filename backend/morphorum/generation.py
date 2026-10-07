@@ -740,7 +740,51 @@ class GenerationManager:
 
         return pipe, "cuda-offload", "cpu"
 
-    def _load_zimage_pipeline(self, job: GenerationJob, cache_dir: Path):
+    @staticmethod
+    def _notify_load_progress(
+        callback: Any,
+        progress: float,
+        phase: str,
+        message: str,
+        detail: str | None = None,
+    ) -> None:
+        if callback is None:
+            return
+        try:
+            callback(
+                max(0.0, min(1.0, float(progress))),
+                str(phase),
+                str(message),
+                detail,
+            )
+        except Exception:
+            pass
+
+    def release_inference_memory(self, *, synchronize: bool = True) -> None:
+        gc.collect()
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                return
+            if synchronize:
+                try:
+                    torch.cuda.synchronize()
+                except Exception:
+                    pass
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+    def pipeline_optimization(self) -> str | None:
+        return self._pipeline_optimization
+
+    def _load_zimage_pipeline(
+        self,
+        job: GenerationJob,
+        cache_dir: Path,
+        load_progress_callback: Any = None,
+    ):
         try:
             import torch
             from diffusers import ZImagePipeline
@@ -759,7 +803,25 @@ class GenerationManager:
         model_path = Path(job.model["path"])
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         total_vram = int(torch.cuda.get_device_properties(0).total_memory)
-        native_threshold = 24 * 1024**3
+        native_threshold = 40 * 1024**3
+        conservative_threshold = 20 * 1024**3
+        use_stream_prefetch = total_vram >= conservative_threshold
+
+        checkpoint_files = sorted(model_path.rglob("*.safetensors"))
+        checkpoint_count = len(checkpoint_files)
+        checkpoint_detail = (
+            f"{checkpoint_count} local safetensors file"
+            f"{'' if checkpoint_count == 1 else 's'}"
+            if checkpoint_count
+            else "local Diffusers package"
+        )
+        self._notify_load_progress(
+            load_progress_callback,
+            0.05,
+            "inspect",
+            f"Inspecting {job.model['name']}",
+            checkpoint_detail,
+        )
 
         emit_console(
             "info",
@@ -777,7 +839,21 @@ class GenerationManager:
             )
 
         try:
+            self._notify_load_progress(
+                load_progress_callback,
+                0.12,
+                "checkpoint",
+                "Loading local checkpoint components",
+                checkpoint_detail,
+            )
             pipe = load_local_pipeline()
+            self._notify_load_progress(
+                load_progress_callback,
+                0.68,
+                "pipeline",
+                "Pipeline components loaded",
+                "Configuring VAE and memory strategy",
+            )
             pipe.set_progress_bar_config(disable=True)
             if hasattr(pipe.vae, "enable_tiling"):
                 pipe.vae.enable_tiling()
@@ -785,6 +861,13 @@ class GenerationManager:
                 pipe.vae.enable_slicing()
 
             if total_vram >= native_threshold:
+                self._notify_load_progress(
+                    load_progress_callback,
+                    0.78,
+                    "cuda",
+                    "Moving Z-Image pipeline to CUDA",
+                    f"{total_vram / 1024**3:.1f} GiB VRAM",
+                )
                 pipe.to("cuda")
                 self._pipeline_optimization = "bf16-native-gpu"
                 emit_console(
@@ -792,20 +875,51 @@ class GenerationManager:
                     "generation",
                     f"Z-Image native CUDA path enabled ({total_vram / 1024**3:.1f} GiB VRAM).",
                 )
+                self._notify_load_progress(
+                    load_progress_callback,
+                    1.0,
+                    "ready",
+                    "Z-Image pipeline ready",
+                    "Native CUDA",
+                )
                 return pipe, "cuda", "cuda"
 
+            offload_label = (
+                "streamed group offloading"
+                if use_stream_prefetch
+                else "conservative group offloading without CUDA prefetch"
+            )
             emit_console(
                 "info",
                 "generation",
-                f"Z-Image 16 GB-class path enabled ({total_vram / 1024**3:.1f} GiB VRAM): "
-                "using streamed group offloading for VRAM headroom.",
+                f"Z-Image low-VRAM path enabled ({total_vram / 1024**3:.1f} GiB VRAM): "
+                f"using {offload_label}.",
+            )
+            self._notify_load_progress(
+                load_progress_callback,
+                0.76,
+                "offload",
+                "Configuring low-VRAM model offload",
+                offload_label,
             )
 
             onload_device = torch.device("cuda")
             offload_device = torch.device("cpu")
             configured = 0
 
+            component_progress = {
+                "transformer": 0.84,
+                "text_encoder": 0.91,
+                "vae": 0.96,
+            }
             for component_name in ("transformer", "text_encoder", "vae"):
+                self._notify_load_progress(
+                    load_progress_callback,
+                    component_progress.get(component_name, 0.9),
+                    "offload",
+                    f"Configuring {component_name.replace('_', ' ')} offload",
+                    offload_label,
+                )
                 component = getattr(pipe, component_name, None)
                 if component is None:
                     continue
@@ -818,7 +932,7 @@ class GenerationManager:
                                 offload_device=offload_device,
                                 offload_type="block_level",
                                 num_blocks_per_group=1,
-                                use_stream=True,
+                                use_stream=use_stream_prefetch,
                             )
                             emit_console(
                                 "info",
@@ -837,7 +951,7 @@ class GenerationManager:
                                 onload_device=onload_device,
                                 offload_device=offload_device,
                                 offload_type="leaf_level",
-                                use_stream=True,
+                                use_stream=use_stream_prefetch,
                             )
                     else:
                         apply_group_offloading(
@@ -845,7 +959,7 @@ class GenerationManager:
                             onload_device=onload_device,
                             offload_device=offload_device,
                             offload_type="leaf_level",
-                            use_stream=True,
+                            use_stream=use_stream_prefetch,
                         )
                     configured += 1
                 except Exception as component_exc:
@@ -864,8 +978,20 @@ class GenerationManager:
                 pipe.enable_model_cpu_offload()
                 self._pipeline_optimization = "bf16-model-cpu-offload"
             else:
-                self._pipeline_optimization = "bf16-streamed-group-offload"
+                self._pipeline_optimization = (
+                    "bf16-streamed-group-offload"
+                    if use_stream_prefetch
+                    else "bf16-conservative-group-offload"
+                )
 
+            self.release_inference_memory()
+            self._notify_load_progress(
+                load_progress_callback,
+                1.0,
+                "ready",
+                "Z-Image pipeline ready",
+                self._pipeline_optimization,
+            )
             return pipe, "cuda-offload", "cpu"
         except Exception as exc:
             if self._is_cuda_oom(exc):
@@ -934,7 +1060,12 @@ class GenerationManager:
                 f"Could not switch {family} pipeline to {task}: {exc}"
             ) from exc
 
-    def _switch_loaded_pipeline_task(self, model: dict[str, Any], task: str):
+    def _switch_loaded_pipeline_task(
+        self,
+        model: dict[str, Any],
+        task: str,
+        load_progress_callback: Any = None,
+    ):
         family = str(model.get("family", ""))
         if self._pipeline is None:
             raise GenerationError("No diffusion pipeline is loaded.")
@@ -942,22 +1073,47 @@ class GenerationManager:
             return self._pipeline
 
         previous = self._pipeline_task or "unknown"
+        self._notify_load_progress(
+            load_progress_callback,
+            0.92,
+            "task",
+            f"Switching pipeline to {task}",
+            f"{previous} → {task}",
+        )
         emit_console(
             "info",
             "generation",
             f"Switching loaded {model['name']} pipeline from {previous} to {task}.",
         )
-        self._pipeline = self._convert_pipeline_task(self._pipeline, family, task)
+        old_pipe = self._pipeline
+        self._pipeline = self._convert_pipeline_task(old_pipe, family, task)
         self._pipeline_task = task
+        del old_pipe
+        self.release_inference_memory()
+        self._notify_load_progress(
+            load_progress_callback,
+            1.0,
+            "ready",
+            f"{model['name']} {task} pipeline ready",
+            self._pipeline_optimization,
+        )
         return self._pipeline
 
-    def _load_img2img_pipeline(self, job: GenerationJob):
+    def _load_img2img_pipeline(
+        self,
+        job: GenerationJob,
+        load_progress_callback: Any = None,
+    ):
         model = job.model
         model_id = model["id"]
         family = str(model.get("family", ""))
 
         if self._pipeline is not None and self._pipeline_model_id == model_id:
-            pipe = self._switch_loaded_pipeline_task(model, "img2img")
+            pipe = self._switch_loaded_pipeline_task(
+                model,
+                "img2img",
+                load_progress_callback,
+            )
             emit_console(
                 "info",
                 "generation",
@@ -965,13 +1121,21 @@ class GenerationManager:
             )
             return pipe, self._generator_device(family)
 
-        pipe, generator_device = self._load_pipeline(job)
-        pipe = self._switch_loaded_pipeline_task(model, "img2img")
+        pipe, generator_device = self._load_pipeline(
+            job,
+            load_progress_callback,
+        )
+        pipe = self._switch_loaded_pipeline_task(
+            model,
+            "img2img",
+            load_progress_callback,
+        )
         return pipe, generator_device
 
     def prepare_txt2img(
         self,
         request: GenerationRequest,
+        load_progress_callback: Any = None,
     ) -> tuple[Any, str, dict[str, Any]]:
         model = self._validate_request(request)
         job = GenerationJob(
@@ -980,7 +1144,10 @@ class GenerationManager:
             model=model,
             total_steps=request.steps,
         )
-        pipe, generator_device = self._load_pipeline(job)
+        pipe, generator_device = self._load_pipeline(
+            job,
+            load_progress_callback,
+        )
         self._configure_sampler(pipe, model["family"], request.sampler)
         return pipe, generator_device, model
 
@@ -1003,6 +1170,7 @@ class GenerationManager:
     def prepare_img2img(
         self,
         request: GenerationRequest,
+        load_progress_callback: Any = None,
     ) -> tuple[Any, str, dict[str, Any]]:
         model = self._validate_request(request)
         job = GenerationJob(
@@ -1011,7 +1179,10 @@ class GenerationManager:
             model=model,
             total_steps=request.steps,
         )
-        pipe, generator_device = self._load_img2img_pipeline(job)
+        pipe, generator_device = self._load_img2img_pipeline(
+            job,
+            load_progress_callback,
+        )
         self._configure_sampler(pipe, model["family"], request.sampler)
         return pipe, generator_device, model
 
@@ -1058,17 +1229,32 @@ class GenerationManager:
 
         return call_args
 
-    def _load_pipeline(self, job: GenerationJob):
+    def _load_pipeline(
+        self,
+        job: GenerationJob,
+        load_progress_callback: Any = None,
+    ):
         model = job.model
         model_id = model["id"]
         family = str(model.get("family", ""))
 
         if self._pipeline is not None and self._pipeline_model_id == model_id:
-            pipe = self._switch_loaded_pipeline_task(model, "txt2img")
+            pipe = self._switch_loaded_pipeline_task(
+                model,
+                "txt2img",
+                load_progress_callback,
+            )
             emit_console("info", "generation", f"Reusing loaded model: {model['name']}.")
             return pipe, self._generator_device(family)
 
         self._unload_pipeline()
+        self._notify_load_progress(
+            load_progress_callback,
+            0.02,
+            "prepare",
+            f"Preparing {model['name']}",
+            family.upper(),
+        )
         self._set_status(job, "loading_model", f"Loading {model['name']}")
         emit_console("info", "generation", f"Loading {family} checkpoint: {model['path']}")
 
@@ -1080,7 +1266,11 @@ class GenerationManager:
         elif family == "flux":
             pipe, display_device, generator_device = self._load_flux_pipeline(job, cache_dir)
         elif family == "zimage":
-            pipe, display_device, generator_device = self._load_zimage_pipeline(job, cache_dir)
+            pipe, display_device, generator_device = self._load_zimage_pipeline(
+                job,
+                cache_dir,
+                load_progress_callback,
+            )
         else:
             raise GenerationError(f"No pipeline loader is registered for model family '{family}'.")
 
@@ -1096,6 +1286,13 @@ class GenerationManager:
             "info",
             "generation",
             f"Model ready on {display_device}: {model['name']} ({self._pipeline_optimization or 'default'}).",
+        )
+        self._notify_load_progress(
+            load_progress_callback,
+            1.0,
+            "ready",
+            f"{model['name']} pipeline ready",
+            self._pipeline_optimization,
         )
         return pipe, generator_device
 
