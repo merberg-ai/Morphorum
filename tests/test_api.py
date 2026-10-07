@@ -35,6 +35,9 @@ def test_frontend_and_health() -> None:
         assert 'id="animation-model-load-progress"' in frontend.text
         assert 'id="animation-model-load-status"' in frontend.text
         assert 'id="animation-resume-render"' in frontend.text
+        assert 'id="image-lora-select"' in frontend.text
+        assert 'id="image-insert-lora"' in frontend.text
+        assert 'id="resolved-loras"' in frontend.text
         assert 'id="copy-console-view"' in frontend.text
         assert 'id="copy-console-buffer"' in frontend.text
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
