@@ -1,3 +1,20 @@
+.lora-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 92px auto;
+  gap: 7px;
+  align-items: center;
+  margin: 8px 0 4px;
+}
+.lora-picker-row select,
+.lora-picker-row input {
+  min-width: 0;
+}
+.field-help {
+  color: var(--muted);
+  font-size: .67rem;
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
 .image-layout {
   grid-template-columns: minmax(440px, .92fr) minmax(420px, 1.08fr);
   max-width: 1320px;
@@ -98,6 +115,12 @@
 }
 
 @media (max-width: 640px) {
+  .lora-picker-row {
+    grid-template-columns: minmax(0,1fr) 84px;
+  }
+  .lora-picker-row button {
+    grid-column: 1 / -1;
+  }
   .image-gallery { grid-template-columns: 1fr; }
   .generation-actions { flex-wrap: wrap; }
   .generation-actions #cancel-generation,
