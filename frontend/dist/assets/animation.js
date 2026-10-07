@@ -23,6 +23,7 @@
     timelineSelection: null,
     timelineScale: 6,
     timelineBusy: false,
+    timelineResizeTimer: null,
   };
 
   const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
@@ -150,6 +151,8 @@
     'animation-inspector-slider',
     'animation-curve-field',
     'animation-timeline-frame',
+    'animation-timeline-scrubber',
+    'animation-timeline-track-select',
     'animation-timeline-scale',
     'animation-timeline-keyframe-frame',
     'animation-timeline-keyframe-value',
@@ -215,6 +218,11 @@
     const value = Math.max(0, Math.min(timelineMaxFrame(), Math.trunc(Number(frame) || 0)));
     const input = qs('#animation-timeline-frame');
     if (input) input.value = String(value);
+    const scrubber = qs('#animation-timeline-scrubber');
+    if (scrubber) {
+      scrubber.max = String(timelineMaxFrame());
+      scrubber.value = String(value);
+    }
     const left = timelinePosition(value) + '%';
     qsa('.animation-timeline-playhead').forEach(playhead => {
       playhead.style.left = left;
@@ -566,15 +574,23 @@
     const empty = qs('#animation-timeline-empty');
     const refresh = qs('#animation-timeline-refresh');
     const frameInput = qs('#animation-timeline-frame');
+    const scrubber = qs('#animation-timeline-scrubber');
     const scaleInput = qs('#animation-timeline-scale');
+    const trackSelect = qs('#animation-timeline-track-select');
+    const prevButton = qs('#animation-timeline-prev-keyframe');
+    const nextButton = qs('#animation-timeline-next-keyframe');
 
     if (refresh) refresh.disabled = !state.project || state.timelineBusy;
     if (frameInput) {
       frameInput.disabled = !state.project || state.timelineBusy;
       frameInput.max = String(timelineMaxFrame());
     }
+    if (scrubber) {
+      scrubber.disabled = !state.project || state.timelineBusy;
+      scrubber.max = String(timelineMaxFrame());
+    }
     if (scaleInput) {
-      scaleInput.disabled = !state.project;
+      scaleInput.disabled = !state.project || state.timelineBusy || isMobileTimeline();
       scaleInput.value = String(state.timelineScale);
     }
 
@@ -583,6 +599,16 @@
         grid.hidden = true;
         grid.replaceChildren();
       }
+      if (trackSelect) {
+        trackSelect.replaceChildren();
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No track';
+        trackSelect.appendChild(option);
+        trackSelect.disabled = true;
+      }
+      if (prevButton) prevButton.disabled = true;
+      if (nextButton) nextButton.disabled = true;
       if (empty) {
         empty.hidden = false;
         empty.textContent = state.project
@@ -601,12 +627,18 @@
         empty.hidden = false;
         empty.textContent = 'No editable tracks are available.';
       }
+      if (trackSelect) trackSelect.disabled = true;
+      if (prevButton) prevButton.disabled = true;
+      if (nextButton) nextButton.disabled = true;
       timelineStatus('No tracks');
       renderTimelineEditor();
       return;
     }
 
-    if (!state.timelineSelection) {
+    if (
+      !state.timelineSelection ||
+      !timelineDescriptor(state.timelineSelection.group, state.timelineSelection.name)
+    ) {
       state.timelineSelection = {
         group: descriptors[0].group,
         name: descriptors[0].name,
@@ -614,9 +646,58 @@
       };
     }
 
+    if (trackSelect) {
+      const selectedValue =
+        state.timelineSelection.group + '/' + state.timelineSelection.name;
+      trackSelect.replaceChildren();
+      for (const descriptor of descriptors) {
+        const option = document.createElement('option');
+        option.value = descriptor.group + '/' + descriptor.name;
+        option.textContent =
+          timelineGroupLabel(descriptor.group) + ' · ' + (descriptor.label || descriptor.name);
+        trackSelect.appendChild(option);
+      }
+      trackSelect.value = selectedValue;
+      trackSelect.disabled = state.timelineBusy;
+    }
+
+    const selectedDescriptor = timelineDescriptor(
+      state.timelineSelection.group,
+      state.timelineSelection.name
+    );
+    const selectedTrack = timelineTrack(
+      state.timelineSelection.group,
+      state.timelineSelection.name
+    );
+    const playheadFrame = Math.max(
+      0,
+      Math.min(
+        timelineMaxFrame(),
+        Math.trunc(Number(qs('#animation-timeline-frame')?.value || 0))
+      )
+    );
+    const selectedFrames = (selectedTrack?.keyframes || [])
+      .map(item => Number(item.frame))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    if (prevButton) {
+      prevButton.disabled =
+        state.timelineBusy || !selectedFrames.some(frame => frame < playheadFrame);
+    }
+    if (nextButton) {
+      nextButton.disabled =
+        state.timelineBusy || !selectedFrames.some(frame => frame > playheadFrame);
+    }
+
     const maxFrames = Math.max(1, Number(state.timeline.max_frames || 1));
-    const contentWidth = Math.max(640, Math.round(maxFrames * state.timelineScale));
+    const mobile = isMobileTimeline();
+    const scroll = qs('#animation-timeline-scroll');
+    const availableWidth = Math.max(300, Number(scroll?.clientWidth || 360) - 4);
+    const contentWidth = mobile
+      ? availableWidth
+      : Math.max(640, Math.round(maxFrames * state.timelineScale));
     grid.style.setProperty('--timeline-content-width', contentWidth + 'px');
+    grid.classList.toggle('mobile-focused', mobile);
     grid.replaceChildren();
     grid.hidden = false;
     if (empty) empty.hidden = true;
@@ -625,7 +706,10 @@
     rulerRow.className = 'animation-timeline-ruler-row';
     const rulerLabel = document.createElement('div');
     rulerLabel.className = 'animation-timeline-ruler-label';
-    rulerLabel.textContent = maxFrames + 'f · ' + formatNumber(state.timeline.fps, 2) + 'fps';
+    rulerLabel.textContent =
+      mobile && selectedDescriptor
+        ? (selectedDescriptor.label || selectedDescriptor.name)
+        : (maxFrames + 'f · ' + formatNumber(state.timeline.fps, 2) + 'fps');
     const ruler = document.createElement('div');
     ruler.className = 'animation-timeline-ruler';
 
@@ -659,7 +743,11 @@
     rulerRow.append(rulerLabel, ruler);
     grid.appendChild(rulerRow);
 
-    for (const descriptor of descriptors) {
+    const visibleDescriptors = mobile && selectedDescriptor
+      ? [selectedDescriptor]
+      : descriptors;
+
+    for (const descriptor of visibleDescriptors) {
       const track = timelineTrack(descriptor.group, descriptor.name);
       if (!track) continue;
       const row = document.createElement('div');
@@ -755,9 +843,40 @@
       grid.appendChild(row);
     }
 
-    syncTimelinePlayhead(qs('#animation-timeline-frame')?.value || 0);
-    timelineStatus('Ready', 'saved');
+    syncTimelinePlayhead(playheadFrame);
+    timelineStatus(mobile ? 'Focused track · Ready' : 'Ready', 'saved');
     renderTimelineEditor();
+  }
+
+  function navigateTimelineKeyframe(direction) {
+    const selection = state.timelineSelection;
+    if (!selection) return;
+    const track = timelineTrack(selection.group, selection.name);
+    const frames = (track?.keyframes || [])
+      .map(item => Number(item.frame))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    if (!frames.length) return;
+
+    const current = Math.max(
+      0,
+      Math.min(
+        timelineMaxFrame(),
+        Math.trunc(Number(qs('#animation-timeline-frame')?.value || 0))
+      )
+    );
+    const target = direction < 0
+      ? [...frames].reverse().find(frame => frame < current)
+      : frames.find(frame => frame > current);
+    if (target === undefined) return;
+
+    state.timelineSelection = {
+      group: selection.group,
+      name: selection.name,
+      frame: target,
+    };
+    setInspectorFrame(target);
+    renderTimeline();
   }
 
   async function persistDirtyBeforeTimelineEdit() {
@@ -860,6 +979,11 @@
       frame: sourceFrame,
     };
     setInspectorFrame(sourceFrame);
+
+    if (isMobileTimeline() || window.matchMedia('(pointer: coarse)').matches) {
+      renderTimeline();
+      return;
+    }
 
     if (descriptor.required_frame_zero && sourceFrame === 0) {
       renderTimeline();
@@ -2251,6 +2375,8 @@
   }
 
   function bind() {
+    qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
+    qs('#animation-expand-all')?.addEventListener('click', () => setAllAnimationCards(false));
     qs('#animation-new')?.addEventListener('click', createProject);
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
@@ -2264,9 +2390,20 @@
         toast('Could not refresh timeline', error.message, 'error', 6500);
       }
     });
+    qs('#animation-timeline-track-select')?.addEventListener('change', event => {
+      const [group, name] = String(event.target.value || '').split('/');
+      if (!group || !name) return;
+      state.timelineSelection = { group, name, frame: null };
+      renderTimeline();
+    });
     qs('#animation-timeline-frame')?.addEventListener('input', event => {
       setInspectorFrame(event.target.value);
     });
+    qs('#animation-timeline-scrubber')?.addEventListener('input', event => {
+      setInspectorFrame(event.target.value);
+    });
+    qs('#animation-timeline-prev-keyframe')?.addEventListener('click', () => navigateTimelineKeyframe(-1));
+    qs('#animation-timeline-next-keyframe')?.addEventListener('click', () => navigateTimelineKeyframe(1));
     qs('#animation-timeline-scale')?.addEventListener('input', event => {
       state.timelineScale = Math.max(2, Math.min(14, Number(event.target.value) || 6));
       renderTimeline();
@@ -2344,8 +2481,14 @@
   }
 
   async function start() {
+    setupAnimationAccordions();
     bind();
     setEditorEnabled(false);
+
+    window.addEventListener('resize', () => {
+      window.clearTimeout(state.timelineResizeTimer);
+      state.timelineResizeTimer = window.setTimeout(() => renderTimeline(), 140);
+    });
     try {
       await Promise.all([
         loadCapabilities(),
