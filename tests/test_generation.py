@@ -709,3 +709,18 @@ def test_lora_adapter_rejects_family_mismatch(tmp_path) -> None:
                 "weight": 1.0,
             }],
         )
+
+
+
+def test_supported_pipeline_families_expose_lora_adapter_api() -> None:
+    from diffusers import FluxPipeline, StableDiffusionXLPipeline, ZImagePipeline
+
+    for pipeline_class in (
+        StableDiffusionXLPipeline,
+        FluxPipeline,
+        ZImagePipeline,
+    ):
+        assert callable(getattr(pipeline_class, "load_lora_weights", None))
+        assert callable(getattr(pipeline_class, "set_adapters", None))
+        assert callable(getattr(pipeline_class, "disable_lora", None))
+        assert callable(getattr(pipeline_class, "enable_lora", None))
