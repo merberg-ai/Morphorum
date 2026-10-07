@@ -42,30 +42,44 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP="$ROOT/backups/update-$STAMP"
 mkdir -p "$BACKUP"
 printf '%s\n' "$PREVIOUS" > "$BACKUP/previous_commit.txt"
+printf '%s\n' "$PREVIOUS_BRANCH" > "$BACKUP/previous_branch.txt"
 
 [[ -f "$ROOT/data/config.yaml" ]] && cp "$ROOT/data/config.yaml" "$BACKUP/config.yaml"
 find "$ROOT/data" -maxdepth 1 -type f -name '*.db' -exec cp {} "$BACKUP/" \; 2>/dev/null || true
 
 step "Backup created: $BACKUP"
 
+UPDATE_ERROR=""
+
 if [[ "$TARGET_BRANCH" != "$PREVIOUS_BRANCH" ]]; then
   step "Switching Morphorum from '$PREVIOUS_BRANCH' to '$TARGET_BRANCH'..."
   if git -C "$ROOT" show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
-    git -C "$ROOT" switch "$TARGET_BRANCH"
+    if ! git -C "$ROOT" switch "$TARGET_BRANCH"; then
+      UPDATE_ERROR="git switch failed"
+    fi
   else
-    git -C "$ROOT" switch --track -c "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+    if ! git -C "$ROOT" switch --track -c "$TARGET_BRANCH" "origin/$TARGET_BRANCH"; then
+      UPDATE_ERROR="git switch --track failed"
+    fi
   fi
 fi
 
-step "Updating branch '$TARGET_BRANCH'..."
-git -C "$ROOT" pull --ff-only origin "$TARGET_BRANCH"
+if [[ -z "$UPDATE_ERROR" ]]; then
+  step "Updating branch '$TARGET_BRANCH'..."
+  if ! git -C "$ROOT" pull --ff-only origin "$TARGET_BRANCH"; then
+    UPDATE_ERROR="git pull failed"
+  fi
+fi
 
-if "$ROOT/scripts/install_linux.sh" --update; then
+if [[ -z "$UPDATE_ERROR" ]] && "$ROOT/scripts/install_linux.sh" --update; then
   ok "Morphorum update completed successfully on branch '$TARGET_BRANCH'."
   exit 0
 fi
 
-warn "Update install/self-test failed. Rolling source tree back to branch '$PREVIOUS_BRANCH' at $PREVIOUS..."
+if [[ -z "$UPDATE_ERROR" ]]; then
+  UPDATE_ERROR="install/self-test failed"
+fi
+warn "$UPDATE_ERROR. Rolling source tree back to branch '$PREVIOUS_BRANCH' at $PREVIOUS..."
 
 if [[ "$PREVIOUS_BRANCH" != "HEAD" ]]; then
   if ! git -C "$ROOT" switch "$PREVIOUS_BRANCH"; then
