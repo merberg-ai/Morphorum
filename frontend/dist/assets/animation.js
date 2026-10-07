@@ -25,6 +25,115 @@
     timelineBusy: false,
   };
 
+  const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
+
+  function readAnimationCardState() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ANIMATION_CARD_STORAGE_KEY) || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeAnimationCardState(value) {
+    try {
+      localStorage.setItem(ANIMATION_CARD_STORAGE_KEY, JSON.stringify(value));
+    } catch (_) {
+      // Browser storage can be unavailable in private/restricted contexts.
+    }
+  }
+
+  function animationCardKey(card, index) {
+    if (card.dataset.animationCardKey) return card.dataset.animationCardKey;
+    const heading = qs('h2', card)?.textContent || card.id || ('section-' + index);
+    const slug = String(heading)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || ('section-' + index);
+    card.dataset.animationCardKey = slug;
+    return slug;
+  }
+
+  function setAnimationCardCollapsed(card, collapsed, { persist = true } = {}) {
+    if (!card) return;
+    const key = card.dataset.animationCardKey;
+    card.classList.toggle('animation-card-collapsed', Boolean(collapsed));
+    const content = qs('.animation-card-content', card);
+    if (content) content.hidden = Boolean(collapsed);
+    const toggle = qs('.animation-card-toggle', card);
+    if (toggle) {
+      toggle.textContent = collapsed ? '▸' : '▾';
+      toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      toggle.title = collapsed ? 'Expand section' : 'Collapse section';
+    }
+    if (persist && key) {
+      const stateValue = readAnimationCardState();
+      stateValue[key] = Boolean(collapsed);
+      writeAnimationCardState(stateValue);
+    }
+  }
+
+  function setAllAnimationCards(collapsed) {
+    qsa('#view-animation .animation-layout > article.card').forEach(card => {
+      setAnimationCardCollapsed(card, collapsed);
+    });
+  }
+
+  function setupAnimationAccordions() {
+    const stored = readAnimationCardState();
+    const mobile = window.matchMedia('(max-width: 720px)').matches;
+    const mobileOpenByDefault = new Set([
+      'project',
+      'start-frame',
+      'visual-timeline',
+      'animation-render',
+    ]);
+
+    qsa('#view-animation .animation-layout > article.card').forEach((card, index) => {
+      if (card.dataset.animationAccordionReady === '1') return;
+      card.dataset.animationAccordionReady = '1';
+      const key = animationCardKey(card, index);
+      const header = qs('.card-header', card);
+      if (!header) return;
+
+      const content = document.createElement('div');
+      content.className = 'animation-card-content';
+      const children = [...card.children].filter(child => child !== header);
+      for (const child of children) content.appendChild(child);
+      card.appendChild(content);
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'icon-button animation-card-toggle';
+      toggle.setAttribute('aria-label', 'Collapse or expand section');
+      header.appendChild(toggle);
+
+      const defaultCollapsed = mobile && !mobileOpenByDefault.has(key);
+      const collapsed = Object.prototype.hasOwnProperty.call(stored, key)
+        ? Boolean(stored[key])
+        : defaultCollapsed;
+      setAnimationCardCollapsed(card, collapsed, { persist: false });
+
+      toggle.addEventListener('click', event => {
+        event.stopPropagation();
+        setAnimationCardCollapsed(
+          card,
+          !card.classList.contains('animation-card-collapsed')
+        );
+      });
+
+      header.addEventListener('click', event => {
+        if (event.target.closest('button, input, select, textarea, a, label')) return;
+        setAnimationCardCollapsed(
+          card,
+          !card.classList.contains('animation-card-collapsed')
+        );
+      });
+    });
+  }
+
   const SCHEDULE_INPUTS = {
     'motion.angle': '#animation-angle',
     'motion.zoom': '#animation-zoom',
@@ -68,6 +177,10 @@
       throw new Error(detail || `${response.status} ${response.statusText}`);
     }
     return payload;
+  }
+
+  function isMobileTimeline() {
+    return window.matchMedia('(max-width: 720px)').matches;
   }
 
   function timelineStatus(text, kind = '') {
