@@ -30,6 +30,7 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
         "width": 1024,
         "height": 1024,
         "prompt_transition": "blend",
+        "start_mode": "prompt",
         "source_image": "",
         "source_image_name": "",
     }
@@ -151,3 +152,17 @@ def test_animation_project_json_is_human_readable(tmp_path, monkeypatch) -> None
     assert raw.endswith("\n")
     assert "\n  \"animation\":" in raw
     assert parsed["id"] == project["id"]
+
+
+def test_legacy_source_project_infers_source_start_mode(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    project = create_animation_project({"name": "Legacy Source"})
+    path = tmp_path / project["id"] / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["animation"].pop("start_mode", None)
+    payload["animation"]["source_image"] = "assets/source.png"
+    payload["animation"]["source_image_name"] = "legacy.png"
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    loaded = load_animation_project(project["id"])
+    assert loaded["animation"]["start_mode"] == "source"
