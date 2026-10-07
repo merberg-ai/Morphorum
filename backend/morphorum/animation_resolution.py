@@ -282,3 +282,55 @@ def project_schedule_series(
         "keyframes": validation["keyframes"],
         "issues": validation["issues"],
     }
+
+
+MAX_RESOLVED_TIMELINE_FRAMES = 2000
+
+
+def resolve_project_timeline(
+    project: dict[str, Any],
+    *,
+    start_frame: int = 0,
+    end_frame: int | None = None,
+    step: int = 1,
+) -> dict[str, Any]:
+    max_frames, fps, _expression_seed = _project_context(project)
+
+    try:
+        start = int(start_frame)
+        end = max_frames - 1 if end_frame is None else int(end_frame)
+        stride = int(step)
+    except (TypeError, ValueError) as exc:
+        raise ScheduleError("Timeline range values must be integers.") from exc
+
+    if stride < 1:
+        raise ScheduleError("Timeline step must be at least 1.")
+    if start < 0 or start >= max_frames:
+        raise ScheduleError(
+            f"Start frame {start} is outside the animation range 0..{max_frames - 1}."
+        )
+    if end < start or end >= max_frames:
+        raise ScheduleError(
+            f"End frame {end} must be between {start} and {max_frames - 1}."
+        )
+
+    frames = list(range(start, end + 1, stride))
+    if len(frames) > MAX_RESOLVED_TIMELINE_FRAMES:
+        raise ScheduleError(
+            "Resolved timeline request is too large; increase step or narrow the frame range."
+        )
+
+    return {
+        "schema_version": TIMELINE_SCHEMA_VERSION,
+        "source": "tracks",
+        "max_frames": max_frames,
+        "fps": fps,
+        "start_frame": start,
+        "end_frame": end,
+        "step": stride,
+        "count": len(frames),
+        "frames": [
+            resolve_project_frame(project, frame)
+            for frame in frames
+        ],
+    }
