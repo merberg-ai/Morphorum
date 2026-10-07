@@ -304,6 +304,635 @@
       .sort((a, b) => a - b);
   }
 
+  function timelineTrackDescriptors() {
+    const tracks = state.timeline?.descriptors?.tracks;
+    return Array.isArray(tracks)
+      ? tracks.filter(item => item?.editable && item?.keyframe_editable)
+      : [];
+  }
+
+  function timelineDescriptor(group, name) {
+    return timelineTrackDescriptors().find(
+      item => item.group === group && item.name === name
+    ) || null;
+  }
+
+  function timelineTrack(group, name) {
+    const groupValue = state.timeline?.tracks?.[group];
+    return groupValue && typeof groupValue === 'object'
+      ? (groupValue[name] || null)
+      : null;
+  }
+
+  function timelineGroupLabel(group) {
+    const groups = state.timeline?.descriptors?.groups;
+    const match = Array.isArray(groups)
+      ? groups.find(item => item.id === group)
+      : null;
+    return match?.label || String(group || '').replaceAll('_', ' ');
+  }
+
+  function niceTimelineStep(maxFrames, width) {
+    const approximateTicks = Math.max(2, Math.floor(Number(width || 720) / 90));
+    const raw = Math.max(1, Number(maxFrames || 1) / approximateTicks);
+    const power = 10 ** Math.floor(Math.log10(raw));
+    const normalized = raw / power;
+    const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    return Math.max(1, Math.round(nice * power));
+  }
+
+  function timelineKeyframeAt(track, frame) {
+    const keyframes = Array.isArray(track?.keyframes) ? track.keyframes : [];
+    return keyframes.find(item => Number(item.frame) === Number(frame)) || null;
+  }
+
+  function nearestTimelineValue(track, frame) {
+    const keyframes = (Array.isArray(track?.keyframes) ? track.keyframes : [])
+      .filter(item => Number.isFinite(Number(item.frame)))
+      .sort((a, b) => Number(a.frame) - Number(b.frame));
+    if (!keyframes.length) return '';
+    let selected = keyframes[0];
+    for (const item of keyframes) {
+      if (Number(item.frame) <= Number(frame)) selected = item;
+      else break;
+    }
+    return String(selected?.value ?? '');
+  }
+
+  function renderTimelineEditor() {
+    const editor = qs('#animation-timeline-editor');
+    const selection = state.timelineSelection;
+    const add = qs('#animation-timeline-add');
+    if (add) add.disabled = !state.project || !selection || state.timelineBusy;
+
+    if (!editor || !selection || !state.timeline) {
+      if (editor) editor.hidden = true;
+      return;
+    }
+
+    const descriptor = timelineDescriptor(selection.group, selection.name);
+    const track = timelineTrack(selection.group, selection.name);
+    if (!descriptor || !track) {
+      editor.hidden = true;
+      return;
+    }
+
+    const playhead = Number(qs('#animation-timeline-frame')?.value || 0);
+    const selectedFrame = selection.frame === null || selection.frame === undefined
+      ? playhead
+      : Number(selection.frame);
+    const keyframe = timelineKeyframeAt(track, selectedFrame);
+
+    editor.hidden = false;
+    const title = qs('#animation-timeline-selected-track');
+    if (title) title.textContent = descriptor.label || descriptor.id;
+    const meta = qs('#animation-timeline-selected-meta');
+    if (meta) {
+      const unit = descriptor.unit ? ' · ' + descriptor.unit : '';
+      meta.textContent =
+        timelineGroupLabel(descriptor.group) +
+        ' · ' + descriptor.kind +
+        unit +
+        (keyframe ? ' · keyframe F' + selectedFrame : ' · new keyframe at F' + selectedFrame);
+    }
+
+    const frameInput = qs('#animation-timeline-keyframe-frame');
+    if (frameInput) {
+      frameInput.max = String(timelineMaxFrame());
+      frameInput.value = String(selectedFrame);
+      frameInput.disabled = state.timelineBusy;
+    }
+
+    const valueInput = qs('#animation-timeline-keyframe-value');
+    if (valueInput) {
+      valueInput.value = keyframe
+        ? String(keyframe.value ?? '')
+        : nearestTimelineValue(track, selectedFrame);
+      valueInput.rows = descriptor.kind === 'prompt' ? 3 : 2;
+      valueInput.disabled = state.timelineBusy;
+    }
+
+    const interpolation = qs('#animation-timeline-interpolation');
+    if (interpolation) {
+      interpolation.replaceChildren();
+      for (const mode of descriptor.interpolation_modes || []) {
+        const option = document.createElement('option');
+        option.value = mode;
+        option.textContent = mode;
+        interpolation.appendChild(option);
+      }
+      interpolation.value = track.interpolation || descriptor.interpolation_modes?.[0] || '';
+      interpolation.disabled = state.timelineBusy;
+    }
+
+    const apply = qs('#animation-timeline-apply');
+    if (apply) {
+      apply.textContent = keyframe ? 'Apply' : 'Add keyframe';
+      apply.disabled = state.timelineBusy;
+    }
+
+    const remove = qs('#animation-timeline-delete');
+    if (remove) {
+      const protectedFrame = Boolean(
+        keyframe && descriptor.required_frame_zero && Number(selectedFrame) === 0
+      );
+      remove.disabled = state.timelineBusy || !keyframe || protectedFrame;
+      remove.title = protectedFrame
+        ? 'Frame 0 is required for this track.'
+        : 'Delete selected keyframe';
+    }
+  }
+
+  function renderTimeline() {
+    const grid = qs('#animation-timeline-grid');
+    const empty = qs('#animation-timeline-empty');
+    const refresh = qs('#animation-timeline-refresh');
+    const frameInput = qs('#animation-timeline-frame');
+    const scaleInput = qs('#animation-timeline-scale');
+
+    if (refresh) refresh.disabled = !state.project || state.timelineBusy;
+    if (frameInput) {
+      frameInput.disabled = !state.project || state.timelineBusy;
+      frameInput.max = String(timelineMaxFrame());
+    }
+    if (scaleInput) {
+      scaleInput.disabled = !state.project;
+      scaleInput.value = String(state.timelineScale);
+    }
+
+    if (!grid || !state.project || !state.timeline) {
+      if (grid) {
+        grid.hidden = true;
+        grid.replaceChildren();
+      }
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = state.project
+          ? 'Loading timeline tracks…'
+          : 'Create or load a project to view timeline tracks.';
+      }
+      timelineStatus(state.project ? 'Loading…' : 'No project', state.project ? 'busy' : '');
+      renderTimelineEditor();
+      return;
+    }
+
+    const descriptors = timelineTrackDescriptors();
+    if (!descriptors.length) {
+      grid.hidden = true;
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = 'No editable tracks are available.';
+      }
+      timelineStatus('No tracks');
+      renderTimelineEditor();
+      return;
+    }
+
+    if (!state.timelineSelection) {
+      state.timelineSelection = {
+        group: descriptors[0].group,
+        name: descriptors[0].name,
+        frame: null,
+      };
+    }
+
+    const maxFrames = Math.max(1, Number(state.timeline.max_frames || 1));
+    const contentWidth = Math.max(640, Math.round(maxFrames * state.timelineScale));
+    grid.style.setProperty('--timeline-content-width', contentWidth + 'px');
+    grid.replaceChildren();
+    grid.hidden = false;
+    if (empty) empty.hidden = true;
+
+    const rulerRow = document.createElement('div');
+    rulerRow.className = 'animation-timeline-ruler-row';
+    const rulerLabel = document.createElement('div');
+    rulerLabel.className = 'animation-timeline-ruler-label';
+    rulerLabel.textContent = maxFrames + 'f · ' + formatNumber(state.timeline.fps, 2) + 'fps';
+    const ruler = document.createElement('div');
+    ruler.className = 'animation-timeline-ruler';
+
+    const step = niceTimelineStep(maxFrames, contentWidth);
+    const lastFrame = Math.max(0, maxFrames - 1);
+    for (let frame = 0; frame <= lastFrame; frame += step) {
+      const tick = document.createElement('div');
+      tick.className = 'animation-timeline-tick major';
+      tick.style.left = timelinePosition(frame) + '%';
+      const label = document.createElement('span');
+      label.textContent = String(frame);
+      tick.appendChild(label);
+      ruler.appendChild(tick);
+    }
+    if (lastFrame > 0 && lastFrame % step !== 0) {
+      const tick = document.createElement('div');
+      tick.className = 'animation-timeline-tick major';
+      tick.style.left = '100%';
+      const label = document.createElement('span');
+      label.textContent = String(lastFrame);
+      tick.appendChild(label);
+      ruler.appendChild(tick);
+    }
+    const rulerPlayhead = document.createElement('div');
+    rulerPlayhead.className = 'animation-timeline-playhead';
+    ruler.appendChild(rulerPlayhead);
+    ruler.addEventListener('click', event => {
+      const frame = timelineFrameFromClientX(ruler, event.clientX);
+      setInspectorFrame(frame);
+    });
+    rulerRow.append(rulerLabel, ruler);
+    grid.appendChild(rulerRow);
+
+    for (const descriptor of descriptors) {
+      const track = timelineTrack(descriptor.group, descriptor.name);
+      if (!track) continue;
+      const row = document.createElement('div');
+      row.className = 'animation-timeline-track-row';
+      if (
+        state.timelineSelection?.group === descriptor.group &&
+        state.timelineSelection?.name === descriptor.name
+      ) {
+        row.classList.add('selected');
+      }
+
+      const label = document.createElement('div');
+      label.className = 'animation-timeline-track-label';
+      const strong = document.createElement('strong');
+      strong.textContent = descriptor.label || descriptor.id;
+      const meta = document.createElement('span');
+      meta.textContent =
+        timelineGroupLabel(descriptor.group) +
+        ' · ' + (track.interpolation || '') +
+        (descriptor.unit ? ' · ' + descriptor.unit : '');
+      label.append(strong, meta);
+      label.addEventListener('click', () => {
+        state.timelineSelection = {
+          group: descriptor.group,
+          name: descriptor.name,
+          frame: null,
+        };
+        renderTimeline();
+      });
+
+      const lane = document.createElement('div');
+      lane.className = 'animation-timeline-track-lane';
+      lane.dataset.group = descriptor.group;
+      lane.dataset.track = descriptor.name;
+      lane.addEventListener('click', event => {
+        if (event.target.closest('.animation-timeline-keyframe')) return;
+        const frame = timelineFrameFromClientX(lane, event.clientX);
+        state.timelineSelection = {
+          group: descriptor.group,
+          name: descriptor.name,
+          frame: timelineKeyframeAt(track, frame) ? frame : null,
+        };
+        setInspectorFrame(frame);
+        renderTimeline();
+      });
+
+      const playhead = document.createElement('div');
+      playhead.className = 'animation-timeline-playhead';
+      lane.appendChild(playhead);
+
+      for (const item of track.keyframes || []) {
+        const frame = Number(item.frame);
+        if (!Number.isFinite(frame)) continue;
+        const keyframe = document.createElement('button');
+        keyframe.type = 'button';
+        keyframe.className = 'animation-timeline-keyframe';
+        if (descriptor.required_frame_zero && frame === 0) {
+          keyframe.classList.add('required');
+        }
+        if (
+          state.timelineSelection?.group === descriptor.group &&
+          state.timelineSelection?.name === descriptor.name &&
+          Number(state.timelineSelection?.frame) === frame
+        ) {
+          keyframe.classList.add('selected');
+        }
+        keyframe.style.left = timelinePosition(frame) + '%';
+        keyframe.title = descriptor.label + ' · F' + frame + ' · ' + String(item.value ?? '');
+        keyframe.setAttribute('aria-label', descriptor.label + ' keyframe at frame ' + frame);
+        keyframe.addEventListener('click', event => {
+          event.stopPropagation();
+          state.timelineSelection = {
+            group: descriptor.group,
+            name: descriptor.name,
+            frame,
+          };
+          setInspectorFrame(frame);
+          renderTimeline();
+        });
+        keyframe.addEventListener('pointerdown', event => {
+          beginTimelineDrag(event, descriptor, item, lane, keyframe);
+        });
+        lane.appendChild(keyframe);
+      }
+
+      row.append(label, lane);
+      grid.appendChild(row);
+    }
+
+    syncTimelinePlayhead(qs('#animation-timeline-frame')?.value || 0);
+    timelineStatus('Ready', 'saved');
+    renderTimelineEditor();
+  }
+
+  async function persistDirtyBeforeTimelineEdit() {
+    if (!state.project || !state.dirty) return;
+    timelineStatus('Saving form…', 'busy');
+    const payload = await api(
+      '/api/animation/projects/' + encodeURIComponent(state.project.id),
+      {
+        method: 'PUT',
+        body: JSON.stringify(collectProject()),
+      }
+    );
+    state.project = payload.project;
+    state.path = payload.path || state.path;
+    clearDirty();
+  }
+
+  async function loadTimeline() {
+    if (!state.project?.id) {
+      state.timeline = null;
+      state.timelineSelection = null;
+      renderTimeline();
+      return;
+    }
+
+    timelineStatus('Loading…', 'busy');
+    try {
+      state.timeline = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) + '/timeline'
+      );
+      if (state.timelineSelection) {
+        const descriptor = timelineDescriptor(
+          state.timelineSelection.group,
+          state.timelineSelection.name
+        );
+        if (!descriptor) state.timelineSelection = null;
+      }
+      renderTimeline();
+    } catch (error) {
+      state.timeline = null;
+      timelineStatus('Timeline error', 'error');
+      const empty = qs('#animation-timeline-empty');
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = error.message;
+      }
+      const grid = qs('#animation-timeline-grid');
+      if (grid) grid.hidden = true;
+    }
+  }
+
+  async function finishTimelineMutation(payload, selection) {
+    if (payload?.project) {
+      state.project = payload.project;
+      state.timelineSelection = selection || state.timelineSelection;
+      clearDirty();
+      fillForm();
+    }
+    await loadTimeline();
+    refreshInspector();
+  }
+
+  async function moveTimelineKeyframe(descriptor, sourceFrame, targetFrame) {
+    if (!state.project || sourceFrame === targetFrame) return;
+    state.timelineBusy = true;
+    timelineStatus('Moving F' + sourceFrame + ' → F' + targetFrame + '…', 'busy');
+    renderTimelineEditor();
+    try {
+      await persistDirtyBeforeTimelineEdit();
+      const payload = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+        '/' + encodeURIComponent(descriptor.name) +
+        '/keyframes/' + encodeURIComponent(sourceFrame) + '/move',
+        {
+          method: 'POST',
+          body: JSON.stringify({ frame: targetFrame, overwrite: false }),
+        }
+      );
+      await finishTimelineMutation(payload, {
+        group: descriptor.group,
+        name: descriptor.name,
+        frame: targetFrame,
+      });
+    } catch (error) {
+      timelineStatus('Move failed', 'error');
+      toast('Could not move keyframe', error.message, 'error', 6500);
+      await loadTimeline();
+    } finally {
+      state.timelineBusy = false;
+      renderTimeline();
+    }
+  }
+
+  function beginTimelineDrag(event, descriptor, item, lane, button) {
+    const sourceFrame = Number(item.frame);
+    state.timelineSelection = {
+      group: descriptor.group,
+      name: descriptor.name,
+      frame: sourceFrame,
+    };
+    setInspectorFrame(sourceFrame);
+
+    if (descriptor.required_frame_zero && sourceFrame === 0) {
+      renderTimeline();
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    let targetFrame = sourceFrame;
+    let moved = false;
+
+    const onMove = moveEvent => {
+      if (Math.abs(moveEvent.clientX - event.clientX) > 3) moved = true;
+      if (!moved) return;
+      targetFrame = timelineFrameFromClientX(lane, moveEvent.clientX);
+      button.style.left = timelinePosition(targetFrame) + '%';
+      timelineStatus('Drop at F' + targetFrame, 'busy');
+      syncTimelinePlayhead(targetFrame);
+    };
+
+    const onUp = async () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (moved && targetFrame !== sourceFrame) {
+        await moveTimelineKeyframe(descriptor, sourceFrame, targetFrame);
+      } else {
+        renderTimeline();
+      }
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+  }
+
+  async function addTimelineKeyframeAtPlayhead() {
+    if (!state.project || !state.timelineSelection || state.timelineBusy) return;
+    const descriptor = timelineDescriptor(
+      state.timelineSelection.group,
+      state.timelineSelection.name
+    );
+    const track = timelineTrack(
+      state.timelineSelection.group,
+      state.timelineSelection.name
+    );
+    if (!descriptor || !track) return;
+
+    const frame = Math.max(
+      0,
+      Math.min(timelineMaxFrame(), Math.trunc(Number(qs('#animation-timeline-frame')?.value || 0)))
+    );
+    const existing = timelineKeyframeAt(track, frame);
+    if (existing) {
+      state.timelineSelection.frame = frame;
+      renderTimeline();
+      qs('#animation-timeline-keyframe-value')?.focus();
+      return;
+    }
+
+    state.timelineBusy = true;
+    timelineStatus('Adding keyframe…', 'busy');
+    try {
+      await persistDirtyBeforeTimelineEdit();
+      const payload = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+        '/' + encodeURIComponent(descriptor.name) +
+        '/keyframes/' + encodeURIComponent(frame),
+        {
+          method: 'PUT',
+          body: JSON.stringify({ value: nearestTimelineValue(track, frame) }),
+        }
+      );
+      await finishTimelineMutation(payload, {
+        group: descriptor.group,
+        name: descriptor.name,
+        frame,
+      });
+    } catch (error) {
+      timelineStatus('Add failed', 'error');
+      toast('Could not add keyframe', error.message, 'error', 6500);
+    } finally {
+      state.timelineBusy = false;
+      renderTimeline();
+    }
+  }
+
+  async function applyTimelineEditor() {
+    const selection = state.timelineSelection;
+    if (!state.project || !selection || state.timelineBusy) return;
+    const descriptor = timelineDescriptor(selection.group, selection.name);
+    const track = timelineTrack(selection.group, selection.name);
+    if (!descriptor || !track) return;
+
+    const originalFrame = selection.frame;
+    const targetFrame = Math.max(
+      0,
+      Math.min(
+        timelineMaxFrame(),
+        Math.trunc(Number(qs('#animation-timeline-keyframe-frame')?.value || 0))
+      )
+    );
+    const value = qs('#animation-timeline-keyframe-value')?.value ?? '';
+    const interpolation = qs('#animation-timeline-interpolation')?.value || track.interpolation;
+
+    state.timelineBusy = true;
+    timelineStatus('Saving keyframe…', 'busy');
+    try {
+      await persistDirtyBeforeTimelineEdit();
+      let payload = null;
+      let frame = originalFrame;
+
+      if (frame !== null && frame !== undefined && Number(frame) !== targetFrame) {
+        payload = await api(
+          '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+          '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+          '/' + encodeURIComponent(descriptor.name) +
+          '/keyframes/' + encodeURIComponent(frame) + '/move',
+          {
+            method: 'POST',
+            body: JSON.stringify({ frame: targetFrame, overwrite: false }),
+          }
+        );
+        if (payload?.project) state.project = payload.project;
+        frame = targetFrame;
+      }
+
+      payload = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+        '/' + encodeURIComponent(descriptor.name) +
+        '/keyframes/' + encodeURIComponent(targetFrame),
+        {
+          method: 'PUT',
+          body: JSON.stringify({ value }),
+        }
+      );
+      if (payload?.project) state.project = payload.project;
+
+      if (interpolation && interpolation !== track.interpolation) {
+        payload = await api(
+          '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+          '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+          '/' + encodeURIComponent(descriptor.name) +
+          '/interpolation',
+          {
+            method: 'PUT',
+            body: JSON.stringify({ interpolation }),
+          }
+        );
+      }
+
+      await finishTimelineMutation(payload, {
+        group: descriptor.group,
+        name: descriptor.name,
+        frame: targetFrame,
+      });
+    } catch (error) {
+      timelineStatus('Save failed', 'error');
+      toast('Could not save timeline keyframe', error.message, 'error', 7000);
+      await loadTimeline();
+    } finally {
+      state.timelineBusy = false;
+      renderTimeline();
+    }
+  }
+
+  async function deleteTimelineKeyframe() {
+    const selection = state.timelineSelection;
+    if (!state.project || !selection || selection.frame === null || state.timelineBusy) return;
+    const descriptor = timelineDescriptor(selection.group, selection.name);
+    if (!descriptor) return;
+
+    state.timelineBusy = true;
+    timelineStatus('Deleting keyframe…', 'busy');
+    try {
+      await persistDirtyBeforeTimelineEdit();
+      const payload = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+        '/' + encodeURIComponent(descriptor.name) +
+        '/keyframes/' + encodeURIComponent(selection.frame),
+        { method: 'DELETE' }
+      );
+      await finishTimelineMutation(payload, {
+        group: descriptor.group,
+        name: descriptor.name,
+        frame: null,
+      });
+    } catch (error) {
+      timelineStatus('Delete failed', 'error');
+      toast('Could not delete keyframe', error.message, 'error', 6500);
+    } finally {
+      state.timelineBusy = false;
+      renderTimeline();
+    }
+  }
+
   function currentAnimationLoras() {
     const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
     const model = modelById(modelId);
