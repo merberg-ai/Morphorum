@@ -1064,3 +1064,247 @@
     grid-column: 1;
   }
 }
+
+
+/* Timeline Beta B1: compact sections, mobile focus editor, prompt telemetry */
+#view-animation .animation-layout > article.card > .card-header {
+  cursor: pointer;
+}
+.animation-card-content[hidden] {
+  display: none !important;
+}
+.animation-card-toggle {
+  flex: 0 0 auto;
+  min-width: 36px;
+  min-height: 36px;
+  margin-left: 6px;
+  font-size: 1rem;
+  line-height: 1;
+}
+.animation-card-collapsed > .card-header {
+  margin-bottom: 0;
+}
+.animation-card-collapsed > .card-header .muted {
+  opacity: .72;
+}
+
+.animation-timeline-toolbar {
+  grid-template-columns:
+    minmax(180px,1.35fr)
+    100px
+    minmax(150px,1fr)
+    auto auto auto;
+}
+.animation-timeline-track-picker {
+  min-width: 0;
+}
+.animation-timeline-track-picker select {
+  width: 100%;
+}
+.animation-timeline-mobile-scrubber {
+  display: none;
+  margin: 2px 0 12px;
+}
+.animation-timeline-mobile-scrubber input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.animation-render-prompt-telemetry {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(65,217,255,.18);
+  border-radius: var(--radius-sm);
+  background: rgba(65,217,255,.035);
+}
+.animation-render-prompt-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.animation-render-prompt-applied.applied {
+  color: #9bdcb8;
+  border-color: rgba(114,230,167,.24);
+  background: rgba(114,230,167,.05);
+}
+.animation-render-prompt-applied.skipped {
+  color: #e4c77f;
+  border-color: rgba(243,198,106,.25);
+  background: rgba(243,198,106,.05);
+}
+.animation-render-prompt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.animation-render-prompt-grid > div {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(3,5,8,.36);
+}
+.animation-render-prompt-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: .62rem;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+}
+.animation-render-prompt-grid strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .67rem;
+  line-height: 1.35;
+}
+.animation-render-prompt-grid p {
+  margin: 7px 0 0;
+  color: var(--text);
+  font-size: .72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.animation-render-prompt-meta {
+  margin-top: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .64rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .animation-timeline-toolbar {
+    grid-template-columns: minmax(180px,1fr) 100px 1fr;
+  }
+  .animation-timeline-toolbar #animation-timeline-prev-keyframe,
+  .animation-timeline-toolbar #animation-timeline-next-keyframe,
+  .animation-timeline-toolbar #animation-timeline-add {
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .animation-project-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+  .animation-project-actions #animation-collapse-all,
+  .animation-project-actions #animation-expand-all {
+    font-size: .68rem;
+  }
+
+  .animation-timeline-toolbar {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .animation-timeline-track-picker {
+    grid-column: 1 / -1;
+  }
+  .animation-timeline-scale-control {
+    display: none;
+  }
+  .animation-timeline-toolbar #animation-timeline-prev-keyframe,
+  .animation-timeline-toolbar #animation-timeline-next-keyframe {
+    grid-row: auto;
+  }
+  .animation-timeline-toolbar #animation-timeline-add {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    min-height: 44px;
+  }
+  .animation-timeline-mobile-scrubber {
+    display: block;
+  }
+
+  .animation-timeline-scroll {
+    overflow-x: hidden;
+    touch-action: pan-y;
+  }
+  .animation-timeline-grid.mobile-focused {
+    --timeline-label-width: 0px;
+    min-width: 100%;
+    width: 100%;
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-ruler-row,
+  .animation-timeline-grid.mobile-focused .animation-timeline-track-row {
+    grid-template-columns: var(--timeline-content-width);
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-ruler-label,
+  .animation-timeline-grid.mobile-focused .animation-timeline-track-label {
+    display: none;
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-ruler,
+  .animation-timeline-grid.mobile-focused .animation-timeline-track-lane {
+    width: var(--timeline-content-width);
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-track-lane {
+    min-height: 62px;
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-keyframe {
+    width: 22px;
+    height: 22px;
+  }
+  .animation-timeline-editor {
+    grid-template-columns: 1fr 1fr;
+    padding: 9px;
+  }
+  .animation-timeline-selection,
+  .animation-timeline-value-field,
+  .animation-timeline-editor-actions {
+    grid-column: 1 / -1;
+  }
+  .animation-timeline-value-field textarea {
+    min-height: 84px;
+  }
+  .animation-timeline-editor-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .animation-timeline-editor-actions button {
+    min-height: 44px;
+  }
+
+  .animation-render-prompt-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  #view-animation .animation-layout > article.card {
+    padding: 12px;
+  }
+  #view-animation .animation-layout > article.card > .card-header {
+    gap: 8px;
+  }
+  .animation-card-toggle {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .animation-timeline-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .animation-timeline-track-picker,
+  .animation-timeline-toolbar #animation-timeline-add {
+    grid-column: 1;
+  }
+  .animation-timeline-toolbar button {
+    min-height: 44px;
+  }
+  .animation-timeline-editor {
+    grid-template-columns: 1fr;
+  }
+  .animation-timeline-selection,
+  .animation-timeline-value-field,
+  .animation-timeline-editor-actions {
+    grid-column: 1;
+  }
+  .animation-render-prompt-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
