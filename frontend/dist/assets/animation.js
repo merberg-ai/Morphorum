@@ -399,7 +399,7 @@
       if (!project) {
         renderPromptRows();
         qs('#animation-project-path').textContent = 'Create or select an animation project.';
-        qs('#animation-schema-badge').textContent = 'Schema 1';
+        qs('#animation-schema-badge').textContent = 'Schema 2';
         clearInspector();
         clearDirty();
         return;
