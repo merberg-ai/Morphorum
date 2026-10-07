@@ -469,3 +469,406 @@ def track_keyframe_count(
         return 0
     keyframes = track.get("keyframes", [])
     return len(keyframes) if isinstance(keyframes, list) else 0
+
+
+class TimelineError(ValueError):
+    pass
+
+
+TRACK_GROUP_DEFS: dict[str, dict[str, Any]] = {
+    "prompts": {"label": "Prompts", "order": 0, "reserved": False},
+    "camera_2d": {"label": "2D Camera", "order": 10, "reserved": False},
+    "camera_3d": {"label": "3D Camera", "order": 20, "reserved": True},
+    "generation": {"label": "Generation", "order": 30, "reserved": False},
+    "cadence": {"label": "Cadence", "order": 40, "reserved": True},
+    "loras": {"label": "LoRAs", "order": 50, "reserved": True},
+}
+
+_TRACK_META: dict[tuple[str, str], dict[str, Any]] = {
+    ("prompts", "positive"): {
+        "label": "Positive Prompt",
+        "kind": "prompt",
+        "value_type": "text",
+        "unit": None,
+        "interpolation_modes": ["blend", "hold"],
+        "required_frame_zero": True,
+    },
+    ("prompts", "negative"): {
+        "label": "Negative Prompt",
+        "kind": "prompt",
+        "value_type": "text",
+        "unit": None,
+        "interpolation_modes": ["blend", "hold"],
+        "required_frame_zero": True,
+    },
+    ("camera_2d", "angle"): {
+        "label": "Angle",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "deg",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "motion.angle",
+    },
+    ("camera_2d", "zoom"): {
+        "label": "Zoom",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "scale",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "motion.zoom",
+    },
+    ("camera_2d", "translation_x"): {
+        "label": "Translate X",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "px",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "motion.translation_x",
+    },
+    ("camera_2d", "translation_y"): {
+        "label": "Translate Y",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "px",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "motion.translation_y",
+    },
+    ("generation", "strength"): {
+        "label": "Strength",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": None,
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "generation.strength",
+    },
+    ("generation", "noise"): {
+        "label": "Noise",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": None,
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "generation.noise",
+    },
+    ("generation", "steps"): {
+        "label": "Steps",
+        "kind": "numeric",
+        "value_type": "integer",
+        "unit": None,
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "generation.steps",
+    },
+    ("generation", "guidance"): {
+        "label": "Guidance",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": None,
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "generation.guidance",
+    },
+}
+
+
+def timeline_track_descriptors() -> dict[str, Any]:
+    groups = [
+        {
+            "id": group,
+            **deepcopy(metadata),
+        }
+        for group, metadata in sorted(
+            TRACK_GROUP_DEFS.items(),
+            key=lambda item: int(item[1].get("order", 0)),
+        )
+    ]
+    tracks = []
+    for (group, name), metadata in _TRACK_META.items():
+        tracks.append(
+            {
+                "id": f"{group}.{name}",
+                "group": group,
+                "name": name,
+                "editable": True,
+                "keyframe_editable": True,
+                **deepcopy(metadata),
+            }
+        )
+    return {
+        "schema_version": TIMELINE_SCHEMA_VERSION,
+        "groups": groups,
+        "tracks": tracks,
+    }
+
+
+def _track_descriptor(group: str, name: str) -> dict[str, Any]:
+    key = (str(group or "").strip(), str(name or "").strip())
+    metadata = _TRACK_META.get(key)
+    if metadata is None:
+        raise TimelineError(f"Unknown timeline track '{key[0]}.{key[1]}'.")
+    return {
+        "id": f"{key[0]}.{key[1]}",
+        "group": key[0],
+        "name": key[1],
+        "editable": True,
+        "keyframe_editable": True,
+        **deepcopy(metadata),
+    }
+
+
+def _frame_in_range(project: dict[str, Any], frame: Any) -> int:
+    max_frames, _fps, _seed = _project_context(project)
+    try:
+        value = int(frame)
+    except (TypeError, ValueError) as exc:
+        raise TimelineError("Timeline keyframe must use an integer frame.") from exc
+    if value < 0 or value >= max_frames:
+        raise TimelineError(
+            f"Frame {value} is outside the animation range 0..{max_frames - 1}."
+        )
+    return value
+
+
+def _mutable_track(
+    project: dict[str, Any],
+    group: str,
+    name: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    descriptor = _track_descriptor(group, name)
+    bundle = normalize_tracks(project.get("tracks"), project=project)
+    group_value = bundle.get(group)
+    if not isinstance(group_value, dict):
+        raise TimelineError(f"Timeline group '{group}' is not available.")
+    track = group_value.get(name)
+    if not isinstance(track, dict):
+        raise TimelineError(f"Timeline track '{group}.{name}' is not available.")
+    return descriptor, bundle, deepcopy(track)
+
+
+def get_timeline_track(
+    project: dict[str, Any],
+    group: str,
+    name: str,
+) -> dict[str, Any]:
+    descriptor, _bundle, track = _mutable_track(project, group, name)
+    return {
+        "descriptor": descriptor,
+        "track": track,
+    }
+
+
+def timeline_snapshot(project: dict[str, Any]) -> dict[str, Any]:
+    max_frames, fps, _seed = _project_context(project)
+    bundle = normalize_tracks(project.get("tracks"), project=project)
+    return {
+        "schema_version": TIMELINE_SCHEMA_VERSION,
+        "project_id": str(project.get("id") or ""),
+        "max_frames": max_frames,
+        "fps": fps,
+        "duration_seconds": max_frames / fps,
+        "descriptors": timeline_track_descriptors(),
+        "tracks": bundle,
+    }
+
+
+def _store_track(
+    project: dict[str, Any],
+    *,
+    group: str,
+    name: str,
+    bundle: dict[str, Any],
+    track: dict[str, Any],
+) -> dict[str, Any]:
+    descriptor = _track_descriptor(group, name)
+    if descriptor["kind"] == "numeric":
+        field = str(descriptor.get("legacy_field") or "")
+        definition = NUMERIC_TRACK_DEFS.get(field)
+        if definition is None:
+            raise TimelineError(f"Numeric track '{group}.{name}' has no field definition.")
+        track["schedule"] = _schedule_from_keyframes(
+            track.get("keyframes"),
+            definition["default_schedule"],
+        )
+
+    group_value = bundle.setdefault(group, {})
+    group_value[name] = track
+    project["tracks"] = normalize_tracks(bundle, project=project)
+    sync_legacy_from_tracks(project, project["tracks"])
+    return project
+
+
+def upsert_track_keyframe(
+    project: dict[str, Any],
+    group: str,
+    name: str,
+    *,
+    frame: Any,
+    value: Any,
+) -> dict[str, Any]:
+    descriptor, bundle, track = _mutable_track(project, group, name)
+    frame_value = _frame_in_range(project, frame)
+    keyframes = [
+        deepcopy(item)
+        for item in track.get("keyframes", [])
+        if isinstance(item, dict)
+    ]
+
+    raw_value = str(value if value is not None else "")
+    if descriptor["kind"] == "numeric":
+        raw_value = raw_value.strip()
+        if not raw_value:
+            raise TimelineError("Numeric keyframe value cannot be empty.")
+
+    replacement: dict[str, Any] = {
+        "frame": frame_value,
+        "value": raw_value,
+    }
+    if descriptor["kind"] == "numeric":
+        replacement["frame_expression"] = str(frame_value)
+
+    by_frame: dict[int, dict[str, Any]] = {}
+    for item in keyframes:
+        try:
+            item_frame = int(item.get("frame", 0))
+        except (TypeError, ValueError):
+            continue
+        by_frame[item_frame] = item
+    by_frame[frame_value] = replacement
+    track["keyframes"] = [
+        by_frame[item_frame]
+        for item_frame in sorted(by_frame)
+    ]
+
+    return _store_track(
+        project,
+        group=group,
+        name=name,
+        bundle=bundle,
+        track=track,
+    )
+
+
+def delete_track_keyframe(
+    project: dict[str, Any],
+    group: str,
+    name: str,
+    *,
+    frame: Any,
+) -> dict[str, Any]:
+    descriptor, bundle, track = _mutable_track(project, group, name)
+    frame_value = _frame_in_range(project, frame)
+    keyframes = [
+        deepcopy(item)
+        for item in track.get("keyframes", [])
+        if isinstance(item, dict)
+    ]
+    matching = [
+        item for item in keyframes
+        if int(item.get("frame", -1)) == frame_value
+    ]
+    if not matching:
+        raise TimelineError(
+            f"Track '{group}.{name}' has no keyframe at frame {frame_value}."
+        )
+    if descriptor.get("required_frame_zero") and frame_value == 0:
+        raise TimelineError(
+            f"Track '{group}.{name}' requires a frame 0 keyframe."
+        )
+    if descriptor["kind"] == "numeric" and len(keyframes) <= 1:
+        raise TimelineError(
+            f"Numeric track '{group}.{name}' must contain at least one keyframe."
+        )
+
+    track["keyframes"] = [
+        item for item in keyframes
+        if int(item.get("frame", -1)) != frame_value
+    ]
+    return _store_track(
+        project,
+        group=group,
+        name=name,
+        bundle=bundle,
+        track=track,
+    )
+
+
+def move_track_keyframe(
+    project: dict[str, Any],
+    group: str,
+    name: str,
+    *,
+    source_frame: Any,
+    target_frame: Any,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    descriptor, bundle, track = _mutable_track(project, group, name)
+    source = _frame_in_range(project, source_frame)
+    target = _frame_in_range(project, target_frame)
+
+    if source == target:
+        return project
+    if descriptor.get("required_frame_zero") and source == 0:
+        raise TimelineError(
+            f"Track '{group}.{name}' requires its frame 0 keyframe."
+        )
+
+    keyframes = [
+        deepcopy(item)
+        for item in track.get("keyframes", [])
+        if isinstance(item, dict)
+    ]
+    by_frame: dict[int, dict[str, Any]] = {}
+    for item in keyframes:
+        try:
+            item_frame = int(item.get("frame", -1))
+        except (TypeError, ValueError):
+            continue
+        by_frame[item_frame] = item
+
+    if source not in by_frame:
+        raise TimelineError(
+            f"Track '{group}.{name}' has no keyframe at frame {source}."
+        )
+    if target in by_frame and not overwrite:
+        raise TimelineError(
+            f"Track '{group}.{name}' already has a keyframe at frame {target}."
+        )
+
+    moved = by_frame.pop(source)
+    moved["frame"] = target
+    if descriptor["kind"] == "numeric":
+        moved["frame_expression"] = str(target)
+    by_frame[target] = moved
+    track["keyframes"] = [
+        by_frame[item_frame]
+        for item_frame in sorted(by_frame)
+    ]
+
+    return _store_track(
+        project,
+        group=group,
+        name=name,
+        bundle=bundle,
+        track=track,
+    )
+
+
+def set_track_interpolation(
+    project: dict[str, Any],
+    group: str,
+    name: str,
+    *,
+    interpolation: Any,
+) -> dict[str, Any]:
+    descriptor, bundle, track = _mutable_track(project, group, name)
+    mode = str(interpolation or "").strip().lower()
+    supported = descriptor.get("interpolation_modes", [])
+    if mode not in supported:
+        raise TimelineError(
+            f"Track '{group}.{name}' does not support interpolation mode '{mode}'."
+        )
+    track["interpolation"] = mode
+    return _store_track(
+        project,
+        group=group,
+        name=name,
+        bundle=bundle,
+        track=track,
+    )
