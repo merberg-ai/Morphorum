@@ -212,17 +212,23 @@ def _merge_legacy_timeline_changes(
     merged = normalize_tracks(tracks, project=project)
     legacy = build_tracks_from_legacy(project)
 
+    comparison = existing
+    if existing is payload:
+        comparison = deepcopy(project)
+        comparison["tracks"] = deepcopy(merged)
+        sync_legacy_from_tracks(comparison, comparison["tracks"])
+
     for payload_key, track_name in {
         "prompts": "positive",
         "negative_prompts": "negative",
     }.items():
-        if payload_key in payload and payload.get(payload_key) != existing.get(payload_key):
+        if payload_key in payload and payload.get(payload_key) != comparison.get(payload_key):
             merged["prompts"][track_name]["keyframes"] = deepcopy(
                 legacy["prompts"][track_name]["keyframes"]
             )
 
     payload_animation = payload.get("animation")
-    existing_animation = existing.get("animation", {})
+    existing_animation = comparison.get("animation", {})
     if (
         isinstance(payload_animation, dict)
         and "prompt_transition" in payload_animation
@@ -239,7 +245,7 @@ def _merge_legacy_timeline_changes(
 
     for field, definition in NUMERIC_TRACK_DEFS.items():
         incoming = payload.get(definition["legacy_section"])
-        current = existing.get(definition["legacy_section"], {})
+        current = comparison.get(definition["legacy_section"], {})
         if not isinstance(incoming, dict):
             continue
         current = current if isinstance(current, dict) else {}
