@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+import morphorum.animation_resolution as animation_resolution
 from morphorum.animation_timeline import build_tracks_from_legacy
 from morphorum.animation_resolution import (
     project_schedule_series,
@@ -198,3 +199,40 @@ def test_resolved_frame_strips_prompt_lora_and_interpolates_weight(tmp_path) -> 
     assert resolved["prompts"]["positive"]["to_text"] == "city"
     assert resolved["loras"][0]["id"] == "horror-id"
     assert resolved["loras"][0]["weight"] == pytest.approx(0.5)
+
+
+
+def test_validate_project_schedules_rejects_wrong_family_lora(monkeypatch) -> None:
+    project = sample_project()
+    project["model"]["family"] = "flux"
+    project["prompts"] = {
+        "0": "forest <lora:horror:0.8>",
+        "100": "city",
+    }
+    monkeypatch.setattr(
+        animation_resolution,
+        "lora_catalog",
+        lambda: [
+            {
+                "id": "sdxl-horror",
+                "family": "sdxl",
+                "kind": "loras",
+                "name": "horror",
+                "filename": "horror.safetensors",
+                "path": "/fake/horror.safetensors",
+                "size_bytes": 1,
+                "preview_path": None,
+            }
+        ],
+    )
+
+    result = validate_project_schedules(project)
+
+    assert result["valid"] is False
+    issue = next(
+        item
+        for item in result["issues"]
+        if item["field"] == "tracks.prompts.positive"
+    )
+    assert "found for sdxl" in issue["message"]
+    assert "active model family is flux" in issue["message"]
