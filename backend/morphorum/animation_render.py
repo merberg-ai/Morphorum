@@ -741,13 +741,133 @@ class AnimationRenderManager:
             self._complete(job, fps)
             return
 
+        model_id = str(project["model"]["model_id"])
+        model = get_model(model_id)
+        if not model:
+            raise AnimationRenderError(
+                "The render model is no longer available in the model index."
+            )
+        family = str(model["family"])
+        capability = generation_manager._effective_capability(model)
+        start_mode = str(animation.get("start_mode", "prompt") or "prompt").lower()
+
+        load_started = time.monotonic()
+        pipe = None
+        generator_device = "cpu"
         render_dir = _render_dir(job.project_id, job.id)
         copied_source = render_dir / "source.png"
 
         if start_frame == 0:
-            with Image.open(copied_source) as opened:
-                frame_image = _prepare_source(opened, width, height)
             resolved = resolve_project_frame(project, 0)
+            seed = int(job.seed_plan[0])
+
+            if start_mode == "source":
+                with Image.open(copied_source) as opened:
+                    frame_image = _prepare_source(opened, width, height)
+                start_metadata = {
+                    "source_frame": True,
+                    "generated_start": False,
+                }
+                job.message = f"Prepared starting image frame 1 of {total}"
+            else:
+                generation = resolved["generation"]
+                positive = resolved["prompts"]["positive"]
+                negative = resolved["prompts"]["negative"]
+                steps = int(generation["steps"])
+                guidance = float(generation["guidance"])
+                sampler = str(generation["sampler"])
+                request = GenerationRequest(
+                    model_id=model_id,
+                    prompt=_safe_prompt_text(positive),
+                    negative_prompt=str(negative.get("from_text") or ""),
+                    width=width,
+                    height=height,
+                    steps=steps,
+                    guidance_scale=guidance,
+                    sampler=sampler,
+                    seed=seed,
+                    seed_mode="fixed",
+                    images=1,
+                )
+
+                with self._lock:
+                    job.status = "rendering"
+                    job.current_frame = 0
+                    job.current_step = 0
+                    job.message = f"Generating starting frame 1 of {total}"
+
+                pipe, generator_device, validated_model = (
+                    generation_manager.prepare_txt2img(request)
+                )
+                job.model_load_seconds = max(
+                    0.0,
+                    time.monotonic() - load_started,
+                )
+                emit_console(
+                    "info",
+                    "animation",
+                    f"{job.id}: txt2img starting-frame pipeline ready in "
+                    f"{job.model_load_seconds:.1f}s.",
+                )
+
+                import torch
+
+                generator = torch.Generator(
+                    device=generator_device
+                ).manual_seed(seed)
+
+                def on_start_step_end(
+                    pipeline,
+                    step: int,
+                    timestep,
+                    callback_kwargs,
+                ):
+                    with self._lock:
+                        job.current_step = step + 1
+                        within = min(1.0, (step + 1) / max(1, steps))
+                        job.progress = min(0.999, within / total)
+                        cancelled = job.cancel_requested
+                    if cancelled:
+                        pipeline._interrupt = True
+                    return callback_kwargs
+
+                call_args = generation_manager.build_txt2img_call_args(
+                    request,
+                    validated_model,
+                    generator=generator,
+                    on_step_end=on_start_step_end,
+                )
+                conditioning = _prompt_conditioning_kwargs(
+                    pipe,
+                    family,
+                    positive,
+                    negative,
+                    guidance_scale=guidance,
+                    max_sequence_length=int(
+                        capability.get("max_sequence_length", 512)
+                    ),
+                )
+                call_args.update(conditioning)
+
+                with torch.inference_mode():
+                    result = pipe(**call_args)
+                if job.cancel_requested:
+                    self._cancel(job)
+                    return
+                if not result.images:
+                    raise AnimationRenderError(
+                        "Txt2img returned no image for the starting frame."
+                    )
+                frame_image = result.images[0].convert("RGB")
+                start_metadata = {
+                    "source_frame": False,
+                    "generated_start": True,
+                    "model": model["name"],
+                    "family": family,
+                    "variant": generation_manager._model_variant(model),
+                    "seed": seed,
+                }
+
             path = _frame_path(job.project_id, job.id, 0)
             _save_frame(
                 frame_image,
@@ -757,22 +877,29 @@ class AnimationRenderManager:
                     "render_id": job.id,
                     "project_id": job.project_id,
                     "frame": 0,
-                    "source_frame": True,
+                    "start_mode": start_mode,
+                    **start_metadata,
                     "resolved": resolved,
                 },
             )
             job.results = [
                 {
                     "frame": 0,
-                    "seed": job.seed_plan[0],
+                    "seed": seed,
                     "filename": path.name,
                     "path": str(path),
                 }
             ]
             job.current_frame = 0
+            job.current_step = int(resolved["generation"]["steps"]) if start_mode == "prompt" else 0
             job.progress = 1 / total
-            job.message = f"Prepared source frame 1 of {total}"
+            job.message = f"Starting frame 1 of {total} complete"
             self._write_manifest(job)
+            emit_console(
+                "info",
+                "animation",
+                f"{job.id}: starting frame 0 complete using {start_mode} mode.",
+            )
             start_frame = 1
         else:
             previous_path = _frame_path(
@@ -782,19 +909,6 @@ class AnimationRenderManager:
             )
             with Image.open(previous_path) as opened:
                 frame_image = opened.convert("RGB").copy()
-
-        model_id = str(project["model"]["model_id"])
-        model = get_model(model_id)
-        if not model:
-            raise AnimationRenderError(
-                "The render model is no longer available in the model index."
-            )
-        family = str(model["family"])
-        capability = generation_manager._effective_capability(model)
-
-        load_started = time.monotonic()
-        pipe = None
-        generator_device = "cpu"
 
         for frame in range(start_frame, total):
             if job.cancel_requested:
