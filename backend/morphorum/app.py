@@ -276,7 +276,11 @@ def api_upsert_animation_timeline_keyframe(
             frame=frame,
             value=payload.get("value"),
         )
-        saved = save_animation_project(project_id, edited)
+        saved = save_animation_project(
+            project_id,
+            edited,
+            prefer_tracks=True,
+        )
         return {
             "status": "saved",
             "project": saved,
@@ -306,7 +310,11 @@ def api_delete_animation_timeline_keyframe(
             name,
             frame=frame,
         )
-        saved = save_animation_project(project_id, edited)
+        saved = save_animation_project(
+            project_id,
+            edited,
+            prefer_tracks=True,
+        )
         return {
             "status": "saved",
             "project": saved,
@@ -339,7 +347,11 @@ def api_move_animation_timeline_keyframe(
             target_frame=payload.get("frame"),
             overwrite=bool(payload.get("overwrite", False)),
         )
-        saved = save_animation_project(project_id, edited)
+        saved = save_animation_project(
+            project_id,
+            edited,
+            prefer_tracks=True,
+        )
         return {
             "status": "saved",
             "project": saved,
@@ -369,7 +381,11 @@ def api_set_animation_timeline_interpolation(
             name,
             interpolation=payload.get("interpolation"),
         )
-        saved = save_animation_project(project_id, edited)
+        saved = save_animation_project(
+            project_id,
+            edited,
+            prefer_tracks=True,
+        )
         return {
             "status": "saved",
             "project": saved,
