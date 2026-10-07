@@ -9,10 +9,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .animation_timeline import (
+    build_tracks_from_legacy,
+    normalize_tracks,
+    sync_legacy_from_tracks,
+    track_keyframe_count,
+)
 from .console import emit_console
 from .paths import PROJECTS_DIR, ensure_runtime_dirs
 
-ANIMATION_PROJECT_SCHEMA = 1
+ANIMATION_PROJECT_SCHEMA = 2
 _PROJECT_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,95}$")
 _KNOWN_TOP_LEVEL = {
     "schema_version",
@@ -26,6 +32,7 @@ _KNOWN_TOP_LEVEL = {
     "negative_prompts",
     "motion",
     "generation",
+    "tracks",
     "notes",
 }
 
@@ -124,6 +131,8 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
         },
         "notes": "",
     }
+    project["tracks"] = build_tracks_from_legacy(project)
+    return project
 
 
 def _normalize_prompt_map(value: Any, max_frames: int) -> dict[str, str]:
@@ -155,6 +164,44 @@ def _normalize_string_section(
     return result
 
 
+def _legacy_timeline_changed(
+    payload: dict[str, Any],
+    existing: dict[str, Any],
+) -> bool:
+    for key in ("prompts", "negative_prompts"):
+        if key in payload and payload.get(key) != existing.get(key):
+            return True
+
+    payload_animation = payload.get("animation")
+    existing_animation = existing.get("animation", {})
+    if (
+        isinstance(payload_animation, dict)
+        and "prompt_transition" in payload_animation
+        and payload_animation.get("prompt_transition")
+        != (
+            existing_animation.get("prompt_transition")
+            if isinstance(existing_animation, dict)
+            else None
+        )
+    ):
+        return True
+
+    for section, keys in {
+        "motion": ("angle", "zoom", "translation_x", "translation_y"),
+        "generation": ("strength", "noise", "steps", "guidance"),
+    }.items():
+        incoming = payload.get(section)
+        current = existing.get(section, {})
+        if not isinstance(incoming, dict):
+            continue
+        current = current if isinstance(current, dict) else {}
+        for key in keys:
+            if key in incoming and incoming.get(key) != current.get(key):
+                return True
+
+    return False
+
+
 def normalize_animation_project(
     payload: dict[str, Any] | None,
     *,
@@ -162,7 +209,8 @@ def normalize_animation_project(
     project_id: str | None = None,
 ) -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
-    base = deepcopy(existing) if isinstance(existing, dict) else _default_project(
+    had_existing = isinstance(existing, dict)
+    base = deepcopy(existing) if had_existing else _default_project(
         str(payload.get("name") or "Untitled Animation"),
         project_id=project_id,
     )
@@ -255,6 +303,28 @@ def normalize_animation_project(
 
     project["notes"] = str(payload.get("notes", project.get("notes", "")) or "")
 
+    incoming_tracks = payload.get("tracks")
+    existing_tracks = existing.get("tracks") if had_existing else None
+    use_incoming_tracks = isinstance(incoming_tracks, dict)
+    legacy_changed = (
+        _legacy_timeline_changed(payload, existing)
+        if had_existing and isinstance(existing, dict)
+        else False
+    )
+
+    if use_incoming_tracks and (
+        not had_existing
+        or (isinstance(existing_tracks, dict) and not legacy_changed)
+        or (
+            not isinstance(existing_tracks, dict)
+            and int(payload.get("schema_version", 1) or 1) >= ANIMATION_PROJECT_SCHEMA
+        )
+    ):
+        project["tracks"] = normalize_tracks(incoming_tracks, project=project)
+        sync_legacy_from_tracks(project, project["tracks"])
+    else:
+        project["tracks"] = build_tracks_from_legacy(project)
+
     # Native projects are forward-compatible: unknown top-level fields survive
     # a load/edit/save round trip just like future imported compatibility data.
     for key, value in payload.items():
@@ -292,9 +362,24 @@ def load_animation_project(project_id: str) -> dict[str, Any]:
         raise AnimationProjectError(f"Could not read animation project: {exc}") from exc
     if not isinstance(payload, dict):
         raise AnimationProjectError("Animation project file does not contain an object.")
+    try:
+        source_schema = int(payload.get("schema_version", 1) or 1)
+    except (TypeError, ValueError):
+        source_schema = 1
+    migration_needed = (
+        source_schema < ANIMATION_PROJECT_SCHEMA
+        or not isinstance(payload.get("tracks"), dict)
+    )
     project = normalize_animation_project(payload, existing=payload, project_id=project_id)
     project["created_at"] = str(payload.get("created_at") or project["created_at"])
     project["updated_at"] = str(payload.get("updated_at") or project["updated_at"])
+    if migration_needed:
+        _write_atomic(path, project)
+        emit_console(
+            "info",
+            "animation",
+            f"Migrated animation project {project_id} to schema {ANIMATION_PROJECT_SCHEMA}.",
+        )
     return project
 
 
@@ -343,7 +428,10 @@ def list_animation_projects() -> list[dict[str, Any]]:
                 "width": animation.get("width"),
                 "height": animation.get("height"),
                 "model_id": project.get("model", {}).get("model_id", ""),
-                "prompt_keyframes": len(prompts) if isinstance(prompts, dict) else 0,
+                "prompt_keyframes": (
+                    track_keyframe_count(project, group="prompts", name="positive")
+                    or (len(prompts) if isinstance(prompts, dict) else 0)
+                ),
             }
         )
 
