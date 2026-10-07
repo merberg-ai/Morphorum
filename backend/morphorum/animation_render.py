@@ -1416,6 +1416,7 @@ class AnimationRenderManager:
                     "family": family,
                     "variant": generation_manager._model_variant(model),
                     "resolved": resolved,
+                    "render_state": deepcopy(job.current_frame_state),
                 },
             )
 
