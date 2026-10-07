@@ -609,7 +609,9 @@
         if (
           state.timelineSelection?.group === descriptor.group &&
           state.timelineSelection?.name === descriptor.name &&
-          Number(state.timelineSelection?.frame) === frame
+          state.timelineSelection?.frame !== null &&
+          state.timelineSelection?.frame !== undefined &&
+          Number(state.timelineSelection.frame) === frame
         ) {
           keyframe.classList.add('selected');
         }
@@ -618,6 +620,10 @@
         keyframe.setAttribute('aria-label', descriptor.label + ' keyframe at frame ' + frame);
         keyframe.addEventListener('click', event => {
           event.stopPropagation();
+          if (keyframe.dataset.suppressClick === '1') {
+            delete keyframe.dataset.suppressClick;
+            return;
+          }
           state.timelineSelection = {
             group: descriptor.group,
             name: descriptor.name,
@@ -755,6 +761,7 @@
     const onMove = moveEvent => {
       if (Math.abs(moveEvent.clientX - event.clientX) > 3) moved = true;
       if (!moved) return;
+      button.dataset.suppressClick = '1';
       targetFrame = timelineFrameFromClientX(lane, moveEvent.clientX);
       button.style.left = timelinePosition(targetFrame) + '%';
       timelineStatus('Drop at F' + targetFrame, 'busy');
