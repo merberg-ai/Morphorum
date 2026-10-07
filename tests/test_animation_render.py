@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 from PIL import Image
@@ -364,7 +365,6 @@ class FakePromptStartGenerationManager:
         generator,
         on_step_end,
     ):
-        self.img2img_strengths.append(float(strength))
         return {
             "prompt": request.prompt,
             "negative_prompt": request.negative_prompt or None,
@@ -658,6 +658,7 @@ class RecordingSDXLGenerationManager:
         generator,
         on_step_end,
     ):
+        self.img2img_strengths.append(float(strength))
         return {
             "prompt": request.prompt,
             "negative_prompt": request.negative_prompt or None,
@@ -800,9 +801,10 @@ def test_render_loop_applies_full_2d_and_generation_schedule_set(
         [5.0, 6.0, 7.0]
     )
     assert [request.seed for request in fake_generation.requests] == [101, 102, 103]
-    assert noise_calls == pytest.approx(
-        [(0.01, 101), (0.02, 102), (0.03, 103)]
+    assert [amount for amount, _seed in noise_calls] == pytest.approx(
+        [0.01, 0.02, 0.03]
     )
+    assert [seed for _amount, seed in noise_calls] == [101, 102, 103]
 
     state = finished["current_frame_state"]
     assert state["frame"] == 3
