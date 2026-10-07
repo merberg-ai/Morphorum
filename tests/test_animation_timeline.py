@@ -251,5 +251,14 @@ def test_track_edit_validation_rejects_bad_frame_and_empty_numeric_value() -> No
             value="",
         )
 
+    with pytest.raises(TimelineError, match="Invalid keyframe"):
+        upsert_track_keyframe(
+            project,
+            "camera_2d",
+            "zoom",
+            frame=10,
+            value="evil(t)",
+        )
+
     with pytest.raises(TimelineError, match="Unknown timeline track"):
         get_timeline_track(project, "camera_3d", "teleport")
