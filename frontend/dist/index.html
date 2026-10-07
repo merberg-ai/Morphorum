@@ -134,6 +134,8 @@
             <p class="muted">Build projects, resolve keyframed schedules, inspect exact frame state, and preview motion curves before rendering.</p>
           </div>
           <div class="button-row animation-project-actions">
+            <button class="secondary-button compact" id="animation-collapse-all" type="button">Collapse Sections</button>
+            <button class="secondary-button compact" id="animation-expand-all" type="button">Expand Sections</button>
             <button class="secondary-button busy-button" id="animation-reload" type="button" disabled><span class="spinner"></span><span class="button-label">Reload</span></button>
             <button class="secondary-button busy-button" id="animation-new" type="button"><span class="spinner"></span><span class="button-label">New Project</span></button>
             <button class="primary-button busy-button" id="animation-save" type="button" disabled><span class="spinner"></span><span class="button-label">Save Project</span></button>
@@ -213,10 +215,14 @@
             </div>
 
             <div class="animation-timeline-toolbar">
+              <label class="animation-timeline-track-picker"><span>Track</span><select id="animation-timeline-track-select" disabled><option value="">No track</option></select></label>
               <label><span>Playhead</span><input id="animation-timeline-frame" type="number" min="0" value="0" disabled></label>
               <label class="animation-timeline-scale-control"><span>Scale</span><input id="animation-timeline-scale" type="range" min="2" max="14" step="1" value="6" disabled></label>
-              <button class="secondary-button compact" id="animation-timeline-add" type="button" disabled>+ Keyframe at playhead</button>
+              <button class="secondary-button compact" id="animation-timeline-prev-keyframe" type="button" disabled>◀ Prev Keyframe</button>
+              <button class="secondary-button compact" id="animation-timeline-next-keyframe" type="button" disabled>Next Keyframe ▶</button>
+              <button class="primary-button compact" id="animation-timeline-add" type="button" disabled>+ Keyframe Here</button>
             </div>
+            <label class="animation-timeline-mobile-scrubber"><span>Frame scrubber</span><input id="animation-timeline-scrubber" type="range" min="0" max="119" value="0" disabled></label>
 
             <div class="animation-timeline-scroll" id="animation-timeline-scroll">
               <div class="animation-timeline-empty" id="animation-timeline-empty">Create or load a project to view timeline tracks.</div>
@@ -356,6 +362,25 @@
                 <span>Step <strong id="animation-render-step">--</strong></span>
                 <span>Frame time <strong id="animation-render-frame-time">--</strong></span>
                 <span>ETA <strong id="animation-render-eta">--</strong></span>
+              </div>
+              <div class="animation-render-prompt-telemetry" id="animation-render-prompt-telemetry" hidden>
+                <div class="animation-render-prompt-heading">
+                  <span class="field-label">Prompt actually resolved for this frame</span>
+                  <span class="badge" id="animation-render-prompt-applied">--</span>
+                </div>
+                <div class="animation-render-prompt-grid">
+                  <div>
+                    <span>Positive</span>
+                    <strong id="animation-render-positive-weights">--</strong>
+                    <p id="animation-render-positive-prompt">--</p>
+                  </div>
+                  <div>
+                    <span>Negative</span>
+                    <strong id="animation-render-negative-weights">--</strong>
+                    <p id="animation-render-negative-prompt">--</p>
+                  </div>
+                </div>
+                <div class="animation-render-prompt-meta" id="animation-render-prompt-meta">--</div>
               </div>
             </div>
 
