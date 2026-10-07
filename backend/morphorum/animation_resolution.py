@@ -3,6 +3,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from .animation_timeline import (
+    NUMERIC_TRACK_DEFS,
+    TIMELINE_SCHEMA_VERSION,
+    numeric_track,
+    prompt_track,
+    prompt_track_map,
+)
 from .schedules import (
     ScheduleError,
     resolve_numeric_schedule,
@@ -12,14 +19,12 @@ from .schedules import (
 )
 
 SCHEDULE_FIELDS: dict[str, tuple[str, str, str]] = {
-    "motion.angle": ("motion", "angle", "float"),
-    "motion.zoom": ("motion", "zoom", "float"),
-    "motion.translation_x": ("motion", "translation_x", "float"),
-    "motion.translation_y": ("motion", "translation_y", "float"),
-    "generation.strength": ("generation", "strength", "float"),
-    "generation.noise": ("generation", "noise", "float"),
-    "generation.steps": ("generation", "steps", "integer"),
-    "generation.guidance": ("generation", "guidance", "float"),
+    field: (
+        definition["legacy_section"],
+        definition["legacy_key"],
+        definition["value_type"],
+    )
+    for field, definition in NUMERIC_TRACK_DEFS.items()
 }
 
 
@@ -34,17 +39,21 @@ def _project_context(project: dict[str, Any]) -> tuple[int, float, int]:
 
 
 def _schedule_text(project: dict[str, Any], field: str) -> str:
-    definition = SCHEDULE_FIELDS.get(field)
-    if definition is None:
-        raise ScheduleError(f"Unknown animation schedule field '{field}'.")
-    section, key, _kind = definition
-    source = project.get(section, {})
-    if not isinstance(source, dict):
-        raise ScheduleError(f"Animation project section '{section}' is invalid.")
-    value = str(source.get(key, "") or "").strip()
+    track = numeric_track(project, field)
+    value = str(track.get("schedule", "") or "").strip()
     if not value:
         raise ScheduleError(f"Animation schedule '{field}' is empty.")
     return value
+
+
+def _track_interpolation(project: dict[str, Any], field: str) -> str:
+    track = numeric_track(project, field)
+    interpolation = str(track.get("interpolation") or "linear").strip().lower()
+    if interpolation not in {"linear", "hold"}:
+        raise ScheduleError(
+            f"Unsupported schedule interpolation mode '{interpolation}' for '{field}'."
+        )
+    return interpolation
 
 
 def _resolve_field(
@@ -59,7 +68,7 @@ def _resolve_field(
         max_frames=max_frames,
         seed=expression_seed,
         fps=fps,
-        interpolation="linear",
+        interpolation=_track_interpolation(project, field),
     )
     kind = SCHEDULE_FIELDS[field][2]
     if kind == "integer":
@@ -90,6 +99,23 @@ def _resolved_seed(project: dict[str, Any], frame: int) -> dict[str, Any]:
     }
 
 
+def _resolve_prompt_track(
+    project: dict[str, Any],
+    name: str,
+    *,
+    frame: int,
+    max_frames: int,
+):
+    track = prompt_track(project, name)
+    mode = str(track.get("interpolation") or "blend").strip().lower()
+    return resolve_prompt_transition(
+        prompt_track_map(track),
+        frame=frame,
+        max_frames=max_frames,
+        mode=mode,
+    )
+
+
 def resolve_project_frame(
     project: dict[str, Any],
     frame: int,
@@ -101,19 +127,17 @@ def resolve_project_frame(
         )
 
     animation = project.get("animation", {})
-    prompt_mode = str(animation.get("prompt_transition", "blend") or "blend").lower()
-
-    positive = resolve_prompt_transition(
-        project.get("prompts", {}),
+    positive = _resolve_prompt_track(
+        project,
+        "positive",
         frame=frame,
         max_frames=max_frames,
-        mode=prompt_mode,
     )
-    negative = resolve_prompt_transition(
-        project.get("negative_prompts", {}),
+    negative = _resolve_prompt_track(
+        project,
+        "negative",
         frame=frame,
         max_frames=max_frames,
-        mode=prompt_mode,
     )
 
     motion = {
@@ -135,11 +159,22 @@ def resolve_project_frame(
     generation["sampler"] = str(source_generation.get("sampler", "") or "")
     generation["seed"] = _resolved_seed(project, frame)
 
+    tracks = project.get("tracks", {})
+    timeline_schema = (
+        int(tracks.get("schema_version", TIMELINE_SCHEMA_VERSION))
+        if isinstance(tracks, dict)
+        else TIMELINE_SCHEMA_VERSION
+    )
+
     return {
         "frame": frame,
         "max_frames": max_frames,
         "fps": fps,
         "time_seconds": frame / fps,
+        "timeline": {
+            "schema_version": timeline_schema,
+            "source": "tracks",
+        },
         "dimensions": {
             "width": int(animation.get("width", 1024)),
             "height": int(animation.get("height", 1024)),
@@ -161,35 +196,43 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
 
     for field in SCHEDULE_FIELDS:
         try:
+            interpolation = _track_interpolation(project, field)
             result = validate_numeric_schedule(
                 _schedule_text(project, field),
                 max_frames=max_frames,
                 seed=expression_seed,
                 fps=fps,
-                interpolation="linear",
+                interpolation=interpolation,
             )
+            result["interpolation"] = interpolation
         except ScheduleError as exc:
             result = {
                 "valid": False,
                 "issues": [{"severity": "error", "message": str(exc)}],
                 "keyframes": [],
+                "interpolation": "linear",
             }
 
         fields[field] = result
         for issue in result["issues"]:
             all_issues.append({"field": field, **issue})
 
-    prompt_mode = str(
-        project.get("animation", {}).get("prompt_transition", "blend") or "blend"
-    ).lower()
-    if prompt_mode not in {"blend", "hold"}:
-        all_issues.append(
-            {
-                "field": "animation.prompt_transition",
-                "severity": "error",
-                "message": f"Unsupported prompt transition mode '{prompt_mode}'.",
-            }
-        )
+    for name in ("positive", "negative"):
+        try:
+            track = prompt_track(project, name)
+            mode = str(track.get("interpolation") or "blend").strip().lower()
+            if mode not in {"blend", "hold"}:
+                raise ScheduleError(
+                    f"Unsupported prompt transition mode '{mode}'."
+                )
+        except ScheduleError as exc:
+            all_issues.append(
+                {
+                    "field": f"tracks.prompts.{name}",
+                    "severity": "error",
+                    "message": str(exc),
+                }
+            )
 
     return {
         "valid": not any(issue["severity"] == "error" for issue in all_issues),
@@ -209,12 +252,13 @@ def project_schedule_series(
 
     max_frames, fps, expression_seed = _project_context(project)
     schedule = _schedule_text(project, field)
+    interpolation = _track_interpolation(project, field)
     validation = validate_numeric_schedule(
         schedule,
         max_frames=max_frames,
         seed=expression_seed,
         fps=fps,
-        interpolation="linear",
+        interpolation=interpolation,
     )
     if not validation["valid"]:
         first_error = next(
@@ -225,13 +269,14 @@ def project_schedule_series(
     return {
         "field": field,
         "schedule": schedule,
+        "interpolation": interpolation,
         "max_frames": max_frames,
         "samples": sample_schedule(
             schedule,
             max_frames=max_frames,
             seed=expression_seed,
             fps=fps,
-            interpolation="linear",
+            interpolation=interpolation,
             sample_count=sample_count,
         ),
         "keyframes": validation["keyframes"],
