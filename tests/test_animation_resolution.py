@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from morphorum.animation_timeline import build_tracks_from_legacy
 from morphorum.animation_resolution import (
     project_schedule_series,
     resolve_project_frame,
@@ -112,3 +113,55 @@ def test_project_schedule_series() -> None:
 def test_unknown_schedule_field_is_rejected() -> None:
     with pytest.raises(Exception, match="Unknown animation schedule field"):
         project_schedule_series(sample_project(), "motion.teleport")
+
+
+
+def test_resolver_prefers_canonical_tracks_over_legacy_mirror() -> None:
+    project = sample_project()
+    project["schema_version"] = 2
+    project["tracks"] = build_tracks_from_legacy(project)
+    project["tracks"]["camera_2d"]["zoom"]["schedule"] = "0:(1.0), 100:(1.5)"
+    project["tracks"]["prompts"]["positive"]["keyframes"] = [
+        {"frame": 0, "value": "ocean"},
+        {"frame": 100, "value": "desert"},
+    ]
+
+    resolved = resolve_project_frame(project, 50)
+
+    assert resolved["timeline"] == {"schema_version": 1, "source": "tracks"}
+    assert resolved["motion"]["zoom"] == pytest.approx(1.25)
+    assert resolved["prompts"]["positive"]["from_text"] == "ocean"
+    assert resolved["prompts"]["positive"]["to_text"] == "desert"
+    assert resolved["prompts"]["positive"]["from_weight"] == pytest.approx(0.5)
+
+
+def test_numeric_track_hold_interpolation_is_respected() -> None:
+    project = sample_project()
+    project["tracks"] = build_tracks_from_legacy(project)
+    project["tracks"]["camera_2d"]["zoom"]["schedule"] = "0:(1.0), 100:(1.5)"
+    project["tracks"]["camera_2d"]["zoom"]["interpolation"] = "hold"
+
+    resolved = resolve_project_frame(project, 50)
+    series = project_schedule_series(project, "motion.zoom", sample_count=5)
+
+    assert resolved["motion"]["zoom"] == pytest.approx(1.0)
+    assert series["interpolation"] == "hold"
+    assert series["samples"][2]["value"] == pytest.approx(1.0)
+
+
+def test_prompt_tracks_can_use_independent_transition_modes() -> None:
+    project = sample_project()
+    project["tracks"] = build_tracks_from_legacy(project)
+    project["tracks"]["prompts"]["positive"]["interpolation"] = "hold"
+    project["tracks"]["prompts"]["negative"]["interpolation"] = "blend"
+
+    resolved = resolve_project_frame(project, 50)
+
+    positive = resolved["prompts"]["positive"]
+    negative = resolved["prompts"]["negative"]
+    assert positive["mode"] == "hold"
+    assert positive["from_text"] == "forest"
+    assert positive["to_weight"] == pytest.approx(0.0)
+    assert negative["mode"] == "blend"
+    assert negative["from_weight"] == pytest.approx(0.5)
+    assert negative["to_weight"] == pytest.approx(0.5)
