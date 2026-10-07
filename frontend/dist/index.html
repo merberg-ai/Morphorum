@@ -200,6 +200,49 @@
             </div>
           </article>
 
+          <article class="card glass animation-timeline-card" id="animation-timeline-card">
+            <div class="card-header">
+              <div>
+                <h2>Visual Timeline</h2>
+                <p class="muted">Drag keyframes across tracks, edit values at the playhead, and keep Deforum schedules synchronized automatically.</p>
+              </div>
+              <div class="animation-timeline-header-actions">
+                <span class="badge" id="animation-timeline-status">No project</span>
+                <button class="secondary-button compact" id="animation-timeline-refresh" type="button" disabled>Refresh</button>
+              </div>
+            </div>
+
+            <div class="animation-timeline-toolbar">
+              <label><span>Playhead</span><input id="animation-timeline-frame" type="number" min="0" value="0" disabled></label>
+              <label class="animation-timeline-scale-control"><span>Scale</span><input id="animation-timeline-scale" type="range" min="2" max="14" step="1" value="6" disabled></label>
+              <button class="secondary-button compact" id="animation-timeline-add" type="button" disabled>+ Keyframe at playhead</button>
+            </div>
+
+            <div class="animation-timeline-scroll" id="animation-timeline-scroll">
+              <div class="animation-timeline-empty" id="animation-timeline-empty">Create or load a project to view timeline tracks.</div>
+              <div class="animation-timeline-grid" id="animation-timeline-grid" hidden></div>
+            </div>
+
+            <div class="animation-timeline-editor" id="animation-timeline-editor" hidden>
+              <div class="animation-timeline-selection">
+                <strong id="animation-timeline-selected-track">Select a keyframe</strong>
+                <span id="animation-timeline-selected-meta">Click a track or keyframe to edit it.</span>
+              </div>
+              <label><span>Frame</span><input id="animation-timeline-keyframe-frame" type="number" min="0" value="0"></label>
+              <label class="animation-timeline-value-field"><span>Value / expression</span><textarea id="animation-timeline-keyframe-value" rows="2"></textarea></label>
+              <label><span>Interpolation</span><select id="animation-timeline-interpolation"></select></label>
+              <div class="animation-timeline-editor-actions">
+                <button class="primary-button compact" id="animation-timeline-apply" type="button">Apply</button>
+                <button class="secondary-button compact" id="animation-timeline-delete" type="button">Delete</button>
+              </div>
+            </div>
+
+            <div class="notice subtle animation-timeline-note">
+              <strong>Timeline edits save immediately</strong>
+              <span>Raw schedule fields remain available below as an advanced compatibility editor. Save unsaved form changes before dragging timeline keyframes.</span>
+            </div>
+          </article>
+
           <article class="card glass animation-prompts-card">
             <div class="card-header">
               <div><h2>Prompt Keyframes</h2><p class="muted">Positive and negative prompts resolve into per-frame transition weights.</p></div>
