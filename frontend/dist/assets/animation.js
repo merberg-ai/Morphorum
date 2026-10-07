@@ -1999,6 +1999,77 @@
     return minutes + 'm ' + remain + 's';
   }
 
+  function renderPromptTelemetryTransition(transition) {
+    if (!transition || typeof transition !== 'object') {
+      return { weights: '--', text: '--' };
+    }
+    const fromFrame = Number(transition.from_frame ?? 0);
+    const toFrame = Number(transition.to_frame ?? fromFrame);
+    const fromWeight = Math.max(0, Math.min(1, Number(transition.from_weight ?? 1)));
+    const toWeight = Math.max(0, Math.min(1, Number(transition.to_weight ?? 0)));
+    const fromText = String(transition.from_text || '(empty)');
+    const toText = String(transition.to_text || fromText);
+    const mode = String(transition.mode || 'blend');
+
+    if (fromFrame === toFrame || toWeight <= 0 || fromText === toText) {
+      return {
+        weights: 'F' + fromFrame + ' · 100% · ' + mode,
+        text: fromText,
+      };
+    }
+
+    return {
+      weights:
+        'F' + fromFrame + ' ' + Math.round(fromWeight * 100) + '% → ' +
+        'F' + toFrame + ' ' + Math.round(toWeight * 100) + '% · ' + mode,
+      text: 'FROM: ' + fromText + '\nTO: ' + toText,
+    };
+  }
+
+  function renderAnimationPromptTelemetry(job) {
+    const panel = qs('#animation-render-prompt-telemetry');
+    if (!panel) return;
+    const promptState = job?.current_prompt_state;
+    if (!promptState || typeof promptState !== 'object' || !Object.keys(promptState).length) {
+      panel.hidden = true;
+      return;
+    }
+
+    panel.hidden = false;
+    const positive = renderPromptTelemetryTransition(promptState.positive);
+    const negative = renderPromptTelemetryTransition(promptState.negative);
+    const positiveWeights = qs('#animation-render-positive-weights');
+    const positiveText = qs('#animation-render-positive-prompt');
+    const negativeWeights = qs('#animation-render-negative-weights');
+    const negativeText = qs('#animation-render-negative-prompt');
+    if (positiveWeights) positiveWeights.textContent = positive.weights;
+    if (positiveText) positiveText.textContent = positive.text;
+    if (negativeWeights) negativeWeights.textContent = negative.weights;
+    if (negativeText) negativeText.textContent = negative.text;
+
+    const applied = qs('#animation-render-prompt-applied');
+    if (applied) {
+      applied.textContent = promptState.applied ? 'Applied to diffusion' : 'Resolved only';
+      applied.className =
+        'badge animation-render-prompt-applied ' +
+        (promptState.applied ? 'applied' : 'skipped');
+    }
+
+    const meta = qs('#animation-render-prompt-meta');
+    if (meta) {
+      const loras = Array.isArray(promptState.loras) && promptState.loras.length
+        ? promptState.loras
+            .map(item => (item.name || item.requested_name || 'LoRA') + ' ' + formatNumber(item.weight, 3))
+            .join(' · ')
+        : 'none';
+      const reason = String(promptState.reason || '').trim();
+      meta.textContent =
+        'Frame ' + Number(promptState.frame ?? job?.current_frame ?? 0) +
+        ' · LoRAs: ' + loras +
+        (reason ? ' · ' + reason : '');
+    }
+  }
+
   function resetRenderUi() {
     window.clearTimeout(state.renderPollTimer);
     state.renderPollTimer = null;
@@ -2010,6 +2081,7 @@
     if (loadProgress) loadProgress.hidden = true;
     const progress = qs('#animation-render-progress');
     if (progress) progress.hidden = true;
+    renderAnimationPromptTelemetry(null);
     const error = qs('#animation-render-error');
     if (error) { error.hidden = true; error.textContent = ''; }
     const frame = qs('#animation-render-latest-frame');
@@ -2110,6 +2182,8 @@
       if (preview) preview.hidden = true;
       if (previewEmpty) previewEmpty.hidden = false;
     }
+
+    renderAnimationPromptTelemetry(job);
 
     const error = qs('#animation-render-error');
     if (error) {
