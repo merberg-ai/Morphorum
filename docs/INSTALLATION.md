@@ -127,17 +127,71 @@ Linux:
 ./update.sh
 ```
 
+With no argument, the updater keeps the currently checked-out branch and updates it.
+
+To switch to and update a specific remote branch:
+
+```text
+update.bat feature/timeline-alpha-a3
+```
+
+or on Linux:
+
+```bash
+./update.sh feature/timeline-alpha-a3
+```
+
+The same command can return a test installation to the stable branch:
+
+```text
+update.bat main
+```
+
+```bash
+./update.sh main
+```
+
+When a branch is requested, the updater fetches remote branch information, verifies
+`origin/<branch>` exists, switches or creates the matching local tracking branch, and
+then performs the normal guarded update.
+
 The updater:
 
 1. refuses to overwrite modified tracked source files;
-2. records the current Git commit;
+2. records the current Git branch and commit;
 3. backs up `data/config.yaml` and top-level Morphorum databases;
-4. pulls the update with fast-forward-only Git semantics;
-5. reinstalls/updates runtime dependencies;
-6. runs the API self-test;
-7. automatically attempts to roll the source tree and runtime back to the previous commit if the new install/self-test fails.
+4. optionally switches to the requested remote branch;
+5. pulls that branch with fast-forward-only Git semantics;
+6. reinstalls/updates runtime dependencies;
+7. runs the API self-test;
+8. automatically attempts to restore the previous branch, commit, and runtime dependencies if the new install/self-test fails.
 
-Update backups are stored under `backups/update-<timestamp>/`.
+Update backups are stored under `backups/update-<timestamp>/` and include
+`previous_branch.txt` plus `previous_commit.txt`.
+
+### First switch from an older installation
+
+Installations created before branch-aware updating do not understand the branch argument
+yet. For the first switch only, use Git directly, then run the updater from the new
+branch.
+
+Windows PowerShell:
+
+```powershell
+cd D:\Morphorum-test
+git fetch origin
+git switch --track -c feature/timeline-alpha-a3 origin/feature/timeline-alpha-a3
+.\update.bat
+```
+
+If the local branch already exists, use:
+
+```powershell
+git switch feature/timeline-alpha-a3
+.\update.bat
+```
+
+After that first switch, branch-aware updating is available normally.
 
 ## Repair / diagnostics
 
