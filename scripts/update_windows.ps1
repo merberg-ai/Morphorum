@@ -56,23 +56,27 @@ Get-ChildItem (Join-Path $Root 'data') -Filter '*.db' -ErrorAction SilentlyConti
 
 Step "Backup created: $backup"
 
-if ($targetBranch -ne $previousBranch) {
-    Step "Switching Morphorum from '$previousBranch' to '$targetBranch'..."
-    git -C $Root show-ref --verify --quiet "refs/heads/$targetBranch"
-    if ($LASTEXITCODE -eq 0) {
-        git -C $Root switch $targetBranch
-    }
-    else {
-        git -C $Root switch --track -c $targetBranch "origin/$targetBranch"
-    }
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
-
-Step "Updating branch '$targetBranch'..."
-git -C $Root pull --ff-only origin $targetBranch
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
 try {
+    if ($targetBranch -ne $previousBranch) {
+        Step "Switching Morphorum from '$previousBranch' to '$targetBranch'..."
+        git -C $Root show-ref --verify --quiet "refs/heads/$targetBranch"
+        if ($LASTEXITCODE -eq 0) {
+            git -C $Root switch $targetBranch
+        }
+        else {
+            git -C $Root switch --track -c $targetBranch "origin/$targetBranch"
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "git switch returned exit code $LASTEXITCODE"
+        }
+    }
+
+    Step "Updating branch '$targetBranch'..."
+    git -C $Root pull --ff-only origin $targetBranch
+    if ($LASTEXITCODE -ne 0) {
+        throw "git pull returned exit code $LASTEXITCODE"
+    }
+
     & (Join-Path $Root 'scripts\install_windows.ps1') -Update
     if ($LASTEXITCODE -ne 0) { throw "installer returned exit code $LASTEXITCODE" }
     Okay "Morphorum update completed successfully on branch '$targetBranch'."
