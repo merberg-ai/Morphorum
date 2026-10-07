@@ -45,6 +45,7 @@ def test_frontend_and_health() -> None:
         assert 'id="animation-timeline-delete"' in frontend.text
         assert 'id="animation-timeline-track-select"' in frontend.text
         assert 'id="animation-timeline-scrubber"' in frontend.text
+        assert 'id="animation-timeline-keyframe-list"' in frontend.text
         assert 'id="animation-collapse-all"' in frontend.text
         assert 'id="animation-expand-all"' in frontend.text
         assert 'id="animation-render-prompt-telemetry"' in frontend.text
