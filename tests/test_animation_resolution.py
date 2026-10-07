@@ -165,3 +165,36 @@ def test_prompt_tracks_can_use_independent_transition_modes() -> None:
     assert negative["mode"] == "blend"
     assert negative["from_weight"] == pytest.approx(0.5)
     assert negative["to_weight"] == pytest.approx(0.5)
+
+
+
+def test_resolved_frame_strips_prompt_lora_and_interpolates_weight(tmp_path) -> None:
+    lora = tmp_path / "horror.safetensors"
+    lora.write_bytes(b"fake")
+    project = sample_project()
+    project["model"]["family"] = "sdxl"
+    project["prompts"] = {
+        "0": "forest <lora:horror:0.0>",
+        "100": "city <lora:horror:1.0>",
+    }
+    records = [{
+        "id": "horror-id",
+        "family": "sdxl",
+        "kind": "loras",
+        "name": "horror",
+        "filename": lora.name,
+        "path": str(lora),
+        "size_bytes": lora.stat().st_size,
+        "preview_path": None,
+    }]
+
+    resolved = resolve_project_frame(
+        project,
+        50,
+        lora_records=records,
+    )
+
+    assert resolved["prompts"]["positive"]["from_text"] == "forest"
+    assert resolved["prompts"]["positive"]["to_text"] == "city"
+    assert resolved["loras"][0]["id"] == "horror-id"
+    assert resolved["loras"][0]["weight"] == pytest.approx(0.5)
