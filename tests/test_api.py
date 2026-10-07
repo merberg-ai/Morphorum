@@ -92,10 +92,11 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
         assert settings["ui"]["image_preview_limit"] == 7
         assert settings["performance"]["unload_after_generation"] is True
 
-        # Only external model families receive scan-path settings.
-        for family in ("sdxl", "flux"):
+        # Checkpoint and LoRA source policies are independent.
+        for family in ("sdxl", "flux", "zimage"):
             assert family in settings["models"]
-        assert "zimage" not in settings["models"]
+        assert settings["models"]["zimage"]["loras"] == []
+        assert "checkpoints" not in settings["models"]["zimage"]
         assert "sd15" not in settings["models"]
         assert "sd2" not in settings["models"]
         assert settings["managed_models"]["locations"]["zimage"] == r".\ckpts\z-image"
