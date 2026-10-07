@@ -23,7 +23,18 @@ from .animation_projects import (
 from .animation_resolution import (
     project_schedule_series,
     resolve_project_frame,
+    resolve_project_timeline,
     validate_project_schedules,
+)
+from .animation_timeline import (
+    TimelineError,
+    delete_track_keyframe,
+    get_timeline_track,
+    move_track_keyframe,
+    set_track_interpolation,
+    timeline_snapshot,
+    timeline_track_descriptors,
+    upsert_track_keyframe,
 )
 from .animation_motion import (
     MotionPreviewError,
@@ -212,6 +223,162 @@ def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
         raise HTTPException(status_code=status, detail=message) from exc
+
+
+@app.get("/api/animation/timeline/descriptors")
+def api_animation_timeline_descriptors() -> dict[str, Any]:
+    return timeline_track_descriptors()
+
+
+@app.get("/api/animation/projects/{project_id}/timeline")
+def api_animation_project_timeline(project_id: str) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        return timeline_snapshot(project)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get(
+    "/api/animation/projects/{project_id}/timeline/tracks/{group}/{name}"
+)
+def api_animation_timeline_track(
+    project_id: str,
+    group: str,
+    name: str,
+) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        return get_timeline_track(project, group, name)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TimelineError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put(
+    "/api/animation/projects/{project_id}/timeline/tracks/"
+    "{group}/{name}/keyframes/{frame}"
+)
+def api_upsert_animation_timeline_keyframe(
+    project_id: str,
+    group: str,
+    name: str,
+    frame: int,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        edited = upsert_track_keyframe(
+            project,
+            group,
+            name,
+            frame=frame,
+            value=payload.get("value"),
+        )
+        saved = save_animation_project(project_id, edited)
+        return {
+            "status": "saved",
+            "project": saved,
+            **get_timeline_track(saved, group, name),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TimelineError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete(
+    "/api/animation/projects/{project_id}/timeline/tracks/"
+    "{group}/{name}/keyframes/{frame}"
+)
+def api_delete_animation_timeline_keyframe(
+    project_id: str,
+    group: str,
+    name: str,
+    frame: int,
+) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        edited = delete_track_keyframe(
+            project,
+            group,
+            name,
+            frame=frame,
+        )
+        saved = save_animation_project(project_id, edited)
+        return {
+            "status": "saved",
+            "project": saved,
+            **get_timeline_track(saved, group, name),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TimelineError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post(
+    "/api/animation/projects/{project_id}/timeline/tracks/"
+    "{group}/{name}/keyframes/{frame}/move"
+)
+def api_move_animation_timeline_keyframe(
+    project_id: str,
+    group: str,
+    name: str,
+    frame: int,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        edited = move_track_keyframe(
+            project,
+            group,
+            name,
+            source_frame=frame,
+            target_frame=payload.get("frame"),
+            overwrite=bool(payload.get("overwrite", False)),
+        )
+        saved = save_animation_project(project_id, edited)
+        return {
+            "status": "saved",
+            "project": saved,
+            **get_timeline_track(saved, group, name),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TimelineError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put(
+    "/api/animation/projects/{project_id}/timeline/tracks/"
+    "{group}/{name}/interpolation"
+)
+def api_set_animation_timeline_interpolation(
+    project_id: str,
+    group: str,
+    name: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        edited = set_track_interpolation(
+            project,
+            group,
+            name,
+            interpolation=payload.get("interpolation"),
+        )
+        saved = save_animation_project(project_id, edited)
+        return {
+            "status": "saved",
+            "project": saved,
+            **get_timeline_track(saved, group, name),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TimelineError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/animation/projects/{project_id}/source-image", status_code=201)
@@ -426,6 +593,28 @@ def api_resolve_animation_frame(payload: dict[str, Any]) -> dict[str, Any]:
         frame = int(payload.get("frame", 0))
         return {"resolved": resolve_project_frame(normalized, frame)}
     except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/resolve-timeline")
+def api_resolve_animation_timeline(payload: dict[str, Any]) -> dict[str, Any]:
+    project_payload = payload.get("project")
+    if not isinstance(project_payload, dict):
+        raise HTTPException(status_code=400, detail="Animation project payload is required.")
+    project_id = str(project_payload.get("id") or "preview-project").strip().lower()
+    try:
+        normalized = normalize_animation_project(
+            project_payload,
+            existing=project_payload,
+            project_id=project_id,
+        )
+        return resolve_project_timeline(
+            normalized,
+            start_frame=payload.get("start_frame", 0),
+            end_frame=payload.get("end_frame"),
+            step=payload.get("step", 1),
+        )
+    except (AnimationProjectError, ScheduleError, TimelineError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
