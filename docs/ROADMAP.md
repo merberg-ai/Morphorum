@@ -122,7 +122,20 @@ Physical acceptance target: upload a source image, preview obvious cumulative ca
 - shared inference lock with still-image generation
 - automatic img2img ↔ txt2img task switching
 
-Physical acceptance target: render a short 6–10 frame Z-Image sequence, verify frame-to-frame motion and diffusion continuity, verify prompt/strength/noise behavior, then cancel/resume a second short render.
+Physical acceptance passed on Z-Image-Turbo with real frame generation plus cancel/resume.
+
+## Phase 4.1 — start-frame and workflow polish implemented
+
+- explicit Generate from Prompt vs Use Starting Image mode
+- txt2img-generated frame 0 when no source image is desired
+- uploaded image remains available as an optional CPU camera-preview reference
+- latest-rendered-frame URLs now track only completed PNGs
+- existing stale manifests repair latest-frame URLs from completed results
+- Z-Image variable-length prompt embeddings aligned safely for Blend transitions
+- clearer Project → Start Frame → Prompts → Motion → Generation → Preview → Render workflow
+- embedded favicon removes the stray browser `/favicon.ico` 404
+
+Physical acceptance target: generate frame 0 from prompt with no upload, repeat a multi-prompt Z-Image Blend render, and verify the latest-frame panel advances without 404s.
 
 ## 0.3.0-alpha.1 — classic motion
 
