@@ -990,6 +990,8 @@
     state.renderJob = null;
     state.renderHistory = [];
     state.lastRenderFrameUrl = '';
+    const loadProgress = qs('#animation-model-load-progress');
+    if (loadProgress) loadProgress.hidden = true;
     const progress = qs('#animation-render-progress');
     if (progress) progress.hidden = true;
     const error = qs('#animation-render-error');
@@ -1019,6 +1021,34 @@
     state.renderJob = job || null;
     state.renderJobId = job?.id || null;
     const active = renderIsActive(job);
+
+    const loadPanel = qs('#animation-model-load-progress');
+    const loadProgressValue = Math.max(
+      0,
+      Math.min(1, Number(job?.load_progress || 0))
+    );
+    const showLoad = Boolean(
+      job &&
+      (
+        job.status === 'loading_model' ||
+        (loadProgressValue > 0 && loadProgressValue < 1)
+      )
+    );
+    if (loadPanel) loadPanel.hidden = !showLoad;
+    const loadPercent = Math.round(loadProgressValue * 100);
+    const loadStatus = qs('#animation-model-load-status');
+    if (loadStatus) loadStatus.textContent = job?.load_message || 'Preparing model pipeline…';
+    const loadPercentEl = qs('#animation-model-load-percent');
+    if (loadPercentEl) loadPercentEl.textContent = loadPercent + '%';
+    const loadFill = qs('#animation-model-load-progress-fill');
+    if (loadFill) loadFill.style.width = loadPercent + '%';
+    const loadPhase = qs('#animation-model-load-phase');
+    if (loadPhase) loadPhase.textContent = job?.load_phase
+      ? String(job.load_phase).replaceAll('_', ' ')
+      : 'Preparing';
+    const loadDetail = qs('#animation-model-load-detail');
+    if (loadDetail) loadDetail.textContent = job?.load_detail || '';
+
     const progress = qs('#animation-render-progress');
     if (progress) progress.hidden = !job;
     const badge = qs('#animation-render-state');
@@ -1078,7 +1108,11 @@
     if (start) {
       start.classList.toggle('busy', active);
       const label = qs('.button-label', start);
-      if (label) label.textContent = active ? 'Rendering…' : 'Render Animation';
+      if (label) {
+        label.textContent = job?.status === 'loading_model'
+          ? 'Loading Model…'
+          : (active ? 'Rendering…' : 'Render Animation');
+      }
     }
     renderSourceState();
   }
