@@ -888,6 +888,7 @@ class AnimationRenderManager:
                     seed=seed,
                     seed_mode="fixed",
                     images=1,
+                    loras=deepcopy(resolved.get("loras", [])),
                 )
 
                 with self._lock:
@@ -1096,6 +1097,7 @@ class AnimationRenderManager:
                     seed=seed,
                     seed_mode="fixed",
                     images=1,
+                    loras=deepcopy(resolved.get("loras", [])),
                 )
 
                 pipe, generator_device, validated_model = (
