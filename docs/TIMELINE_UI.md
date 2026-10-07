@@ -181,3 +181,94 @@ MORPHORUM_ACCESS_LOG=1
 
 The normal `run.bat`, `run-lan.bat`, `run.sh`, and `run-lan.sh` paths remain
 quiet by default.
+
+
+# Timeline Beta B1 mobile workflow
+
+Beta B1 keeps the A4 canonical timeline API but changes how the Animation workspace is
+used on smaller screens.
+
+## Persistent collapsible sections
+
+Every card in the Animation workspace is now collapsible.
+
+The section header or its disclosure button toggles the card body. The page also
+provides **Collapse Sections** and **Expand Sections** controls.
+
+Collapse state is stored in browser-local storage under a Morphorum-specific key, so
+each browser remembers its own preferred Animation workspace layout. This state is
+local UI state only and is not written into the animation project.
+
+On a phone-sized viewport, first-time defaults keep the high-level workflow compact:
+
+- Project: expanded
+- Start Frame: expanded
+- Visual Timeline: expanded
+- Animation Render: expanded
+- lower-level/advanced sections: collapsed
+
+After the user changes those states, the saved local browser preference wins.
+
+## Mobile focused-track timeline
+
+The desktop timeline continues to show the multi-track overview.
+
+At 720px and below the editor changes to a focused-track workflow:
+
+1. choose one track from the Track selector;
+2. move the frame scrubber or enter a frame;
+3. use Previous/Next Keyframe for fast navigation;
+4. tap an existing keyframe or add one at the playhead;
+5. edit frame, value/expression, and interpolation in the editor below.
+
+The focused lane fits the phone viewport instead of depending on horizontal zoom.
+
+Touch/coarse-pointer devices do not require drag-to-move. Selecting a keyframe and
+editing its Frame value is the primary precise workflow. Desktop pointer devices retain
+dragging.
+
+The raw Deforum schedule fields remain available as an advanced compatibility editor.
+
+## Live render prompt telemetry
+
+Animation render jobs now expose `current_prompt_state`.
+
+This is generated directly from the same resolved frame state used to build diffusion
+conditioning. It includes:
+
+- current frame,
+- whether diffusion actually applies the prompt on that frame,
+- positive prompt transition mode,
+- positive from/to frames and texts,
+- positive blend weights,
+- negative prompt transition and blend weights,
+- active resolved LoRAs,
+- a reason when conditioning is resolved but not applied.
+
+Examples of a prompt being resolved but not applied include:
+
+- frame 0 when Start Mode uses an uploaded source image;
+- a later frame where retention strength resolves to `1.0`, so denoise strength is
+  zero and diffusion is skipped.
+
+The Animation Render card displays this telemetry live while rendering. For a blended
+prompt transition it shows both endpoint prompts and their percentages rather than
+inventing a synthetic text prompt. Diffusers receives blended embeddings in that case.
+
+## Prompt-keyframe render verification
+
+Beta B1 adds a renderer-level SDXL regression test in addition to the existing resolver
+tests.
+
+The test renders a short fake animation with:
+
+- frame 0 prompt: `forest`
+- final prompt: `city`
+- blend interpolation
+
+The fake SDXL pipeline records the conditioning handed to diffusion. The test verifies
+that intermediate frames receive progressively changing embeddings and the final
+keyframe receives `city` directly.
+
+This guards against a regression where the timeline resolver is correct but the actual
+render loop accidentally reuses one prompt for every frame.
