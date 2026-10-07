@@ -87,11 +87,39 @@ def _blend_value(first: Any, second: Any, second_weight: float):
 
     try:
         import torch
-
-        if isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor):
-            return first * (1.0 - weight) + second * weight
     except Exception:
-        pass
+        torch = None
+
+    if (
+        torch is not None
+        and isinstance(first, torch.Tensor)
+        and isinstance(second, torch.Tensor)
+    ):
+        left = first
+        right = second
+
+        if left.shape != right.shape:
+            if (
+                left.ndim == 2
+                and right.ndim == 2
+                and left.shape[1] == right.shape[1]
+            ):
+                target = max(left.shape[0], right.shape[0])
+                if left.shape[0] < target:
+                    padded = left.new_zeros((target, left.shape[1]))
+                    padded[: left.shape[0]] = left
+                    left = padded
+                if right.shape[0] < target:
+                    padded = right.new_zeros((target, right.shape[1]))
+                    padded[: right.shape[0]] = right
+                    right = padded
+            else:
+                raise AnimationRenderError(
+                    "Cannot blend prompt conditioning tensors with incompatible "
+                    f"shapes {tuple(left.shape)} and {tuple(right.shape)}."
+                )
+
+        return left * (1.0 - weight) + right * weight
 
     if isinstance(first, list) and isinstance(second, list):
         if len(first) != len(second):
