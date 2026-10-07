@@ -188,6 +188,10 @@ def test_interrupted_manifest_can_resume_from_last_completed_frame(
     assert finished["status"] == "completed"
     assert len(finished["results"]) == 4
     assert (render_dir / "frames" / "frame_000003.png").is_file()
+    assert finished["current_frame_state"]["frame"] == 3
+    assert finished["current_frame_state"]["cumulative_2d"]["zoom"] == pytest.approx(1.0)
+    assert finished["current_frame_state"]["cumulative_2d"]["center_offset_x"] == pytest.approx(3.0)
+    assert finished["current_frame_state"]["cumulative_2d"]["center_offset_y"] == pytest.approx(0.0)
 
 
 class FakeSDXLPipe:
@@ -722,6 +726,38 @@ def test_render_loop_changes_sdxl_prompt_conditioning_across_keyframes(
     assert finished["current_prompt_state"]["frame"] == 3
     assert finished["current_prompt_state"]["positive"]["from_text"] == "city"
 
+
+
+def test_render_loop_respects_hold_prompt_transition(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_generation = RecordingSDXLGenerationManager()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "orange").save(source)
+
+    project = sample_project(max_frames=4)
+    project["animation"]["prompt_transition"] = "hold"
+    project["generation"]["strength"] = "0:(0.5)"
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished
+    assert fake_generation.pipe.conditioning == [
+        ("prompt", "forest"),
+        ("prompt", "forest"),
+        ("prompt", "city"),
+    ]
+    assert finished["current_prompt_state"]["positive"]["mode"] == "hold"
+    assert finished["current_prompt_state"]["positive"]["from_text"] == "city"
 
 
 def test_render_loop_applies_full_2d_and_generation_schedule_set(
