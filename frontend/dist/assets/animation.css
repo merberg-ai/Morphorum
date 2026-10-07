@@ -603,3 +603,52 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Phase 4.1 workflow layout */
+.animation-project-card,
+.animation-start-card,
+.animation-prompts-card {
+  grid-column: 1 / -1;
+}
+.animation-start-grid {
+  display: grid;
+  grid-template-columns: minmax(260px,.8fr) minmax(300px,1.2fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.animation-start-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.animation-start-note {
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: rgba(6,9,13,.34);
+  font-size: .73rem;
+  line-height: 1.45;
+}
+.animation-motion-preview-note {
+  margin-bottom: 12px;
+}
+.animation-start-card .animation-source-preview-wrap {
+  min-height: 240px;
+}
+.animation-start-card .animation-source-preview {
+  max-height: 420px;
+}
+.animation-motion-preview-card {
+  margin-top: 2px;
+}
+
+@media (max-width: 760px) {
+  .animation-start-grid {
+    grid-template-columns: 1fr;
+  }
+  .animation-start-card .animation-source-preview-wrap {
+    min-height: 180px;
+  }
+}
