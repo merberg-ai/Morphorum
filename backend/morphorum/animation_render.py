@@ -142,6 +142,21 @@ def _blend_value(first: Any, second: Any, second_weight: float):
     )
 
 
+def _detach_conditioning_to_cpu(value: Any):
+    try:
+        import torch
+    except Exception:
+        torch = None
+
+    if torch is not None and isinstance(value, torch.Tensor):
+        return value.detach().to("cpu")
+    if isinstance(value, list):
+        return [_detach_conditioning_to_cpu(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_detach_conditioning_to_cpu(item) for item in value)
+    return value
+
+
 def _prompt_conditioning_kwargs(
     pipe: Any,
     family: str,
@@ -150,6 +165,8 @@ def _prompt_conditioning_kwargs(
     *,
     guidance_scale: float,
     max_sequence_length: int = 512,
+    conditioning_cache: dict[tuple[Any, ...], Any] | None = None,
+    cache_zimage_on_cpu: bool = False,
 ) -> dict[str, Any]:
     positive_to_weight = float(positive.get("to_weight") or 0.0)
     same_positive = (
@@ -233,20 +250,30 @@ def _prompt_conditioning_kwargs(
             }
 
         if family == "zimage":
-            first = pipe.encode_prompt(
-                prompt=from_prompt,
-                do_classifier_free_guidance=False,
-                max_sequence_length=max_sequence_length,
-            )
-            second = pipe.encode_prompt(
-                prompt=to_prompt,
-                do_classifier_free_guidance=False,
-                max_sequence_length=max_sequence_length,
-            )
+            def zimage_embeds(prompt_text: str):
+                key = ("zimage", prompt_text, int(max_sequence_length))
+                if conditioning_cache is not None and key in conditioning_cache:
+                    return conditioning_cache[key]
+
+                encoded = pipe.encode_prompt(
+                    prompt=prompt_text,
+                    do_classifier_free_guidance=False,
+                    max_sequence_length=max_sequence_length,
+                )[0]
+                if cache_zimage_on_cpu:
+                    encoded = _detach_conditioning_to_cpu(encoded)
+                    generation_manager.release_inference_memory()
+
+                if conditioning_cache is not None:
+                    conditioning_cache[key] = encoded
+                return encoded
+
+            first = zimage_embeds(from_prompt)
+            second = zimage_embeds(to_prompt)
             return {
                 "prompt": None,
                 "prompt_embeds": _blend_value(
-                    first[0], second[0], positive_to_weight
+                    first, second, positive_to_weight
                 ),
             }
     except AnimationRenderError:
@@ -394,6 +421,10 @@ class AnimationRenderJob:
     error: str | None = None
     cancel_requested: bool = False
     model_load_seconds: float | None = None
+    load_progress: float = 0.0
+    load_phase: str = ""
+    load_message: str = ""
+    load_detail: str | None = None
     frame_seconds: float | None = None
     average_frame_seconds: float | None = None
     preview: dict[str, Any] | None = None
@@ -623,6 +654,10 @@ class AnimationRenderManager:
             total_frames=int(payload.get("total_frames") or project["animation"]["max_frames"]),
             progress=(len(results) / max(1, int(payload.get("total_frames") or 1))),
             results=results,
+            load_progress=float(payload.get("load_progress") or 0.0),
+            load_phase=str(payload.get("load_phase") or ""),
+            load_message=str(payload.get("load_message") or ""),
+            load_detail=payload.get("load_detail"),
             resumed=True,
         )
         with self._lock:
@@ -803,6 +838,23 @@ class AnimationRenderManager:
         load_started = time.monotonic()
         pipe = None
         generator_device = "cpu"
+        conditioning_cache: dict[tuple[Any, ...], Any] = {}
+
+        def on_model_load(
+            progress: float,
+            phase: str,
+            message: str,
+            detail: str | None = None,
+        ) -> None:
+            with self._lock:
+                job.status = "loading_model"
+                job.load_progress = max(0.0, min(1.0, float(progress)))
+                job.load_phase = str(phase)
+                job.load_message = str(message)
+                job.load_detail = detail
+                job.message = str(message)
+
+        generator_device = "cpu"
         render_dir = _render_dir(job.project_id, job.id)
         copied_source = render_dir / "source.png"
 
@@ -840,18 +892,27 @@ class AnimationRenderManager:
                 )
 
                 with self._lock:
-                    job.status = "rendering"
+                    job.status = "loading_model"
                     job.current_frame = 0
                     job.current_step = 0
-                    job.message = f"Generating starting frame 1 of {total}"
+                    job.message = f"Loading model for starting frame 1 of {total}"
 
                 pipe, generator_device, validated_model = (
-                    generation_manager.prepare_txt2img(request)
+                    generation_manager.prepare_txt2img(
+                        request,
+                        on_model_load,
+                    )
                 )
                 job.model_load_seconds = max(
                     0.0,
                     time.monotonic() - load_started,
                 )
+                with self._lock:
+                    job.status = "rendering"
+                    job.load_progress = 1.0
+                    job.load_phase = "ready"
+                    job.load_message = "Model pipeline ready"
+                    job.message = f"Generating starting frame 1 of {total}"
                 emit_console(
                     "info",
                     "animation",
@@ -895,6 +956,15 @@ class AnimationRenderManager:
                     max_sequence_length=int(
                         capability.get("max_sequence_length", 512)
                     ),
+                    conditioning_cache=conditioning_cache,
+                    cache_zimage_on_cpu=(
+                        family == "zimage"
+                        and generation_manager.pipeline_optimization()
+                        in {
+                            "bf16-conservative-group-offload",
+                            "bf16-streamed-group-offload",
+                        }
+                    ),
                 )
                 call_args.update(conditioning)
 
@@ -908,6 +978,9 @@ class AnimationRenderManager:
                         "Txt2img returned no image for the starting frame."
                     )
                 frame_image = result.images[0].convert("RGB")
+                del result, call_args, conditioning, generator
+                pipe = None
+                generation_manager.release_inference_memory()
                 start_metadata = {
                     "source_frame": False,
                     "generated_start": True,
@@ -1027,7 +1100,10 @@ class AnimationRenderManager:
                 )
 
                 pipe, generator_device, validated_model = (
-                    generation_manager.prepare_img2img(request)
+                    generation_manager.prepare_img2img(
+                        request,
+                        on_model_load,
+                    )
                 )
                 if job.model_load_seconds is None:
                     job.model_load_seconds = max(
@@ -1040,6 +1116,12 @@ class AnimationRenderManager:
                         f"{job.id}: img2img pipeline ready in "
                         f"{job.model_load_seconds:.1f}s.",
                     )
+                with self._lock:
+                    job.status = "rendering"
+                    job.load_progress = 1.0
+                    job.load_phase = "ready"
+                    job.load_message = "Model pipeline ready"
+                    job.message = f"Rendering frame {frame + 1} of {total}"
 
                 import torch
 
@@ -1088,6 +1170,15 @@ class AnimationRenderManager:
                     max_sequence_length=int(
                         capability.get("max_sequence_length", 512)
                     ),
+                    conditioning_cache=conditioning_cache,
+                    cache_zimage_on_cpu=(
+                        family == "zimage"
+                        and generation_manager.pipeline_optimization()
+                        in {
+                            "bf16-conservative-group-offload",
+                            "bf16-streamed-group-offload",
+                        }
+                    ),
                 )
                 call_args.update(conditioning)
 
@@ -1101,6 +1192,8 @@ class AnimationRenderManager:
                         f"Img2img returned no image for frame {frame}."
                     )
                 image = result.images[0].convert("RGB")
+                del result, call_args, conditioning, generator
+                generation_manager.release_inference_memory()
 
             path = _frame_path(job.project_id, job.id, frame)
             _save_frame(
@@ -1147,6 +1240,7 @@ class AnimationRenderManager:
             job.message = f"Rendered frame {frame + 1} of {total}"
             self._write_manifest(job)
             frame_image = image
+            generation_manager.release_inference_memory(synchronize=False)
 
             emit_console(
                 "info",
