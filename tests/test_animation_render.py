@@ -438,3 +438,50 @@ def test_source_start_mode_requires_uploaded_image(
             project=sample_project(max_frames=1),
             source_path=tmp_path / "missing.png",
         )
+
+
+class FakeZImageBlendPipe:
+    def encode_prompt(
+        self,
+        *,
+        prompt,
+        do_classifier_free_guidance=False,
+        max_sequence_length=512,
+    ):
+        del do_classifier_free_guidance, max_sequence_length
+        if prompt == "short prompt":
+            embeds = [torch.ones((2, 3), dtype=torch.float32)]
+        else:
+            embeds = [torch.full((4, 3), 3.0, dtype=torch.float32)]
+        return embeds, []
+
+
+def test_zimage_prompt_transition_blends_unequal_sequence_lengths() -> None:
+    kwargs = _prompt_conditioning_kwargs(
+        FakeZImageBlendPipe(),
+        "zimage",
+        {
+            "from_frame": 0,
+            "to_frame": 10,
+            "from_text": "short prompt",
+            "to_text": "a much longer prompt",
+            "from_weight": 0.75,
+            "to_weight": 0.25,
+        },
+        {
+            "from_frame": 0,
+            "to_frame": 0,
+            "from_text": "",
+            "to_text": "",
+            "from_weight": 1.0,
+            "to_weight": 0.0,
+        },
+        guidance_scale=0.0,
+    )
+
+    assert kwargs["prompt"] is None
+    assert isinstance(kwargs["prompt_embeds"], list)
+    blended = kwargs["prompt_embeds"][0]
+    assert blended.shape == (4, 3)
+    assert torch.allclose(blended[:2], torch.full((2, 3), 1.5))
+    assert torch.allclose(blended[2:], torch.full((2, 3), 0.75))
