@@ -999,6 +999,25 @@ class AnimationRenderManager:
         render_dir = _render_dir(job.project_id, job.id)
         copied_source = render_dir / "source.png"
 
+        cumulative_matrix = np.eye(3, dtype=np.float64)
+        if start_frame > 1:
+            for completed_frame in range(1, start_frame):
+                prior_resolved = resolve_project_frame(
+                    project,
+                    completed_frame,
+                    lora_records=lora_records,
+                )
+                prior_motion = prior_resolved["motion"]
+                prior_step = _frame_transform_matrix(
+                    width=width,
+                    height=height,
+                    angle=float(prior_motion["angle"]),
+                    zoom=float(prior_motion["zoom"]),
+                    translation_x=float(prior_motion["translation_x"]),
+                    translation_y=float(prior_motion["translation_y"]),
+                )
+                cumulative_matrix = prior_step @ cumulative_matrix
+
         if start_frame == 0:
             resolved = resolve_project_frame(project, 0, lora_records=lora_records)
             seed = int(job.seed_plan[0])
@@ -1009,6 +1028,13 @@ class AnimationRenderManager:
                         resolved,
                         applied=False,
                         reason="Frame 0 uses the uploaded starting image; diffusion is not applied.",
+                    )
+                    job.current_frame_state = _frame_state_for_frame(
+                        resolved,
+                        seed=seed,
+                        diffusion_mode="source",
+                        motion_applied=False,
+                        cumulative_matrix=cumulative_matrix,
                     )
                 with Image.open(copied_source) as opened:
                     frame_image = _prepare_source(opened, width, height)
@@ -1022,6 +1048,13 @@ class AnimationRenderManager:
                     job.current_prompt_state = _prompt_state_for_frame(
                         resolved,
                         applied=True,
+                    )
+                    job.current_frame_state = _frame_state_for_frame(
+                        resolved,
+                        seed=seed,
+                        diffusion_mode="txt2img",
+                        motion_applied=False,
+                        cumulative_matrix=cumulative_matrix,
                     )
                 generation = resolved["generation"]
                 positive = resolved["prompts"]["positive"]
@@ -1155,6 +1188,7 @@ class AnimationRenderManager:
                     "start_mode": start_mode,
                     **start_metadata,
                     "resolved": resolved,
+                    "render_state": deepcopy(job.current_frame_state),
                 },
             )
             job.results = [
@@ -1206,6 +1240,7 @@ class AnimationRenderManager:
                 step_matrix,
                 border_mode=border_mode,
             )
+            cumulative_matrix = step_matrix @ cumulative_matrix
 
             generation = resolved["generation"]
             retention_strength = float(generation["strength"])
@@ -1225,6 +1260,13 @@ class AnimationRenderManager:
                         if denoise_strength > 0.0
                         else "Retention strength is 1.0, so this frame skips diffusion."
                     ),
+                )
+                job.current_frame_state = _frame_state_for_frame(
+                    resolved,
+                    seed=int(job.seed_plan[frame]),
+                    diffusion_mode=("img2img" if denoise_strength > 0.0 else "transform-only"),
+                    motion_applied=True,
+                    cumulative_matrix=cumulative_matrix,
                 )
 
             positive = resolved["prompts"]["positive"]
