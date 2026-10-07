@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from .schedules import ScheduleError, parse_schedule
+from .schedules import ScheduleError, parse_schedule, validate_numeric_schedule
 
 TIMELINE_SCHEMA_VERSION = 1
 
@@ -686,6 +686,23 @@ def _store_track(
             track.get("keyframes"),
             definition["default_schedule"],
         )
+        max_frames, fps, seed = _project_context(project)
+        interpolation = str(track.get("interpolation") or "linear").strip().lower()
+        validation = validate_numeric_schedule(
+            track["schedule"],
+            max_frames=max_frames,
+            seed=seed,
+            fps=fps,
+            interpolation=interpolation,
+        )
+        if not validation["valid"]:
+            first = next(
+                issue for issue in validation["issues"]
+                if issue.get("severity") == "error"
+            )
+            raise TimelineError(
+                f"Invalid keyframe for '{group}.{name}': {first['message']}"
+            )
 
     group_value = bundle.setdefault(group, {})
     group_value[name] = track
