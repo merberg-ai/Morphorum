@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -10,7 +12,9 @@ from PIL import Image
 
 import morphorum.animation_render as animation_render
 from morphorum.animation_render import (
+    AnimationRenderJob,
     AnimationRenderManager,
+    _blend_value,
     _prompt_conditioning_kwargs,
 )
 
@@ -26,6 +30,7 @@ def sample_project(max_frames: int = 4) -> dict:
             "width": 64,
             "height": 64,
             "prompt_transition": "blend",
+            "start_mode": "source",
             "source_image": "assets/source.png",
             "source_image_name": "source.png",
         },
@@ -297,3 +302,139 @@ def test_uniform_noise_is_deterministic() -> None:
 
     assert first.tobytes() == second.tobytes()
     assert first.tobytes() != third.tobytes()
+
+
+def test_latest_frame_url_tracks_last_completed_result() -> None:
+    job = AnimationRenderJob(
+        id="anim-test",
+        project_id="project-test",
+        project={},
+        seed_plan=[1, 2, 3],
+        total_frames=3,
+        current_frame=2,
+        results=[
+            {"frame": 0, "path": "0.png"},
+            {"frame": 1, "path": "1.png"},
+        ],
+    )
+    public = job.public()
+    assert public["latest_completed_frame"] == 1
+    assert public["latest_frame_url"].endswith("/frames/1")
+
+
+def test_variable_length_tensor_blend_zero_pads_sequence_dimension() -> None:
+    left = torch.ones((2, 3), dtype=torch.float32)
+    right = torch.full((4, 3), 3.0, dtype=torch.float32)
+
+    blended = _blend_value(left, right, 0.25)
+
+    assert blended.shape == (4, 3)
+    assert torch.allclose(blended[:2], torch.full((2, 3), 1.5))
+    assert torch.allclose(blended[2:], torch.full((2, 3), 0.75))
+
+
+class FakePromptStartPipe:
+    def set_progress_bar_config(self, **_kwargs):
+        return None
+
+    def __call__(self, **_kwargs):
+        return SimpleNamespace(images=[Image.new("RGB", (64, 64), "purple")])
+
+
+class FakePromptStartGenerationManager:
+    def __init__(self) -> None:
+        self.inference_lock = threading.Lock()
+        self.pipe = FakePromptStartPipe()
+
+    def _effective_capability(self, _model):
+        return {}
+
+    def prepare_txt2img(self, _request):
+        return self.pipe, "cpu", fake_model()
+
+    def build_txt2img_call_args(
+        self,
+        request,
+        _model,
+        *,
+        generator,
+        on_step_end,
+    ):
+        return {
+            "prompt": request.prompt,
+            "negative_prompt": request.negative_prompt or None,
+            "generator": generator,
+            "callback_on_step_end": on_step_end,
+        }
+
+    def _model_variant(self, _model):
+        return "sdxl"
+
+    def unload_after_job_enabled(self):
+        return False
+
+    def reset_inference_pipeline(self):
+        return None
+
+    def _friendly_error(self, exc, **_kwargs):
+        return exc
+
+
+def test_prompt_start_mode_generates_frame_zero_without_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(
+        animation_render,
+        "generation_manager",
+        FakePromptStartGenerationManager(),
+    )
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    project = sample_project(max_frames=1)
+    project["animation"]["start_mode"] = "prompt"
+    project["animation"]["source_image"] = ""
+    project["animation"]["source_image_name"] = ""
+
+    manager = AnimationRenderManager()
+    started = manager.submit(
+        project=project,
+        source_path=tmp_path / "does-not-exist.png",
+    )
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished
+    assert finished["latest_completed_frame"] == 0
+    frame = (
+        tmp_path
+        / "outputs"
+        / "animations"
+        / "render-test"
+        / started["id"]
+        / "frames"
+        / "frame_000000.png"
+    )
+    assert frame.is_file()
+    with Image.open(frame) as generated:
+        assert generated.getpixel((0, 0)) == (128, 0, 128)
+
+
+def test_source_start_mode_requires_uploaded_image(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    manager = AnimationRenderManager()
+
+    with pytest.raises(
+        animation_render.AnimationRenderError,
+        match="no starting image",
+    ):
+        manager.submit(
+            project=sample_project(max_frames=1),
+            source_path=tmp_path / "missing.png",
+        )
