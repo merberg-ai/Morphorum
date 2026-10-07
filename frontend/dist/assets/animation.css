@@ -652,3 +652,61 @@
     min-height: 180px;
   }
 }
+
+
+.animation-model-load-progress {
+  margin-top: 12px;
+  padding: 10px 11px;
+  border: 1px solid rgba(65,217,255,.18);
+  border-radius: var(--radius-sm);
+  background: rgba(65,217,255,.035);
+}
+.animation-model-load-progress .progress-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: .72rem;
+}
+.animation-model-load-progress .progress-track {
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(3,5,8,.6);
+}
+.animation-model-load-progress .progress-fill {
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), rgba(124,103,255,.72));
+  transition: width .22s ease;
+}
+.animation-model-load-detail {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .66rem;
+  line-height: 1.35;
+}
+.animation-model-load-detail span:first-child {
+  text-transform: uppercase;
+  letter-spacing: .055em;
+}
+.animation-model-load-detail span:last-child {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .animation-model-load-detail {
+    flex-direction: column;
+    gap: 3px;
+  }
+  .animation-model-load-detail span:last-child {
+    text-align: left;
+  }
+}
