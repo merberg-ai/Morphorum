@@ -8,9 +8,15 @@ projects/<project-id>/project.json
 
 The project directory is intentionally broader than the JSON file. Later phases can place source images, masks, migration reports, thumbnails, and other project-owned assets beside the project state without changing the top-level storage model.
 
-## Schema version 1
+## Schema version 2
 
-Phase 1 establishes the project/state contract only. Deforum-style schedule strings are preserved as project data but are not evaluated until the schedule-engine phase.
+Timeline Alpha upgrades native projects to schema 2. The new canonical timeline lives in a top-level `tracks` bundle containing prompt, 2D camera, generation, and reserved 3D/cadence/LoRA groups. Existing schema 1 files are migrated automatically when loaded.
+
+The legacy fields documented below remain synchronized during the transition so the current schedule editor and renderer-facing APIs stay compatible. See [TIMELINE_SCHEMA.md](TIMELINE_SCHEMA.md) for the track/keyframe contract and migration rules.
+
+### Legacy-compatible project fields
+
+Deforum-style schedule strings remain present as compatibility data while the UI moves to native tracks.
 
 Example:
 
