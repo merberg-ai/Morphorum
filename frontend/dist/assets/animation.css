@@ -1336,3 +1336,55 @@
     display: flex;
   }
 }
+
+
+/* Timeline Beta B2: live 2D/generation render telemetry */
+.animation-render-frame-telemetry {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(124,103,255,.2);
+  border-radius: var(--radius-sm);
+  background: rgba(124,103,255,.035);
+}
+.animation-render-state-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+.animation-render-state-grid > div {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(3,5,8,.34);
+}
+.animation-render-state-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+}
+.animation-render-state-grid strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  font-weight: 550;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .animation-render-state-grid {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .animation-render-state-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
