@@ -260,6 +260,7 @@ def normalize_animation_project(
     *,
     existing: dict[str, Any] | None = None,
     project_id: str | None = None,
+    prefer_tracks: bool | None = None,
 ) -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
     had_existing = isinstance(existing, dict)
@@ -359,11 +360,30 @@ def normalize_animation_project(
     incoming_tracks = payload.get("tracks")
     existing_tracks = existing.get("tracks") if had_existing else None
     use_incoming_tracks = isinstance(incoming_tracks, dict)
-    legacy_changed = (
-        _legacy_timeline_changed(payload, existing)
-        if had_existing and isinstance(existing, dict)
-        else False
-    )
+
+    if prefer_tracks is True:
+        legacy_changed = False
+    elif prefer_tracks is False:
+        legacy_changed = True
+    elif (
+        had_existing
+        and isinstance(existing, dict)
+        and existing is payload
+        and use_incoming_tracks
+    ):
+        track_candidate = deepcopy(project)
+        track_candidate["tracks"] = normalize_tracks(
+            incoming_tracks,
+            project=track_candidate,
+        )
+        sync_legacy_from_tracks(track_candidate, track_candidate["tracks"])
+        legacy_changed = _legacy_timeline_changed(payload, track_candidate)
+    else:
+        legacy_changed = (
+            _legacy_timeline_changed(payload, existing)
+            if had_existing and isinstance(existing, dict)
+            else False
+        )
 
     if use_incoming_tracks and isinstance(existing_tracks, dict) and had_existing:
         project["tracks"] = normalize_tracks(incoming_tracks, project=project)
@@ -437,7 +457,12 @@ def load_animation_project(project_id: str) -> dict[str, Any]:
         source_schema < ANIMATION_PROJECT_SCHEMA
         or not isinstance(payload.get("tracks"), dict)
     )
-    project = normalize_animation_project(payload, existing=payload, project_id=project_id)
+    project = normalize_animation_project(
+        payload,
+        existing=payload,
+        project_id=project_id,
+        prefer_tracks=True,
+    )
     project["created_at"] = str(payload.get("created_at") or project["created_at"])
     project["updated_at"] = str(payload.get("updated_at") or project["updated_at"])
     if migration_needed:
