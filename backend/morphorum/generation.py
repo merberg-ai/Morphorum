@@ -4,7 +4,6 @@ import gc
 import json
 import math
 import random
-import re
 import threading
 import time
 import uuid
