@@ -40,6 +40,11 @@
     'animation-inspector-frame',
     'animation-inspector-slider',
     'animation-curve-field',
+    'animation-timeline-frame',
+    'animation-timeline-scale',
+    'animation-timeline-keyframe-frame',
+    'animation-timeline-keyframe-value',
+    'animation-timeline-interpolation',
   ]);
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -1144,6 +1149,7 @@
     const slider = qs('#animation-inspector-slider');
     if (frameInput) frameInput.value = String(frame);
     if (slider) slider.value = String(frame);
+    syncTimelinePlayhead(frame);
     refreshInspector();
   }
 
@@ -1155,6 +1161,7 @@
       setEditorEnabled(Boolean(project));
       if (!project) {
         renderPromptRows();
+        renderTimeline();
         qs('#animation-project-path').textContent = 'Create or select an animation project.';
         qs('#animation-schema-badge').textContent = 'Schema 2';
         clearInspector();
@@ -1195,6 +1202,7 @@
       renderPromptRows();
       renderSourceState();
       syncInspectorBounds();
+      renderTimeline();
       clearDirty();
     } finally {
       state.loading = false;
@@ -2035,7 +2043,10 @@
       resetRenderUi();
       state.project = payload.project;
       state.path = payload.path || '';
+      state.timeline = null;
+      state.timelineSelection = null;
       fillForm();
+      await loadTimeline();
       await loadRenderHistory();
     } catch (error) {
       toast('Could not load animation project', error.message, 'error', 6500);
@@ -2064,8 +2075,11 @@
       resetRenderUi();
       state.project = payload.project;
       state.path = payload.path || '';
+      state.timeline = null;
+      state.timelineSelection = null;
       await loadProjectList();
       fillForm();
+      await loadTimeline();
       await loadRenderHistory();
       toast('Animation project created', `${state.project.name} is ready for editing.`, 'success');
     } catch (error) {
@@ -2091,6 +2105,7 @@
       state.path = payload.path || state.path;
       await loadProjectList();
       fillForm();
+      await loadTimeline();
       await loadRenderHistory();
       toast('Animation project saved', `${state.project.name} was written to project.json.`, 'success');
     } catch (error) {
@@ -2121,6 +2136,24 @@
     qs('#animation-reload')?.addEventListener('click', reloadProject);
     qs('#animation-add-prompt')?.addEventListener('click', addPromptKeyframe);
     qs('#animation-validate-schedules')?.addEventListener('click', () => validateSchedules(true));
+    qs('#animation-timeline-refresh')?.addEventListener('click', async () => {
+      try {
+        await persistDirtyBeforeTimelineEdit();
+        await loadTimeline();
+      } catch (error) {
+        toast('Could not refresh timeline', error.message, 'error', 6500);
+      }
+    });
+    qs('#animation-timeline-frame')?.addEventListener('input', event => {
+      setInspectorFrame(event.target.value);
+    });
+    qs('#animation-timeline-scale')?.addEventListener('input', event => {
+      state.timelineScale = Math.max(2, Math.min(14, Number(event.target.value) || 6));
+      renderTimeline();
+    });
+    qs('#animation-timeline-add')?.addEventListener('click', addTimelineKeyframeAtPlayhead);
+    qs('#animation-timeline-apply')?.addEventListener('click', applyTimelineEditor);
+    qs('#animation-timeline-delete')?.addEventListener('click', deleteTimelineKeyframe);
 
     qs('#animation-source-file')?.addEventListener('change', event => {
       const file = event.target.files?.[0];
@@ -2186,6 +2219,7 @@
         input.max = String(max);
       });
       syncInspectorBounds();
+      syncTimelinePlayhead(qs('#animation-inspector-frame')?.value || 0);
     });
   }
 
