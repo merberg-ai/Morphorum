@@ -969,6 +969,37 @@ class GenerationManager:
         pipe = self._switch_loaded_pipeline_task(model, "img2img")
         return pipe, generator_device
 
+    def prepare_txt2img(
+        self,
+        request: GenerationRequest,
+    ) -> tuple[Any, str, dict[str, Any]]:
+        model = self._validate_request(request)
+        job = GenerationJob(
+            id="animation-txt2img",
+            request=request,
+            model=model,
+            total_steps=request.steps,
+        )
+        pipe, generator_device = self._load_pipeline(job)
+        self._configure_sampler(pipe, model["family"], request.sampler)
+        return pipe, generator_device, model
+
+    def build_txt2img_call_args(
+        self,
+        request: GenerationRequest,
+        model: dict[str, Any],
+        *,
+        generator: Any,
+        on_step_end: Any,
+    ) -> dict[str, Any]:
+        job = GenerationJob(
+            id="animation-txt2img",
+            request=request,
+            model=model,
+            total_steps=request.steps,
+        )
+        return self._build_call_args(job, generator, on_step_end)
+
     def prepare_img2img(
         self,
         request: GenerationRequest,
