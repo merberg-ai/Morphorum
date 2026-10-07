@@ -51,6 +51,10 @@ def test_frontend_and_health() -> None:
         assert 'id="animation-render-prompt-telemetry"' in frontend.text
         assert 'id="animation-render-positive-prompt"' in frontend.text
         assert 'id="animation-render-negative-prompt"' in frontend.text
+        assert 'id="animation-render-frame-telemetry"' in frontend.text
+        assert 'id="animation-render-state-cum-zoom"' in frontend.text
+        assert 'id="animation-render-state-strength"' in frontend.text
+        assert 'id="animation-render-state-seed"' in frontend.text
         assert 'id="copy-console-view"' in frontend.text
         assert 'id="copy-console-buffer"' in frontend.text
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
@@ -68,6 +72,8 @@ def test_frontend_and_health() -> None:
         assert animation_js.status_code == 200
         assert "morphorum.animation.cards.v1" in animation_js.text
         assert "current_prompt_state" in animation_js.text
+        assert "current_frame_state" in animation_js.text
+        assert "animation-render-state-cum-zoom" in animation_js.text
         assert "animation-timeline-keyframe-chip" in animation_js.text
         assert "animation-timeline-track-select" in animation_js.text
 
