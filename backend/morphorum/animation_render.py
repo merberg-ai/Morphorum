@@ -321,6 +321,83 @@ def _prompt_state_for_frame(
     }
 
 
+def _transform_telemetry(
+    matrix: np.ndarray,
+    *,
+    width: int,
+    height: int,
+) -> dict[str, Any]:
+    transform = np.asarray(matrix, dtype=np.float64)
+    center = np.array(
+        [(width - 1) / 2.0, (height - 1) / 2.0, 1.0],
+        dtype=np.float64,
+    )
+    mapped_center = transform @ center
+    scale = float(np.hypot(transform[0, 0], transform[1, 0]))
+    rotation = float(np.degrees(np.arctan2(transform[1, 0], transform[0, 0])))
+    return {
+        "zoom": scale,
+        "rotation_degrees": rotation,
+        "center_offset_x": float(mapped_center[0] - center[0]),
+        "center_offset_y": float(mapped_center[1] - center[1]),
+        "matrix": [
+            [float(value) for value in row]
+            for row in transform.tolist()
+        ],
+    }
+
+
+def _frame_state_for_frame(
+    resolved: dict[str, Any],
+    *,
+    seed: int,
+    diffusion_mode: str,
+    motion_applied: bool,
+    cumulative_matrix: np.ndarray,
+) -> dict[str, Any]:
+    motion = resolved.get("motion", {})
+    generation = resolved.get("generation", {})
+    retention_strength = float(generation.get("strength", 0.0))
+    denoise_strength = (
+        1.0 - retention_strength
+        if diffusion_mode in {"img2img", "transform-only"}
+        else None
+    )
+    dimensions = resolved.get("dimensions", {})
+    width = int(dimensions.get("width") or 1)
+    height = int(dimensions.get("height") or 1)
+    seed_state = generation.get("seed", {})
+    return {
+        "frame": int(resolved.get("frame") or 0),
+        "motion_applied": bool(motion_applied),
+        "motion": {
+            "angle": float(motion.get("angle", 0.0)),
+            "zoom": float(motion.get("zoom", 1.0)),
+            "translation_x": float(motion.get("translation_x", 0.0)),
+            "translation_y": float(motion.get("translation_y", 0.0)),
+            "border_mode": str(motion.get("border_mode") or "replicate"),
+        },
+        "cumulative_2d": _transform_telemetry(
+            cumulative_matrix,
+            width=width,
+            height=height,
+        ),
+        "generation": {
+            "strength": retention_strength,
+            "denoise_strength": denoise_strength,
+            "noise": float(generation.get("noise", 0.0)),
+            "steps": int(generation.get("steps", 1)),
+            "guidance": float(generation.get("guidance", 0.0)),
+            "sampler": str(generation.get("sampler") or ""),
+            "seed": int(seed),
+            "seed_behavior": str(seed_state.get("behavior") or "fixed"),
+            "seed_increment": int(seed_state.get("increment") or 0),
+            "random_at_render": bool(seed_state.get("random_at_render")),
+            "diffusion_mode": str(diffusion_mode),
+        },
+    }
+
+
 def _add_uniform_noise(
     image: Image.Image,
     *,
@@ -462,6 +539,7 @@ class AnimationRenderJob:
     average_frame_seconds: float | None = None
     preview: dict[str, Any] | None = None
     current_prompt_state: dict[str, Any] = field(default_factory=dict)
+    current_frame_state: dict[str, Any] = field(default_factory=dict)
     resumed: bool = False
     _frame_times: list[float] = field(default_factory=list, repr=False)
 
@@ -710,6 +788,7 @@ class AnimationRenderManager:
             load_message=str(payload.get("load_message") or ""),
             load_detail=payload.get("load_detail"),
             current_prompt_state=deepcopy(payload.get("current_prompt_state") or {}),
+            current_frame_state=deepcopy(payload.get("current_frame_state") or {}),
             resumed=True,
         )
         with self._lock:
