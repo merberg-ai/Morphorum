@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .model_index import list_models
+from .schedules import ScheduleError
 
 LORA_TAG = re.compile(
     r"<lora\s*:\s*([^:>]+?)\s*:\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*>",
@@ -14,7 +15,7 @@ LORA_TAG = re.compile(
 )
 
 
-class LoRAError(ValueError):
+class LoRAError(ScheduleError):
     pass
 
 
