@@ -11,11 +11,13 @@ import torch
 from PIL import Image
 
 import morphorum.animation_render as animation_render
+from morphorum.animation_resolution import resolve_project_frame
 from morphorum.animation_render import (
     AnimationRenderJob,
     AnimationRenderManager,
     _blend_value,
     _prompt_conditioning_kwargs,
+    _prompt_state_for_frame,
 )
 
 
@@ -571,3 +573,44 @@ def test_animation_job_exposes_model_load_progress() -> None:
     assert public["load_progress"] == pytest.approx(0.68)
     assert public["load_phase"] == "pipeline"
     assert "safetensors" in public["load_detail"]
+
+
+
+def test_render_prompt_telemetry_matches_resolved_frame_transition() -> None:
+    project = sample_project(max_frames=4)
+    resolved = resolve_project_frame(project, 1)
+    telemetry = _prompt_state_for_frame(resolved, applied=True)
+
+    assert telemetry["frame"] == 1
+    assert telemetry["applied"] is True
+    assert telemetry["positive"]["from_frame"] == 0
+    assert telemetry["positive"]["to_frame"] == 3
+    assert telemetry["positive"]["from_text"] == "forest"
+    assert telemetry["positive"]["to_text"] == "city"
+    assert telemetry["positive"]["from_weight"] == pytest.approx(2 / 3)
+    assert telemetry["positive"]["to_weight"] == pytest.approx(1 / 3)
+
+
+def test_animation_job_public_exposes_current_prompt_telemetry() -> None:
+    resolved = resolve_project_frame(sample_project(max_frames=4), 2)
+    prompt_state = _prompt_state_for_frame(
+        resolved,
+        applied=False,
+        reason="Retention strength is 1.0, so this frame skips diffusion.",
+    )
+    job = AnimationRenderJob(
+        id="prompt-state",
+        project_id="project",
+        project={},
+        seed_plan=[1, 2, 3, 4],
+        total_frames=4,
+        current_frame=2,
+        current_prompt_state=prompt_state,
+    )
+
+    public = job.public()
+
+    assert public["current_prompt_state"]["frame"] == 2
+    assert public["current_prompt_state"]["applied"] is False
+    assert "skips diffusion" in public["current_prompt_state"]["reason"]
+    assert public["current_prompt_state"]["positive"]["to_text"] == "city"
