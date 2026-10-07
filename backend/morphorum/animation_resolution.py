@@ -10,6 +10,7 @@ from .animation_timeline import (
     prompt_track,
     prompt_track_map,
 )
+from .loras import LoRAError, lora_catalog, parse_lora_tags, resolve_transition_loras
 from .schedules import (
     ScheduleError,
     resolve_numeric_schedule,
@@ -119,6 +120,8 @@ def _resolve_prompt_track(
 def resolve_project_frame(
     project: dict[str, Any],
     frame: int,
+    *,
+    lora_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     max_frames, fps, _expression_seed = _project_context(project)
     if frame < 0 or frame >= max_frames:
@@ -138,6 +141,27 @@ def resolve_project_frame(
         "negative",
         frame=frame,
         max_frames=max_frames,
+    )
+
+    family = str(project.get("model", {}).get("family") or "").strip().lower()
+    positive_state = positive.to_dict()
+    negative_state = negative.to_dict()
+
+    for endpoint in ("from_text", "to_text"):
+        clean_negative, negative_loras = parse_lora_tags(
+            negative_state.get(endpoint)
+        )
+        if negative_loras:
+            raise LoRAError(
+                "LoRA directives are global adapter controls; place <lora:name:weight> "
+                "tags in the positive prompt, not the negative prompt."
+            )
+        negative_state[endpoint] = clean_negative
+
+    positive_state, resolved_loras = resolve_transition_loras(
+        positive_state,
+        family,
+        records=lora_records,
     )
 
     motion = {
@@ -181,9 +205,10 @@ def resolve_project_frame(
         },
         "model": deepcopy(project.get("model", {})),
         "prompts": {
-            "positive": positive.to_dict(),
-            "negative": negative.to_dict(),
+            "positive": positive_state,
+            "negative": negative_state,
         },
+        "loras": resolved_loras,
         "motion": motion,
         "generation": generation,
     }
@@ -320,6 +345,8 @@ def resolve_project_timeline(
             "Resolved timeline request is too large; increase step or narrow the frame range."
         )
 
+    records = lora_catalog()
+
     return {
         "schema_version": TIMELINE_SCHEMA_VERSION,
         "source": "tracks",
@@ -330,7 +357,11 @@ def resolve_project_timeline(
         "step": stride,
         "count": len(frames),
         "frames": [
-            resolve_project_frame(project, frame)
+            resolve_project_frame(
+                project,
+                frame,
+                lora_records=records,
+            )
             for frame in frames
         ],
     }
