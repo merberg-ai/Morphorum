@@ -169,3 +169,29 @@ Phase 3 proves:
 - mobile users can inspect the camera path cheaply
 
 The next rendering phase can reuse the same transform engine on previous diffusion frames rather than inventing a second motion implementation.
+
+
+## 2D zoom semantics
+
+Morphorum follows Deforum's 2D zoom convention exactly:
+
+- `1.0` = no zoom
+- values slightly above `1.0` = zoom in
+- values between `0.0` and `1.0` = zoom out
+- `0.0` and negative values are invalid for 2D zoom
+
+The value is a multiplicative factor applied every frame, so it compounds. Small values
+are therefore appropriate for smooth motion. Useful starting points are:
+
+```text
+0:(1.005)   # slow zoom in
+0:(1.0)     # static
+0:(0.995)   # slow zoom out
+```
+
+For example, a constant `1.01` becomes roughly 1.64x cumulative scale after 50
+transformed frames. A value such as `0.5` halves the image every frame and will
+collapse the visible canvas almost immediately.
+
+Signed toward/away camera motion is a separate 3D concept and will be represented by
+`translation_z`, where zero is neutral and positive/negative values select direction.
