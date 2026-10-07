@@ -481,12 +481,22 @@ def load_animation_project(project_id: str) -> dict[str, Any]:
     return project
 
 
-def save_animation_project(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def save_animation_project(
+    project_id: str,
+    payload: dict[str, Any],
+    *,
+    prefer_tracks: bool | None = None,
+) -> dict[str, Any]:
     path = _project_file(project_id)
     if not path.is_file():
         raise AnimationProjectError("Animation project not found.")
     existing = load_animation_project(project_id)
-    project = normalize_animation_project(payload, existing=existing, project_id=project_id)
+    project = normalize_animation_project(
+        payload,
+        existing=existing,
+        project_id=project_id,
+        prefer_tracks=prefer_tracks,
+    )
     project["created_at"] = existing["created_at"]
     project["updated_at"] = _utc_now()
     _write_atomic(path, project)
