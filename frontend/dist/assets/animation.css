@@ -1308,3 +1308,31 @@
     flex-direction: column;
   }
 }
+
+
+.animation-timeline-keyframe-list {
+  display: none;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 2px 0 1px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.animation-timeline-keyframe-chip {
+  flex: 0 0 auto;
+  min-width: 52px;
+  min-height: 40px;
+  font-family: var(--font-mono);
+}
+.animation-timeline-keyframe-chip.selected {
+  border-color: rgba(65,217,255,.55);
+  background: rgba(65,217,255,.12);
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .animation-timeline-keyframe-list:not([hidden]) {
+    display: flex;
+  }
+}
