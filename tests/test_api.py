@@ -430,6 +430,118 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
         assert missing.status_code == 404
 
 
+def test_animation_timeline_editing_api(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/animation/projects",
+            json={"name": "Timeline API"},
+        )
+        assert created.status_code == 201
+        project_id = created.json()["project"]["id"]
+
+        descriptors = client.get("/api/animation/timeline/descriptors")
+        assert descriptors.status_code == 200
+        descriptor_ids = {
+            item["id"] for item in descriptors.json()["tracks"]
+        }
+        assert "prompts.positive" in descriptor_ids
+        assert "camera_2d.zoom" in descriptor_ids
+
+        timeline = client.get(
+            f"/api/animation/projects/{project_id}/timeline"
+        )
+        assert timeline.status_code == 200
+        assert timeline.json()["project_id"] == project_id
+        assert timeline.json()["tracks"]["camera_2d"]["zoom"]["schedule"] == "0:(1.0)"
+
+        prompt = client.put(
+            f"/api/animation/projects/{project_id}/timeline/tracks/"
+            "prompts/positive/keyframes/12",
+            json={"value": "neon city"},
+        )
+        assert prompt.status_code == 200
+        assert prompt.json()["track"]["keyframes"][-1] == {
+            "frame": 12,
+            "value": "neon city",
+        }
+
+        zoom = client.put(
+            f"/api/animation/projects/{project_id}/timeline/tracks/"
+            "camera_2d/zoom/keyframes/15",
+            json={"value": "1.25"},
+        )
+        assert zoom.status_code == 200
+        assert zoom.json()["track"]["schedule"] == "0:(1.0), 15:(1.25)"
+        assert zoom.json()["project"]["motion"]["zoom"] == "0:(1.0), 15:(1.25)"
+
+        moved = client.post(
+            f"/api/animation/projects/{project_id}/timeline/tracks/"
+            "camera_2d/zoom/keyframes/15/move",
+            json={"frame": 18},
+        )
+        assert moved.status_code == 200
+        assert moved.json()["track"]["keyframes"][-1]["frame"] == 18
+        assert moved.json()["track"]["keyframes"][-1]["frame_expression"] == "18"
+
+        negative_mode = client.put(
+            f"/api/animation/projects/{project_id}/timeline/tracks/"
+            "prompts/negative/interpolation",
+            json={"interpolation": "hold"},
+        )
+        assert negative_mode.status_code == 200
+        prompts = negative_mode.json()["project"]["tracks"]["prompts"]
+        assert prompts["positive"]["interpolation"] == "blend"
+        assert prompts["negative"]["interpolation"] == "hold"
+        assert negative_mode.json()["project"]["animation"]["prompt_transition"] == "blend"
+
+        track = client.get(
+            f"/api/animation/projects/{project_id}/timeline/tracks/"
+            "camera_2d/zoom"
+        )
+        assert track.status_code == 200
+        assert track.json()["descriptor"]["unit"] == "scale"
+        assert track.json()["track"]["schedule"] == "0:(1.0), 18:(1.25)"
+
+        project = client.get(
+            f"/api/animation/projects/{project_id}"
+        ).json()["project"]
+        resolved = client.post(
+            "/api/animation/resolve-timeline",
+            json={
+                "project": project,
+                "start_frame": 0,
+                "end_frame": 18,
+                "step": 9,
+            },
+        )
+        assert resolved.status_code == 200
+        assert resolved.json()["count"] == 3
+        assert [item["frame"] for item in resolved.json()["frames"]] == [0, 9, 18]
+        assert resolved.json()["frames"][1]["motion"]["zoom"] > 1.0
+
+        deleted = client.delete(
+            f"/api/animation/projects/{project_id}/timeline/tracks/"
+            "camera_2d/zoom/keyframes/18"
+        )
+        assert deleted.status_code == 200
+        assert deleted.json()["track"]["schedule"] == "0:(1.0)"
+
+        protected = client.delete(
+            f"/api/animation/projects/{project_id}/timeline/tracks/"
+            "prompts/positive/keyframes/0"
+        )
+        assert protected.status_code == 400
+        assert "requires a frame 0" in protected.json()["detail"]
+
+        unknown = client.get(
+            f"/api/animation/projects/{project_id}/timeline/tracks/"
+            "camera_3d/teleport"
+        )
+        assert unknown.status_code == 400
+
+
 def test_animation_sampler_capabilities_are_model_specific() -> None:
     with TestClient(app) as client:
         response = client.get("/api/generation/capabilities")
