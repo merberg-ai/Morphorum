@@ -2111,6 +2111,65 @@
     }
   }
 
+  function renderAnimationFrameTelemetry(job) {
+    const panel = qs('#animation-render-frame-telemetry');
+    if (!panel) return;
+    const frameState = job?.current_frame_state;
+    if (!frameState || typeof frameState !== 'object' || !Object.keys(frameState).length) {
+      panel.hidden = true;
+      return;
+    }
+
+    panel.hidden = false;
+    const motion = frameState.motion || {};
+    const cumulative = frameState.cumulative_2d || {};
+    const generation = frameState.generation || {};
+    const set = (selector, value) => {
+      const element = qs(selector);
+      if (element) element.textContent = value;
+    };
+
+    set('#animation-render-state-angle', formatNumber(motion.angle, 4) + '°');
+    set('#animation-render-state-zoom', formatNumber(motion.zoom, 6) + '×');
+    set('#animation-render-state-x', formatNumber(motion.translation_x, 4) + ' px');
+    set('#animation-render-state-y', formatNumber(motion.translation_y, 4) + ' px');
+    set('#animation-render-state-cum-zoom', formatNumber(cumulative.zoom, 6) + '×');
+    set('#animation-render-state-cum-angle', formatNumber(cumulative.rotation_degrees, 4) + '°');
+    set(
+      '#animation-render-state-center',
+      formatNumber(cumulative.center_offset_x, 3) + ', ' +
+      formatNumber(cumulative.center_offset_y, 3) + ' px'
+    );
+    set('#animation-render-state-border', String(motion.border_mode || '--'));
+    set('#animation-render-state-strength', formatNumber(generation.strength, 4));
+    set(
+      '#animation-render-state-denoise',
+      generation.denoise_strength === null || generation.denoise_strength === undefined
+        ? 'n/a'
+        : formatNumber(generation.denoise_strength, 4)
+    );
+    set('#animation-render-state-noise', formatNumber(generation.noise, 4));
+    set('#animation-render-state-steps', String(generation.steps ?? '--'));
+    set('#animation-render-state-guidance', formatNumber(generation.guidance, 4));
+    set('#animation-render-state-sampler', String(generation.sampler || '--'));
+    set('#animation-render-state-seed', String(generation.seed ?? '--'));
+    set(
+      '#animation-render-state-seed-mode',
+      String(generation.seed_behavior || '--') +
+      (generation.seed_behavior === 'increment'
+        ? ' +' + String(generation.seed_increment ?? 0)
+        : '')
+    );
+
+    const mode = qs('#animation-render-diffusion-mode');
+    if (mode) {
+      const label = String(generation.diffusion_mode || '--').replaceAll('-', ' ');
+      mode.textContent = frameState.motion_applied
+        ? label + ' · motion applied'
+        : label + ' · frame 0';
+    }
+  }
+
   function resetRenderUi() {
     window.clearTimeout(state.renderPollTimer);
     state.renderPollTimer = null;
@@ -2123,6 +2182,7 @@
     const progress = qs('#animation-render-progress');
     if (progress) progress.hidden = true;
     renderAnimationPromptTelemetry(null);
+    renderAnimationFrameTelemetry(null);
     const error = qs('#animation-render-error');
     if (error) { error.hidden = true; error.textContent = ''; }
     const frame = qs('#animation-render-latest-frame');
@@ -2225,6 +2285,7 @@
     }
 
     renderAnimationPromptTelemetry(job);
+    renderAnimationFrameTelemetry(job);
 
     const error = qs('#animation-render-error');
     if (error) {
