@@ -127,3 +127,34 @@ def test_external_scan_preserves_managed_model_entries(tmp_path, monkeypatch) ->
     external = model_index.list_models(family="sdxl", kind="checkpoints")
     assert len(external) == 1
     assert external[0]["source"] == "external"
+
+
+
+def test_managed_zimage_family_scans_external_loras(tmp_path, monkeypatch) -> None:
+    user_config = tmp_path / "config.yaml"
+    index_db = tmp_path / "model-index.db"
+    lora_root = tmp_path / "zimage-loras"
+    lora_root.mkdir()
+    lora = lora_root / "zimage-style.safetensors"
+    lora.write_bytes(b"fake-zimage-lora")
+
+    monkeypatch.setattr(settings_module, "USER_CONFIG", user_config)
+    monkeypatch.setattr(model_index, "MODEL_INDEX_DB", index_db)
+
+    save_settings(
+        {
+            "models": {
+                "zimage": {
+                    "loras": [str(lora_root)],
+                }
+            }
+        }
+    )
+
+    result = model_index.scan_models()
+
+    indexed = model_index.list_models(family="zimage", kind="loras")
+    assert len(indexed) == 1
+    assert indexed[0]["filename"] == lora.name
+    assert indexed[0]["source"] == "external"
+    assert result["counts"]["zimage"]["loras"] == 1
