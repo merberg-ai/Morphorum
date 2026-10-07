@@ -16,7 +16,14 @@ if (-not (Test-Path $Python)) {
 $hostAddress = if ($Lan) { '0.0.0.0' } else { '127.0.0.1' }
 $displayAddress = if ($Lan) { 'this-computer-ip' } else { '127.0.0.1' }
 
+$branch = ''
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    try { $branch = (git -C $Root rev-parse --abbrev-ref HEAD).Trim() } catch { $branch = '' }
+}
 Write-Host "Morphorum starting at http://${displayAddress}:$Port" -ForegroundColor Cyan
+if ($branch) {
+    Write-Host "Git branch: $branch" -ForegroundColor DarkGray
+}
 if ($Lan) {
     Write-Host 'LAN mode is enabled. Morphorum will listen on all network interfaces.' -ForegroundColor Yellow
 }
