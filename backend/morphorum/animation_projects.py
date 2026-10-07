@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .animation_timeline import (
+    NUMERIC_TRACK_DEFS,
     build_tracks_from_legacy,
     normalize_tracks,
     sync_legacy_from_tracks,
@@ -202,6 +203,58 @@ def _legacy_timeline_changed(
     return False
 
 
+def _merge_legacy_timeline_changes(
+    payload: dict[str, Any],
+    existing: dict[str, Any],
+    project: dict[str, Any],
+    tracks: dict[str, Any],
+) -> dict[str, Any]:
+    merged = normalize_tracks(tracks, project=project)
+    legacy = build_tracks_from_legacy(project)
+
+    for payload_key, track_name in {
+        "prompts": "positive",
+        "negative_prompts": "negative",
+    }.items():
+        if payload_key in payload and payload.get(payload_key) != existing.get(payload_key):
+            merged["prompts"][track_name]["keyframes"] = deepcopy(
+                legacy["prompts"][track_name]["keyframes"]
+            )
+
+    payload_animation = payload.get("animation")
+    existing_animation = existing.get("animation", {})
+    if (
+        isinstance(payload_animation, dict)
+        and "prompt_transition" in payload_animation
+        and payload_animation.get("prompt_transition")
+        != (
+            existing_animation.get("prompt_transition")
+            if isinstance(existing_animation, dict)
+            else None
+        )
+    ):
+        mode = legacy["prompts"]["positive"]["interpolation"]
+        merged["prompts"]["positive"]["interpolation"] = mode
+        merged["prompts"]["negative"]["interpolation"] = mode
+
+    for field, definition in NUMERIC_TRACK_DEFS.items():
+        incoming = payload.get(definition["legacy_section"])
+        current = existing.get(definition["legacy_section"], {})
+        if not isinstance(incoming, dict):
+            continue
+        current = current if isinstance(current, dict) else {}
+        key = definition["legacy_key"]
+        if key not in incoming or incoming.get(key) == current.get(key):
+            continue
+
+        replacement = legacy[definition["group"]][definition["name"]]
+        target = merged[definition["group"]][definition["name"]]
+        target["schedule"] = replacement["schedule"]
+        target["keyframes"] = deepcopy(replacement["keyframes"])
+
+    return normalize_tracks(merged, project=project)
+
+
 def normalize_animation_project(
     payload: dict[str, Any] | None,
     *,
@@ -312,9 +365,18 @@ def normalize_animation_project(
         else False
     )
 
-    if use_incoming_tracks and (
+    if use_incoming_tracks and isinstance(existing_tracks, dict) and had_existing:
+        project["tracks"] = normalize_tracks(incoming_tracks, project=project)
+        if legacy_changed:
+            project["tracks"] = _merge_legacy_timeline_changes(
+                payload,
+                existing,
+                project,
+                project["tracks"],
+            )
+        sync_legacy_from_tracks(project, project["tracks"])
+    elif use_incoming_tracks and (
         not had_existing
-        or (isinstance(existing_tracks, dict) and not legacy_changed)
         or (
             not isinstance(existing_tracks, dict)
             and _safe_int(
