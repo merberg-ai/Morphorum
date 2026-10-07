@@ -702,6 +702,27 @@ class AnimationRenderManager:
             for key, value in payload.items()
             if key not in {"project", "seed_plan", "schema_version"}
         }
+        results = [
+            item for item in public.get("results", [])
+            if isinstance(item, dict)
+        ]
+        latest_frame = (
+            max(int(item.get("frame", -1)) for item in results)
+            if results
+            else None
+        )
+        public["latest_completed_frame"] = latest_frame
+        project_id = str(public.get("project_id") or "")
+        render_id = str(public.get("id") or "")
+        public["latest_frame_url"] = (
+            f"/api/animation/renders/{project_id}/{render_id}/frames/{latest_frame}"
+            if latest_frame is not None
+            and latest_frame >= 0
+            and project_id
+            and render_id
+            else None
+        )
+
         status = str(public.get("status") or "")
         if status in {"queued", "loading_model", "rendering", "finalizing"}:
             public["status"] = "interrupted"
