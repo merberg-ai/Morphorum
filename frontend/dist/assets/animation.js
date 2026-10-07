@@ -19,6 +19,10 @@
     renderHistory: [],
     renderPollTimer: null,
     lastRenderFrameUrl: '',
+    timeline: null,
+    timelineSelection: null,
+    timelineScale: 6,
+    timelineBusy: false,
   };
 
   const SCHEDULE_INPUTS = {
@@ -59,6 +63,44 @@
       throw new Error(detail || `${response.status} ${response.statusText}`);
     }
     return payload;
+  }
+
+  function timelineStatus(text, kind = '') {
+    const badge = qs('#animation-timeline-status');
+    if (!badge) return;
+    badge.textContent = text;
+    badge.className = 'badge animation-timeline-status';
+    if (kind) badge.classList.add(kind);
+  }
+
+  function timelineMaxFrame() {
+    return Math.max(
+      0,
+      Number(state.timeline?.max_frames || state.project?.animation?.max_frames || 1) - 1
+    );
+  }
+
+  function timelinePosition(frame) {
+    const max = timelineMaxFrame();
+    if (max <= 0) return 0;
+    return Math.max(0, Math.min(100, (Number(frame) / max) * 100));
+  }
+
+  function timelineFrameFromClientX(lane, clientX) {
+    const rect = lane.getBoundingClientRect();
+    if (!rect.width) return 0;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.round(ratio * timelineMaxFrame());
+  }
+
+  function syncTimelinePlayhead(frame) {
+    const value = Math.max(0, Math.min(timelineMaxFrame(), Math.trunc(Number(frame) || 0)));
+    const input = qs('#animation-timeline-frame');
+    if (input) input.value = String(value);
+    const left = timelinePosition(value) + '%';
+    qsa('.animation-timeline-playhead').forEach(playhead => {
+      playhead.style.left = left;
+    });
   }
 
   function setBusy(button, busy) {
