@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+BRANCH="${1:-}"
+
 step(){ printf '[Morphorum] %s\n' "$1"; }
 ok(){ printf '[OK] %s\n' "$1"; }
 warn(){ printf '[!] %s\n' "$1"; }
@@ -19,6 +21,23 @@ if [[ -n "$DIRTY" ]]; then
 fi
 
 PREVIOUS="$(git -C "$ROOT" rev-parse HEAD)"
+PREVIOUS_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+TARGET_BRANCH="${BRANCH:-$PREVIOUS_BRANCH}"
+
+if [[ -z "$TARGET_BRANCH" || "$TARGET_BRANCH" == "HEAD" ]]; then
+  fail "Morphorum is in detached HEAD state. Specify a branch explicitly, for example: ./update.sh main"
+  exit 1
+fi
+
+if [[ -n "$BRANCH" ]]; then
+  step "Fetching branch information from origin..."
+  git -C "$ROOT" fetch origin --prune
+  if ! git -C "$ROOT" show-ref --verify --quiet "refs/remotes/origin/$TARGET_BRANCH"; then
+    fail "Remote branch 'origin/$TARGET_BRANCH' was not found."
+    exit 1
+  fi
+fi
+
 STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP="$ROOT/backups/update-$STAMP"
 mkdir -p "$BACKUP"
@@ -28,15 +47,38 @@ printf '%s\n' "$PREVIOUS" > "$BACKUP/previous_commit.txt"
 find "$ROOT/data" -maxdepth 1 -type f -name '*.db' -exec cp {} "$BACKUP/" \; 2>/dev/null || true
 
 step "Backup created: $BACKUP"
-step "Pulling Morphorum update..."
-git -C "$ROOT" pull --ff-only
+
+if [[ "$TARGET_BRANCH" != "$PREVIOUS_BRANCH" ]]; then
+  step "Switching Morphorum from '$PREVIOUS_BRANCH' to '$TARGET_BRANCH'..."
+  if git -C "$ROOT" show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
+    git -C "$ROOT" switch "$TARGET_BRANCH"
+  else
+    git -C "$ROOT" switch --track -c "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+  fi
+fi
+
+step "Updating branch '$TARGET_BRANCH'..."
+git -C "$ROOT" pull --ff-only origin "$TARGET_BRANCH"
 
 if "$ROOT/scripts/install_linux.sh" --update; then
-  ok "Morphorum update completed successfully."
+  ok "Morphorum update completed successfully on branch '$TARGET_BRANCH'."
   exit 0
 fi
 
-warn "Update install/self-test failed. Rolling source tree back to $PREVIOUS..."
+warn "Update install/self-test failed. Rolling source tree back to branch '$PREVIOUS_BRANCH' at $PREVIOUS..."
+
+if [[ "$PREVIOUS_BRANCH" != "HEAD" ]]; then
+  if ! git -C "$ROOT" switch "$PREVIOUS_BRANCH"; then
+    fail "Automatic branch rollback failed. Resolve the Git error, then run ./repair.sh."
+    exit 1
+  fi
+else
+  if ! git -C "$ROOT" checkout --detach "$PREVIOUS"; then
+    fail "Automatic detached-HEAD rollback failed. Resolve the Git error, then run ./repair.sh."
+    exit 1
+  fi
+fi
+
 if ! git -C "$ROOT" reset --hard "$PREVIOUS"; then
   fail "Automatic source rollback failed. Run ./repair.sh after resolving the Git error."
   exit 1
