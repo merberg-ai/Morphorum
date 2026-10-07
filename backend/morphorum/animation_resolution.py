@@ -268,8 +268,9 @@ def _zoom_schedule_issues(
                     "message": (
                         "Deforum 2D zoom is a positive multiplicative factor per frame. "
                         f"Frame {frame} resolves to {value:g}; use 1.0 for no zoom, "
-                        "values slightly above 1.0 to zoom in, or slightly below 1.0 "
-                        "to zoom out. Signed depth motion belongs to 3D translation_z."
+                        "values slightly above 1.0 such as 1.005 to zoom in, or "
+                        "slightly below 1.0 such as 0.995 to zoom out. Signed depth "
+                        "motion belongs to 3D translation_z."
                     ),
                 }
             ]
