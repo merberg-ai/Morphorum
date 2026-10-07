@@ -26,6 +26,7 @@ from .animation_motion import (
 from .animation_resolution import resolve_project_frame, validate_project_schedules
 from .console import emit_console
 from .generation import GenerationError, GenerationRequest, generation_manager
+from .loras import lora_catalog
 from .model_index import get_model
 from .paths import OUTPUTS_DIR
 
@@ -486,8 +487,25 @@ class AnimationRenderManager:
         total = int(project.get("animation", {}).get("max_frames", 0))
         seeds: list[int] = []
         rng = random.SystemRandom()
+        records: list[dict[str, Any]] | None = None
+        positive_prompts = project.get("prompts", {})
+        has_lora_tags = any(
+            "<lora:" in str(value or "").lower()
+            for value in (
+                positive_prompts.values()
+                if isinstance(positive_prompts, dict)
+                else []
+            )
+        )
+        if has_lora_tags:
+            records = lora_catalog()
+
         for frame in range(total):
-            resolved = resolve_project_frame(project, frame)
+            resolved = resolve_project_frame(
+                project,
+                frame,
+                lora_records=records,
+            )
             seed = resolved.get("generation", {}).get("seed", {})
             value = seed.get("resolved")
             if value is None:
@@ -839,6 +857,17 @@ class AnimationRenderManager:
         pipe = None
         generator_device = "cpu"
         conditioning_cache: dict[tuple[Any, ...], Any] = {}
+        lora_records: list[dict[str, Any]] | None = None
+        positive_prompts = project.get("prompts", {})
+        if any(
+            "<lora:" in str(value or "").lower()
+            for value in (
+                positive_prompts.values()
+                if isinstance(positive_prompts, dict)
+                else []
+            )
+        ):
+            lora_records = lora_catalog()
 
         def on_model_load(
             progress: float,
@@ -858,7 +887,7 @@ class AnimationRenderManager:
         copied_source = render_dir / "source.png"
 
         if start_frame == 0:
-            resolved = resolve_project_frame(project, 0)
+            resolved = resolve_project_frame(project, 0, lora_records=lora_records)
             seed = int(job.seed_plan[0])
 
             if start_mode == "source":
@@ -1038,7 +1067,7 @@ class AnimationRenderManager:
                 return
 
             frame_started = time.monotonic()
-            resolved = resolve_project_frame(project, frame)
+            resolved = resolve_project_frame(project, frame, lora_records=lora_records)
             motion = resolved["motion"]
             step_matrix = _frame_transform_matrix(
                 width=width,
