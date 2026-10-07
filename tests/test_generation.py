@@ -596,3 +596,20 @@ def test_zimage_runtime_exposes_required_pipeline_api() -> None:
         "callback_on_step_end",
     ):
         assert name in parameters
+
+
+def test_model_load_progress_callback_is_clamped() -> None:
+    manager = GenerationManager()
+    events = []
+
+    manager._notify_load_progress(
+        lambda progress, phase, message, detail: events.append(
+            (progress, phase, message, detail)
+        ),
+        1.5,
+        "ready",
+        "done",
+        "detail",
+    )
+
+    assert events == [(1.0, "ready", "done", "detail")]
