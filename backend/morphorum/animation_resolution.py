@@ -249,7 +249,7 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
             all_issues.append({"field": field, **issue})
 
     family = str(project.get("model", {}).get("family") or "").strip().lower()
-    prompt_records = lora_catalog()
+    prompt_records: list[dict[str, Any]] | None = None
     positive_track = prompt_track(project, "positive")
     for item in positive_track.get("keyframes", []):
         if not isinstance(item, dict):
@@ -258,6 +258,8 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
         try:
             _clean, directives = parse_lora_tags(item.get("value", ""))
             if directives:
+                if prompt_records is None:
+                    prompt_records = lora_catalog()
                 resolve_lora_directives(
                     directives,
                     family,
