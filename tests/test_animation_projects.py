@@ -12,6 +12,7 @@ from morphorum.animation_projects import (
     create_animation_project,
     list_animation_projects,
     load_animation_project,
+    normalize_animation_project,
     save_animation_project,
 )
 
@@ -252,3 +253,22 @@ def test_direct_track_changes_sync_legacy_bridge(tmp_path, monkeypatch) -> None:
         "frame_expression": "119",
         "value": "1.25",
     }
+
+
+
+def test_unsaved_payload_detects_legacy_changes_against_stale_tracks(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+
+    project = create_animation_project({"name": "Unsaved Preview"})
+    payload = deepcopy(project)
+    payload["motion"]["zoom"] = "0:(1.0), 119:(1.4)"
+    payload["generation"]["strength"] = "0:(1)"
+
+    normalized = normalize_animation_project(
+        payload,
+        existing=payload,
+        project_id=payload["id"],
+    )
+
+    assert normalized["tracks"]["camera_2d"]["zoom"]["schedule"] == "0:(1.0), 119:(1.4)"
+    assert normalized["tracks"]["generation"]["strength"]["schedule"] == "0:(1)"
