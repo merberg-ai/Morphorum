@@ -411,6 +411,7 @@
       qs('#animation-width').value = project.animation?.width ?? 1024;
       qs('#animation-height').value = project.animation?.height ?? 1024;
       qs('#animation-prompt-transition').value = project.animation?.prompt_transition || 'blend';
+      qs('#animation-start-mode').value = project.animation?.start_mode || (project.animation?.source_image ? 'source' : 'prompt');
       qs('#animation-angle').value = project.motion?.angle || '0:(0)';
       qs('#animation-zoom').value = project.motion?.zoom || '0:(1.0)';
       qs('#animation-translation-x').value = project.motion?.translation_x || '0:(0)';
@@ -481,6 +482,7 @@
         width: Number(qs('#animation-width')?.value || 1024),
         height: Number(qs('#animation-height')?.value || 1024),
         prompt_transition: qs('#animation-prompt-transition')?.value || 'blend',
+        start_mode: qs('#animation-start-mode')?.value || 'prompt',
       },
       model: {
         ...existingModel,
@@ -782,23 +784,37 @@
     const preview = qs('#animation-generate-motion-preview');
     const fileInput = qs('#animation-source-file');
     const hasSource = Boolean(state.project?.animation?.source_image);
+    const startMode = qs('#animation-start-mode')?.value || state.project?.animation?.start_mode || 'prompt';
+    const requiresSource = startMode === 'source';
     const renderActive = ['queued', 'loading_model', 'rendering', 'finalizing'].includes(
       state.renderJob?.status
     );
+    const badge = qs('#animation-start-mode-badge');
+    const note = qs('#animation-start-mode-note');
+    if (badge) badge.textContent = requiresSource ? 'Starting Image' : 'Prompt';
+    if (note) {
+      note.textContent = requiresSource
+        ? (hasSource
+            ? 'Frame 0 will use the uploaded image exactly; diffusion feedback begins on frame 1.'
+            : 'Frame 0 requires an uploaded image in this mode. Upload one below before rendering.')
+        : 'Frame 0 will be generated with the selected model and frame-0 prompt. An uploaded image is optional and can still be used for the camera-motion preview.';
+    }
     if (image) {
       image.hidden = !hasSource;
       if (hasSource) image.src = sourceImageUrl();
       else image.removeAttribute('src');
     }
     if (empty) empty.hidden = hasSource;
-    if (meta) meta.textContent = hasSource ? (state.project.animation.source_image_name || 'Project source image') : 'No source image uploaded.';
+    if (meta) meta.textContent = hasSource
+      ? ((requiresSource ? 'Starting frame · ' : 'Optional preview reference · ') + (state.project.animation.source_image_name || 'uploaded image'))
+      : (requiresSource ? 'No starting image uploaded.' : 'No image uploaded. Prompt mode does not require one.');
     if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive;
     if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive;
     if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive;
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
-      renderButton.disabled = !state.project || !hasSource || !hasModel || renderActive;
+      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive;
     }
   }
 
@@ -818,7 +834,7 @@
     if (button) {
       button.classList.remove('busy');
       const label = qs('.button-label', button);
-      if (label) label.textContent = 'Preview Motion';
+      if (label) label.textContent = 'Preview Camera Motion';
     }
     renderSourceState();
   }
@@ -948,7 +964,7 @@
       if (button) {
         button.classList.remove('busy');
         const label = qs('.button-label', button);
-        if (label) label.textContent = 'Preview Motion';
+        if (label) label.textContent = 'Preview Camera Motion';
       }
       renderSourceState();
       toast('Could not start motion preview', error.message, 'error', 7500);
@@ -1029,7 +1045,8 @@
     const latest = qs('#animation-render-latest-frame');
     const latestEmpty = qs('#animation-render-frame-empty');
     if (job?.latest_frame_url) {
-      const url = job.latest_frame_url + '?v=' + encodeURIComponent(String(job.current_frame) + '-' + String(percent));
+      const completedFrame = job.latest_completed_frame ?? job.current_frame ?? 0;
+      const url = job.latest_frame_url + '?v=' + encodeURIComponent(String(completedFrame));
       if (state.lastRenderFrameUrl !== url && latest) { latest.src = url; state.lastRenderFrameUrl = url; }
       if (latest) latest.hidden = false;
       if (latestEmpty) latestEmpty.hidden = true;
@@ -1331,6 +1348,11 @@
       renderSourceState();
     });
 
+    qs('#animation-start-mode')?.addEventListener('change', () => {
+      markDirty();
+      renderSourceState();
+    });
+
     qs('#animation-inspector-frame')?.addEventListener('input', event => {
       setInspectorFrame(event.target.value);
     });
@@ -1346,6 +1368,7 @@
         input.id === 'animation-project-select' ||
         input.id === 'animation-model' ||
         input.id === 'animation-source-file' ||
+        input.id === 'animation-start-mode' ||
         input.id === 'animation-render-select' ||
         INSPECTOR_INPUT_IDS.has(input.id)
       ) {
