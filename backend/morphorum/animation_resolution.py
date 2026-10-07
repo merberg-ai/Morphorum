@@ -10,7 +10,13 @@ from .animation_timeline import (
     prompt_track,
     prompt_track_map,
 )
-from .loras import LoRAError, lora_catalog, parse_lora_tags, resolve_transition_loras
+from .loras import (
+    LoRAError,
+    lora_catalog,
+    parse_lora_tags,
+    resolve_lora_directives,
+    resolve_transition_loras,
+)
 from .schedules import (
     ScheduleError,
     resolve_numeric_schedule,
@@ -241,6 +247,58 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
         fields[field] = result
         for issue in result["issues"]:
             all_issues.append({"field": field, **issue})
+
+    family = str(project.get("model", {}).get("family") or "").strip().lower()
+    prompt_records = lora_catalog()
+    positive_track = prompt_track(project, "positive")
+    for item in positive_track.get("keyframes", []):
+        if not isinstance(item, dict):
+            continue
+        frame = item.get("frame", 0)
+        try:
+            _clean, directives = parse_lora_tags(item.get("value", ""))
+            if directives:
+                resolve_lora_directives(
+                    directives,
+                    family,
+                    records=prompt_records,
+                )
+        except LoRAError as exc:
+            all_issues.append(
+                {
+                    "field": "tracks.prompts.positive",
+                    "severity": "error",
+                    "message": f"Frame {frame}: {exc}",
+                }
+            )
+
+    negative_track = prompt_track(project, "negative")
+    for item in negative_track.get("keyframes", []):
+        if not isinstance(item, dict):
+            continue
+        frame = item.get("frame", 0)
+        try:
+            _clean, directives = parse_lora_tags(item.get("value", ""))
+        except LoRAError as exc:
+            all_issues.append(
+                {
+                    "field": "tracks.prompts.negative",
+                    "severity": "error",
+                    "message": f"Frame {frame}: {exc}",
+                }
+            )
+            continue
+        if directives:
+            all_issues.append(
+                {
+                    "field": "tracks.prompts.negative",
+                    "severity": "error",
+                    "message": (
+                        f"Frame {frame}: LoRA directives are global adapter controls; "
+                        "place <lora:name:weight> tags in the positive prompt."
+                    ),
+                }
+            )
 
     for name in ("positive", "negative"):
         try:
