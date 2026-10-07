@@ -43,6 +43,13 @@ def test_frontend_and_health() -> None:
         assert 'id="animation-timeline-add"' in frontend.text
         assert 'id="animation-timeline-apply"' in frontend.text
         assert 'id="animation-timeline-delete"' in frontend.text
+        assert 'id="animation-timeline-track-select"' in frontend.text
+        assert 'id="animation-timeline-scrubber"' in frontend.text
+        assert 'id="animation-collapse-all"' in frontend.text
+        assert 'id="animation-expand-all"' in frontend.text
+        assert 'id="animation-render-prompt-telemetry"' in frontend.text
+        assert 'id="animation-render-positive-prompt"' in frontend.text
+        assert 'id="animation-render-negative-prompt"' in frontend.text
         assert 'id="copy-console-view"' in frontend.text
         assert 'id="copy-console-buffer"' in frontend.text
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
