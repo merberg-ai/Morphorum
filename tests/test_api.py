@@ -64,6 +64,13 @@ def test_frontend_and_health() -> None:
         assert css.status_code == 200
         assert "no-cache" in css.headers.get("cache-control", "")
 
+        animation_js = client.get("/assets/animation.js")
+        assert animation_js.status_code == 200
+        assert "morphorum.animation.cards.v1" in animation_js.text
+        assert "current_prompt_state" in animation_js.text
+        assert "animation-timeline-keyframe-chip" in animation_js.text
+        assert "animation-timeline-track-select" in animation_js.text
+
 
 def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
     user_config = tmp_path / "config.yaml"
