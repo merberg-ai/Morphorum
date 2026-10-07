@@ -193,3 +193,17 @@ def test_zoom_must_be_positive() -> None:
             translation_x=0,
             translation_y=0,
         )
+
+
+
+def test_zoom_out_factor_below_one_is_valid() -> None:
+    matrix = _frame_transform_matrix(
+        width=64,
+        height=64,
+        angle=0,
+        zoom=0.995,
+        translation_x=0,
+        translation_y=0,
+    )
+    assert np.isfinite(matrix).all()
+    assert np.linalg.det(matrix) > 0
