@@ -11,6 +11,7 @@
     currentResults: [],
     currentResultJobId: null,
     modelLoaded: false,
+    loras: [],
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -250,12 +251,96 @@
     return merged;
   }
 
+  function renderLoraPicker() {
+    const select = qs('#image-lora-select');
+    const weight = qs('#image-lora-weight');
+    const insert = qs('#image-insert-lora');
+    if (!select) return;
+
+    select.replaceChildren();
+    if (!state.model) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Select a model to browse LoRAs';
+      select.appendChild(option);
+      select.disabled = true;
+      if (weight) weight.disabled = true;
+      if (insert) insert.disabled = true;
+      return;
+    }
+
+    if (!state.loras.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = `No indexed ${state.model.family} LoRAs`;
+      select.appendChild(option);
+      select.disabled = true;
+      if (weight) weight.disabled = true;
+      if (insert) insert.disabled = true;
+      return;
+    }
+
+    for (const lora of state.loras) {
+      const option = document.createElement('option');
+      option.value = lora.name || lora.filename || lora.id;
+      option.textContent = lora.name || lora.filename || lora.id;
+      select.appendChild(option);
+    }
+    select.disabled = false;
+    if (weight) weight.disabled = false;
+    if (insert) insert.disabled = false;
+  }
+
+  async function loadLorasForModel() {
+    state.loras = [];
+    renderLoraPicker();
+    if (!state.model?.family) return;
+    try {
+      const payload = await api(
+        `/api/models?family=${encodeURIComponent(state.model.family)}&kind=loras&limit=500`
+      );
+      state.loras = Array.isArray(payload.models) ? payload.models : [];
+    } catch (error) {
+      state.loras = [];
+      toast('Could not load LoRAs', error.message, 'warning', 6000);
+    }
+    renderLoraPicker();
+  }
+
+  function insertAtCursor(textarea, text) {
+    if (!textarea) return;
+    const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+    const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    const prefix = before && !/\s$/.test(before) ? ' ' : '';
+    const suffix = after && !/^\s/.test(after) ? ' ' : '';
+    const insertion = prefix + text + suffix;
+    textarea.value = before + insertion + after;
+    const cursor = before.length + insertion.length;
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function insertSelectedLora() {
+    const select = qs('#image-lora-select');
+    const textarea = qs('#image-prompt');
+    const name = String(select?.value || '').trim();
+    if (!name || !textarea) return;
+    const rawWeight = Number(qs('#image-lora-weight')?.value);
+    const weight = Number.isFinite(rawWeight) ? rawWeight : 1;
+    insertAtCursor(textarea, `<lora:${name}:${Number(weight.toFixed(4))}>`);
+  }
+
   async function configureModel() {
     const select = qs('#image-model-select');
     const modelId = select?.value || '';
     state.model = null;
     if (!modelId) {
       setEnabled(false);
+      state.loras = [];
+      renderLoraPicker();
       qs('#image-capability-note').textContent = 'Select an indexed checkpoint to begin.';
       qs('#image-model-family-badge').textContent = 'No model';
       return;
@@ -264,6 +349,7 @@
     try {
       const model = await api(`/api/models/${encodeURIComponent(modelId)}`);
       state.model = model;
+      await loadLorasForModel();
       const capability = effectiveCapability(model);
       qs('#image-model-family-badge').textContent = capability?.label || model.family;
       if (!capability?.supported) {
@@ -520,6 +606,7 @@
 
   function bind() {
     qs('#image-model-select')?.addEventListener('change', configureModel);
+    qs('#image-insert-lora')?.addEventListener('click', insertSelectedLora);
     qs('#image-resolution-preset')?.addEventListener('change', event => {
       if (event.target.value === 'custom') return;
       const [width, height] = event.target.value.split('x').map(Number);
