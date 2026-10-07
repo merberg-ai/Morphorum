@@ -579,6 +579,7 @@
     const trackSelect = qs('#animation-timeline-track-select');
     const prevButton = qs('#animation-timeline-prev-keyframe');
     const nextButton = qs('#animation-timeline-next-keyframe');
+    const keyframeList = qs('#animation-timeline-keyframe-list');
 
     if (refresh) refresh.disabled = !state.project || state.timelineBusy;
     if (frameInput) {
@@ -609,6 +610,10 @@
       }
       if (prevButton) prevButton.disabled = true;
       if (nextButton) nextButton.disabled = true;
+      if (keyframeList) {
+        keyframeList.hidden = true;
+        keyframeList.replaceChildren();
+      }
       if (empty) {
         empty.hidden = false;
         empty.textContent = state.project
@@ -630,6 +635,10 @@
       if (trackSelect) trackSelect.disabled = true;
       if (prevButton) prevButton.disabled = true;
       if (nextButton) nextButton.disabled = true;
+      if (keyframeList) {
+        keyframeList.hidden = true;
+        keyframeList.replaceChildren();
+      }
       timelineStatus('No tracks');
       renderTimelineEditor();
       return;
@@ -689,8 +698,40 @@
         state.timelineBusy || !selectedFrames.some(frame => frame > playheadFrame);
     }
 
-    const maxFrames = Math.max(1, Number(state.timeline.max_frames || 1));
     const mobile = isMobileTimeline();
+    if (keyframeList) {
+      keyframeList.replaceChildren();
+      keyframeList.hidden = !mobile || !selectedFrames.length;
+      if (mobile) {
+        for (const frame of selectedFrames) {
+          const item = timelineKeyframeAt(selectedTrack, frame);
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'secondary-button compact animation-timeline-keyframe-chip';
+          if (
+            state.timelineSelection?.frame !== null &&
+            state.timelineSelection?.frame !== undefined &&
+            Number(state.timelineSelection.frame) === frame
+          ) {
+            button.classList.add('selected');
+          }
+          button.textContent = 'F' + frame;
+          button.title = String(item?.value ?? '');
+          button.addEventListener('click', () => {
+            state.timelineSelection = {
+              group: state.timelineSelection.group,
+              name: state.timelineSelection.name,
+              frame,
+            };
+            setInspectorFrame(frame);
+            renderTimeline();
+          });
+          keyframeList.appendChild(button);
+        }
+      }
+    }
+
+    const maxFrames = Math.max(1, Number(state.timeline.max_frames || 1));
     const scroll = qs('#animation-timeline-scroll');
     const availableWidth = Math.max(300, Number(scroll?.clientWidth || 360) - 4);
     const contentWidth = mobile
