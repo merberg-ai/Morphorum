@@ -74,6 +74,12 @@
 
             <label class="field-label" for="image-prompt">Prompt</label>
             <textarea id="image-prompt" class="text-area" rows="5" placeholder="Describe the image you want to make…"></textarea>
+            <div class="lora-picker-row" id="image-lora-picker">
+              <select id="image-lora-select" disabled aria-label="LoRA"><option value="">Select a model to browse LoRAs</option></select>
+              <input id="image-lora-weight" type="number" value="1" step="0.05" min="-4" max="4" disabled aria-label="LoRA weight">
+              <button id="image-insert-lora" class="secondary-button compact" type="button" disabled>Insert LoRA</button>
+            </div>
+            <div class="field-help" id="image-lora-help">Morphorum inserts Deforum-style &lt;lora:name:weight&gt; directives into the positive prompt.</div>
             <label class="field-label" for="image-negative-prompt">Negative prompt</label>
             <textarea id="image-negative-prompt" class="text-area" rows="3" placeholder="Things you don't want in the image"></textarea>
 
@@ -378,6 +384,7 @@
               <div><span>Steps</span><strong id="resolved-steps">--</strong></div>
               <div><span>Guidance</span><strong id="resolved-guidance">--</strong></div>
               <div><span>Seed</span><strong id="resolved-seed">--</strong></div>
+              <div class="animation-resolved-loras"><span>LoRAs</span><strong id="resolved-loras">None</strong></div>
             </div>
 
             <div class="animation-prompt-resolution">
