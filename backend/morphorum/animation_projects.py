@@ -85,7 +85,7 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
     now = _utc_now()
     title = str(name or "").strip() or "Untitled Animation"
     pid = project_id or f"{_slugify(title)}-{uuid.uuid4().hex[:8]}"
-    return {
+    project = {
         "schema_version": ANIMATION_PROJECT_SCHEMA,
         "id": pid,
         "name": title,
@@ -317,7 +317,12 @@ def normalize_animation_project(
         or (isinstance(existing_tracks, dict) and not legacy_changed)
         or (
             not isinstance(existing_tracks, dict)
-            and int(payload.get("schema_version", 1) or 1) >= ANIMATION_PROJECT_SCHEMA
+            and _safe_int(
+                payload.get("schema_version"),
+                1,
+                1,
+                1_000_000,
+            ) >= ANIMATION_PROJECT_SCHEMA
         )
     ):
         project["tracks"] = normalize_tracks(incoming_tracks, project=project)
