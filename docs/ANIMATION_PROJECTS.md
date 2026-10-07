@@ -27,6 +27,7 @@ Example:
     "width": 1024,
     "height": 1024,
     "prompt_transition": "blend",
+    "start_mode": "source",
     "source_image": "assets/source.png",
     "source_image_name": "starting-frame.png"
   },
@@ -73,7 +74,8 @@ Timeline/output geometry shared by all model adapters:
 - `fps`: target playback frame rate.
 - `width`, `height`: requested frame dimensions.
 - `prompt_transition`: `blend` or `hold`; controls how prompt keyframes resolve between frames.
-- `source_image`: project-relative normalized source-image asset used by motion preview and future animation rendering.
+- `start_mode`: `prompt` generates frame 0 with txt2img; `source` uses the uploaded image as frame 0.
+- `source_image`: optional project-relative normalized image. It is the real frame 0 only when `start_mode=source`; otherwise it can still serve as the CPU camera-preview reference.
 - `source_image_name`: original user-facing filename for the uploaded source.
 
 ### `model`
