@@ -614,3 +614,105 @@ def test_animation_job_public_exposes_current_prompt_telemetry() -> None:
     assert public["current_prompt_state"]["applied"] is False
     assert "skips diffusion" in public["current_prompt_state"]["reason"]
     assert public["current_prompt_state"]["positive"]["to_text"] == "city"
+
+
+
+class RecordingSDXLPipe(FakeSDXLPipe):
+    def __init__(self) -> None:
+        self.conditioning = []
+
+    def __call__(self, **kwargs):
+        if kwargs.get("prompt_embeds") is not None:
+            self.conditioning.append(
+                ("embeds", float(kwargs["prompt_embeds"].reshape(-1)[0].item()))
+            )
+        else:
+            self.conditioning.append(("prompt", kwargs.get("prompt")))
+        return SimpleNamespace(images=[Image.new("RGB", (64, 64), "blue")])
+
+
+class RecordingSDXLGenerationManager:
+    def __init__(self) -> None:
+        self.inference_lock = threading.Lock()
+        self.pipe = RecordingSDXLPipe()
+
+    def _effective_capability(self, _model):
+        return {"max_sequence_length": 512}
+
+    def prepare_img2img(self, _request, load_progress_callback=None):
+        if load_progress_callback is not None:
+            load_progress_callback(1.0, "ready", "Fake img2img ready", "test")
+        return self.pipe, "cpu", fake_model()
+
+    def build_img2img_call_args(
+        self,
+        request,
+        _model,
+        *,
+        image,
+        strength,
+        generator,
+        on_step_end,
+    ):
+        return {
+            "prompt": request.prompt,
+            "negative_prompt": request.negative_prompt or None,
+            "image": image,
+            "strength": strength,
+            "generator": generator,
+            "callback_on_step_end": on_step_end,
+        }
+
+    def _model_variant(self, _model):
+        return "sdxl"
+
+    def unload_after_job_enabled(self):
+        return False
+
+    def reset_inference_pipeline(self):
+        return None
+
+    def pipeline_optimization(self):
+        return None
+
+    def release_inference_memory(self, **_kwargs):
+        return None
+
+    def cuda_memory_status(self):
+        return None
+
+    def _is_cuda_oom(self, _exc):
+        return False
+
+    def _friendly_error(self, exc, **_kwargs):
+        return exc
+
+
+def test_render_loop_changes_sdxl_prompt_conditioning_across_keyframes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_generation = RecordingSDXLGenerationManager()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "orange").save(source)
+
+    project = sample_project(max_frames=4)
+    project["generation"]["strength"] = "0:(0.5)"
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished
+    assert fake_generation.pipe.conditioning[0][0] == "embeds"
+    assert fake_generation.pipe.conditioning[0][1] == pytest.approx(10 / 3)
+    assert fake_generation.pipe.conditioning[1][0] == "embeds"
+    assert fake_generation.pipe.conditioning[1][1] == pytest.approx(20 / 3)
+    assert fake_generation.pipe.conditioning[2] == ("prompt", "city")
+    assert finished["current_prompt_state"]["frame"] == 3
+    assert finished["current_prompt_state"]["positive"]["from_text"] == "city"
