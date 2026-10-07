@@ -6,7 +6,10 @@ It uses the same schedule resolver and 2D transform engine as the motion-only pr
 
 ## Frame loop
 
-Frame 0 is the project's uploaded source image, normalized to the project width and height.
+Frame 0 is controlled by `animation.start_mode`:
+
+- `prompt`: Morphorum generates frame 0 with the selected model's normal txt2img pipeline using the resolved frame-0 prompt/seed/steps/guidance.
+- `source`: Morphorum uses the uploaded project image as frame 0, normalized to the project width and height.
 
 For every later frame:
 
@@ -79,7 +82,7 @@ Adapter handling:
 
 - SDXL: prompt, negative-prompt, pooled, and negative-pooled embeddings.
 - Flux: T5 prompt embeddings plus pooled CLIP embeddings.
-- Z-Image: Z-Image prompt embedding lists.
+- Z-Image: Z-Image prompt embedding lists. Z-Image removes padding after text encoding, so surrounding prompts may have different token-sequence lengths. Morphorum pads only the shorter embedding sequence with zero vectors before weighted interpolation instead of truncating the longer prompt.
 
 This keeps animation scheduling model-independent while letting each architecture receive conditioning in its native form.
 
@@ -132,9 +135,9 @@ outputs/
           ...
 ```
 
-The source image is copied into the render directory at submission time.
+If a project image exists, it is copied into the render directory at submission time. It is mandatory only for `start_mode=source`.
 
-The render therefore uses a frozen source and project snapshot even if the user edits the live project while the render continues.
+The render therefore uses a frozen project snapshot, frozen seed plan, and frozen source image when applicable even if the user edits the live project while the render continues.
 
 ## Render manifest
 
