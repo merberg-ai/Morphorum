@@ -262,6 +262,91 @@
       .sort((a, b) => a - b);
   }
 
+  function currentAnimationLoras() {
+    const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
+    const model = modelById(modelId);
+    if (!model?.family) return [];
+    return state.models
+      .filter(item => item.kind === 'loras' && item.family === model.family)
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }
+
+  function insertAtCursor(textarea, text) {
+    if (!textarea) return;
+    const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+    const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    const prefix = before && !/\s$/.test(before) ? ' ' : '';
+    const suffix = after && !/^\s/.test(after) ? ' ' : '';
+    const insertion = prefix + text + suffix;
+    textarea.value = before + insertion + after;
+    const cursor = before.length + insertion.length;
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function createLoraTools(promptInput) {
+    const tools = document.createElement('div');
+    tools.className = 'animation-lora-tools';
+
+    const select = document.createElement('select');
+    select.className = 'animation-lora-select';
+    select.setAttribute('aria-label', 'LoRA');
+
+    const loras = currentAnimationLoras();
+    if (!loras.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No compatible indexed LoRAs';
+      select.appendChild(option);
+      select.disabled = true;
+    } else {
+      for (const lora of loras) {
+        const option = document.createElement('option');
+        option.value = lora.name || lora.filename || lora.id;
+        option.textContent = lora.name || lora.filename || lora.id;
+        select.appendChild(option);
+      }
+    }
+
+    const weight = document.createElement('input');
+    weight.className = 'animation-lora-weight';
+    weight.type = 'number';
+    weight.value = '1';
+    weight.step = '0.05';
+    weight.min = '-4';
+    weight.max = '4';
+    weight.setAttribute('aria-label', 'LoRA weight');
+    weight.disabled = !loras.length;
+
+    const insert = document.createElement('button');
+    insert.type = 'button';
+    insert.className = 'secondary-button compact animation-insert-lora';
+    insert.textContent = 'Insert LoRA';
+    insert.disabled = !loras.length;
+    insert.addEventListener('click', () => {
+      const name = String(select.value || '').trim();
+      if (!name) return;
+      const numericWeight = Number(weight.value);
+      const value = Number.isFinite(numericWeight) ? numericWeight : 1;
+      insertAtCursor(
+        promptInput,
+        `<lora:${name}:${Number(value.toFixed(4))}>`
+      );
+    });
+
+    const hint = document.createElement('span');
+    hint.className = 'animation-lora-hint';
+    hint.textContent = loras.length
+      ? 'Deforum syntax · weight can animate between prompt keyframes'
+      : 'Add a LoRA directory for the selected model family, then scan Models.';
+
+    tools.append(select, weight, insert, hint);
+    return tools;
+  }
+
   function createPromptRow(frame, prompt, negativePrompt) {
     const row = document.createElement('div');
     row.className = 'animation-prompt-row';
@@ -315,7 +400,8 @@
       remove.disabled = Number(frameInput.value) === 0;
     });
 
-    row.append(frameLabel, promptLabel, negativeLabel, remove);
+    const loraTools = createLoraTools(promptInput);
+    row.append(frameLabel, promptLabel, negativeLabel, remove, loraTools);
     return row;
   }
 
@@ -551,6 +637,12 @@
     set('#resolved-noise', formatNumber(resolved.generation?.noise));
     set('#resolved-steps', formatNumber(resolved.generation?.steps));
     set('#resolved-guidance', formatNumber(resolved.generation?.guidance));
+    const loraText = Array.isArray(resolved.loras) && resolved.loras.length
+      ? resolved.loras
+          .map(lora => `${lora.name || lora.requested_name || 'LoRA'} ${formatNumber(lora.weight, 3)}`)
+          .join(' · ')
+      : 'None';
+    set('#resolved-loras', loraText);
 
     const seed = resolved.generation?.seed || {};
     set(
@@ -576,6 +668,7 @@
       '#resolved-steps',
       '#resolved-guidance',
       '#resolved-seed',
+      '#resolved-loras',
       '#resolved-positive-prompt',
       '#resolved-negative-prompt',
     ]) {
@@ -1378,6 +1471,7 @@
 
     qs('#animation-model')?.addEventListener('change', () => {
       populateSamplerSelect('');
+      renderPromptRows();
       markDirty();
       renderSourceState();
     });
