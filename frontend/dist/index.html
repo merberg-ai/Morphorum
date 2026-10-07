@@ -212,12 +212,12 @@
 
           <article class="card glass">
             <div class="card-header">
-              <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style keyframes and safe math expressions using t, max_f, sin(), cos(), and related functions.</p></div>
+              <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style keyframes and safe math expressions using t, max_f, sin(), cos(), and related functions. 2D zoom is a multiplicative factor per frame, so small changes compound quickly.</p></div>
             </div>
             <div class="animation-schedule-grid">
               <label><span>Border mode</span><select id="animation-border-mode" disabled><option value="replicate">Replicate edges</option><option value="wrap">Wrap opposite edge</option></select></label>
               <label><span>Angle</span><input id="animation-angle" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Zoom</span><input id="animation-zoom" class="animation-schedule" type="text" value="0:(1.0)" disabled></label>
+              <label><span>Zoom factor / frame <small class="muted">(1.0 = none · 1.005 = slow in · 0.995 = slow out)</small></span><input id="animation-zoom" class="animation-schedule" type="text" value="0:(1.0)" disabled></label>
               <label><span>Translation X</span><input id="animation-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
               <label><span>Translation Y</span><input id="animation-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
             </div>
@@ -375,7 +375,7 @@
 
             <div class="animation-resolved-grid" id="animation-resolved-grid">
               <div><span>Time</span><strong id="resolved-time">--</strong></div>
-              <div><span>Zoom</span><strong id="resolved-zoom">--</strong></div>
+              <div><span>Zoom factor / frame</span><strong id="resolved-zoom">--</strong></div>
               <div><span>Angle</span><strong id="resolved-angle">--</strong></div>
               <div><span>Translate X</span><strong id="resolved-translation-x">--</strong></div>
               <div><span>Translate Y</span><strong id="resolved-translation-y">--</strong></div>
