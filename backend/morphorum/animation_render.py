@@ -289,6 +289,38 @@ def _prompt_conditioning_kwargs(
     )
 
 
+def _prompt_state_for_frame(
+    resolved: dict[str, Any],
+    *,
+    applied: bool,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    prompts = resolved.get("prompts", {}) if isinstance(resolved, dict) else {}
+    positive = prompts.get("positive", {}) if isinstance(prompts, dict) else {}
+    negative = prompts.get("negative", {}) if isinstance(prompts, dict) else {}
+
+    def transition(value: Any) -> dict[str, Any]:
+        source = value if isinstance(value, dict) else {}
+        return {
+            "mode": str(source.get("mode") or "blend"),
+            "from_frame": int(source.get("from_frame") or 0),
+            "to_frame": int(source.get("to_frame") or 0),
+            "from_text": str(source.get("from_text") or ""),
+            "to_text": str(source.get("to_text") or ""),
+            "from_weight": float(source.get("from_weight") or 0.0),
+            "to_weight": float(source.get("to_weight") or 0.0),
+        }
+
+    return {
+        "frame": int(resolved.get("frame") or 0),
+        "applied": bool(applied),
+        "reason": reason,
+        "positive": transition(positive),
+        "negative": transition(negative),
+        "loras": deepcopy(resolved.get("loras", [])),
+    }
+
+
 def _add_uniform_noise(
     image: Image.Image,
     *,
@@ -429,6 +461,7 @@ class AnimationRenderJob:
     frame_seconds: float | None = None
     average_frame_seconds: float | None = None
     preview: dict[str, Any] | None = None
+    current_prompt_state: dict[str, Any] = field(default_factory=dict)
     resumed: bool = False
     _frame_times: list[float] = field(default_factory=list, repr=False)
 
@@ -676,6 +709,7 @@ class AnimationRenderManager:
             load_phase=str(payload.get("load_phase") or ""),
             load_message=str(payload.get("load_message") or ""),
             load_detail=payload.get("load_detail"),
+            current_prompt_state=deepcopy(payload.get("current_prompt_state") or {}),
             resumed=True,
         )
         with self._lock:
@@ -891,6 +925,12 @@ class AnimationRenderManager:
             seed = int(job.seed_plan[0])
 
             if start_mode == "source":
+                with self._lock:
+                    job.current_prompt_state = _prompt_state_for_frame(
+                        resolved,
+                        applied=False,
+                        reason="Frame 0 uses the uploaded starting image; diffusion is not applied.",
+                    )
                 with Image.open(copied_source) as opened:
                     frame_image = _prepare_source(opened, width, height)
                 start_metadata = {
@@ -899,6 +939,11 @@ class AnimationRenderManager:
                 }
                 job.message = f"Prepared starting image frame 1 of {total}"
             else:
+                with self._lock:
+                    job.current_prompt_state = _prompt_state_for_frame(
+                        resolved,
+                        applied=True,
+                    )
                 generation = resolved["generation"]
                 positive = resolved["prompts"]["positive"]
                 negative = resolved["prompts"]["negative"]
@@ -1091,6 +1136,17 @@ class AnimationRenderManager:
                     "Deforum-style strength must be between 0 and 1."
                 )
             denoise_strength = 1.0 - retention_strength
+
+            with self._lock:
+                job.current_prompt_state = _prompt_state_for_frame(
+                    resolved,
+                    applied=denoise_strength > 0.0,
+                    reason=(
+                        None
+                        if denoise_strength > 0.0
+                        else "Retention strength is 1.0, so this frame skips diffusion."
+                    ),
+                )
 
             positive = resolved["prompts"]["positive"]
             negative = resolved["prompts"]["negative"]
