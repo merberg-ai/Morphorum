@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0d0f13">
   <title>Morphorum</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%2341d9ff%22/%3E%3Cpath d=%22M14 46V18h9l9 15 9-15h9v28h-8V30L32 45 22 30v16z%22 fill=%22%23090c10%22/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Roboto+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -156,6 +157,43 @@
             </div>
           </article>
 
+          <article class="card glass animation-start-card">
+            <div class="card-header">
+              <div>
+                <h2>Start Frame</h2>
+                <p class="muted">Choose how frame 0 is created. This is the actual first frame of the diffusion animation.</p>
+              </div>
+              <span class="badge" id="animation-start-mode-badge">Prompt</span>
+            </div>
+
+            <div class="animation-start-grid">
+              <div class="animation-start-controls">
+                <label>
+                  <span>Start mode</span>
+                  <select id="animation-start-mode" disabled>
+                    <option value="prompt">Generate frame 0 from prompt</option>
+                    <option value="source">Use uploaded image as frame 0</option>
+                  </select>
+                </label>
+                <div class="animation-start-note" id="animation-start-mode-note">
+                  Frame 0 will be generated with the selected model and frame-0 prompt. An uploaded image is optional and can still be used for the camera-motion preview.
+                </div>
+                <label>
+                  <span>Optional image</span>
+                  <input id="animation-source-file" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" disabled>
+                </label>
+                <div class="button-row">
+                  <button class="secondary-button compact" id="animation-clear-source" type="button" disabled>Clear Image</button>
+                </div>
+                <div class="animation-source-meta" id="animation-source-meta">No image uploaded.</div>
+              </div>
+              <div class="animation-source-preview-wrap">
+                <img id="animation-source-preview" class="animation-source-preview" alt="Uploaded animation start or preview reference" hidden>
+                <div id="animation-source-empty" class="animation-empty">No image uploaded. Prompt mode can render without one.</div>
+              </div>
+            </div>
+          </article>
+
           <article class="card glass animation-prompts-card">
             <div class="card-header">
               <div><h2>Prompt Keyframes</h2><p class="muted">Positive and negative prompts resolve into per-frame transition weights.</p></div>
@@ -179,46 +217,6 @@
             </div>
           </article>
 
-          <article class="card glass animation-motion-preview-card">
-            <div class="card-header">
-              <div>
-                <h2>Motion Preview</h2>
-                <p class="muted">CPU-only preview of cumulative 2D camera motion. No diffusion, no GPU model load.</p>
-              </div>
-              <button class="primary-button compact busy-button" id="animation-generate-motion-preview" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Motion</span></button>
-            </div>
-
-            <div class="animation-source-grid">
-              <div class="animation-source-controls">
-                <label>
-                  <span>Starting image</span>
-                  <input id="animation-source-file" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" disabled>
-                </label>
-                <div class="button-row">
-                  <button class="secondary-button compact" id="animation-clear-source" type="button" disabled>Clear Source</button>
-                </div>
-                <div class="animation-source-meta" id="animation-source-meta">No source image uploaded.</div>
-              </div>
-              <div class="animation-source-preview-wrap">
-                <img id="animation-source-preview" class="animation-source-preview" alt="Animation source preview" hidden>
-                <div id="animation-source-empty" class="animation-empty">Upload a starting image to preview camera motion.</div>
-              </div>
-            </div>
-
-            <div class="animation-motion-progress" id="animation-motion-progress" hidden>
-              <div class="progress-row">
-                <span id="animation-motion-status">Preparing motion preview…</span>
-                <strong id="animation-motion-percent">0%</strong>
-              </div>
-              <div class="progress-track"><div class="progress-fill" id="animation-motion-progress-fill"></div></div>
-            </div>
-
-            <div class="animation-motion-result" id="animation-motion-result" hidden>
-              <img id="animation-motion-preview-image" alt="Motion-only animation preview">
-              <div class="animation-motion-result-meta" id="animation-motion-result-meta"></div>
-            </div>
-          </article>
-
           <article class="card glass">
             <div class="card-header">
               <div><h2>Generation State</h2><p class="muted">Model-independent animation controls. Adapter-specific interpretation comes later.</p></div>
@@ -235,11 +233,39 @@
             </div>
           </article>
 
+          <article class="card glass animation-motion-preview-card">
+            <div class="card-header">
+              <div>
+                <h2>Camera Motion Preview</h2>
+                <p class="muted">CPU-only geometry check using the optional uploaded image. No diffusion and no GPU model load.</p>
+              </div>
+              <button class="primary-button compact busy-button" id="animation-generate-motion-preview" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Camera Motion</span></button>
+            </div>
+
+            <div class="notice subtle animation-motion-preview-note">
+              <strong>Geometry only</strong>
+              <span>This preview uses the uploaded image above only as a visual reference. It never decides how the real animation starts. Uploading an image is required for this diagnostic preview.</span>
+            </div>
+
+            <div class="animation-motion-progress" id="animation-motion-progress" hidden>
+              <div class="progress-row">
+                <span id="animation-motion-status">Preparing motion preview…</span>
+                <strong id="animation-motion-percent">0%</strong>
+              </div>
+              <div class="progress-track"><div class="progress-fill" id="animation-motion-progress-fill"></div></div>
+            </div>
+
+            <div class="animation-motion-result" id="animation-motion-result" hidden>
+              <img id="animation-motion-preview-image" alt="Motion-only animation preview">
+              <div class="animation-motion-result-meta" id="animation-motion-result-meta"></div>
+            </div>
+          </article>
+
           <article class="card glass animation-render-card">
             <div class="card-header">
               <div>
                 <h2>Animation Render</h2>
-                <p class="muted">Render the real frame-to-frame img2img loop. Frame 0 is the project source; each later frame transforms the previous rendered frame before diffusion.</p>
+                <p class="muted">Render the real diffusion sequence. Frame 0 comes from the selected Start Mode; each later frame transforms the previous rendered frame before img2img diffusion.</p>
               </div>
               <div class="button-row animation-render-actions">
                 <button class="secondary-button compact" id="animation-resume-render" type="button" disabled>Resume</button>
@@ -360,7 +386,7 @@
           </article>
 
           <article class="card glass animation-foundation-card">
-            <div class="card-header"><div><h2>Phase 3 Motion Preview</h2><p class="muted">Resolved 2D schedules now drive real cumulative pixel transforms before diffusion enters the loop.</p></div></div>
+            <div class="card-header"><div><h2>Animation Pipeline</h2><p class="muted">One project flows from start-frame choice through schedules, previews, resumable diffusion frames, and final assembly.</p></div></div>
             <div class="animation-foundation-grid">
               <div><strong>Timeline</strong><span>Frames, FPS, dimensions</span></div>
               <div><strong>Prompts</strong><span>Positive + negative keyframes</span></div>
