@@ -149,8 +149,9 @@ retain their existing shape.
 
 The reserved groups are intended for the already-planned work:
 
-- `loras`: model-family-aware LoRA state derived initially from
-  `<lora:name:weight>` prompt directives and later exposed as timeline controls.
+- `loras`: A3 now resolves model-family-aware LoRA state from
+  `<lora:name:weight>` prompt directives into each resolved frame. The reserved
+  project group remains available for a later explicit visual LoRA-track editor.
 - `cadence`: diffusion cadence and between-cadence frame behavior.
 - `camera_3d`: rotation, translation, perspective/FOV, and later depth-assisted warp
   controls.
