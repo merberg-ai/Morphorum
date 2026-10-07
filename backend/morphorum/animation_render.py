@@ -854,7 +854,6 @@ class AnimationRenderManager:
                 job.load_detail = detail
                 job.message = str(message)
 
-        generator_device = "cpu"
         render_dir = _render_dir(job.project_id, job.id)
         copied_source = render_dir / "source.png"
 
@@ -1242,13 +1241,23 @@ class AnimationRenderManager:
             frame_image = image
             generation_manager.release_inference_memory(synchronize=False)
 
+            memory = generation_manager.cuda_memory_status()
+            memory_text = ""
+            if memory is not None:
+                memory_text = (
+                    f" VRAM free {memory['free_gib']:.1f}/{memory['total_gib']:.1f} GiB, "
+                    f"allocated {memory['allocated_gib']:.1f}, "
+                    f"reserved {memory['reserved_gib']:.1f} GiB."
+                )
+
             emit_console(
                 "info",
                 "animation",
                 f"{job.id}: frame {frame}/{total - 1} complete "
                 f"in {frame_seconds:.1f}s, seed {seed}, "
                 f"strength {retention_strength:g} "
-                f"(denoise {denoise_strength:g}), noise {noise_amount:g}.",
+                f"(denoise {denoise_strength:g}), noise {noise_amount:g}."
+                f"{memory_text}",
             )
 
         if generation_manager.unload_after_job_enabled():
@@ -1313,6 +1322,11 @@ class AnimationRenderManager:
         job.status = "failed"
         job.message = "Animation render failed"
         job.error = str(error)
+        if generation_manager._is_cuda_oom(exc):
+            job.error += (
+                " This render is resumable; after Morphorum unloads the failed pipeline, "
+                "Resume will continue from the last completed frame."
+            )
         job.completed_at = _utc_now()
         job.eta_seconds = None
         self._write_manifest(job)
