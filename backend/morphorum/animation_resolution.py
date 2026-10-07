@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from typing import Any
 
@@ -220,6 +221,104 @@ def resolve_project_frame(
     }
 
 
+def _zoom_schedule_issues(
+    project: dict[str, Any],
+    *,
+    max_frames: int,
+    fps: float,
+    seed: int,
+) -> list[dict[str, Any]]:
+    schedule = _schedule_text(project, "motion.zoom")
+    interpolation = _track_interpolation(project, "motion.zoom")
+
+    # Typical animations are small enough to validate every frame. For unusually
+    # large projects, sample evenly so schedule validation stays responsive.
+    if max_frames <= 5000:
+        frames = range(max_frames)
+    else:
+        sample_count = 1000
+        last = max_frames - 1
+        frames = sorted(
+            {
+                int(round(index * last / (sample_count - 1)))
+                for index in range(sample_count)
+            }
+        )
+
+    resolved: list[tuple[int, float]] = []
+    for frame in frames:
+        try:
+            value = float(
+                resolve_numeric_schedule(
+                    schedule,
+                    frame=frame,
+                    max_frames=max_frames,
+                    seed=seed,
+                    fps=fps,
+                    interpolation=interpolation,
+                )
+            )
+        except ScheduleError:
+            return []
+        if not math.isfinite(value) or value <= 0.0:
+            return [
+                {
+                    "severity": "error",
+                    "frame": frame,
+                    "message": (
+                        "Deforum 2D zoom is a positive multiplicative factor per frame. "
+                        f"Frame {frame} resolves to {value:g}; use 1.0 for no zoom, "
+                        "values slightly above 1.0 to zoom in, or slightly below 1.0 "
+                        "to zoom out. Signed depth motion belongs to 3D translation_z."
+                    ),
+                }
+            ]
+        resolved.append((frame, value))
+
+    issues: list[dict[str, Any]] = []
+    if max_frames <= 5000 and max_frames > 1:
+        cumulative_log = 0.0
+        min_log = 0.0
+        max_log = 0.0
+        min_frame = 0
+        max_frame = 0
+        for frame, value in resolved:
+            if frame == 0:
+                continue
+            cumulative_log += math.log(value)
+            if cumulative_log < min_log:
+                min_log = cumulative_log
+                min_frame = frame
+            if cumulative_log > max_log:
+                max_log = cumulative_log
+                max_frame = frame
+
+        if min_log < math.log(0.5) or max_log > math.log(2.0):
+            if abs(max_log) >= abs(min_log):
+                strongest_log = max_log
+                strongest_frame = max_frame
+            else:
+                strongest_log = min_log
+                strongest_frame = min_frame
+            strongest_scale = math.exp(
+                max(math.log(1e-6), min(math.log(1e6), strongest_log))
+            )
+            issues.append(
+                {
+                    "severity": "warning",
+                    "frame": strongest_frame,
+                    "message": (
+                        "2D zoom compounds every frame. This schedule reaches roughly "
+                        f"{strongest_scale:.3g}x cumulative scale by frame "
+                        f"{strongest_frame}. For gentle motion, values near 1.0 such "
+                        "as 1.005 (slow zoom in) or 0.995 (slow zoom out) are typical."
+                    ),
+                }
+            )
+
+    return issues
+
+
 def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
     max_frames, fps, expression_seed = _project_context(project)
     fields: dict[str, Any] = {}
@@ -247,6 +346,20 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
         fields[field] = result
         for issue in result["issues"]:
             all_issues.append({"field": field, **issue})
+
+    zoom_field = fields.get("motion.zoom", {})
+    if zoom_field.get("valid", False):
+        zoom_issues = _zoom_schedule_issues(
+            project,
+            max_frames=max_frames,
+            fps=fps,
+            seed=expression_seed,
+        )
+        zoom_field.setdefault("issues", []).extend(zoom_issues)
+        if any(issue.get("severity") == "error" for issue in zoom_issues):
+            zoom_field["valid"] = False
+        for issue in zoom_issues:
+            all_issues.append({"field": "motion.zoom", **issue})
 
     family = str(project.get("model", {}).get("family") or "").strip().lower()
     prompt_records: list[dict[str, Any]] | None = None
