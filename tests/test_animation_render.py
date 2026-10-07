@@ -364,6 +364,7 @@ class FakePromptStartGenerationManager:
         generator,
         on_step_end,
     ):
+        self.img2img_strengths.append(float(strength))
         return {
             "prompt": request.prompt,
             "negative_prompt": request.negative_prompt or None,
@@ -635,11 +636,14 @@ class RecordingSDXLGenerationManager:
     def __init__(self) -> None:
         self.inference_lock = threading.Lock()
         self.pipe = RecordingSDXLPipe()
+        self.requests = []
+        self.img2img_strengths = []
 
     def _effective_capability(self, _model):
         return {"max_sequence_length": 512}
 
     def prepare_img2img(self, _request, load_progress_callback=None):
+        self.requests.append(_request)
         if load_progress_callback is not None:
             load_progress_callback(1.0, "ready", "Fake img2img ready", "test")
         return self.pipe, "cpu", fake_model()
@@ -716,3 +720,148 @@ def test_render_loop_changes_sdxl_prompt_conditioning_across_keyframes(
     assert fake_generation.pipe.conditioning[2] == ("prompt", "city")
     assert finished["current_prompt_state"]["frame"] == 3
     assert finished["current_prompt_state"]["positive"]["from_text"] == "city"
+
+
+
+def test_render_loop_applies_full_2d_and_generation_schedule_set(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_generation = RecordingSDXLGenerationManager()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    real_render_affine = animation_render.render_affine
+    real_add_noise = animation_render._add_uniform_noise
+    motion_calls = []
+    noise_calls = []
+
+    def recording_render_affine(source, matrix, *, border_mode):
+        motion_calls.append((matrix.copy(), border_mode))
+        return real_render_affine(source, matrix, border_mode=border_mode)
+
+    def recording_add_noise(image, *, amount, seed):
+        noise_calls.append((float(amount), int(seed)))
+        return real_add_noise(image, amount=amount, seed=seed)
+
+    monkeypatch.setattr(animation_render, "render_affine", recording_render_affine)
+    monkeypatch.setattr(animation_render, "_add_uniform_noise", recording_add_noise)
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "orange").save(source)
+
+    project = sample_project(max_frames=4)
+    project["motion"].update(
+        {
+            "angle": "0:(0), 3:(3)",
+            "zoom": "0:(1.0), 3:(1.03)",
+            "translation_x": "0:(0), 3:(6)",
+            "translation_y": "0:(0), 3:(-3)",
+            "border_mode": "wrap",
+        }
+    )
+    project["generation"].update(
+        {
+            "strength": "0:(0.8), 3:(0.5)",
+            "noise": "0:(0.0), 3:(0.03)",
+            "steps": "0:(6), 3:(9)",
+            "guidance": "0:(4), 3:(7)",
+            "seed": 100,
+            "seed_behavior": "increment",
+            "seed_increment": 1,
+        }
+    )
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished
+    assert len(motion_calls) == 3
+    assert [mode for _matrix, mode in motion_calls] == ["wrap", "wrap", "wrap"]
+
+    for index, frame in enumerate((1, 2, 3)):
+        expected = animation_render._frame_transform_matrix(
+            width=64,
+            height=64,
+            angle=float(frame),
+            zoom=1.0 + frame * 0.01,
+            translation_x=float(frame * 2),
+            translation_y=float(-frame),
+        )
+        assert np.allclose(motion_calls[index][0], expected)
+
+    assert fake_generation.img2img_strengths == pytest.approx([0.3, 0.4, 0.5])
+    assert [request.steps for request in fake_generation.requests] == [7, 8, 9]
+    assert [request.guidance_scale for request in fake_generation.requests] == pytest.approx(
+        [5.0, 6.0, 7.0]
+    )
+    assert [request.seed for request in fake_generation.requests] == [101, 102, 103]
+    assert noise_calls == pytest.approx(
+        [(0.01, 101), (0.02, 102), (0.03, 103)]
+    )
+
+    state = finished["current_frame_state"]
+    assert state["frame"] == 3
+    assert state["motion_applied"] is True
+    assert state["motion"]["angle"] == pytest.approx(3.0)
+    assert state["motion"]["zoom"] == pytest.approx(1.03)
+    assert state["motion"]["translation_x"] == pytest.approx(6.0)
+    assert state["motion"]["translation_y"] == pytest.approx(-3.0)
+    assert state["motion"]["border_mode"] == "wrap"
+    assert state["cumulative_2d"]["zoom"] == pytest.approx(1.01 * 1.02 * 1.03)
+    assert state["cumulative_2d"]["rotation_degrees"] == pytest.approx(6.0)
+    assert state["generation"]["strength"] == pytest.approx(0.5)
+    assert state["generation"]["denoise_strength"] == pytest.approx(0.5)
+    assert state["generation"]["noise"] == pytest.approx(0.03)
+    assert state["generation"]["steps"] == 9
+    assert state["generation"]["guidance"] == pytest.approx(7.0)
+    assert state["generation"]["seed"] == 103
+    assert state["generation"]["seed_behavior"] == "increment"
+    assert state["generation"]["seed_increment"] == 1
+    assert state["generation"]["diffusion_mode"] == "img2img"
+
+    frame_path = (
+        tmp_path
+        / "outputs"
+        / "animations"
+        / "render-test"
+        / started["id"]
+        / "frames"
+        / "frame_000003.png"
+    )
+    with Image.open(frame_path) as rendered:
+        metadata = json.loads(rendered.text["Morphorum"])
+    assert metadata["render_state"]["frame"] == 3
+    assert metadata["render_state"]["cumulative_2d"]["zoom"] == pytest.approx(
+        1.01 * 1.02 * 1.03
+    )
+
+
+def test_source_frame_telemetry_marks_motion_and_diffusion_not_applied(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "orange").save(source)
+    project = sample_project(max_frames=1)
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    state = finished["current_frame_state"]
+    assert state["frame"] == 0
+    assert state["motion_applied"] is False
+    assert state["cumulative_2d"]["zoom"] == pytest.approx(1.0)
+    assert state["cumulative_2d"]["rotation_degrees"] == pytest.approx(0.0)
+    assert state["generation"]["diffusion_mode"] == "source"
+    assert state["generation"]["denoise_strength"] is None
