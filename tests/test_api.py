@@ -31,6 +31,7 @@ def test_frontend_and_health() -> None:
         assert 'id="view-animation"' in frontend.text
         assert '<select id="animation-sampler"' in frontend.text
         assert 'id="animation-start-render"' in frontend.text
+        assert 'id="animation-start-mode"' in frontend.text
         assert 'id="animation-resume-render"' in frontend.text
         assert 'id="copy-console-view"' in frontend.text
         assert 'id="copy-console-buffer"' in frontend.text
@@ -351,6 +352,7 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
         render_project = dict(preview_project)
         render_project["animation"] = dict(preview_project["animation"])
         render_project["animation"]["max_frames"] = 4
+        render_project["animation"]["start_mode"] = "source"
         render_project["model"] = {
             "model_id": "fake-model",
             "family": "sdxl",
