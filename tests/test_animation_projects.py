@@ -215,6 +215,8 @@ def test_legacy_editor_changes_refresh_track_mirror(tmp_path, monkeypatch) -> No
     created = create_animation_project({"name": "Legacy Bridge"})
     payload = deepcopy(created)
     payload["prompts"] = {"0": "start", "30": "middle"}
+    payload["tracks"]["camera_2d"]["zoom"]["interpolation"] = "hold"
+    payload["tracks"]["prompts"]["negative"]["interpolation"] = "hold"
     payload["motion"]["zoom"] = "0:(1.0), 30:(1.15)"
     payload["generation"]["strength"] = "0:(0.7), 30:(0.6)"
 
@@ -225,6 +227,8 @@ def test_legacy_editor_changes_refresh_track_mirror(tmp_path, monkeypatch) -> No
         {"frame": 30, "value": "middle"},
     ]
     assert saved["tracks"]["camera_2d"]["zoom"]["schedule"] == "0:(1.0), 30:(1.15)"
+    assert saved["tracks"]["camera_2d"]["zoom"]["interpolation"] == "hold"
+    assert saved["tracks"]["prompts"]["negative"]["interpolation"] == "hold"
     assert saved["tracks"]["generation"]["strength"]["schedule"] == "0:(0.7), 30:(0.6)"
 
 
