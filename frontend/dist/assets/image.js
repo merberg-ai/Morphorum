@@ -297,7 +297,7 @@
     if (!state.model?.family) return;
     try {
       const payload = await api(
-        `/api/models?family=${encodeURIComponent(state.model.family)}&kind=loras&limit=500`
+        `/api/models?family=${encodeURIComponent(state.model.family)}&kind=loras&limit=2000`
       );
       state.loras = Array.isArray(payload.models) ? payload.models : [];
     } catch (error) {
