@@ -93,10 +93,14 @@ pipeline and the BF16 LoRA pipeline.
 and run A (base), B (Flux style LoRA weight 1.0), C (base). The transition
 from A to B should log a BF16 compatibility reload, followed by adapter
 activation. B should change the image versus A if the LoRA is effective;
-C must disable the adapter and restore base behavior. Comparing output
-requires matching sampler, steps, guidance, resolution, seed, and prompt
-text after stripping `<lora:...>` directives. A base image generated
-after a LoRA may continue using the warm BF16 pipeline until unloaded.
+C must disable the adapter and restore base behavior. Compare B and C
+for the cleanest evidence of LoRA influence because both use the same warm
+BF16 transformer. A was likely produced using FP8 weight storage, so A/C
+need not be pixel-identical due solely to the change in numerical precision.
+Comparing output otherwise requires matching sampler, steps, guidance,
+resolution, seed, and prompt text after stripping `<lora:...>` directives.
+A base image generated after a LoRA may continue using the warm BF16
+pipeline until unloaded.
 
 **Still not accepted:** Flux LoRA pixel influence and performance on real
 hardware are not verified by CI. The successful SDXL known-working checkpoint
