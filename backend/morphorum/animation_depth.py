@@ -100,6 +100,8 @@ class DepthManager:
         self._loaded_model_id: str | None = None
         self._device: str | None = None
         self._last_result: dict[str, Any] | None = None
+        self._phase = "idle"
+        self._message = "Depth estimator idle."
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -108,6 +110,9 @@ class DepthManager:
                 "model_id": self._loaded_model_id,
                 "device": self._device,
                 "last_result": dict(self._last_result) if self._last_result else None,
+                "phase": self._phase,
+                "message": self._message,
+                "busy": self._phase in {"loading", "estimating"},
             }
 
     def _resolve_spec(self, model_id: str | None) -> DepthModelSpec:
@@ -148,11 +153,11 @@ class DepthManager:
                 return self.status()
 
             self.unload()
-            emit_console(
-                "info",
-                "depth",
-                f"Loading {spec.label} on {resolved_device}.",
+            self._phase = "loading"
+            self._message = (
+                f"Loading {spec.label} on {resolved_device}; first use may download model files."
             )
+            emit_console("info", "depth", self._message)
             try:
                 import torch
                 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
@@ -166,17 +171,17 @@ class DepthManager:
                 self._processor = None
                 self._loaded_model_id = None
                 self._device = None
-                raise DepthError(f"Could not load {spec.label}: {exc}") from exc
+                self._phase = "error"
+                self._message = f"Could not load {spec.label}: {exc}"
+                raise DepthError(self._message) from exc
 
             self._processor = processor
             self._model = model
             self._loaded_model_id = spec.id
             self._device = resolved_device
-            emit_console(
-                "info",
-                "depth",
-                f"{spec.label} ready on {resolved_device}.",
-            )
+            self._phase = "ready"
+            self._message = f"{spec.label} ready on {resolved_device}."
+            emit_console("info", "depth", self._message)
             return self.status()
 
     def unload(self) -> None:
@@ -195,6 +200,8 @@ class DepthManager:
                 except Exception:
                     pass
                 emit_console("info", "depth", "Depth estimator unloaded.")
+            self._phase = "idle"
+            self._message = "Depth estimator unloaded." if had_model else "Depth estimator idle."
 
     @staticmethod
     def _normalize_depth(raw_depth: np.ndarray) -> tuple[np.ndarray, float, float]:
@@ -232,6 +239,14 @@ class DepthManager:
 
         try:
             import torch
+
+            with self._lock:
+                self._phase = "estimating"
+                self._message = (
+                    f"Estimating relative depth at {image.width}x{image.height} on "
+                    f"{resolved_device}."
+                )
+            emit_console("info", "depth", self._message)
 
             rgb = image.convert("RGB")
             inputs = processor(images=rgb, return_tensors="pt")
@@ -286,7 +301,13 @@ class DepthManager:
             }
             with self._lock:
                 self._last_result = dict(result)
-            emit_console("info", "depth", f"Depth cache hit {cache_key[:12]}.")
+                self._phase = "idle"
+                self._message = f"Depth cache hit {cache_key[:12]}."
+            if release_after:
+                self.unload()
+                with self._lock:
+                    self._message = f"Depth cache hit {cache_key[:12]}; no model load required."
+            emit_console("info", "depth", self._message)
             return result
 
         emit_console("info", "depth", f"Estimating depth for {rgb.width}x{rgb.height} image.")
@@ -297,16 +318,21 @@ class DepthManager:
                 device=device,
             )
             normalized, raw_min, raw_max = self._normalize_depth(raw)
-            np.savez_compressed(
-                paths["data"],
-                raw=raw.astype(np.float32, copy=False),
-                normalized=normalized,
-            )
+            data_temp = paths["data"].with_name(paths["data"].name + ".tmp")
+            with data_temp.open("wb") as handle:
+                np.savez_compressed(
+                    handle,
+                    raw=raw.astype(np.float32, copy=False),
+                    normalized=normalized,
+                )
+            data_temp.replace(paths["data"])
+
             preview = Image.fromarray(
-                np.clip(np.rint(normalized * 255.0), 0, 255).astype(np.uint8),
-                mode="L",
+                np.clip(np.rint(normalized * 255.0), 0, 255).astype(np.uint8)
             )
-            preview.save(paths["preview"], format="PNG")
+            preview_temp = paths["preview"].with_name(paths["preview"].name + ".tmp")
+            preview.save(preview_temp, format="PNG")
+            preview_temp.replace(paths["preview"])
 
             metadata = {
                 "cache_version": DEPTH_CACHE_VERSION,
@@ -387,6 +413,29 @@ class DepthManager:
             "preview_path": str(paths["preview"]),
             "metadata_path": str(paths["metadata"]),
         }
+
+    def load_cached_array(
+        self,
+        cache_key: str,
+        *,
+        normalized: bool = True,
+    ) -> np.ndarray:
+        path = _cache_paths(cache_key)["data"]
+        if not path.is_file():
+            raise DepthError("Depth data is not cached.")
+        key = "normalized" if normalized else "raw"
+        try:
+            with np.load(path, allow_pickle=False) as payload:
+                if key not in payload:
+                    raise DepthError(f"Cached depth data is missing '{key}'.")
+                value = np.asarray(payload[key], dtype=np.float32).copy()
+        except DepthError:
+            raise
+        except Exception as exc:
+            raise DepthError(f"Could not read cached depth data: {exc}") from exc
+        if value.ndim != 2 or not np.isfinite(value).all():
+            raise DepthError("Cached depth data is invalid.")
+        return value
 
     def preview_path(self, cache_key: str) -> Path:
         path = _cache_paths(cache_key)["preview"]
