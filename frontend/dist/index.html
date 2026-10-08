@@ -202,6 +202,41 @@
             </div>
           </article>
 
+          <article class="card glass animation-depth-card" id="animation-depth-card">
+            <div class="card-header">
+              <div>
+                <h2>3D Depth</h2>
+                <p class="muted">Estimate relative scene depth from the uploaded reference image before depth-aware camera warping.</p>
+              </div>
+              <span class="badge" id="animation-depth-status">No preview</span>
+            </div>
+
+            <div class="animation-depth-grid">
+              <div class="animation-depth-controls">
+                <label><span>Depth estimator</span><select id="animation-depth-model" disabled><option value="">Loading depth models…</option></select></label>
+                <label><span>Device</span><select id="animation-depth-device" disabled>
+                  <option value="auto">Auto</option>
+                  <option value="cuda">CUDA</option>
+                  <option value="cpu">CPU</option>
+                </select></label>
+                <div class="button-row animation-depth-actions">
+                  <button class="primary-button busy-button" id="animation-generate-depth" type="button" disabled><span class="spinner"></span><span class="button-label">Generate Depth Preview</span></button>
+                  <button class="secondary-button compact busy-button" id="animation-recompute-depth" type="button" disabled><span class="spinner"></span><span class="button-label">Recompute</span></button>
+                  <button class="secondary-button compact" id="animation-clear-depth" type="button" disabled>Clear Preview</button>
+                </div>
+                <div class="notice subtle animation-depth-note">
+                  <strong>Relative depth</strong>
+                  <span>White is nearer and black is farther. This is geometry guidance for the 3D warp, not a distance measurement in meters.</span>
+                </div>
+                <div class="animation-depth-meta" id="animation-depth-meta">Upload an image in Start Frame to generate a depth map.</div>
+              </div>
+              <div class="animation-depth-preview-wrap">
+                <img id="animation-depth-preview" class="animation-depth-preview" alt="Estimated relative depth map" hidden>
+                <div id="animation-depth-empty" class="animation-empty">No depth preview generated.</div>
+              </div>
+            </div>
+          </article>
+
           <article class="card glass animation-timeline-card" id="animation-timeline-card">
             <div class="card-header">
               <div>
