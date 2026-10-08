@@ -8,6 +8,9 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 $Python = Join-Path $Root '.venv\Scripts\python.exe'
 
+$env:HF_HUB_DISABLE_PROGRESS_BARS = '1'
+$env:HF_HUB_DISABLE_TELEMETRY = '1'
+
 if (-not (Test-Path $Python)) {
     Write-Host 'Morphorum is not installed yet. Run install.bat first.' -ForegroundColor Yellow
     exit 1
