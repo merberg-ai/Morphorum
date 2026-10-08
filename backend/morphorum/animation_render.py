@@ -170,6 +170,7 @@ def _prompt_conditioning_kwargs(
     max_sequence_length: int = 512,
     conditioning_cache: dict[tuple[Any, ...], Any] | None = None,
     cache_zimage_on_cpu: bool = False,
+    lora_signature: tuple[Any, ...] = (),
 ) -> dict[str, Any]:
     positive_to_weight = float(positive.get("to_weight") or 0.0)
     same_positive = (
@@ -199,18 +200,29 @@ def _prompt_conditioning_kwargs(
     try:
         if family == "sdxl":
             do_cfg = float(guidance_scale) > 1.0
-            first = pipe.encode_prompt(
-                prompt=from_prompt,
-                negative_prompt=from_negative or None,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=do_cfg,
-            )
-            second = pipe.encode_prompt(
-                prompt=to_prompt,
-                negative_prompt=to_negative or None,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=do_cfg,
-            )
+
+            def sdxl_encoded(prompt_text: str, negative_text: str):
+                key = (
+                    "sdxl",
+                    prompt_text,
+                    negative_text,
+                    bool(do_cfg),
+                    tuple(lora_signature),
+                )
+                if conditioning_cache is not None and key in conditioning_cache:
+                    return conditioning_cache[key]
+                encoded = pipe.encode_prompt(
+                    prompt=prompt_text,
+                    negative_prompt=negative_text or None,
+                    num_images_per_prompt=1,
+                    do_classifier_free_guidance=do_cfg,
+                )
+                if conditioning_cache is not None:
+                    conditioning_cache[key] = encoded
+                return encoded
+
+            first = sdxl_encoded(from_prompt, from_negative)
+            second = sdxl_encoded(to_prompt, to_negative)
             result = {
                 "prompt": None,
                 "negative_prompt": None,
@@ -232,16 +244,26 @@ def _prompt_conditioning_kwargs(
             return result
 
         if family == "flux":
-            first = pipe.encode_prompt(
-                prompt=from_prompt,
-                num_images_per_prompt=1,
-                max_sequence_length=max_sequence_length,
-            )
-            second = pipe.encode_prompt(
-                prompt=to_prompt,
-                num_images_per_prompt=1,
-                max_sequence_length=max_sequence_length,
-            )
+            def flux_encoded(prompt_text: str):
+                key = (
+                    "flux",
+                    prompt_text,
+                    int(max_sequence_length),
+                    tuple(lora_signature),
+                )
+                if conditioning_cache is not None and key in conditioning_cache:
+                    return conditioning_cache[key]
+                encoded = pipe.encode_prompt(
+                    prompt=prompt_text,
+                    num_images_per_prompt=1,
+                    max_sequence_length=max_sequence_length,
+                )
+                if conditioning_cache is not None:
+                    conditioning_cache[key] = encoded
+                return encoded
+
+            first = flux_encoded(from_prompt)
+            second = flux_encoded(to_prompt)
             return {
                 "prompt": None,
                 "prompt_embeds": _blend_value(
@@ -254,7 +276,12 @@ def _prompt_conditioning_kwargs(
 
         if family == "zimage":
             def zimage_embeds(prompt_text: str):
-                key = ("zimage", prompt_text, int(max_sequence_length))
+                key = (
+                    "zimage",
+                    prompt_text,
+                    int(max_sequence_length),
+                    tuple(lora_signature),
+                )
                 if conditioning_cache is not None and key in conditioning_cache:
                     return conditioning_cache[key]
 
@@ -289,6 +316,18 @@ def _prompt_conditioning_kwargs(
     raise AnimationRenderError(
         f"Prompt blending is not implemented for model family '{family}'."
     )
+
+
+def _resolved_lora_signature(resolved: dict[str, Any]) -> tuple[Any, ...]:
+    values = []
+    for item in resolved.get("loras", []) if isinstance(resolved, dict) else []:
+        if not isinstance(item, dict):
+            continue
+        values.append((
+            str(item.get("id") or item.get("adapter_name") or item.get("name") or ""),
+            round(float(item.get("weight", 1.0)), 6),
+        ))
+    return tuple(values)
 
 
 def _prompt_state_for_frame(
@@ -1170,6 +1209,7 @@ class AnimationRenderManager:
                             "bf16-streamed-group-offload",
                         }
                     ),
+                    lora_signature=_resolved_lora_signature(resolved),
                 )
                 call_args.update(conditioning)
 
