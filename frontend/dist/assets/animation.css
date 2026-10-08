@@ -1388,3 +1388,80 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+
+/* 3D Camera MVP A2: depth estimation preview */
+.animation-depth-card {
+  grid-column: 1 / -1;
+}
+.animation-depth-grid {
+  display: grid;
+  grid-template-columns: minmax(260px,.75fr) minmax(300px,1.25fr);
+  gap: 12px;
+  align-items: stretch;
+}
+.animation-depth-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.animation-depth-actions {
+  flex-wrap: wrap;
+}
+.animation-depth-note {
+  margin: 0;
+}
+.animation-depth-meta {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.animation-depth-preview-wrap {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(3,5,8,.56);
+}
+.animation-depth-preview {
+  display: block;
+  width: 100%;
+  max-height: 560px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+#animation-depth-status {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .animation-depth-grid {
+    grid-template-columns: 1fr;
+  }
+  .animation-depth-preview-wrap {
+    min-height: 220px;
+  }
+  .animation-depth-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .animation-depth-actions #animation-generate-depth {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 440px) {
+  .animation-depth-actions {
+    grid-template-columns: 1fr;
+  }
+  .animation-depth-actions #animation-generate-depth {
+    grid-column: 1;
+  }
+  .animation-depth-actions button {
+    min-height: 44px;
+  }
+}
