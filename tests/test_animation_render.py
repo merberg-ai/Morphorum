@@ -1031,6 +1031,87 @@ def test_resize_depth_map_restores_render_resolution() -> None:
     assert np.isfinite(resized).all()
 
 
+def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """B5 cadence baseline: 3D transform frames still perform depth projection,
+    but only frame 3 and the forced last frame 5 perform GPU diffusion.
+    """
+    fake_generation = RecordingSDXLGenerationManager()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    depth_calls: list[int] = []
+
+    def estimate_depth(image, *, device, release_after, **_kwargs):
+        depth_calls.append(image.width)
+        return {"cache_key": "d" * 64, "cache_hit": False, "device": "cpu"}
+
+    def depth_array(_cache_key):
+        result = np.full((64, 64), 0.3, dtype=np.float32)
+        result[12:52, 12:52] = 0.8
+        return result
+
+    monkeypatch.setattr(animation_render.depth_manager, "estimate", estimate_depth)
+    monkeypatch.setattr(animation_render.depth_manager, "load_cached_array", depth_array)
+    monkeypatch.setattr(animation_render.depth_manager, "unload", lambda: None)
+
+    source = tmp_path / "start.png"
+    image = Image.new("RGB", (64, 64), "black")
+    for y in range(12, 52):
+        for x in range(12, 52):
+            image.putpixel((x, y), (255, 128, 32))
+    image.save(source)
+
+    project = sample_project(max_frames=6)
+    project["animation"]["mode"] = "3d"
+    project["camera_3d"] = {
+        "translation_x": "0:(0.02)",
+        "translation_y": "0:(0)",
+        "translation_z": "0:(0.02)",
+        "rotation_x": "0:(0)",
+        "rotation_y": "0:(0.2)",
+        "rotation_z": "0:(0)",
+        "fov": "0:(40)",
+    }
+    project["generation"]["strength"] = "0:(0.5)"
+    project["generation"]["noise"] = "0:(0.02)"
+    project["cadence"]["diffusion"] = "0:(3)"
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished.get("error") or finished
+    assert len(depth_calls) == 5, "3D depth projection must run on every frame after source."
+    assert [request.seed for request in fake_generation.requests] == [103, 105]
+
+    frames = (tmp_path / "outputs" / "animations" / "render-test" /
+              started["id"] / "frames")
+    expected_modes = {
+        1: ("cadence-transform", False, 1),
+        2: ("cadence-transform", False, 2),
+        3: ("img2img", True, 0),
+        4: ("cadence-transform", False, 1),
+        5: ("img2img", True, 2),  # Forced final anchor: 5 % 3 != 0.
+    }
+    for frame, (mode, anchor, phase) in expected_modes.items():
+        with Image.open(frames / f"frame_{frame:06d}.png") as result:
+            info = json.loads(result.text["Morphorum"])
+        state = info["render_state"]
+        assert state["animation_mode"] == "3d"
+        assert state["generation"]["diffusion_mode"] == mode
+        assert state["cadence"] == {
+            "diffusion": 3, "anchor": anchor, "phase": phase,
+        }
+        assert state["depth_3d"]["projected_coverage"] > 0.0
+        assert state["depth_3d"]["warp"] == "depth-forward-zbuffer-nearest-fill"
+
+
 def test_diffusion_cadence_skips_intermediate_diffusion_but_keeps_motion(
     tmp_path: Path,
     monkeypatch,
