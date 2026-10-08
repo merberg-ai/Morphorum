@@ -58,7 +58,7 @@ def test_timeline_descriptors_expose_canonical_tracks_and_reserved_groups() -> N
 
     assert descriptors["schema_version"] == 1
     assert groups["camera_3d"]["reserved"] is False
-    assert groups["cadence"]["reserved"] is True
+    assert groups["cadence"]["reserved"] is False
     assert groups["loras"]["reserved"] is True
     assert tracks["prompts.positive"]["interpolation_modes"] == ["blend", "hold"]
     assert tracks["camera_2d.zoom"]["legacy_field"] == "motion.zoom"
@@ -66,6 +66,8 @@ def test_timeline_descriptors_expose_canonical_tracks_and_reserved_groups() -> N
     assert tracks["camera_3d.rotation_y"]["unit"] == "deg"
     assert tracks["camera_3d.fov"]["unit"] == "deg"
     assert tracks["generation.steps"]["value_type"] == "integer"
+    assert tracks["cadence.diffusion"]["value_type"] == "integer"
+    assert tracks["cadence.diffusion"]["legacy_field"] == "cadence.diffusion"
 
 
 def test_numeric_keyframe_crud_updates_schedule_and_legacy_bridge() -> None:
@@ -290,3 +292,20 @@ def test_3d_camera_keyframe_crud_updates_project_bridge() -> None:
         interpolation="hold",
     )
     assert project["tracks"]["camera_3d"]["translation_z"]["interpolation"] == "hold"
+
+
+
+def test_cadence_keyframe_crud_updates_legacy_schedule() -> None:
+    project = sample_project()
+
+    upsert_track_keyframe(
+        project,
+        "cadence",
+        "diffusion",
+        frame=10,
+        value="3",
+    )
+
+    track = get_timeline_track(project, "cadence", "diffusion")["track"]
+    assert track["schedule"] == "0:(1), 10:(3)"
+    assert project["cadence"]["diffusion"] == "0:(1), 10:(3)"
