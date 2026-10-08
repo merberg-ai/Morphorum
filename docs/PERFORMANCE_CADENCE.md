@@ -13,6 +13,27 @@ It has two acceptance gates:
 CI can verify contracts and state handling. It cannot prove those two GPU/model-specific
 facts.
 
+## B4 priority gate: LoRAs before further 3D development
+
+After physical testing of `ChalkDustStyleSDXL`, LoRA registration and
+nonzero injected parameters were verified, but a convincing visual A/B difference
+was not observed. The LoRA-on and LoRA-off samples must be compared with an
+**identical sampler and every other generation setting**. Prior console
+captures included both `dpmpp_2m_sde` and `dpmpp_2m`, which confounds
+some comparisons.
+
+The LoRA Manager introduced on B4 provides metadata inspection, safe local
+Civitai sidecar reading, exact SHA-256 Civitai lookup, and live adapter status.
+Its presence does **not** constitute LoRA inference acceptance.
+
+Do not resume new 3D renderer features until physical tests establish:
+- visible same-seed SDXL LoRA-on/off effects and correct restoration;
+- verified Flux and Z-Image LoRA impact with compatible real checkpoints;
+- correct reweight, disable, and img2img/task-switch behavior;
+- animated/keyframed LoRA application without adapter leakage.
+
+This is a release gate and not a prohibition on bug fixes to existing 3D code.
+
 ## SDXL LoRA correctness
 
 ### Why the old verification was insufficient
