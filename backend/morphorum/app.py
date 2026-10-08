@@ -64,6 +64,7 @@ from .console import (
 from .generation import GenerationError, generation_manager
 from .loras import LoRAError
 from .lora_inspector import LoRAInspectionError, inspect_lora
+from .civitai import CivitaiLookupError, lookup_civitai
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -825,6 +826,15 @@ def api_lora_inspect(model_id: str) -> dict[str, Any]:
         return inspect_lora(model_id)
     except LoRAInspectionError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/loras/{model_id}/civitai-lookup")
+def api_lora_civitai_lookup(model_id: str) -> dict[str, Any]:
+    """Network lookup is opt-in; the indexed file SHA-256 is sent to Civitai."""
+    try:
+        return lookup_civitai(model_id)
+    except CivitaiLookupError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/models/families")
