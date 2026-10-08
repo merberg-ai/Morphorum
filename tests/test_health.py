@@ -11,6 +11,8 @@ def test_health_endpoint() -> None:
     assert payload["status"] == "ok"
     assert payload["app"] == "Morphorum"
     assert payload["version"]
+    assert "git_branch" in payload
+    assert "git_commit" in payload
 
 
 def test_root_serves_application_shell() -> None:
