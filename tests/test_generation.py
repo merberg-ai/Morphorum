@@ -1364,3 +1364,146 @@ def test_flux_lora_safe_bf16_pipeline_is_reused(tmp_path, monkeypatch) -> None:
     got, device = manager._load_pipeline(job)
     assert got is pipe
     assert device == "cpu"
+
+@pytest.mark.parametrize(
+    ("vram_gib", "with_lora", "stream_expected"),
+    [
+        (8, False, False), (16, False, False), (16, True, False),
+        (24, False, False), (24, True, False),
+        (32, False, True), (32, True, False),
+        (48, True, True),
+    ],
+)
+def test_flux_streaming_offload_avoids_pinning_on_small_vram(
+    vram_gib: int, with_lora: bool, stream_expected: bool
+) -> None:
+    assert GenerationManager._flux_streaming_offload_enabled(
+        vram_bytes=vram_gib * 1024**3,
+        with_lora=with_lora,
+    ) is stream_expected
+
+
+@pytest.mark.parametrize("has_lora", [False, True])
+def test_flux_16gib_loader_never_streams_cpu_group_offload(
+    tmp_path: Path, monkeypatch, has_lora: bool
+) -> None:
+    """Exercise actual Flux loader configuration without CUDA or large weights.
+
+    Diffusers streamed hooks pin tensors using cuMemHostAlloc; our RTX 4080
+    SUPER path must avoid them even for plain Flux inference.
+    """
+    from types import SimpleNamespace
+    import torch
+    import diffusers
+    import diffusers.hooks
+
+    tracker: dict = {"calls": [], "dtype": [], "fp8": []}
+    transformer = SimpleNamespace()
+    transformer.enable_layerwise_casting = lambda **kwargs: tracker["fp8"].append(kwargs)
+
+    class FakeFluxTransformer:
+        @staticmethod
+        def from_single_file(_path, **kwargs):
+            tracker["dtype"].append(kwargs["torch_dtype"])
+            return transformer
+
+    class FakeFluxPipeline:
+        @staticmethod
+        def from_pretrained(_repo, **kwargs):
+            assert kwargs["transformer"] is transformer
+            assert kwargs["torch_dtype"] == torch.bfloat16
+            return SimpleNamespace(
+                transformer=transformer,
+                text_encoder=SimpleNamespace(),
+                text_encoder_2=SimpleNamespace(),
+                vae=SimpleNamespace(),
+                set_progress_bar_config=lambda **_kwargs: None,
+            )
+
+    monkeypatch.setattr(diffusers, "FluxTransformer2DModel", FakeFluxTransformer)
+    monkeypatch.setattr(diffusers, "FluxPipeline", FakeFluxPipeline)
+    monkeypatch.setattr(
+        diffusers.hooks, "apply_group_offloading",
+        lambda component, **kwargs: tracker["calls"].append(
+            (component, kwargs.copy())
+        ),
+    )
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda _idx: (8, 9))
+    monkeypatch.setattr(
+        torch.cuda, "get_device_properties",
+        lambda _idx: SimpleNamespace(total_memory=16 * 1024**3),
+    )
+
+    model_path = tmp_path / "artsyDream_v6FP8.safetensors"
+    model_path.write_bytes(b"fake")
+    model = fake_model(model_path, "flux", "dev")
+    job = GenerationJob(
+        id="flux-no-stream",
+        request=GenerationRequest(
+            model_id=model["id"], prompt="haunted house",
+            loras=[{"id": "test-flux-lora"}] if has_lora else [],
+            sampler="flowmatch_euler", guidance_scale=1.0,
+        ),
+        model=model,
+    )
+    manager = GenerationManager()
+    pipe, location, gen_device = manager._load_flux_pipeline(job, tmp_path)
+    assert location == "cuda-offload"
+    assert gen_device == "cpu"
+    assert pipe.transformer is transformer
+    assert len(tracker["calls"]) == 4
+    assert all(not kwargs["use_stream"] for _, kwargs in tracker["calls"])
+    assert tracker["calls"][0][1]["offload_type"] == "block_level"
+    assert tracker["calls"][0][1]["num_blocks_per_group"] == 1
+    assert manager.pipeline_optimization().endswith("+nonstreamed-group-offload")
+    assert len(tracker["fp8"]) == (0 if has_lora else 1)
+
+
+def test_flux_out_of_memory_during_offload_never_retries_partially_hooked_model(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from types import SimpleNamespace
+    import torch
+    import diffusers
+    import diffusers.hooks
+
+    calls = []
+    transformer = SimpleNamespace(enable_layerwise_casting=lambda **_kw: None)
+    monkeypatch.setattr(diffusers, "FluxTransformer2DModel", SimpleNamespace(
+        from_single_file=lambda *_args, **_kw: transformer,
+    ))
+    monkeypatch.setattr(diffusers, "FluxPipeline", SimpleNamespace(
+        from_pretrained=lambda *_args, **_kw: SimpleNamespace(
+            transformer=transformer, text_encoder=None, text_encoder_2=None,
+            vae=None, set_progress_bar_config=lambda **_kw: None,
+        ),
+    ))
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda _idx: (8, 9))
+    monkeypatch.setattr(torch.cuda, "get_device_properties", lambda _idx:
+                        SimpleNamespace(total_memory=16 * 1024**3))
+
+    def fail_once(_component, **kwargs):
+        calls.append(kwargs.copy())
+        raise RuntimeError("CUDA error: out of memory while preparing offload hooks")
+
+    monkeypatch.setattr(diffusers.hooks, "apply_group_offloading", fail_once)
+    model_path = tmp_path / "flux.safetensors"
+    model_path.write_bytes(b"fake")
+    model = fake_model(model_path, "flux", "dev")
+    job = GenerationJob(
+        id="flux-hook-fail",
+        request=GenerationRequest(
+            model_id=model["id"], prompt="test",
+            sampler="flowmatch_euler", guidance_scale=1.0,
+        ),
+        model=model,
+    )
+    manager = GenerationManager()
+    with pytest.raises(GenerationError, match="GPU memory exhausted"):
+        manager._load_flux_pipeline(job, tmp_path)
+    assert len(calls) == 1, "Never retry after an offload CUDA OOM"
+    assert calls[0]["use_stream"] is False
