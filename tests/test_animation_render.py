@@ -1167,3 +1167,59 @@ def test_sdxl_conditioning_cache_is_isolated_by_lora_signature() -> None:
         ("city", "worse"),
     ]
     assert len(cache) == 4
+
+def test_animation_img2img_frame_requests_resolve_loras_before_shared_generation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The animation renderer must forward the resolved per-frame adapter
+    state to GenerationManager.prepare_img2img rather than using a separate
+    LoRA loading implementation.
+    """
+    import morphorum.animation_resolution as resolution
+
+    path = tmp_path / "CreepyDroneStyle.safetensors"
+    path.write_bytes(b"fake-lora-for-resolution")
+    records = [
+        {
+            "id": "creepy-style-id", "kind": "loras", "family": "sdxl",
+            "name": "CreepyDroneStyle", "filename": path.name,
+            "path": str(path), "size_bytes": path.stat().st_size,
+            "preview_path": None,
+        }
+    ]
+    fake_generation = RecordingSDXLGenerationManager()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "lora_catalog", lambda: records)
+    monkeypatch.setattr(resolution, "lora_catalog", lambda: records)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "orange").save(source)
+
+    project = sample_project(max_frames=4)
+    project["generation"]["strength"] = "0:(0.5)"
+    project["prompts"] = {
+        "0": "dreamy forest <lora:CreepyDroneStyle:0.2>",
+        "3": "haunted city <lora:CreepyDroneStyle:0.8>",
+    }
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    completed = wait_for(manager, started["id"])
+    assert completed["status"] == "completed", completed
+    assert len(fake_generation.requests) == 3
+
+    weights = []
+    for request in fake_generation.requests:
+        assert "<lora:" not in request.prompt
+        assert len(request.loras) == 1
+        adapter = request.loras[0]
+        assert adapter["id"] == "creepy-style-id"
+        assert adapter["adapter_name"] == "morphorum_creepy-style-id"
+        assert adapter["family"] == "sdxl"
+        weights.append(adapter["weight"])
+
+    assert weights == pytest.approx([0.4, 0.6, 0.8])
