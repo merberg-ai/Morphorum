@@ -62,6 +62,9 @@ def sample_project() -> dict:
             "seed_behavior": "increment",
             "seed_increment": 3,
         },
+        "cadence": {
+            "diffusion": "0:(1), 100:(3)",
+        },
     }
 
 
@@ -87,6 +90,7 @@ def test_resolve_project_frame_contract() -> None:
     assert resolved["generation"]["steps"] == 9
     assert resolved["generation"]["sampler"] == "flowmatch_euler"
     assert resolved["generation"]["seed"]["resolved"] == 1150
+    assert resolved["cadence"]["diffusion"] == 2
 
     positive = resolved["prompts"]["positive"]
     assert positive["mode"] == "blend"
@@ -370,3 +374,31 @@ def test_inactive_2d_schedule_error_does_not_break_3d_resolver() -> None:
     assert resolved["motion"]["zoom"] == pytest.approx(1.0)
     assert "motion.zoom" not in validation["fields"]
     assert validation["valid"] is True
+
+
+
+@pytest.mark.parametrize("schedule", ["0:(0)", "0:(65)"])
+def test_cadence_validation_rejects_out_of_range_values(schedule: str) -> None:
+    project = sample_project()
+    project["cadence"]["diffusion"] = schedule
+    project.pop("tracks", None)
+
+    result = validate_project_schedules(project)
+
+    assert result["valid"] is False
+    issue = next(
+        item for item in result["issues"]
+        if item["field"] == "cadence.diffusion"
+    )
+    assert issue["severity"] == "error"
+
+
+def test_cadence_schedule_series_is_resolvable() -> None:
+    result = project_schedule_series(
+        sample_project(),
+        "cadence.diffusion",
+        sample_count=5,
+    )
+
+    assert result["samples"][0]["value"] == pytest.approx(1.0)
+    assert result["samples"][-1]["value"] == pytest.approx(3.0)
