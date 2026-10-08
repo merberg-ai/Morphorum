@@ -45,7 +45,10 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
         {"frame": 0, "value": ""}
     ]
     assert project["tracks"]["camera_2d"]["zoom"]["schedule"] == "0:(1.0)"
-    assert project["tracks"]["camera_3d"] == {}
+    assert project["camera_3d"]["translation_z"] == "0:(0)"
+    assert project["camera_3d"]["fov"] == "0:(40)"
+    assert project["tracks"]["camera_3d"]["translation_z"]["schedule"] == "0:(0)"
+    assert project["tracks"]["camera_3d"]["fov"]["schedule"] == "0:(40)"
     assert project["tracks"]["cadence"] == {}
     assert project["tracks"]["loras"] == {}
     assert project["id"].startswith("my-first-morph-")
