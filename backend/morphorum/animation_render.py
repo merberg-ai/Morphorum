@@ -1289,7 +1289,6 @@ class AnimationRenderManager:
                 frame_image = result.images[0].convert("RGB")
                 del result, call_args, conditioning, generator
                 pipe = None
-                generation_manager.release_inference_memory()
                 start_metadata = {
                     "source_frame": False,
                     "generated_start": True,
@@ -1444,24 +1443,51 @@ class AnimationRenderManager:
                     "Deforum-style strength must be between 0 and 1."
                 )
             denoise_strength = 1.0 - retention_strength
+            cadence_value = max(
+                1,
+                int(resolved.get("cadence", {}).get("diffusion", 1) or 1),
+            )
+            cadence_anchor = (
+                cadence_value <= 1
+                or frame % cadence_value == 0
+                or frame == total - 1
+            )
+            should_diffuse = denoise_strength > 0.0 and cadence_anchor
+            cadence_state = {
+                "diffusion": cadence_value,
+                "anchor": bool(cadence_anchor),
+                "phase": int(frame % cadence_value),
+            }
+            if should_diffuse:
+                diffusion_mode = "img2img"
+                prompt_reason = None
+            elif denoise_strength <= 0.0:
+                diffusion_mode = "transform-only"
+                prompt_reason = (
+                    "Retention strength is 1.0, so this frame skips diffusion."
+                )
+            else:
+                diffusion_mode = "cadence-transform"
+                prompt_reason = (
+                    f"Diffusion cadence {cadence_value} skips this intermediate frame; "
+                    "camera transform is applied without diffusion."
+                )
 
             with self._lock:
                 job.current_prompt_state = _prompt_state_for_frame(
                     resolved,
-                    applied=denoise_strength > 0.0,
-                    reason=(
-                        None
-                        if denoise_strength > 0.0
-                        else "Retention strength is 1.0, so this frame skips diffusion."
-                    ),
+                    applied=should_diffuse,
+                    reason=prompt_reason,
                 )
                 job.current_frame_state = _frame_state_for_frame(
                     resolved,
                     seed=int(job.seed_plan[frame]),
-                    diffusion_mode=("img2img" if denoise_strength > 0.0 else "transform-only"),
+                    diffusion_mode=diffusion_mode,
                     motion_applied=True,
                     cumulative_matrix=cumulative_matrix,
                     depth_state=depth_state,
+                    cadence_state=cadence_state,
+                    timings=timings,
                 )
 
             positive = resolved["prompts"]["positive"]
@@ -1471,11 +1497,14 @@ class AnimationRenderManager:
             guidance = float(generation["guidance"])
             sampler = str(generation["sampler"])
             noise_amount = float(generation["noise"])
-            transformed = _add_uniform_noise(
-                transformed,
-                amount=noise_amount,
-                seed=seed,
-            )
+            noise_started = time.monotonic()
+            if should_diffuse:
+                transformed = _add_uniform_noise(
+                    transformed,
+                    amount=noise_amount,
+                    seed=seed,
+                )
+            timings["noise"] = max(0.0, time.monotonic() - noise_started)
 
             with self._lock:
                 job.status = "rendering"
@@ -1483,8 +1512,11 @@ class AnimationRenderManager:
                 job.current_step = 0
                 job.message = f"Rendering frame {frame + 1} of {total}"
 
-            if denoise_strength <= 0:
+            if not should_diffuse:
                 image = transformed
+                timings["prepare"] = 0.0
+                timings["conditioning"] = 0.0
+                timings["diffusion"] = 0.0
             else:
                 request = GenerationRequest(
                     model_id=model_id,
@@ -1501,11 +1533,16 @@ class AnimationRenderManager:
                     loras=deepcopy(resolved.get("loras", [])),
                 )
 
+                prepare_started = time.monotonic()
                 pipe, generator_device, validated_model = (
                     generation_manager.prepare_img2img(
                         request,
                         on_model_load,
                     )
+                )
+                timings["prepare"] = max(
+                    0.0,
+                    time.monotonic() - prepare_started,
                 )
                 if job.model_load_seconds is None:
                     job.model_load_seconds = max(
@@ -1563,6 +1600,7 @@ class AnimationRenderManager:
                     on_step_end=on_step_end,
                 )
 
+                conditioning_started = time.monotonic()
                 conditioning = _prompt_conditioning_kwargs(
                     pipe,
                     family,
@@ -1581,11 +1619,21 @@ class AnimationRenderManager:
                             "bf16-streamed-group-offload",
                         }
                     ),
+                    lora_signature=_resolved_lora_signature(resolved),
+                )
+                timings["conditioning"] = max(
+                    0.0,
+                    time.monotonic() - conditioning_started,
                 )
                 call_args.update(conditioning)
 
+                diffusion_started = time.monotonic()
                 with torch.inference_mode():
                     result = pipe(**call_args)
+                timings["diffusion"] = max(
+                    0.0,
+                    time.monotonic() - diffusion_started,
+                )
                 if job.cancel_requested:
                     self._cancel(job)
                     return
@@ -1595,9 +1643,12 @@ class AnimationRenderManager:
                     )
                 image = result.images[0].convert("RGB")
                 del result, call_args, conditioning, generator
-                generation_manager.release_inference_memory()
+
+            with self._lock:
+                job.current_frame_state["timings"] = deepcopy(timings)
 
             path = _frame_path(job.project_id, job.id, frame)
+            save_started = time.monotonic()
             _save_frame(
                 image,
                 path,
@@ -1614,6 +1665,9 @@ class AnimationRenderManager:
                     "render_state": deepcopy(job.current_frame_state),
                 },
             )
+            timings["save"] = max(0.0, time.monotonic() - save_started)
+            with self._lock:
+                job.current_frame_state["timings"] = deepcopy(timings)
 
             job.results = [
                 item
@@ -1631,6 +1685,7 @@ class AnimationRenderManager:
             job.results.sort(key=lambda item: int(item["frame"]))
 
             frame_seconds = max(0.0, time.monotonic() - frame_started)
+            timings["total"] = frame_seconds
             job._frame_times.append(frame_seconds)
             recent = job._frame_times[-8:]
             job.frame_seconds = frame_seconds
@@ -1638,12 +1693,27 @@ class AnimationRenderManager:
             remaining = max(0, total - frame - 1)
             job.eta_seconds = job.average_frame_seconds * remaining
             job.current_frame = frame
-            job.current_step = steps
+            job.current_step = steps if should_diffuse else 0
             job.progress = (frame + 1) / total
             job.message = f"Rendered frame {frame + 1} of {total}"
+
+            manifest_started = time.monotonic()
             self._write_manifest(job)
+            timings["manifest"] = max(
+                0.0,
+                time.monotonic() - manifest_started,
+            )
+
             frame_image = image
-            generation_manager.release_inference_memory(synchronize=False)
+            memory_started = time.monotonic()
+            memory_maintenance = generation_manager.maintain_inference_memory()
+            timings["memory"] = max(
+                0.0,
+                time.monotonic() - memory_started,
+            )
+            timings["total"] = max(0.0, time.monotonic() - frame_started)
+            with self._lock:
+                job.current_frame_state["timings"] = deepcopy(timings)
 
             memory = generation_manager.cuda_memory_status()
             memory_text = ""
@@ -1667,8 +1737,18 @@ class AnimationRenderManager:
                 f"{job.id}: frame {frame}/{total - 1} complete "
                 f"in {frame_seconds:.1f}s, seed {seed}, "
                 f"strength {retention_strength:g} "
-                f"(denoise {denoise_strength:g}), noise {noise_amount:g}."
-                f"{depth_text}{memory_text}",
+                f"(denoise {denoise_strength:g}), noise {noise_amount:g}, "
+                f"cadence {cadence_value} "
+                f"({'anchor' if cadence_anchor else 'transform'})."
+                f"{depth_text} "
+                f"timing resolve {timings.get('resolve', 0):.2f}s, "
+                f"warp {timings.get('warp', 0):.2f}s, "
+                f"cond {timings.get('conditioning', 0):.2f}s, "
+                f"diff {timings.get('diffusion', 0):.2f}s, "
+                f"save {timings.get('save', 0):.2f}s, "
+                f"manifest {timings.get('manifest', 0):.2f}s, "
+                f"mem {timings.get('memory', 0):.2f}s."
+                f"{memory_text}",
             )
 
         if generation_manager.unload_after_job_enabled():
