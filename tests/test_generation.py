@@ -735,9 +735,11 @@ class FakeSDXLRankBugPipe(FakeLoRAPipe):
 
     def load_lora_weights(self, source, **kwargs):
         self.loads.append({"path": source, **kwargs})
-        if isinstance(source, dict):
-            return
         adapter_name = kwargs.get("adapter_name")
+        if isinstance(source, dict):
+            if adapter_name:
+                self.unet.peft_config[adapter_name] = object()
+            return
         if self.partial_unet and adapter_name:
             self.unet.peft_config[adapter_name] = object()
         raise IndexError("list index out of range")
