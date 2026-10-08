@@ -639,6 +639,15 @@ class GenerationManager:
             )
         if isinstance(exc, GenerationError):
             return exc
+        if "addmm_cuda" in str(exc).lower() and "float8" in str(exc).lower():
+            return GenerationError(
+                "FP8 CUDA matrix multiplication failed. This usually means a Flux "
+                "layerwise-cast weight was used by PEFT LoRA without being converted "
+                "to BF16/FP16 first. Morphorum should reload Flux in LoRA-safe "
+                "BF16 streamed-offload mode before generation; restart the app "
+                "and retry on the updated B4 branch. Original error: "
+                + str(exc)[:250]
+            )
         return GenerationError(str(exc) or exc.__class__.__name__)
 
     def _fail_job(self, job: GenerationJob, exc: BaseException) -> None:
