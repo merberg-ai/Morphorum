@@ -42,6 +42,15 @@ def sample_project() -> dict:
             "translation_x": "0:(0), 100:(20)",
             "translation_y": "0:(0)",
         },
+        "camera_3d": {
+            "translation_x": "0:(0), 100:(2)",
+            "translation_y": "0:(0), 100:(-2)",
+            "translation_z": "0:(0), 100:(-4)",
+            "rotation_x": "0:(0), 100:(6)",
+            "rotation_y": "0:(0), 100:(-8)",
+            "rotation_z": "0:(0), 100:(2)",
+            "fov": "0:(40), 100:(60)",
+        },
         "generation": {
             "strength": "0:(0.6), 100:(0.8)",
             "noise": "0:(0.02)",
@@ -65,6 +74,13 @@ def test_resolve_project_frame_contract() -> None:
     assert resolved["motion"]["zoom"] == pytest.approx(1.05)
     assert resolved["motion"]["translation_x"] == pytest.approx(10)
     assert resolved["motion"]["border_mode"] == "replicate"
+    assert resolved["camera_3d"]["translation_x"] == pytest.approx(1.0)
+    assert resolved["camera_3d"]["translation_y"] == pytest.approx(-1.0)
+    assert resolved["camera_3d"]["translation_z"] == pytest.approx(-2.0)
+    assert resolved["camera_3d"]["rotation_x"] == pytest.approx(3.0)
+    assert resolved["camera_3d"]["rotation_y"] == pytest.approx(-4.0)
+    assert resolved["camera_3d"]["rotation_z"] == pytest.approx(1.0)
+    assert resolved["camera_3d"]["fov"] == pytest.approx(50.0)
     assert resolved["generation"]["strength"] == pytest.approx(0.7)
     assert resolved["generation"]["steps"] == 9
     assert resolved["generation"]["sampler"] == "flowmatch_euler"
@@ -269,3 +285,52 @@ def test_zoom_validation_warns_when_compounding_becomes_extreme() -> None:
     assert "compounds every frame" in issue["message"]
     assert "1.005" in issue["message"]
     assert "0.995" in issue["message"]
+
+
+
+def test_3d_camera_schedule_series_and_hold_interpolation() -> None:
+    project = sample_project()
+    project["tracks"] = build_tracks_from_legacy(project)
+    project["tracks"]["camera_3d"]["translation_z"]["interpolation"] = "hold"
+
+    resolved = resolve_project_frame(project, 50)
+    series = project_schedule_series(
+        project,
+        "camera_3d.translation_z",
+        sample_count=5,
+    )
+
+    assert resolved["camera_3d"]["translation_z"] == pytest.approx(0.0)
+    assert series["field"] == "camera_3d.translation_z"
+    assert series["interpolation"] == "hold"
+    assert series["samples"][2]["value"] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("schedule", ["0:(0)", "0:(180)", "0:(-30)"])
+def test_3d_fov_validation_rejects_invalid_projection_ranges(schedule: str) -> None:
+    project = sample_project()
+    project["camera_3d"]["fov"] = schedule
+
+    result = validate_project_schedules(project)
+
+    assert result["valid"] is False
+    issue = next(
+        item
+        for item in result["issues"]
+        if item["field"] == "camera_3d.fov"
+    )
+    assert issue["severity"] == "error"
+    assert "between 1 and 179 degrees" in issue["message"]
+
+
+def test_3d_translation_and_rotation_accept_signed_values() -> None:
+    project = sample_project()
+    project["camera_3d"]["translation_z"] = "0:(-3), 100:(2)"
+    project["camera_3d"]["rotation_y"] = "0:(-15), 100:(20)"
+
+    result = validate_project_schedules(project)
+    resolved = resolve_project_frame(project, 50)
+
+    assert result["valid"] is True
+    assert resolved["camera_3d"]["translation_z"] == pytest.approx(-0.5)
+    assert resolved["camera_3d"]["rotation_y"] == pytest.approx(2.5)
