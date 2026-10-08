@@ -630,7 +630,40 @@
     qs('#unload-model')?.addEventListener('click', unloadModel);
   }
 
-  window.MorphorumImage = { configureModel, loadCapabilities, refreshModelStatus };
+  function insertFromManager({ family, name, weight = 1, triggers = [] } = {}) {
+    const prompt = qs('#image-prompt');
+    const model = state.model;
+    if (!prompt || !model) {
+      toast('Select an image model', 'Choose a checkpoint in the Image tab first.', 'warning');
+      return false;
+    }
+    if (model.family !== family) {
+      toast('LoRA family mismatch', `Selected image checkpoint is ${model.family}; this LoRA is ${family}. Choose a matching checkpoint first.`, 'warning');
+      return false;
+    }
+    const candidate = state.loras.find(lora => lora.name === name || lora.filename === name);
+    if (!candidate) {
+      toast('LoRA not indexed for image model', 'Refresh the library and reselect your checkpoint before inserting.', 'warning');
+      return false;
+    }
+    const numeric = Number(weight);
+    if (!Number.isFinite(numeric) || numeric < -4 || numeric > 4) return false;
+    // Safe tags cannot contain colons, angle brackets, or control characters.
+    if (!name || /[:<>\\r\\n]/.test(name)) {
+      toast('Invalid LoRA name', 'This filename cannot be represented by a Deforum-style directive.', 'warning');
+      return false;
+    }
+    const words = Array.isArray(triggers) ? triggers.filter(value => typeof value === 'string' && !/[<>\\r\\n]/.test(value)).slice(0, 20) : [];
+    const tag = `<lora:${name}:${Number(numeric.toFixed(4))}>`;
+    insertAtCursor(prompt, [tag, ...words].join(', '));
+    qs('.nav-button[data-view="image"]')?.click();
+    return true;
+  }
+
+  window.MorphorumImage = {
+    configureModel, loadCapabilities, refreshModelStatus,
+    refreshLoras: loadLorasForModel, insertFromManager,
+  };
   window.addEventListener('morphorum:settings-changed', event => applySettings(event.detail || {}));
   window.addEventListener('DOMContentLoaded', async () => {
     bind();
