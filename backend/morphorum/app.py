@@ -58,7 +58,7 @@ from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
-from .system_info import doctor_report, install_manifest, live_telemetry
+from .system_info import doctor_report, git_branch, git_commit, install_manifest, live_telemetry
 
 FRONTEND_DIR = ROOT / "frontend" / "dist"
 FRONTEND_INDEX = FRONTEND_DIR / "index.html"
@@ -150,6 +150,8 @@ def health() -> dict:
         "status": "ok",
         "app": "Morphorum",
         "version": __version__,
+        "git_branch": git_branch(),
+        "git_commit": git_commit(),
         "frontend_asset_version": FRONTEND_ASSET_VERSION,
         "root": str(ROOT),
     }
