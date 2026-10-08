@@ -100,6 +100,7 @@
     qsa('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === name));
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
     if (name === 'console') renderConsole();
+    if (name === 'loras') window.MorphorumLoras?.refreshRuntime?.();
     try { history.replaceState(null, '', `#${name}`); } catch (_) {}
   }
 
