@@ -693,6 +693,9 @@ class RecordingSDXLGenerationManager:
     def release_inference_memory(self, **_kwargs):
         return None
 
+    def maintain_inference_memory(self, **_kwargs):
+        return {"trimmed": False, "reason": "test"}
+
     def cuda_memory_status(self):
         return None
 
