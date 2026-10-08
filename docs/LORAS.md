@@ -131,6 +131,48 @@ frame.
 
 Typing directives manually remains fully supported.
 
+## LoRA Manager (B4 diagnostic laboratory)
+
+The dedicated **LoRAs** tab sits next to Models and shares its indexed file database.
+It can rescan configured SDXL/Flux/Z-Image LoRA directories, filter a family,
+inspect an individual file, and insert a family-checked Deforum tag into the
+Image prompt. A user may also include *recorded* trigger words automatically.
+The selected image checkpoint must belong to the same family.
+
+The static inspector opens safetensors headers on CPU and reports:
+- embedded metadata and training fields (including `ss_*` values),
+- local `.civitai.info`, `.civitai.json`, `.json` and bounded `.html` sidecars,
+- explicit trigger words with provenance,
+- model-family hints and mismatches,
+- tensor counts by UNet/transformer/text encoder,
+- representative keys and rank/shape patterns,
+- frequently occurring training tags (NOT treated as verified triggers).
+
+Unsafe pickle-based `.ckpt` and `.pt` files are not deserialized for inspection.
+Inspection doesn't load any weights onto CUDA. It also cannot by itself prove
+that the LoRA actually changes inference output.
+
+### Optional Civitai metadata lookup
+
+**Fetch from Civitai** is a deliberate per-LoRA online action. Morphorum
+hashes the selected indexed file with SHA-256 and queries the documented
+`GET https://civitai.com/api/v1/model-versions/by-hash/{SHA256}` endpoint.
+If no hash match is found and a local JSON sidecar supplies an exact
+`modelVersionId`, it attempts that version ID as a fallback, clearly labeled
+*not hash-verified*. There is no fuzzy filename match, HTML scraping, automatic
+whole-library upload, or remote model download.
+
+It displays Civitai's stated base model, model and version names,
+explicit `trainedWords`, description converted to plain text, and a link
+to the version page. All remote text is rendered as untrusted text, not HTML.
+The hash is cached locally using file size/mtime to avoid unnecessary repeated
+hashing. The outbound query reveals the file hash to Civitai, **not** prompts,
+local file paths, or file contents. Browsing the manager stays offline.
+
+If no triggers exist in the local file or sidecar, the prompt insertion
+control may use explicit Civitai trained words after a successful lookup.
+Metadata and source provenance are kept distinct.
+
 ## Runtime implementation
 
 Morphorum uses the current Diffusers LoRA APIs exposed by its supported pipelines:
