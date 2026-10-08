@@ -99,6 +99,7 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "width": 1024,
             "height": 1024,
             "prompt_transition": "blend",
+            "mode": "2d",
             "start_mode": "prompt",
             "source_image": "",
             "source_image_name": "",
@@ -317,6 +318,8 @@ def normalize_animation_project(
     animation["prompt_transition"] = (
         prompt_transition if prompt_transition in {"blend", "hold"} else "blend"
     )
+    raw_mode = str(animation.get("mode", "2d") or "2d").strip().lower()
+    animation["mode"] = raw_mode if raw_mode in {"2d", "3d"} else "2d"
     raw_start_mode = animation.get("start_mode")
     if raw_start_mode is None:
         start_mode = "source" if animation.get("source_image") else "prompt"
