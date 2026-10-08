@@ -1547,6 +1547,8 @@ class AnimationRenderManager:
         job: AnimationRenderJob,
         fps: float,
     ) -> None:
+        if str(job.project.get("animation", {}).get("mode") or "2d").lower() == "3d":
+            depth_manager.unload()
         job.status = "finalizing"
         job.message = "Building animation preview"
         self._write_manifest(job)
@@ -1570,6 +1572,8 @@ class AnimationRenderManager:
         )
 
     def _cancel(self, job: AnimationRenderJob) -> None:
+        if str(job.project.get("animation", {}).get("mode") or "2d").lower() == "3d":
+            depth_manager.unload()
         job.status = "cancelled"
         job.message = "Animation render cancelled"
         job.completed_at = _utc_now()
@@ -1583,6 +1587,7 @@ class AnimationRenderManager:
         )
 
     def _fail(self, job: AnimationRenderJob, exc: BaseException) -> None:
+        depth_manager.unload()
         generation_manager.reset_inference_pipeline()
         error = (
             generation_manager._friendly_error(
