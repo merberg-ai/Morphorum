@@ -64,6 +64,9 @@ def sample_project(max_frames: int = 4) -> dict:
             "seed_behavior": "increment",
             "seed_increment": 1,
         },
+        "cadence": {
+            "diffusion": "0:(1)",
+        },
         "notes": "",
     }
 
@@ -390,6 +393,9 @@ class FakePromptStartGenerationManager:
 
     def release_inference_memory(self, **_kwargs):
         return None
+
+    def maintain_inference_memory(self, **_kwargs):
+        return {"trimmed": False, "reason": "test"}
 
     def cuda_memory_status(self):
         return None
@@ -987,3 +993,98 @@ def test_3d_render_uses_cpu_depth_and_persists_warp_telemetry(
         metadata = json.loads(final.text["Morphorum"])
     assert metadata["resolved"]["animation_mode"] == "3d"
     assert metadata["render_state"]["depth_3d"]["cache_key"] == "a" * 64
+
+
+
+def test_depth_input_auto_caps_large_frames_at_512() -> None:
+    image = Image.new("RGB", (1024, 768), "black")
+
+    auto, auto_label = animation_render._prepare_depth_input(image, "auto")
+    full, full_label = animation_render._prepare_depth_input(image, "full")
+    fixed, fixed_label = animation_render._prepare_depth_input(image, "384")
+
+    assert auto.size == (512, 384)
+    assert auto_label == "auto"
+    assert full.size == image.size
+    assert full_label == "full"
+    assert fixed.size == (384, 288)
+    assert fixed_label == "384"
+
+
+def test_resize_depth_map_restores_render_resolution() -> None:
+    depth = np.linspace(0.0, 1.0, 32 * 24, dtype=np.float32).reshape(24, 32)
+
+    resized = animation_render._resize_depth_map(
+        depth,
+        width=64,
+        height=48,
+    )
+
+    assert resized.shape == (48, 64)
+    assert resized.dtype == np.float32
+    assert np.isfinite(resized).all()
+
+
+def test_diffusion_cadence_skips_intermediate_diffusion_but_keeps_motion(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_generation = RecordingSDXLGenerationManager()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    motion_calls = []
+    noise_calls = []
+    real_render_affine = animation_render.render_affine
+    real_add_noise = animation_render._add_uniform_noise
+
+    def recording_render_affine(source, matrix, *, border_mode):
+        motion_calls.append(matrix.copy())
+        return real_render_affine(source, matrix, border_mode=border_mode)
+
+    def recording_add_noise(image, *, amount, seed):
+        noise_calls.append((float(amount), int(seed)))
+        return real_add_noise(image, amount=amount, seed=seed)
+
+    monkeypatch.setattr(animation_render, "render_affine", recording_render_affine)
+    monkeypatch.setattr(animation_render, "_add_uniform_noise", recording_add_noise)
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "orange").save(source)
+
+    project = sample_project(max_frames=5)
+    project["generation"]["strength"] = "0:(0.5)"
+    project["generation"]["noise"] = "0:(0.02)"
+    project["cadence"]["diffusion"] = "0:(2)"
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished
+    assert len(motion_calls) == 4
+    assert len(fake_generation.requests) == 2
+    assert [request.seed for request in fake_generation.requests] == [102, 104]
+    assert [seed for _amount, seed in noise_calls] == [102, 104]
+
+    render_dir = (
+        tmp_path / "outputs" / "animations" / "render-test" / started["id"]
+    )
+    with Image.open(render_dir / "frames" / "frame_000001.png") as skipped:
+        skipped_meta = json.loads(skipped.text["Morphorum"])
+    with Image.open(render_dir / "frames" / "frame_000002.png") as anchor:
+        anchor_meta = json.loads(anchor.text["Morphorum"])
+
+    assert skipped_meta["render_state"]["generation"]["diffusion_mode"] == "cadence-transform"
+    assert skipped_meta["render_state"]["cadence"] == {
+        "diffusion": 2,
+        "anchor": False,
+        "phase": 1,
+    }
+    assert anchor_meta["render_state"]["generation"]["diffusion_mode"] == "img2img"
+    assert anchor_meta["render_state"]["cadence"]["anchor"] is True
+    assert finished["current_frame_state"]["cadence"]["anchor"] is True
+    assert finished["current_frame_state"]["timings"]["diffusion"] >= 0.0
