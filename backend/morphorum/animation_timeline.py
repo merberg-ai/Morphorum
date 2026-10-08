@@ -128,6 +128,14 @@ NUMERIC_TRACK_DEFS: dict[str, dict[str, str]] = {
         "value_type": "float",
         "default_schedule": "0:(0)",
     },
+    "cadence.diffusion": {
+        "group": "cadence",
+        "name": "diffusion",
+        "legacy_section": "cadence",
+        "legacy_key": "diffusion",
+        "value_type": "integer",
+        "default_schedule": "0:(1)",
+    },
 }
 
 PROMPT_TRACK_DEFS: dict[str, dict[str, str]] = {
@@ -141,7 +149,7 @@ PROMPT_TRACK_DEFS: dict[str, dict[str, str]] = {
     },
 }
 
-RESERVED_TRACK_GROUPS = ("cadence", "loras")
+RESERVED_TRACK_GROUPS = ("loras",)
 
 
 def _project_context(project: dict[str, Any]) -> tuple[int, float, int]:
