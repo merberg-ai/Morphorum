@@ -12,6 +12,19 @@ The checkpoint and B4 branch remain unchanged. B5 improvements must retain
 the shared image/animation LoRA loader, Flux non-streamed CPU offload on 16 GB
 hardware, and the prior 2D/3D behavior.
 
+## Cadence control discovery update
+
+The B5 Animation UI puts a dedicated **Diffusion Cadence** card directly
+after **Project**, rather than leaving the only editor buried in Generation State
+(on mobile, that lower card was collapsed by default). The new card is expanded
+by default on mobile and offers presets for cadence 1, 2, 3, 4, 6, and 8.
+The existing `#animation-cadence` schedule field remains editable for
+advanced keyframes such as `0:(1), 24:(3)` and keeps its original
+`project.cadence.diffusion` representation. The Visual Timeline keyframe
+track remains unchanged. Choosing a preset updates the schedule, marks
+the project unsaved, and triggers validation; manually editing a custom
+schedule does not overwrite it.
+
 ## Cadence implementation audit
 
 **Cadence is implemented in the actual animation render loop.**
