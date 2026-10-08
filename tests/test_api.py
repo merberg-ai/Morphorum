@@ -29,6 +29,10 @@ def test_frontend_and_health() -> None:
         assert "Settings" in frontend.text
         assert "Console" in frontend.text
         assert "Animation" in frontend.text
+        assert 'id="view-loras"' in frontend.text
+        assert 'id="lora-manager-family"' in frontend.text
+        assert 'id="lora-manager-civitai"' in frontend.text
+        assert 'id="lora-manager-insert"' in frontend.text
         assert 'id="view-animation"' in frontend.text
         assert '<select id="animation-sampler"' in frontend.text
         assert 'id="animation-start-render"' in frontend.text
@@ -89,6 +93,7 @@ def test_frontend_and_health() -> None:
         assert f"/assets/app.js?v={asset_version}" in frontend.text
         assert f"/assets/animation.css?v={asset_version}" in frontend.text
         assert f"/assets/animation.js?v={asset_version}" in frontend.text
+        assert f"/assets/loras.js?v={asset_version}" in frontend.text
         assert "no-cache" in frontend.headers.get("cache-control", "")
 
         css = client.get("/assets/app.css")
@@ -651,3 +656,39 @@ def test_animation_sampler_capabilities_are_model_specific() -> None:
     }
     assert flux == {"flowmatch_euler"}
     assert zimage == {"flowmatch_euler"}
+
+def test_lora_inspection_api_rejects_unindexed_file_and_requires_explicit_online_action(
+    tmp_path, monkeypatch
+) -> None:
+    import importlib
+    from safetensors.torch import save_file
+    import torch
+    module = importlib.import_module("morphorum.app")
+    inspector = importlib.import_module("morphorum.lora_inspector")
+    file = tmp_path / "trigger.safetensors"
+    save_file({"unet.down_blocks.0.attn.to_q.lora_A.weight": torch.ones(2, 4)},
+              str(file), metadata={"trigger_words": "marker"})
+    record = {"id": "synthetic-id", "kind": "loras", "family": "sdxl",
+              "name": "trigger", "path": str(file)}
+    monkeypatch.setattr(module, "list_models", lambda **kwargs: [record])
+    monkeypatch.setattr(inspector, "get_model", lambda model_id: record if model_id == "synthetic-id" else None)
+    with TestClient(app) as client:
+        library = client.get("/api/loras?family=sdxl")
+        assert library.status_code == 200
+        assert library.json()["loras"][0]["id"] == "synthetic-id"
+        detail = client.get("/api/loras/synthetic-id/inspect")
+        assert detail.status_code == 200
+        assert detail.json()["trigger_words"] == ["marker"]
+
+        missing = client.get("/api/loras/synthetic-id-absent/inspect")
+        # The metadata route is indexed-id restricted, not an arbitrary path read.
+        assert missing.status_code == 404
+
+        calls = []
+        monkeypatch.setattr(module, "lookup_civitai", lambda model_id: calls.append(model_id) or {
+            "found": False, "message": "offline",
+        })
+        assert not calls
+        lookup = client.post("/api/loras/synthetic-id/civitai-lookup")
+        assert lookup.status_code == 200
+        assert calls == ["synthetic-id"]
