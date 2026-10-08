@@ -731,6 +731,23 @@ class GenerationManager:
             )
             self._unload_pipeline()
 
+    @staticmethod
+    def _flux_streaming_offload_enabled(
+        *,
+        vram_bytes: int,
+        with_lora: bool,
+    ) -> bool:
+        """Avoid massive pinned-memory allocations on 16/24 GB GPUs.
+
+        Diffusers v0.40 streamed group offloading pins every parameter of
+        onloaded module groups, using CUDA cuMemHostAlloc. On small VRAM
+        machines, pinned system memory plus prefetch buffers can exhaust
+        CUDA allocations *during hook setup*, even when ordinary RAM is free.
+        Non-streamed group offload retains CPU weights without pinning.
+        """
+        threshold_gib = 48 if with_lora else 32
+        return int(vram_bytes) >= threshold_gib * 1024**3
+
     def _load_flux_pipeline(self, job: GenerationJob, cache_dir: Path):
         _configure_external_runtime_noise()
         try:
@@ -820,6 +837,18 @@ class GenerationManager:
 
             onload_device = torch.device("cuda")
             offload_device = torch.device("cpu")
+            total_vram = int(torch.cuda.get_device_properties(0).total_memory)
+            use_stream = self._flux_streaming_offload_enabled(
+                vram_bytes=total_vram,
+                with_lora=bool(job.request.loras),
+            )
+            if not use_stream:
+                emit_console(
+                    "info", "generation",
+                    f"Flux memory-safe CPU offload selected for {total_vram / 1024**3:.1f} GiB VRAM: "
+                    "non-streamed transfers avoid CUDA pinned-host-memory allocations "
+                    "during model setup.",
+                )
             offloaded_components = 0
             for component_name in ("transformer", "text_encoder", "text_encoder_2", "vae"):
                 component = getattr(pipe, component_name, None)
@@ -827,6 +856,9 @@ class GenerationManager:
                     continue
                 try:
                     if component_name == "transformer":
+                        # Don't retry an OOM on a partially hooked transformer.
+                        # Streaming retries were repeatedly re-pinning the same
+                        # enormous tensors and could make recovery impossible.
                         try:
                             apply_group_offloading(
                                 component,
@@ -834,33 +866,31 @@ class GenerationManager:
                                 offload_device=offload_device,
                                 offload_type="block_level",
                                 num_blocks_per_group=1,
-                                use_stream=True,
+                                use_stream=use_stream,
                             )
                             emit_console(
-                                "info",
-                                "generation",
-                                "Flux transformer uses streamed block-level group offload (1 block/group).",
+                                "info", "generation",
+                                f"Flux transformer uses {'streamed' if use_stream else 'non-streamed'} "
+                                "block-level CPU group offload (1 block/group).",
                             )
                         except Exception as block_exc:
-                            emit_console(
-                                "warning",
-                                "generation",
-                                f"Flux block-level offload unavailable ({block_exc}); falling back to streamed leaf-level offload.",
-                            )
-                            apply_group_offloading(
-                                component,
-                                onload_device=onload_device,
-                                offload_device=offload_device,
-                                offload_type="leaf_level",
-                                use_stream=True,
-                            )
+                            if self._is_cuda_oom(block_exc):
+                                raise
+                            # Non-OOM errors may reflect unsupported model block
+                            # structures. Never install a second offloader over
+                            # an incompletely installed set of hooks.
+                            raise GenerationError(
+                                f"Flux transformer block-level offload could not initialize: "
+                                f"{block_exc}. No fallback applied to a potentially "
+                                "partially hooked transformer."
+                            ) from block_exc
                     else:
                         apply_group_offloading(
                             component,
                             onload_device=onload_device,
                             offload_device=offload_device,
                             offload_type="leaf_level",
-                            use_stream=True,
+                            use_stream=use_stream,
                         )
                     offloaded_components += 1
                 except Exception as component_exc:
@@ -871,12 +901,13 @@ class GenerationManager:
             if offloaded_components == 0:
                 raise GenerationError("Flux group offload could not find any pipeline components to manage.")
 
-            optimization += "+streamed-group-offload"
+            optimization += "+streamed-group-offload" if use_stream else "+nonstreamed-group-offload"
             self._pipeline_optimization = optimization
             emit_console(
-                "info",
-                "generation",
-                "Flux VRAM headroom mode enabled: streamed group offloading keeps working memory available for activations.",
+                "info", "generation",
+                "Flux VRAM headroom mode enabled: "
+                + ("streamed" if use_stream else "non-streamed")
+                + " CPU group offloading keeps transformer weights off GPU between blocks.",
             )
         except Exception as exc:
             if self._is_cuda_oom(exc):
