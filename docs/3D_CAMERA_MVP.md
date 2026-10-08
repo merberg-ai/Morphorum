@@ -126,3 +126,183 @@ Complete camera controls:
 The verified 2D renderer remains untouched as the known-good fallback while the 3D path is developed.
 
 A 3D project must never silently fall back to a fake flat affine transform while claiming to be depth-aware. Until the depth renderer is implemented, the 3D tracks are schedule state and inspection data only.
+
+
+## B3-A2: depth estimation and cache
+
+A2 adds a reusable monocular depth subsystem without changing the animation renderer.
+
+### Initial estimator
+
+The first supported estimator is:
+
+```text
+depth-anything-v2-small
+depth-anything/Depth-Anything-V2-Small-hf
+```
+
+Morphorum loads it directly through Transformers using `AutoImageProcessor` and
+`AutoModelForDepthEstimation`.
+
+A2 intentionally exposes only the Small checkpoint. It is sufficient to validate the
+depth/warp architecture with modest memory use. Larger estimators can be added through
+the same registry later.
+
+### Relative-depth convention
+
+Depth Anything V2 Small produces relative depth rather than metric distance.
+
+Morphorum stores:
+
+- the raw model output,
+- a normalized float32 map in the range 0..1,
+- a grayscale diagnostic PNG.
+
+The A2 convention is:
+
+```text
+higher relative-depth value = nearer
+preview white = nearer
+preview black = farther
+```
+
+This convention is recorded in cache metadata. The values are not meters and should
+not be displayed or interpreted as physical distance.
+
+### Cache
+
+Depth artifacts are content-addressed under:
+
+```text
+cache/depth/
+```
+
+The cache key includes:
+
+- cache-format version,
+- depth model repository ID,
+- source image dimensions,
+- source RGB pixel data.
+
+Each entry contains:
+
+```text
+<key>.npz   raw + normalized float32 arrays
+<key>.png   grayscale human diagnostic preview
+<key>.json  model, source, range, convention and provenance metadata
+```
+
+Numeric and preview writes are atomic. Metadata is written last, and an entry is only
+considered a cache hit when all three files exist.
+
+The project itself stores only a lightweight pointer in:
+
+```text
+projects/<project>/assets/depth-preview.json
+```
+
+Replacing or clearing the project's source image invalidates this pointer. The global
+content-addressed cache remains available, so restoring identical source pixels can
+reuse the prior depth result.
+
+### Renderer handoff
+
+A3 can consume a cached map through:
+
+```python
+depth_manager.load_cached_array(cache_key)
+```
+
+which returns the normalized float32 HxW array. Raw model output is also available when
+needed.
+
+The renderer should not parse PNG previews.
+
+### Memory lifecycle
+
+The default A2 lifecycle is conservative:
+
+```text
+cache lookup
+  -> if miss:
+       load estimator
+       estimate depth
+       move output to CPU
+       write cache
+       unload estimator
+       release CUDA cache
+```
+
+A cache hit performs no model load.
+
+The UI blocks source-image replacement and animation render start while depth inference
+is active.
+
+### Lifecycle telemetry
+
+The depth manager exposes lightweight status states:
+
+- idle
+- loading
+- ready
+- estimating
+- error
+
+The browser polls these while an uncached preview is running, so first-use model
+download/loading is distinguishable from inference.
+
+### 3D Depth UI
+
+The Animation workspace includes a persistent accordion card named **3D Depth**.
+
+It provides:
+
+- estimator selection,
+- auto/CUDA/CPU device selection,
+- Generate Depth Preview,
+- forced Recompute,
+- Clear Preview,
+- grayscale depth map,
+- source resolution,
+- raw model-output range,
+- cache hit/miss status,
+- near/far convention.
+
+The depth card uses the existing browser-local accordion state.
+
+### Physical A2 acceptance
+
+Use a reference image with obvious foreground, midground and background separation.
+
+Acceptance:
+
+1. Upload the source/reference image.
+2. Select Auto or CUDA.
+3. Generate Depth Preview.
+4. First use may download the estimator checkpoint.
+5. Verify the preview is spatially sensible: foreground generally lighter and distant
+   regions generally darker.
+6. Confirm the UI returns to an unloaded depth-model state after inference.
+7. Generate again without Recompute and verify a cache hit.
+8. Use Recompute and verify inference actually runs again.
+9. Reload the browser/project and verify the cached project preview returns.
+10. Existing 2D animation generation must remain unchanged.
+
+No 3D camera transform is applied in A2.
+
+## Runtime build badge
+
+The top-right runtime badge now uses the health API as the authority for:
+
+- installed Morphorum package version,
+- active Git branch,
+- short Git commit.
+
+Typical development display:
+
+```text
+v0.1.0a1 · feature/3d-depth-a2 · abc123def456
+```
+
+The browser does not hard-code a branch or release label. Switching branches with the
+Morphorum updater and restarting the server changes the badge automatically.
