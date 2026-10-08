@@ -1209,7 +1209,7 @@ def test_animation_img2img_frame_requests_resolve_loras_before_shared_generation
     manager = AnimationRenderManager()
     started = manager.submit(project=project, source_path=source)
     completed = wait_for(manager, started["id"])
-    assert completed["status"] == "completed", completed
+    assert completed["status"] == "completed", completed.get("error") or completed
     assert len(fake_generation.requests) == 3
 
     weights = []
