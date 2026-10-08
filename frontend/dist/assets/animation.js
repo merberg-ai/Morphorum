@@ -636,6 +636,45 @@
       : 'Compatible samplers';
   }
 
+  function repairConstantGuidanceForSelectedModel({ announce = false } = {}) {
+    const input = qs('#animation-guidance');
+    const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
+    const model = modelById(modelId);
+    if (!input || !model) return false;
+
+    const capability = effectiveCapability(model);
+    const guidance = capability.guidance || {};
+    const minimum = Number(guidance.min ?? 0);
+    const maximum = Number(guidance.max ?? 30);
+    const fallback = Number(guidance.default ?? Math.max(minimum, 0));
+    const compact = String(input.value || '').replace(/\s+/g, '');
+    const match = /^0:\(([+-]?(?:\d+(?:\.\d*)?|\.\d+))\)$/.exec(compact);
+    if (!match) return false;
+
+    const current = Number(match[1]);
+    if (Number.isFinite(current) && current >= minimum && current <= maximum) {
+      return false;
+    }
+
+    const replacement = `0:(${Number.isFinite(fallback) ? fallback : minimum})`;
+    input.value = replacement;
+    if (state.project) {
+      state.project.generation = {
+        ...(state.project.generation || {}),
+        guidance: replacement,
+      };
+    }
+    if (announce) {
+      toast(
+        'Guidance adjusted for selected model',
+        `${capability.label || model.family}: ${replacement} (allowed ${minimum}…${maximum}).`,
+        'info',
+        5200
+      );
+    }
+    return true;
+  }
+
   function populateModelSelect() {
     const select = qs('#animation-model');
     if (!select) return;
@@ -1773,6 +1812,7 @@
 
       populateModelSelect();
       populateSamplerSelect(project.generation?.sampler || '');
+      const repairedGuidance = repairConstantGuidanceForSelectedModel();
       renderPromptRows();
       syncAnimationModeUi();
       renderSourceState();
@@ -1780,6 +1820,10 @@
       syncInspectorBounds();
       renderTimeline();
       clearDirty();
+      if (repairedGuidance) {
+        state.dirty = true;
+        setStatus('Guidance adjusted · save project', 'dirty');
+      }
     } finally {
       state.loading = false;
     }
@@ -2951,8 +2995,9 @@
 
     qs('#animation-model')?.addEventListener('change', () => {
       populateSamplerSelect('');
+      const repairedGuidance = repairConstantGuidanceForSelectedModel({ announce: true });
       renderPromptRows();
-      markDirty();
+      markDirty({ validate: repairedGuidance });
       renderSourceState();
     });
 
