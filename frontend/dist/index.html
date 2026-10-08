@@ -325,7 +325,7 @@
             </div>
             <div class="notice subtle">
               <strong>Renderer status</strong>
-              <span>3D schedule state and depth estimation are active now. Depth-aware frame warping lands in the next renderer phase; Morphorum will not silently pretend a 2D affine render is 3D.</span>
+              <span>Depth-aware rendering is active in A3. Start gently: Translation Z around ±0.02 to ±0.08 scene units and rotations around ±0.25° to ±1° per frame. Larger values compound quickly because each rendered frame becomes the next camera source.</span>
             </div>
           </article>
 
@@ -441,18 +441,27 @@
               </div>
               <div class="animation-render-frame-telemetry" id="animation-render-frame-telemetry" hidden>
                 <div class="animation-render-prompt-heading">
-                  <span class="field-label">Resolved 2D / generation state</span>
+                  <span class="field-label" id="animation-render-frame-state-label">Resolved motion / generation state</span>
                   <span class="badge" id="animation-render-diffusion-mode">--</span>
                 </div>
                 <div class="animation-render-state-grid">
-                  <div><span>Angle</span><strong id="animation-render-state-angle">--</strong></div>
-                  <div><span>Zoom / frame</span><strong id="animation-render-state-zoom">--</strong></div>
-                  <div><span>Translate X</span><strong id="animation-render-state-x">--</strong></div>
-                  <div><span>Translate Y</span><strong id="animation-render-state-y">--</strong></div>
-                  <div><span>Cumulative zoom</span><strong id="animation-render-state-cum-zoom">--</strong></div>
-                  <div><span>Cumulative angle</span><strong id="animation-render-state-cum-angle">--</strong></div>
-                  <div><span>Center offset</span><strong id="animation-render-state-center">--</strong></div>
-                  <div><span>Border</span><strong id="animation-render-state-border">--</strong></div>
+                  <div data-render-motion="2d"><span>Angle</span><strong id="animation-render-state-angle">--</strong></div>
+                  <div data-render-motion="2d"><span>Zoom / frame</span><strong id="animation-render-state-zoom">--</strong></div>
+                  <div data-render-motion="2d"><span>Translate X</span><strong id="animation-render-state-x">--</strong></div>
+                  <div data-render-motion="2d"><span>Translate Y</span><strong id="animation-render-state-y">--</strong></div>
+                  <div data-render-motion="2d"><span>Cumulative zoom</span><strong id="animation-render-state-cum-zoom">--</strong></div>
+                  <div data-render-motion="2d"><span>Cumulative angle</span><strong id="animation-render-state-cum-angle">--</strong></div>
+                  <div data-render-motion="2d"><span>Center offset</span><strong id="animation-render-state-center">--</strong></div>
+                  <div data-render-motion="2d"><span>Border</span><strong id="animation-render-state-border">--</strong></div>
+                  <div data-render-motion="3d"><span>Translate X</span><strong id="animation-render-state-3d-x">--</strong></div>
+                  <div data-render-motion="3d"><span>Translate Y</span><strong id="animation-render-state-3d-y">--</strong></div>
+                  <div data-render-motion="3d"><span>Translate Z</span><strong id="animation-render-state-3d-z">--</strong></div>
+                  <div data-render-motion="3d"><span>Rotate X</span><strong id="animation-render-state-3d-rx">--</strong></div>
+                  <div data-render-motion="3d"><span>Rotate Y</span><strong id="animation-render-state-3d-ry">--</strong></div>
+                  <div data-render-motion="3d"><span>Rotate Z</span><strong id="animation-render-state-3d-rz">--</strong></div>
+                  <div data-render-motion="3d"><span>FOV</span><strong id="animation-render-state-3d-fov">--</strong></div>
+                  <div data-render-motion="3d"><span>Depth</span><strong id="animation-render-state-depth">--</strong></div>
+                  <div data-render-motion="3d"><span>Projection coverage</span><strong id="animation-render-state-coverage">--</strong></div>
                   <div><span>Strength</span><strong id="animation-render-state-strength">--</strong></div>
                   <div><span>Denoise</span><strong id="animation-render-state-denoise">--</strong></div>
                   <div><span>Noise</span><strong id="animation-render-state-noise">--</strong></div>
