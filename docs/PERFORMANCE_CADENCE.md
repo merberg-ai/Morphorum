@@ -13,6 +13,43 @@ It has two acceptance gates:
 CI can verify contracts and state handling. It cannot prove those two GPU/model-specific
 facts.
 
+## October 8 checkpoint and shared generation pipeline audit
+
+**User-reported result:** SDXL LoRA Manager prompt insertion and visible LoRA effect
+in still-image generation now appear to work after local physical testing.
+This is a promising SDXL still-image acceptance report, not yet a completed
+multi-family or animation acceptance gate.
+
+A fixed snapshot of that state is preserved on GitHub:
+`checkpoint/b4-sdxl-lora-working-20261008` at
+`2698ed27781a72a1f36517bcb716865e822501fb`.
+The active `feature/perf-cadence-lora-b4` branch remains the integration line
+for Flux and Z-Image tests and any further fixes. Do not merge into main yet.
+
+**Code path verified:** Still images call `GenerationManager._run_job()` and
+then `GenerationManager.configure_loras()`. Prompt-start animation calls
+`prepare_txt2img()`; all subsequent diffusion frames call
+`prepare_img2img()`; both methods use the same
+`GenerationManager.configure_loras()` with the resolved per-frame adapters.
+Family-specific pipelines are handled by the same loader, not by an
+animation-specific LoRA implementation.
+
+**Handoff bug fixed after snapshot:** Conversion from txt2img to img2img can
+retain active PEFT layers on the new pipeline wrapper. Clearing the internal
+LoRA activation signature alone did not deactivate those layers when the
+next frame requested no LoRA. B4 now explicitly calls `disable_lora()`
+on the converted wrapper before reapplying any new per-frame adapter state,
+and fails explicitly if a previously active LoRA cannot be disabled.
+Tests exercise reweighting, disabling, re-enabling, and no-adapter handoff
+for all three model families without a GPU. The independent saved checkpoint
+remains unchanged.
+
+**Physical tests still needed:** SDXL short animations with prompt-start and
+source-start modes; Flux LoRA still-image A/B/C effect; Z-Image LoRA still-image
+A/B/C effect; adapter state and effectiveness across real task conversions;
+LoRA keyframe scheduling and cleanup. Static CI tests verify integration
+control flow but cannot prove real-world pixel effect.
+
 ## B4 priority gate: LoRAs before further 3D development
 
 After physical testing of `ChalkDustStyleSDXL`, LoRA registration and
