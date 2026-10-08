@@ -50,6 +50,58 @@ A/B/C effect; adapter state and effectiveness across real task conversions;
 LoRA keyframe scheduling and cleanup. Static CI tests verify integration
 control flow but cannot prove real-world pixel effect.
 
+## Flux FP8 / PEFT LoRA failure and compatibility mode (Oct 8)
+
+**Physical bug report:** `artsyDream_v6FP8.safetensors` (Flux Dev) generated
+successfully without an adapter. Adding
+`Flux_Unsettling_Horror_Style_v1.1_898175.safetensors` produced successful
+Diffusers `load_lora_weights()` and active-adapter logs, followed by
+`"addmm_cuda" not implemented for 'Float8_e4m3fn'` at inference.
+
+This is a **Flux layerwise FP8 storage / PEFT wrapper compatibility failure**,
+not evidence that the LoRA file targets the wrong model. The manager should
+still check Civitai/sidecar base-model metadata for Flux Dev versus Schnell
+and the model's actual architecture.
+
+The B4 implementation now deliberately separates Flux execution modes:
+
+- **No LoRA requested:** retain the optimized FP8 layerwise storage with BF16
+  compute and streamed group offload on supported NVIDIA hardware.
+- **LoRA requested (from Image or animation):** load the original checkpoint
+  with BF16/FP16 transformer storage, *without* layerwise FP8 casting.
+  Streamed group offloading stays enabled for VRAM control.
+- **LoRA added to already-loaded FP8 Flux base pipeline:** release the FP8
+  pipeline and reload the same checkpoint with original higher-precision
+  weights before calling `load_lora_weights()`. Merely calling
+  `.to(torch.bfloat16)` on an already-cast FP8 pipeline is not a safe
+  recovery strategy.
+- **Animation task conversions:** `prepare_txt2img()` and
+  `prepare_img2img()` use the same model-specific precision gate and shared
+  `configure_loras()`; compatible BF16-loaded Flux pipelines are reused
+  across frames, reweights and disable/re-enable transitions.
+
+LoRA mode may use more **system RAM** and take longer to initialize than
+the FP8 base mode. Group offloading limits VRAM use, but real GPU testing
+is still required on the 16 GB RTX 4080 SUPER.
+
+The regression suite covers FP8/LoRA gating, switching an existing cached FP8
+pipeline for both txt2img and img2img, and reusing both the no-LoRA FP8
+pipeline and the BF16 LoRA pipeline.
+
+**Physical retest:** restart Morphorum after updating B4, select
+`artsyDream_v6FP8`, keep all generation parameters and seed identical,
+and run A (base), B (Flux style LoRA weight 1.0), C (base). The transition
+from A to B should log a BF16 compatibility reload, followed by adapter
+activation. B should change the image versus A if the LoRA is effective;
+C must disable the adapter and restore base behavior. Comparing output
+requires matching sampler, steps, guidance, resolution, seed, and prompt
+text after stripping `<lora:...>` directives. A base image generated
+after a LoRA may continue using the warm BF16 pipeline until unloaded.
+
+**Still not accepted:** Flux LoRA pixel influence and performance on real
+hardware are not verified by CI. The successful SDXL known-working checkpoint
+`checkpoint/b4-sdxl-lora-working-20261008` is unchanged.
+
 ## B4 priority gate: LoRAs before further 3D development
 
 After physical testing of `ChalkDustStyleSDXL`, LoRA registration and
