@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import torch
 
 import morphorum.generation as generation
 import morphorum.loras as loras_module
