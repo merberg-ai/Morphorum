@@ -727,22 +727,47 @@ def test_supported_pipeline_families_expose_lora_adapter_api() -> None:
 
 
 
+class FakeRankBugUNet:
+    def __init__(self) -> None:
+        self.peft_config = {}
+        self.deleted = []
+
+    def delete_adapters(self, adapter_name):
+        self.deleted.append(adapter_name)
+        self.peft_config.pop(adapter_name, None)
+
+
 class FakeSDXLRankBugPipe(FakeLoRAPipe):
     def __init__(self, *, partial_unet: bool = False) -> None:
         super().__init__()
         self.partial_unet = partial_unet
-        self.unet = type("FakeUNet", (), {"peft_config": {}})()
+        self.unet = FakeRankBugUNet()
+        self.unet_loads = []
 
     def load_lora_weights(self, source, **kwargs):
         self.loads.append({"path": source, **kwargs})
         adapter_name = kwargs.get("adapter_name")
-        if isinstance(source, dict):
-            if adapter_name:
-                self.unet.peft_config[adapter_name] = object()
-            return
         if self.partial_unet and adapter_name:
             self.unet.peft_config[adapter_name] = object()
         raise IndexError("list index out of range")
+
+    def lora_state_dict(self, *_args, **_kwargs):
+        return (
+            {
+                "unet.down_blocks.0.attentions.0.to_q.lora_A.weight": torch.ones(2, 2),
+                "unet.down_blocks.0.attentions.0.to_q.lora_B.weight": torch.ones(2, 2),
+                "text_encoder.text_model.encoder.layers.0.self_attn.q_proj.lora_A.weight": torch.ones(2, 2),
+            },
+            {
+                "unet.down_blocks.0.attentions.0.to_q.alpha": 2.0,
+                "text_encoder.text_model.encoder.layers.0.self_attn.q_proj.alpha": 2.0,
+            },
+        )
+
+    def load_lora_into_unet(self, **kwargs):
+        self.unet_loads.append(kwargs)
+        adapter_name = kwargs["adapter_name"]
+        self.unet.peft_config[adapter_name] = object()
 
 
 def _write_mixed_sdxl_lora(path: Path) -> None:
@@ -780,14 +805,18 @@ def test_sdxl_rank_bug_retries_with_unet_only_state_dict(tmp_path) -> None:
     loaded = manager.configure_loras(pipe, model, [item])
 
     assert loaded == [item]
-    assert len(pipe.loads) == 2
+    assert len(pipe.loads) == 1
     assert pipe.loads[0]["weight_name"] == path.name
-    fallback = pipe.loads[1]["path"]
-    assert isinstance(fallback, dict)
-    assert fallback
-    assert all(not key.startswith(("lora_te1_", "lora_te2_")) for key in fallback)
-    assert any(key.startswith("lora_unet_") for key in fallback)
-    assert manager._pipeline_loras["mixed-id"]["compatibility"] == "sdxl-unet-only"
+    assert len(pipe.unet_loads) == 1
+    fallback = pipe.unet_loads[0]
+    assert fallback["adapter_name"] == "morphorum_mixed-id"
+    assert fallback["state_dict"]
+    assert all(
+        not key.startswith(("text_encoder.", "text_encoder_2."))
+        for key in fallback["state_dict"]
+    )
+    assert any(key.startswith("unet.") for key in fallback["state_dict"])
+    assert manager._pipeline_loras["mixed-id"]["compatibility"] == "sdxl-clean-unet-only"
     assert pipe.adapter_calls == [(["morphorum_mixed-id"], [0.8])]
 
 
@@ -809,8 +838,10 @@ def test_sdxl_rank_bug_accepts_already_loaded_unet_adapter(tmp_path) -> None:
     manager.configure_loras(pipe, model, [item])
 
     assert len(pipe.loads) == 1
+    assert len(pipe.unet_loads) == 1
+    assert "morphorum_partial-id" in pipe.unet.deleted
     assert "morphorum_partial-id" in pipe.unet.peft_config
-    assert manager._pipeline_loras["partial-id"]["compatibility"] == "sdxl-unet-only"
+    assert manager._pipeline_loras["partial-id"]["compatibility"] == "sdxl-clean-unet-only"
     assert pipe.adapter_calls == [(["morphorum_partial-id"], [1.0])]
 
 
