@@ -305,7 +305,7 @@
       ? ((detail.trigger_words || []).length ? detail.trigger_words : state.civitai?.trained_words || [])
       : [];
     const applied = window.MorphorumImage?.insertFromManager?.({
-      family: detail.family, name: detail.name, weight: raw, triggers,
+      id: detail.id, family: detail.family, name: detail.name, weight: raw, triggers,
     });
     if (applied) toast('Prompt updated', detail.name + ' added to Image generation.', 'success');
   }
