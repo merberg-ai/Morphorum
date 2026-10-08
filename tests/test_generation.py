@@ -999,3 +999,66 @@ def test_task_switch_reloads_cached_lora_missing_from_converted_pipeline(
     assert converted.adapter_calls == [([adapter_name], [0.8])]
     assert manager._pipeline_loras["style-id"]["adapter_name"] == adapter_name
     assert converted.get_active_adapters() == [adapter_name]
+
+
+
+def test_adapter_diagnostics_require_real_nonzero_payload() -> None:
+    class TinyAdapter(torch.nn.Module):
+        def __init__(self, value: float) -> None:
+            super().__init__()
+            self.lora_A = torch.nn.ParameterDict(
+                {
+                    "morphorum_test": torch.nn.Parameter(
+                        torch.full((2, 2), value, dtype=torch.float32)
+                    )
+                }
+            )
+            self.lora_B = torch.nn.ParameterDict(
+                {
+                    "morphorum_test": torch.nn.Parameter(
+                        torch.full((2, 2), value, dtype=torch.float32)
+                    )
+                }
+            )
+
+    pipe = type("Pipe", (), {})()
+    pipe.unet = TinyAdapter(1.0)
+    manager = GenerationManager()
+
+    diagnostics = manager._verify_adapter_weights(
+        pipe,
+        "morphorum_test",
+        component_name="unet",
+    )
+
+    assert diagnostics["available"] is True
+    assert diagnostics["modules"] >= 1
+    assert diagnostics["tensors"] == 2
+    assert diagnostics["parameters"] == 8
+    assert diagnostics["abs_sum"] == pytest.approx(8.0)
+
+    pipe.unet = TinyAdapter(0.0)
+    with pytest.raises(GenerationError, match="no usable injected LoRA weights"):
+        manager._verify_adapter_weights(
+            pipe,
+            "morphorum_test",
+            component_name="unet",
+        )
+
+
+def test_sdxl_runtime_exposes_direct_unet_lora_loader_api() -> None:
+    import inspect
+    from diffusers import StableDiffusionXLPipeline
+
+    parameters = inspect.signature(
+        StableDiffusionXLPipeline.load_lora_into_unet
+    ).parameters
+
+    for name in (
+        "state_dict",
+        "network_alphas",
+        "unet",
+        "adapter_name",
+        "_pipeline",
+    ):
+        assert name in parameters
