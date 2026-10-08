@@ -831,3 +831,138 @@ def test_rank_bug_fallback_is_not_used_for_non_sdxl(tmp_path) -> None:
         manager.configure_loras(pipe, model, [item])
 
     assert len(pipe.loads) == 1
+
+
+
+class FakeTrackedLoRAPipe(FakeLoRAPipe):
+    def __init__(self, adapters=()) -> None:
+        super().__init__()
+        self.adapters = set(adapters)
+        self.active_adapters: list[str] = []
+
+    def load_lora_weights(self, path, **kwargs):
+        super().load_lora_weights(path, **kwargs)
+        adapter_name = kwargs.get("adapter_name")
+        if adapter_name:
+            self.adapters.add(str(adapter_name))
+
+    def set_adapters(self, names, adapter_weights=None):
+        super().set_adapters(names, adapter_weights)
+        self.active_adapters = [str(name) for name in names]
+
+    def get_list_adapters(self):
+        return {"unet": sorted(self.adapters)}
+
+    def get_active_adapters(self):
+        return list(self.active_adapters)
+
+
+def test_task_switch_reasserts_existing_lora_even_when_weight_is_unchanged(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "style.safetensors"
+    path.write_bytes(b"fake-lora")
+    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    adapter_name = "morphorum-style-id"
+    source = FakeTrackedLoRAPipe([adapter_name])
+    converted = FakeTrackedLoRAPipe([adapter_name])
+    manager = GenerationManager()
+    manager._pipeline = source
+    manager._pipeline_model_id = model["id"]
+    manager._pipeline_task = "txt2img"
+    manager._pipeline_loras = {
+        "style-id": {
+            "id": "style-id",
+            "name": "style",
+            "family": "sdxl",
+            "path": str(path),
+            "adapter_name": adapter_name,
+            "compatibility": None,
+        }
+    }
+    manager._active_lora_signature = ((adapter_name, 0.8),)
+    manager._verified_lora_adapters = (adapter_name,)
+
+    monkeypatch.setattr(
+        manager,
+        "_convert_pipeline_task",
+        lambda _pipe, _family, _task: converted,
+    )
+    monkeypatch.setattr(manager, "release_inference_memory", lambda **_kwargs: None)
+
+    switched = manager._switch_loaded_pipeline_task(model, "img2img")
+
+    assert switched is converted
+    assert manager._active_lora_signature == ()
+    assert manager._verified_lora_adapters == ()
+
+    item = {
+        "id": "style-id",
+        "family": "sdxl",
+        "name": "style",
+        "path": str(path),
+        "adapter_name": adapter_name,
+        "weight": 0.8,
+    }
+    manager.configure_loras(switched, model, [item])
+
+    assert converted.loads == []
+    assert converted.adapter_calls == [([adapter_name], [0.8])]
+    assert converted.get_active_adapters() == [adapter_name]
+    assert manager._verified_lora_adapters == (adapter_name,)
+
+
+def test_task_switch_reloads_cached_lora_missing_from_converted_pipeline(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "style.safetensors"
+    path.write_bytes(b"fake-lora")
+    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    adapter_name = "morphorum-style-id"
+    source = FakeTrackedLoRAPipe([adapter_name])
+    converted = FakeTrackedLoRAPipe()
+    manager = GenerationManager()
+    manager._pipeline = source
+    manager._pipeline_model_id = model["id"]
+    manager._pipeline_task = "txt2img"
+    manager._pipeline_loras = {
+        "style-id": {
+            "id": "style-id",
+            "name": "style",
+            "family": "sdxl",
+            "path": str(path),
+            "adapter_name": adapter_name,
+            "compatibility": None,
+        }
+    }
+    manager._active_lora_signature = ((adapter_name, 0.8),)
+    manager._verified_lora_adapters = (adapter_name,)
+
+    monkeypatch.setattr(
+        manager,
+        "_convert_pipeline_task",
+        lambda _pipe, _family, _task: converted,
+    )
+    monkeypatch.setattr(manager, "release_inference_memory", lambda **_kwargs: None)
+
+    switched = manager._switch_loaded_pipeline_task(model, "img2img")
+
+    assert "style-id" not in manager._pipeline_loras
+
+    item = {
+        "id": "style-id",
+        "family": "sdxl",
+        "name": "style",
+        "path": str(path),
+        "adapter_name": adapter_name,
+        "weight": 0.8,
+    }
+    manager.configure_loras(switched, model, [item])
+
+    assert len(converted.loads) == 1
+    assert converted.loads[0]["adapter_name"] == adapter_name
+    assert converted.adapter_calls == [([adapter_name], [0.8])]
+    assert manager._pipeline_loras["style-id"]["adapter_name"] == adapter_name
+    assert converted.get_active_adapters() == [adapter_name]
