@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -816,25 +817,119 @@ def api_lora_library(family: str | None = None, search: str | None = None) -> di
     supported = {"sdxl", "flux", "zimage"}
     if family is not None and family not in supported:
         raise HTTPException(status_code=400, detail="Unsupported LoRA family.")
-    return {"loras": list_models(family=family, kind="loras", search=search, limit=2000)}
+    records = list_models(family=family, kind="loras", search=search, limit=2000)
+    counts = {key: sum(item.get("family") == key for item in records) for key in sorted(supported)}
+    emit_console(
+        "info", "lora",
+        f"LoRA Manager library ready: {len(records)} indexed item(s), "
+        + ", ".join(f"{name}={count}" for name, count in counts.items())
+        + ("; filtered by " + family if family else "") + ".",
+    )
+    return {"loras": records}
 
 
 @app.get("/api/loras/{model_id}/inspect")
 def api_lora_inspect(model_id: str) -> dict[str, Any]:
     """Inspect the file referenced by an indexed LoRA ID, never an arbitrary path."""
     try:
-        return inspect_lora(model_id)
+        detail = inspect_lora(model_id)
     except LoRAInspectionError as exc:
+        emit_console("warning", "lora", f"LoRA inspection refused for ID {model_id[:32]}: {exc}")
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    summary = str(detail.get("name") or "")[:130].replace("\n", " ").replace("\r", " ")
+    components = detail.get("components") or {}
+    ranks = detail.get("ranks") or []
+    rank_text = ", ".join(f"{item['rank']}x{item['modules']}" for item in ranks[:10]) or "unknown"
+    emit_console(
+        "info", "lora",
+        f"Inspected [{detail.get('family')}] {summary}: "
+        f"format={detail.get('adapter_format')}, tensors={detail.get('tensor_count')}, "
+        f"UNet={components.get('unet', 0)}, transformer={components.get('transformer', 0)}, "
+        f"TE1={components.get('text_encoder', 0)}, TE2={components.get('text_encoder_2', 0)}, "
+        f"ranks={rank_text}.",
+    )
+    emit_console(
+        "info", "lora",
+        f"Metadata for {summary}: base_model={str(detail.get('metadata_base_model') or 'not recorded')[:120]}, "
+        f"trigger_source={detail.get('trigger_source')}, trigger_count={len(detail.get('trigger_words') or [])}, "
+        f"sidecar_json={detail.get('sidecar') or 'none'}, "
+        f"sidecar_html={(detail.get('html_sidecar') or {}).get('filename') or 'none'}.",
+    )
+    for warning in (detail.get("warnings") or [])[:8]:
+        emit_console("warning", "lora", f"{summary}: {str(warning)[:220]}")
+    for error in (detail.get("errors") or [])[:6]:
+        emit_console("warning", "lora", f"{summary}: {str(error)[:220]}")
+    return detail
 
 
 @app.post("/api/loras/{model_id}/civitai-lookup")
 def api_lora_civitai_lookup(model_id: str) -> dict[str, Any]:
     """Network lookup is opt-in; the indexed file SHA-256 is sent to Civitai."""
+    indexed = get_model(model_id)
+    display = (str(indexed.get("name") or "")[:130].replace("\n", " ").replace("\r", " ")
+               if indexed and indexed.get("kind") == "loras" else model_id[:32])
+    emit_console("info", "lora", f"Civitai lookup requested for {display}: hashing local LoRA file.")
     try:
-        return lookup_civitai(model_id)
+        result = lookup_civitai(model_id)
     except CivitaiLookupError as exc:
+        emit_console("warning", "lora", f"Civitai lookup failed for {display}: {exc}")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result.get("found"):
+        emit_console(
+            "info", "lora",
+            f"Civitai matched {display}: {result.get('confidence')}, "
+            f"model={result.get('model_id')}, version={result.get('version_id')}, "
+            f"base={result.get('base_model') or 'unknown'}, "
+            f"trained_words={len(result.get('trained_words') or [])}, "
+            f"sha256={str(result.get('sha256') or '')[:12]}…",
+        )
+    else:
+        emit_console(
+            "warning", "lora", f"No Civitai version match for {display}, "
+            f"sha256={str(result.get('sha256') or '')[:12]}…",
+        )
+    return result
+
+
+@app.post("/api/loras/{model_id}/activity")
+def api_lora_manager_activity(model_id: str, payload: dict[str, Any]) -> dict[str, str]:
+    """Record prompt insertion outcomes without accepting arbitrary log messages."""
+    record = get_model(model_id)
+    if record is None or record.get("kind") != "loras":
+        raise HTTPException(status_code=404, detail="Indexed LoRA not found.")
+    event = str(payload.get("event") or "")
+    if event not in {"prompt_inserted", "prompt_rejected"}:
+        raise HTTPException(status_code=400, detail="Invalid LoRA Manager event.")
+    reason = str(payload.get("reason") or "")
+    allowed_reasons = {"", "no_model", "wrong_family", "not_indexed",
+                       "invalid_strength", "invalid_name"}
+    if reason not in allowed_reasons:
+        raise HTTPException(status_code=400, detail="Invalid LoRA Manager reason.")
+    weight = payload.get("weight")
+    if not isinstance(weight, (int, float)) or isinstance(weight, bool) or not math.isfinite(weight):
+        raise HTTPException(status_code=400, detail="A finite LoRA weight is required.")
+    family = str(payload.get("image_family") or "")
+    if family not in {"", "sdxl", "flux", "zimage"}:
+        raise HTTPException(status_code=400, detail="Invalid image model family.")
+    try:
+        count = int(payload.get("trigger_count", 0))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid trigger word count.") from exc
+    if count < 0 or count > 64:
+        raise HTTPException(status_code=400, detail="Invalid trigger word count.")
+    if event == "prompt_inserted" and reason:
+        raise HTTPException(status_code=400, detail="An inserted LoRA cannot have a rejection reason.")
+    if event == "prompt_rejected" and not reason:
+        raise HTTPException(status_code=400, detail="A rejected LoRA must have a reason.")
+    display = str(record.get("name") or "")[:130].replace("\n", " ").replace("\r", " ")
+    emit_console(
+        "info" if event == "prompt_inserted" else "warning", "lora",
+        f"Image prompt {'insertion succeeded' if event == 'prompt_inserted' else 'insertion rejected'} "
+        f"for [{record.get('family')}] {display}: "
+        f"weight={weight:.3g}, image_family={family or 'none'}, trigger_words={count}"
+        + (f", reason={reason}" if reason else "") + ".",
+    )
+    return {"status": "recorded"}
 
 
 @app.get("/api/models/families")
