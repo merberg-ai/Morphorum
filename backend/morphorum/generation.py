@@ -1682,16 +1682,24 @@ class GenerationManager:
                 "state-dict and UNet-only LoRA loader APIs."
             )
 
+        # Match StableDiffusionXLLoraLoaderMixin.load_lora_weights(): the UNet
+        # config is required to map Kohya/SGM input_blocks/output_blocks indices
+        # to actual SDXL down_blocks/up_blocks module paths. Without it the
+        # fallback silently generates invalid targets such as down_blocks.7.1.
+        unet_config = getattr(unet, "config", None)
+        if unet_config is None:
+            raise GenerationError(
+                "The SDXL UNet configuration is missing; cannot safely remap "
+                "Kohya/SGM LoRA block indices for UNet-only loading."
+            )
+
         try:
             parsed = state_loader(
                 str(path.parent),
                 weight_name=path.name,
                 local_files_only=True,
-            )
-        except TypeError:
-            parsed = state_loader(
-                str(path.parent),
-                weight_name=path.name,
+                unet_config=unet_config,
+                return_lora_metadata=True,
             )
         except Exception as exc:
             raise GenerationError(
