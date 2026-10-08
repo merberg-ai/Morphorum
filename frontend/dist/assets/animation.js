@@ -91,6 +91,7 @@
     const mobile = window.matchMedia('(max-width: 720px)').matches;
     const mobileOpenByDefault = new Set([
       'project',
+      'diffusion-cadence',
       'start-frame',
       '3d-depth',
       'visual-timeline',
@@ -1759,6 +1760,38 @@
     refreshInspector();
   }
 
+  function syncCadencePreset() {
+    const raw = qs('#animation-cadence');
+    const preset = qs('#animation-cadence-preset');
+    const help = qs('#animation-cadence-help');
+    if (!raw || !preset) return;
+    const match = /^\s*0:\(\s*(\d+)\s*\)\s*$/.exec(raw.value);
+    const count = match ? Number(match[1]) : NaN;
+    const fixed = match && [...preset.options].some(option => option.value === String(count));
+    preset.value = fixed ? String(count) : 'custom';
+    if (help) {
+      help.textContent = fixed
+        ? (count === 1
+          ? 'Cadence 1: diffusion on every eligible frame.'
+          : 'Cadence ' + count + ': run diffusion on every ' + count +
+            'th frame; between anchors, only camera transforms run.')
+        : 'Custom keyframe schedule: the renderer resolves cadence at each frame.';
+    }
+  }
+
+  function applyCadencePreset() {
+    const preset = qs('#animation-cadence-preset');
+    const raw = qs('#animation-cadence');
+    if (!preset || !raw || !state.project) return;
+    if (preset.value === 'custom') {
+      raw.focus();
+      return;
+    }
+    raw.value = '0:(' + preset.value + ')';
+    syncCadencePreset();
+    markDirty({ validate: true });
+  }
+
   function fillForm() {
     const project = state.project;
     state.loading = true;
@@ -1802,6 +1835,7 @@
       qs('#animation-steps').value = project.generation?.steps || '0:(20)';
       qs('#animation-guidance').value = project.generation?.guidance || '0:(0)';
       qs('#animation-cadence').value = project.cadence?.diffusion || '0:(1)';
+      syncCadencePreset();
       qs('#animation-seed').value = project.generation?.seed ?? -1;
       qs('#animation-seed-behavior').value = project.generation?.seed_behavior || 'fixed';
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
@@ -3032,6 +3066,9 @@
     qs('#animation-generate-depth')?.addEventListener('click', () => generateDepthPreview(false));
     qs('#animation-recompute-depth')?.addEventListener('click', () => generateDepthPreview(true));
     qs('#animation-clear-depth')?.addEventListener('click', clearDepthPreview);
+    qs('#animation-cadence-preset')?.addEventListener('change', applyCadencePreset);
+    qs('#animation-cadence')?.addEventListener('input', syncCadencePreset);
+    qs('#animation-cadence')?.addEventListener('change', syncCadencePreset);
     qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
 
     qs('#animation-start-render')?.addEventListener('click', startAnimationRender);
@@ -3080,6 +3117,7 @@
         input.id === 'animation-model' ||
         input.id === 'animation-source-file' ||
         input.id === 'animation-start-mode' ||
+        input.id === 'animation-cadence-preset' ||
         input.id === 'animation-render-select' ||
         INSPECTOR_INPUT_IDS.has(input.id)
       ) {
