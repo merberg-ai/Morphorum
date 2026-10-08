@@ -724,3 +724,110 @@ def test_supported_pipeline_families_expose_lora_adapter_api() -> None:
         assert callable(getattr(pipeline_class, "set_adapters", None))
         assert callable(getattr(pipeline_class, "disable_lora", None))
         assert callable(getattr(pipeline_class, "enable_lora", None))
+
+
+
+class FakeSDXLRankBugPipe(FakeLoRAPipe):
+    def __init__(self, *, partial_unet: bool = False) -> None:
+        super().__init__()
+        self.partial_unet = partial_unet
+        self.unet = type("FakeUNet", (), {"peft_config": {}})()
+
+    def load_lora_weights(self, source, **kwargs):
+        self.loads.append({"path": source, **kwargs})
+        if isinstance(source, dict):
+            return
+        adapter_name = kwargs.get("adapter_name")
+        if self.partial_unet and adapter_name:
+            self.unet.peft_config[adapter_name] = object()
+        raise IndexError("list index out of range")
+
+
+def _write_mixed_sdxl_lora(path: Path) -> None:
+    import torch
+    from safetensors.torch import save_file
+
+    save_file(
+        {
+            "lora_unet_down_blocks_0_attentions_0_to_q.lora_down.weight": torch.ones(2, 2),
+            "lora_unet_down_blocks_0_attentions_0_to_q.lora_up.weight": torch.ones(2, 2),
+            "lora_unet_down_blocks_0_attentions_0_to_q.alpha": torch.tensor(2.0),
+            "lora_te1_text_model_encoder_layers_0_self_attn_q_proj.lora_down.weight": torch.ones(2, 2),
+            "lora_te1_text_model_encoder_layers_0_self_attn_q_proj.lora_up.weight": torch.ones(2, 2),
+            "lora_te2_text_model_encoder_layers_0_self_attn_q_proj.lora_down.weight": torch.ones(2, 2),
+        },
+        str(path),
+    )
+
+
+def test_sdxl_rank_bug_retries_with_unet_only_state_dict(tmp_path) -> None:
+    path = tmp_path / "mixed-sdxl.safetensors"
+    _write_mixed_sdxl_lora(path)
+    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    manager = GenerationManager()
+    pipe = FakeSDXLRankBugPipe()
+    item = {
+        "id": "mixed-id",
+        "family": "sdxl",
+        "name": "mixed-sdxl",
+        "path": str(path),
+        "adapter_name": "morphorum_mixed-id",
+        "weight": 0.8,
+    }
+
+    loaded = manager.configure_loras(pipe, model, [item])
+
+    assert loaded == [item]
+    assert len(pipe.loads) == 2
+    assert pipe.loads[0]["weight_name"] == path.name
+    fallback = pipe.loads[1]["path"]
+    assert isinstance(fallback, dict)
+    assert fallback
+    assert all(not key.startswith(("lora_te1_", "lora_te2_")) for key in fallback)
+    assert any(key.startswith("lora_unet_") for key in fallback)
+    assert manager._pipeline_loras["mixed-id"]["compatibility"] == "sdxl-unet-only"
+    assert pipe.adapter_calls == [(["morphorum_mixed-id"], [0.8])]
+
+
+def test_sdxl_rank_bug_accepts_already_loaded_unet_adapter(tmp_path) -> None:
+    path = tmp_path / "partial-sdxl.safetensors"
+    _write_mixed_sdxl_lora(path)
+    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    manager = GenerationManager()
+    pipe = FakeSDXLRankBugPipe(partial_unet=True)
+    item = {
+        "id": "partial-id",
+        "family": "sdxl",
+        "name": "partial-sdxl",
+        "path": str(path),
+        "adapter_name": "morphorum_partial-id",
+        "weight": 1.0,
+    }
+
+    manager.configure_loras(pipe, model, [item])
+
+    assert len(pipe.loads) == 1
+    assert "morphorum_partial-id" in pipe.unet.peft_config
+    assert manager._pipeline_loras["partial-id"]["compatibility"] == "sdxl-unet-only"
+    assert pipe.adapter_calls == [(["morphorum_partial-id"], [1.0])]
+
+
+def test_rank_bug_fallback_is_not_used_for_non_sdxl(tmp_path) -> None:
+    path = tmp_path / "flux.safetensors"
+    _write_mixed_sdxl_lora(path)
+    model = fake_model(tmp_path / "model.safetensors", "flux")
+    manager = GenerationManager()
+    pipe = FakeSDXLRankBugPipe()
+    item = {
+        "id": "flux-id",
+        "family": "flux",
+        "name": "flux-lora",
+        "path": str(path),
+        "adapter_name": "morphorum_flux-id",
+        "weight": 1.0,
+    }
+
+    with pytest.raises(GenerationError, match="IndexError: list index out of range"):
+        manager.configure_loras(pipe, model, [item])
+
+    assert len(pipe.loads) == 1
