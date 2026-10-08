@@ -167,6 +167,35 @@
             </div>
           </article>
 
+          <article class="card glass animation-cadence-card" id="animation-cadence-card">
+            <div class="card-header">
+              <div>
+                <h2>Diffusion Cadence</h2>
+                <p class="muted">Choose how often AI redraws a frame. Camera movement continues on frames between diffusion passes.</p>
+              </div>
+            </div>
+            <div class="animation-cadence-controls">
+              <label>
+                <span>Diffusion frequency</span>
+                <select id="animation-cadence-preset" disabled>
+                  <option value="1">Every frame (cadence 1)</option>
+                  <option value="2">Every 2 frames</option>
+                  <option value="3">Every 3 frames</option>
+                  <option value="4">Every 4 frames</option>
+                  <option value="6">Every 6 frames</option>
+                  <option value="8">Every 8 frames</option>
+                  <option value="custom">Custom keyframed schedule…</option>
+                </select>
+              </label>
+              <label>
+                <span>Keyframe schedule <small class="muted">(advanced)</small></span>
+                <input id="animation-cadence" class="animation-schedule" type="text" value="0:(1)" placeholder="0:(1), 24:(3)" disabled>
+              </label>
+            </div>
+            <p class="animation-cadence-explainer muted" id="animation-cadence-help" aria-live="polite">Cadence 1 runs diffusion for every eligible frame.</p>
+            <p class="muted animation-cadence-explainer">For changing cadence, enter a schedule such as <code>0:(1), 24:(3)</code>, or edit the Diffusion Cadence track in Visual Timeline. The last frame is always a diffusion anchor if denoising is enabled.</p>
+          </article>
+
           <article class="card glass animation-start-card">
             <div class="card-header">
               <div>
@@ -340,7 +369,6 @@
               <label><span>Noise schedule <small class="muted">(uniform)</small></span><input id="animation-noise" class="animation-schedule" type="text" value="0:(0.02)" disabled></label>
               <label><span>Steps schedule</span><input id="animation-steps" class="animation-schedule" type="text" value="0:(20)" disabled></label>
               <label><span>Guidance schedule</span><input id="animation-guidance" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Diffusion cadence <small class="muted">(1 = every frame)</small></span><input id="animation-cadence" class="animation-schedule" type="text" value="0:(1)" disabled></label>
               <label><span>Sampler</span><select id="animation-sampler" disabled><option value="">Select a model first</option></select></label>
               <label><span>Seed</span><input id="animation-seed" type="number" min="-1" max="4294967295" value="-1" disabled></label>
               <label><span>Seed behavior</span><select id="animation-seed-behavior" disabled><option value="fixed">Fixed</option><option value="increment">Increment</option><option value="random">Random</option></select></label>
