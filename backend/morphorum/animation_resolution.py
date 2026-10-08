@@ -171,21 +171,56 @@ def resolve_project_frame(
         records=lora_records,
     )
 
-    motion = {
-        key.split(".", 1)[1]: _resolve_field(project, key, frame)
-        for key in SCHEDULE_FIELDS
-        if key.startswith("motion.")
-    }
+    animation_mode = str(animation.get("mode") or "2d").strip().lower()
+    if animation_mode not in {"2d", "3d"}:
+        animation_mode = "2d"
 
+    def resolve_camera_group(
+        prefix: str,
+        *,
+        strict: bool,
+        defaults: dict[str, float],
+    ) -> dict[str, float | int]:
+        resolved: dict[str, float | int] = {}
+        for key in SCHEDULE_FIELDS:
+            if not key.startswith(prefix + "."):
+                continue
+            name = key.split(".", 1)[1]
+            try:
+                resolved[name] = _resolve_field(project, key, frame)
+            except ScheduleError:
+                if strict:
+                    raise
+                resolved[name] = defaults[name]
+        return resolved
+
+    motion = resolve_camera_group(
+        "motion",
+        strict=animation_mode == "2d",
+        defaults={
+            "angle": 0.0,
+            "zoom": 1.0,
+            "translation_x": 0.0,
+            "translation_y": 0.0,
+        },
+    )
     motion["border_mode"] = str(
         project.get("motion", {}).get("border_mode", "replicate") or "replicate"
     ).strip().lower()
 
-    camera_3d = {
-        key.split(".", 1)[1]: _resolve_field(project, key, frame)
-        for key in SCHEDULE_FIELDS
-        if key.startswith("camera_3d.")
-    }
+    camera_3d = resolve_camera_group(
+        "camera_3d",
+        strict=animation_mode == "3d",
+        defaults={
+            "translation_x": 0.0,
+            "translation_y": 0.0,
+            "translation_z": 0.0,
+            "rotation_x": 0.0,
+            "rotation_y": 0.0,
+            "rotation_z": 0.0,
+            "fov": 40.0,
+        },
+    )
 
     generation = {
         key.split(".", 1)[1]: _resolve_field(project, key, frame)
@@ -208,6 +243,7 @@ def resolve_project_frame(
         "max_frames": max_frames,
         "fps": fps,
         "time_seconds": frame / fps,
+        "animation_mode": animation_mode,
         "timeline": {
             "schema_version": timeline_schema,
             "source": "tracks",
@@ -381,7 +417,15 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
     fields: dict[str, Any] = {}
     all_issues: list[dict[str, Any]] = []
 
+    animation_mode = str(project.get("animation", {}).get("mode") or "2d").strip().lower()
+    if animation_mode not in {"2d", "3d"}:
+        animation_mode = "2d"
+
     for field in SCHEDULE_FIELDS:
+        if animation_mode == "2d" and field.startswith("camera_3d."):
+            continue
+        if animation_mode == "3d" and field.startswith("motion."):
+            continue
         try:
             interpolation = _track_interpolation(project, field)
             result = validate_numeric_schedule(
@@ -405,7 +449,7 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
             all_issues.append({"field": field, **issue})
 
     zoom_field = fields.get("motion.zoom", {})
-    if zoom_field.get("valid", False):
+    if animation_mode == "2d" and zoom_field.get("valid", False):
         zoom_issues = _zoom_schedule_issues(
             project,
             max_frames=max_frames,
@@ -419,7 +463,7 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
             all_issues.append({"field": "motion.zoom", **issue})
 
     fov_field = fields.get("camera_3d.fov", {})
-    if fov_field.get("valid", False):
+    if animation_mode == "3d" and fov_field.get("valid", False):
         fov_issues = _fov_schedule_issues(
             project,
             max_frames=max_frames,
