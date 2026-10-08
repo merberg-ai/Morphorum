@@ -1088,3 +1088,76 @@ def test_diffusion_cadence_skips_intermediate_diffusion_but_keeps_motion(
     assert anchor_meta["render_state"]["cadence"]["anchor"] is True
     assert finished["current_frame_state"]["cadence"]["anchor"] is True
     assert finished["current_frame_state"]["timings"]["diffusion"] >= 0.0
+
+
+
+def test_sdxl_conditioning_cache_is_isolated_by_lora_signature() -> None:
+    class CountingSDXLPipe(FakeSDXLPipe):
+        def __init__(self) -> None:
+            self.calls = []
+
+        def encode_prompt(self, **kwargs):
+            self.calls.append(
+                (
+                    kwargs.get("prompt"),
+                    kwargs.get("negative_prompt"),
+                )
+            )
+            return super().encode_prompt(**kwargs)
+
+    pipe = CountingSDXLPipe()
+    cache = {}
+    positive = {
+        "from_frame": 0,
+        "to_frame": 10,
+        "from_text": "forest",
+        "to_text": "city",
+        "from_weight": 0.75,
+        "to_weight": 0.25,
+    }
+    negative = {
+        "from_frame": 0,
+        "to_frame": 10,
+        "from_text": "bad",
+        "to_text": "worse",
+        "from_weight": 0.5,
+        "to_weight": 0.5,
+    }
+
+    first_signature = (("style-id", 1.0),)
+    second_signature = (("style-id", 0.5),)
+
+    for _ in range(2):
+        _prompt_conditioning_kwargs(
+            pipe,
+            "sdxl",
+            positive,
+            negative,
+            guidance_scale=6.0,
+            conditioning_cache=cache,
+            lora_signature=first_signature,
+        )
+
+    assert pipe.calls == [
+        ("forest", "bad"),
+        ("city", "worse"),
+    ]
+    assert len(cache) == 2
+
+    _prompt_conditioning_kwargs(
+        pipe,
+        "sdxl",
+        positive,
+        negative,
+        guidance_scale=6.0,
+        conditioning_cache=cache,
+        lora_signature=second_signature,
+    )
+
+    assert pipe.calls == [
+        ("forest", "bad"),
+        ("city", "worse"),
+        ("forest", "bad"),
+        ("city", "worse"),
+    ]
+    assert len(cache) == 4
