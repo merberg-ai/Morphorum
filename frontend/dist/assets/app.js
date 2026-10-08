@@ -926,7 +926,12 @@
       const health = await api('/api/health');
       dot?.classList.add('ok');
       dot?.classList.remove('bad');
-      if (text) text.textContent = `v${health.version} · API ready`;
+      if (text) {
+        const branch = String(health.git_branch || 'detached');
+        const commit = String(health.git_commit || '').slice(0, 12);
+        text.textContent = `v${health.version} · ${branch}${commit ? ` · ${commit}` : ''}`;
+        text.title = `Morphorum ${health.version} · ${branch}${commit ? ` · ${commit}` : ''} · API ready`;
+      }
     } catch (error) {
       dot?.classList.add('bad');
       dot?.classList.remove('ok');
