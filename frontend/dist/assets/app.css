@@ -563,3 +563,34 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .console-category { display: none; }
   .button-row { width: 100%; }
 }
+
+
+/* LoRA Manager: compact, mobile-friendly library and diagnostics */
+.lora-manager-grid { max-width:1260px; margin:0 auto; display:grid; grid-template-columns:minmax(270px,.8fr) minmax(0,1.6fr); gap:16px; align-items:start; }
+.lora-manager-library, .lora-manager-details { min-width:0; }
+.lora-manager-toolbar { display:grid; gap:9px; margin:16px 0; }
+.lora-manager-toolbar select, .lora-manager-toolbar input,
+.lora-manager-insert-controls input[type=number] { width:100%; min-width:0; padding:11px 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface,rgba(4,8,15,.65)); color:var(--text); }
+.lora-manager-list { max-height:60vh; min-height:180px; overflow-y:auto; display:grid; align-content:start; gap:6px; }
+.lora-manager-item { display:grid; gap:4px; width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,.02); color:var(--text); text-align:left; cursor:pointer; }
+.lora-manager-item:hover,.lora-manager-item.selected { border-color:var(--accent); background:rgba(65,217,255,.08); }
+.lora-manager-item small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
+.lora-manager-footnote,.lora-manager-small { font-size:.76rem; line-height:1.5; margin-top:10px; }
+.lora-manager-detail-body { display:grid; gap:16px; margin-top:12px; }
+.lora-manager-section { padding:14px; border:1px solid var(--border); border-radius:12px; }
+.lora-manager-section h3 { font-size:.9rem; margin:0 0 12px; }
+.lora-manager-fields { display:grid; gap:8px; }
+.lora-manager-field { display:grid; grid-template-columns:minmax(100px,.75fr) minmax(0,1.35fr); gap:12px; font-size:.8rem; border-bottom:1px solid var(--border); padding-bottom:8px; }
+.lora-manager-field strong { font-weight:600; overflow-wrap:anywhere; }
+.lora-manager-pills { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+.lora-manager-pill { background:rgba(65,217,255,.09); border:1px solid var(--border); padding:5px 8px; border-radius:8px; font-size:.77rem; overflow-wrap:anywhere; }
+.lora-manager-warning { color:var(--warn); font-size:.79rem; line-height:1.45; margin:8px 0; }
+.lora-manager-more pre { max-height:340px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:.7rem; padding:12px; border-radius:8px; background:rgba(0,0,0,.2); }
+.lora-manager-more summary { cursor:pointer; font-size:.82rem; }
+.lora-manager-insert { display:grid; gap:12px; border-top:1px solid var(--border); padding-top:16px; margin-top:16px; }
+.lora-manager-insert-controls { display:grid; grid-template-columns:auto 100px minmax(0,1fr); gap:10px; align-items:center; }
+.lora-manager-checkbox { display:flex; align-items:center; gap:7px; font-size:.8rem; }
+.lora-manager-civitai-actions { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin:10px 0; }
+.lora-manager-civitai-link { color:var(--accent); overflow-wrap:anywhere; }
+@media (max-width:900px) { .lora-manager-grid { grid-template-columns:1fr; } .lora-manager-list { max-height:300px; } }
+@media (max-width:420px) { .lora-manager-insert-controls { grid-template-columns:auto minmax(0,1fr); } .lora-manager-checkbox { grid-column:1/-1; } }
