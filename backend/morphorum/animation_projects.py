@@ -32,6 +32,7 @@ _KNOWN_TOP_LEVEL = {
     "prompts",
     "negative_prompts",
     "motion",
+    "camera_3d",
     "generation",
     "tracks",
     "notes",
@@ -120,6 +121,15 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "translation_y": "0:(0)",
             "border_mode": "replicate",
         },
+        "camera_3d": {
+            "translation_x": "0:(0)",
+            "translation_y": "0:(0)",
+            "translation_z": "0:(0)",
+            "rotation_x": "0:(0)",
+            "rotation_y": "0:(0)",
+            "rotation_z": "0:(0)",
+            "fov": "0:(40)",
+        },
         "generation": {
             "strength": "0:(0.65)",
             "noise": "0:(0.02)",
@@ -189,6 +199,15 @@ def _legacy_timeline_changed(
 
     for section, keys in {
         "motion": ("angle", "zoom", "translation_x", "translation_y"),
+        "camera_3d": (
+            "translation_x",
+            "translation_y",
+            "translation_z",
+            "rotation_x",
+            "rotation_y",
+            "rotation_z",
+            "fov",
+        ),
         "generation": ("strength", "noise", "steps", "guidance"),
     }.items():
         incoming = payload.get(section)
@@ -341,6 +360,19 @@ def normalize_animation_project(
     border_mode = str(project["motion"].get("border_mode") or "replicate").strip().lower()
     project["motion"]["border_mode"] = (
         border_mode if border_mode in {"replicate", "wrap"} else "replicate"
+    )
+
+    project["camera_3d"] = _normalize_string_section(
+        payload.get("camera_3d", project.get("camera_3d")),
+        {
+            "translation_x": "0:(0)",
+            "translation_y": "0:(0)",
+            "translation_z": "0:(0)",
+            "rotation_x": "0:(0)",
+            "rotation_y": "0:(0)",
+            "rotation_z": "0:(0)",
+            "fov": "0:(40)",
+        },
     )
 
     generation_source = payload.get("generation", project.get("generation", {}))
