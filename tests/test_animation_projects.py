@@ -50,7 +50,9 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
     assert project["camera_3d"]["fov"] == "0:(40)"
     assert project["tracks"]["camera_3d"]["translation_z"]["schedule"] == "0:(0)"
     assert project["tracks"]["camera_3d"]["fov"]["schedule"] == "0:(40)"
-    assert project["tracks"]["cadence"] == {}
+    assert project["cadence"]["diffusion"] == "0:(1)"
+    assert project["camera_3d"]["depth_resolution"] == "auto"
+    assert project["tracks"]["cadence"]["diffusion"]["schedule"] == "0:(1)"
     assert project["tracks"]["loras"] == {}
     assert project["id"].startswith("my-first-morph-")
 
@@ -333,3 +335,28 @@ def test_legacy_project_without_animation_mode_defaults_to_2d() -> None:
     )
 
     assert normalized["animation"]["mode"] == "2d"
+
+
+
+def test_project_normalizes_depth_resolution_and_cadence() -> None:
+    project = normalize_animation_project(
+        {
+            "name": "Perf Settings",
+            "camera_3d": {"depth_resolution": "768"},
+            "cadence": {"diffusion": "0:(3)"},
+        },
+        project_id="perf-settings",
+    )
+
+    assert project["camera_3d"]["depth_resolution"] == "768"
+    assert project["cadence"]["diffusion"] == "0:(3)"
+    assert project["tracks"]["cadence"]["diffusion"]["schedule"] == "0:(3)"
+
+    invalid = normalize_animation_project(
+        {
+            "name": "Bad Depth",
+            "camera_3d": {"depth_resolution": "gigantic"},
+        },
+        project_id="bad-depth",
+    )
+    assert invalid["camera_3d"]["depth_resolution"] == "auto"
