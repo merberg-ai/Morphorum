@@ -396,6 +396,8 @@ def _frame_state_for_frame(
     motion_applied: bool,
     cumulative_matrix: np.ndarray,
     depth_state: dict[str, Any] | None = None,
+    cadence_state: dict[str, Any] | None = None,
+    timings: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     motion = resolved.get("motion", {})
     generation = resolved.get("generation", {})
@@ -437,6 +439,11 @@ def _frame_state_for_frame(
             "fov": float(camera_3d.get("fov", 40.0)),
         },
         "depth_3d": deepcopy(depth_state) if depth_state else None,
+        "cadence": deepcopy(cadence_state) if cadence_state else {
+            "diffusion": int(resolved.get("cadence", {}).get("diffusion", 1) or 1),
+            "anchor": True,
+        },
+        "timings": deepcopy(timings) if timings else {},
         "generation": {
             "strength": retention_strength,
             "denoise_strength": denoise_strength,
@@ -489,6 +496,54 @@ def _prepare_source(source: Image.Image, width: int, height: int) -> Image.Image
     )
 
 
+def _prepare_depth_input(
+    image: Image.Image,
+    setting: str,
+) -> tuple[Image.Image, str]:
+    raw = str(setting or "auto").strip().lower()
+    maximum = max(image.size)
+    if raw == "full":
+        return image, "full"
+    if raw == "auto":
+        target = min(512, maximum)
+        label = "auto"
+    else:
+        try:
+            target = max(128, min(2048, int(raw)))
+        except (TypeError, ValueError):
+            target = min(512, maximum)
+            label = "auto"
+        else:
+            label = str(target)
+
+    if maximum <= target:
+        return image, label
+
+    scale = target / maximum
+    resized = image.resize(
+        (
+            max(2, int(round(image.width * scale))),
+            max(2, int(round(image.height * scale))),
+        ),
+        Image.Resampling.BILINEAR,
+    )
+    return resized, label
+
+
+def _resize_depth_map(
+    depth: np.ndarray,
+    *,
+    width: int,
+    height: int,
+) -> np.ndarray:
+    value = np.asarray(depth, dtype=np.float32)
+    if value.shape == (height, width):
+        return value
+    depth_image = Image.fromarray(value, mode="F")
+    resized = depth_image.resize((width, height), Image.Resampling.BILINEAR)
+    return np.asarray(resized, dtype=np.float32)
+
+
 def _save_frame(
     image: Image.Image,
     path: Path,
@@ -499,7 +554,13 @@ def _save_frame(
     pnginfo = PngInfo()
     pnginfo.add_text("Morphorum", json.dumps(metadata, ensure_ascii=False))
     temp = path.with_name(path.name + ".tmp")
-    image.save(temp, format="PNG", pnginfo=pnginfo)
+    image.save(
+        temp,
+        format="PNG",
+        pnginfo=pnginfo,
+        compress_level=1,
+        optimize=False,
+    )
     temp.replace(path)
 
 
