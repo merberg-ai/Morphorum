@@ -669,6 +669,11 @@
           </article>
           <article class="card glass lora-manager-details">
             <div class="card-header"><div><h2 id="lora-manager-title">Choose a LoRA</h2><p class="muted" id="lora-manager-subtitle">Metadata and architecture diagnostics appear here.</p></div></div>
+            <div class="lora-manager-civitai-actions">
+              <button type="button" class="secondary-button compact busy-button" id="lora-manager-civitai" disabled><span class="spinner"></span><span class="button-label">Fetch from Civitai</span></button>
+              <span class="muted lora-manager-small">Optional online lookup sends the file's SHA-256 to Civitai, not the file itself.</span>
+            </div>
+            <div id="lora-manager-civitai-result" aria-live="polite"></div>
             <div id="lora-manager-detail-body" class="lora-manager-detail-body" aria-live="polite">
               <div class="model-empty">Select a LoRA to inspect its local file.</div>
             </div>
