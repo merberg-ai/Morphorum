@@ -2,7 +2,7 @@ name: Syntax checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/3d-depth-quality-b5]
   pull_request:
 
 jobs:
