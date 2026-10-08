@@ -25,6 +25,52 @@ track remains unchanged. Choosing a preset updates the schedule, marks
 the project unsaved, and triggers validation; manually editing a custom
 schedule does not overwrite it.
 
+## B5.0 animation conditioning GPU memory fix
+
+Physical Windows RTX 4080 SUPER test: SDXL
+`artUniverse_sdxlV60_874843` at 512x512, 3D camera, with scheduled
+`DonM0v3rC4ff31n4t3dXL` LoRA weight from 0 to 1.
+A cadence-1 render rose from 13.9 GiB allocated after the first diffused
+frame to 17.3 GiB by frame 8 (reported virtual CUDA allocation under
+Windows WDDM) and repeatedly took 75 to 81 seconds for diffusion.
+Cadence-3 transformed intermediate frames quickly, but anchor diffusion
+could still stall ~75 seconds. The console explicitly recorded
+`Model ready on cuda ... (native-gpu)`, so **this was not a
+whole-model CPU fallback**. Depth Anything V2 was separately running
+on CPU at 0.4 to 0.5 seconds per frame.
+
+Root-cause code audit found `_prompt_conditioning_kwargs()` calling
+SDXL/Flux `pipe.encode_prompt()` before the separate
+`with torch.inference_mode(): pipe(**call_args)` region.
+Diffusers 0.40.0 SDXL `encode_prompt` itself has no `@torch.no_grad`
+decorator, so direct embedding generation could build autograd graphs
+while CLIP weights have `requires_grad=True`. Those embeddings were
+retained for the entire render in an **unbounded dictionary**, keyed
+by LoRA adapter ID **and weight**. The test LoRA weight changed each
+anchor, which meant repeated fresh encodes and long-lived graphs.
+The allocated memory stopped growing after the LoRA weight reached
+the final constant value, supporting this mechanism.
+
+**Fix:** Apply `torch.inference_mode()` around the entire explicit
+animation conditioning and blending function, not just Diffusers
+`pipe.__call__`. Bound the conditioning-cache dictionary to eight entries
+regardless of family, preserving prompt/LoRA signature isolation.
+The global diffusion pipeline, CUDA device selection, SDXL LoRA loading,
+and cadence itself remain unchanged. No CPU offloading was introduced.
+
+Added CPU PyTorch regression tests to simulate an unfrozen text
+encoder, assert gradients are disabled while encoding and that
+the resulting embeddings hold no `grad_fn`, and verify bounded cache
+size even with 10-14 distinct LoRA strengths for SDXL and Flux.
+
+**GPU acceptance still required:** Re-run the same 26-frame cadence-3
+scene and compare `allocated` and `diff` telemetry around anchors
+3, 6, 9, 12, 15, 18. Expected: no monotonic ~0.5 GiB increase per
+changing LoRA weight, and no periodic ~75 s diffusion stalls.
+If allocation still grows, separately inspect PEFT
+`set_adapters()` and Diffusers attention buffers with allocator
+snapshots. A physical retest is required before accepting the fix.
+
 ## Cadence implementation audit
 
 **Cadence is implemented in the actual animation render loop.**
