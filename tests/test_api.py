@@ -748,7 +748,7 @@ def test_lora_manager_server_audit_logs_and_validation(monkeypatch) -> None:
         ).status_code == 404
         assert client.post(
             "/api/loras/audit-529922/activity",
-            json={**payload, "weight": float("nan")},
+            json={**payload, "weight": "nan"},
         ).status_code in (400, 422)
 
     lora_lines = [
