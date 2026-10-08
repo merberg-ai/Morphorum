@@ -1897,11 +1897,17 @@ class GenerationManager:
                         f"{type(exc).__name__}: {exc}"
                     ) from exc
                 component_name = "unet" if family == "sdxl" else "transformer"
-                diagnostics = self._verify_adapter_weights(
-                    pipe,
-                    adapter_name,
-                    component_name=component_name,
-                )
+                if family == "sdxl":
+                    diagnostics = self._verify_adapter_weights(
+                        pipe,
+                        adapter_name,
+                        component_name=component_name,
+                    )
+                else:
+                    diagnostics = self._adapter_diagnostics(
+                        getattr(pipe, component_name, None),
+                        adapter_name,
+                    )
                 self._pipeline_loras[lora_id] = {
                     "id": lora_id,
                     "name": str(item.get("name") or path.stem),
