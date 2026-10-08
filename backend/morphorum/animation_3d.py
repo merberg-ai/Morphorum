@@ -75,6 +75,7 @@ def render_depth_warp(
     rotation_y: float = 0.0,
     rotation_z: float = 0.0,
     fov: float = 40.0,
+    source_fov: float | None = None,
     near_depth: float = 1.0,
     far_depth: float = 4.0,
 ) -> Camera3DWarpResult:
@@ -91,21 +92,25 @@ def render_depth_warp(
         raise Camera3DError("Depth map contains non-finite values.")
 
     fov_value = float(fov)
+    source_fov_value = float(source_fov if source_fov is not None else fov_value)
     if not 1.0 < fov_value < 179.0:
         raise Camera3DError("3D field of view must be between 1 and 179 degrees.")
+    if not 1.0 < source_fov_value < 179.0:
+        raise Camera3DError("3D source field of view must be between 1 and 179 degrees.")
     if not 0.0 < near_depth < far_depth:
         raise Camera3DError("3D pseudo-depth range must satisfy 0 < near < far.")
 
     normalized = np.clip(depth_map, 0.0, 1.0).astype(np.float64, copy=False)
     z = near_depth + (1.0 - normalized) * (far_depth - near_depth)
 
-    focal = (width * 0.5) / math.tan(math.radians(fov_value) * 0.5)
+    source_focal = (width * 0.5) / math.tan(math.radians(source_fov_value) * 0.5)
+    target_focal = (width * 0.5) / math.tan(math.radians(fov_value) * 0.5)
     cx = (width - 1.0) * 0.5
     cy = (height - 1.0) * 0.5
 
     yy, xx = np.indices((height, width), dtype=np.float64)
-    x = (xx - cx) * z / focal
-    y = (yy - cy) * z / focal
+    x = (xx - cx) * z / source_focal
+    y = (yy - cy) * z / source_focal
 
     points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
     camera_translation = np.array(
@@ -122,8 +127,12 @@ def render_depth_warp(
     x2 = transformed[:, 0]
     y2 = transformed[:, 1]
 
-    projected_x = np.rint((focal * x2 / np.maximum(z2, 1e-6)) + cx).astype(np.int64)
-    projected_y = np.rint((focal * y2 / np.maximum(z2, 1e-6)) + cy).astype(np.int64)
+    projected_x = np.rint(
+        (target_focal * x2 / np.maximum(z2, 1e-6)) + cx
+    ).astype(np.int64)
+    projected_y = np.rint(
+        (target_focal * y2 / np.maximum(z2, 1e-6)) + cy
+    ).astype(np.int64)
 
     visible &= projected_x >= 0
     visible &= projected_x < width
@@ -165,6 +174,7 @@ def render_depth_warp(
         "rotation_x": float(rotation_x),
         "rotation_y": float(rotation_y),
         "rotation_z": float(rotation_z),
+        "source_fov": source_fov_value,
         "fov": fov_value,
         "pseudo_depth_near": float(near_depth),
         "pseudo_depth_far": float(far_depth),
