@@ -6,6 +6,8 @@ Never deserializes pickle checkpoints and never loads tensor data onto a GPU.
 """
 
 import json
+import re
+from html.parser import HTMLParser
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -69,7 +71,9 @@ def _first_value(mapping: dict[str, Any], names: tuple[str, ...]) -> Any:
 def _sidecar(path: Path) -> tuple[dict[str, Any], str | None]:
     names = [
         path.with_suffix(".civitai.info"),
+        path.with_suffix(".civitai.json"),
         path.with_suffix(".json"),
+        path.with_name(path.name + ".json"),
     ]
     for candidate in names:
         try:
@@ -81,6 +85,44 @@ def _sidecar(path: Path) -> tuple[dict[str, Any], str | None]:
         except (OSError, UnicodeError, json.JSONDecodeError):
             continue
     return {}, None
+
+
+class _SidecarHTMLText(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.words: list[str] = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"style", "script"}:
+            self.hidden += 1
+
+    def handle_endtag(self, tag):
+        if tag in {"style", "script"}:
+            self.hidden = max(0, self.hidden - 1)
+
+    def handle_data(self, data):
+        if not self.hidden and len(" ".join(self.words)) < 3000:
+            self.words.append(data)
+
+
+def _local_html_info(path: Path) -> dict[str, Any] | None:
+    for candidate in (path.with_suffix(".html"), path.with_suffix(".civitai.html")):
+        try:
+            if not candidate.is_file() or candidate.stat().st_size > MAX_SIDECAR_BYTES:
+                continue
+            raw = candidate.read_text(encoding="utf-8-sig", errors="replace")
+            parser = _SidecarHTMLText()
+            parser.feed(raw)
+            match = re.search(r"https?://(?:www\\.)?civitai\\.com/models/(\\d+)(?:\\?[^\\s\"<>]*)?", raw, re.I)
+            return {
+                "filename": candidate.name,
+                "text_excerpt": " ".join(" ".join(parser.words).split())[:3000],
+                "civitai_model_id": int(match.group(1)) if match else None,
+            }
+        except (OSError, ValueError):
+            continue
+    return None
 
 
 def _component(key: str) -> str:
@@ -173,11 +215,14 @@ def inspect_lora(model_id: str) -> dict[str, Any]:
 
     sidecar, sidecar_name = _sidecar(path)
     embedded_words = _words(_first_value(metadata, TRIGGER_FIELDS))
-    sidecar_words = _words(_first_value(sidecar, TRIGGER_FIELDS))
+    nested_version = sidecar.get("modelVersion") if isinstance(sidecar.get("modelVersion"), dict) else {}
+    sidecar_words = _words(_first_value(sidecar, TRIGGER_FIELDS) or _first_value(nested_version, TRIGGER_FIELDS))
     triggers = embedded_words or sidecar_words
     trigger_source = ("safetensors metadata" if embedded_words else
                       f"sidecar {sidecar_name}" if sidecar_words else "not recorded")
-    base = _first_value(metadata, BASE_FIELDS) or _first_value(sidecar, BASE_FIELDS)
+    base = (_first_value(metadata, BASE_FIELDS) or _first_value(sidecar, BASE_FIELDS)
+            or _first_value(nested_version, BASE_FIELDS))
+    html_info = _local_html_info(path)
     # A family selected by a user in Settings is an indexing label, not proof of architecture.
     reported_families = {
         "sdxl": ("sdxl", "sd_xl", "illustrious", "pony"),
@@ -214,6 +259,7 @@ def inspect_lora(model_id: str) -> dict[str, Any]:
         "tensor_count": tensor_count, "components": dict(counts),
         "ranks": rank, "shape_examples": shape_examples,
         "key_examples": adapter_keys, "sidecar": sidecar_name,
+        "html_sidecar": html_info,
         "metadata": safe_metadata, "metadata_count": len(metadata),
         "errors": list(dict.fromkeys(errors))[:8], "warnings": warnings,
         "inspection": "static header inspection only; does not verify active runtime LoRA effect",
