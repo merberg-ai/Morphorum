@@ -74,6 +74,26 @@
   align-self: end;
   min-height: 43px;
 }
+.animation-lora-tools {
+  grid-column: 2 / 4;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 86px auto;
+  gap: 7px;
+  align-items: center;
+}
+.animation-lora-tools select,
+.animation-lora-tools input {
+  min-width: 0;
+}
+.animation-lora-hint {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: .64rem;
+  line-height: 1.35;
+}
+.animation-resolved-loras {
+  grid-column: span 2;
+}
 .animation-empty {
   min-height: 110px;
   display: grid;
@@ -141,6 +161,10 @@
   .animation-remove-prompt {
     grid-column: 3;
     grid-row: 1;
+  }
+  .animation-lora-tools {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0,1fr) 84px auto;
   }
 }
 
@@ -339,6 +363,15 @@
   }
   .animation-prompt-resolution {
     grid-template-columns: 1fr;
+  }
+  .animation-lora-tools {
+    grid-template-columns: minmax(0,1fr) 80px;
+  }
+  .animation-lora-tools .animation-insert-lora {
+    grid-column: 1 / -1;
+  }
+  .animation-resolved-loras {
+    grid-column: span 2;
   }
   .animation-curve-chart {
     height: 155px;
@@ -708,5 +741,650 @@
   }
   .animation-model-load-detail span:last-child {
     text-align: left;
+  }
+}
+
+
+/* Timeline Alpha A4 visual editor */
+.animation-timeline-card {
+  grid-column: 1 / -1;
+}
+.animation-timeline-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.animation-timeline-toolbar {
+  display: grid;
+  grid-template-columns: 120px minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+.animation-timeline-toolbar label,
+.animation-timeline-editor label {
+  min-width: 0;
+}
+.animation-timeline-scale-control input {
+  width: 100%;
+}
+.animation-timeline-scroll {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(3,5,8,.5);
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+}
+.animation-timeline-empty {
+  padding: 28px 18px;
+  color: var(--muted);
+  text-align: center;
+  font-size: .75rem;
+}
+.animation-timeline-grid {
+  --timeline-label-width: 148px;
+  --timeline-content-width: 720px;
+  min-width: calc(var(--timeline-label-width) + var(--timeline-content-width));
+  width: max-content;
+}
+.animation-timeline-ruler-row,
+.animation-timeline-track-row {
+  display: grid;
+  grid-template-columns: var(--timeline-label-width) var(--timeline-content-width);
+  min-height: 42px;
+}
+.animation-timeline-ruler-row {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  min-height: 34px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(5,8,12,.96);
+}
+.animation-timeline-ruler-label,
+.animation-timeline-track-label {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  border-right: 1px solid var(--border);
+  background: rgba(5,8,12,.97);
+}
+.animation-timeline-ruler-label {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.animation-timeline-ruler {
+  position: relative;
+  height: 34px;
+  background:
+    linear-gradient(to right, rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size: 24px 100%;
+}
+.animation-timeline-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 10px;
+  background: var(--border);
+  transform: translateX(-50%);
+}
+.animation-timeline-tick.major {
+  height: 16px;
+}
+.animation-timeline-tick span {
+  position: absolute;
+  bottom: 15px;
+  left: 4px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .58rem;
+  white-space: nowrap;
+}
+.animation-timeline-track-row {
+  border-bottom: 1px solid rgba(255,255,255,.045);
+}
+.animation-timeline-track-row:last-child {
+  border-bottom: 0;
+}
+.animation-timeline-track-row.selected {
+  background: rgba(65,217,255,.025);
+}
+.animation-timeline-track-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+.animation-timeline-track-label strong {
+  color: var(--text);
+  font-size: .7rem;
+  font-weight: 600;
+}
+.animation-timeline-track-label span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .58rem;
+}
+.animation-timeline-track-lane {
+  position: relative;
+  min-height: 42px;
+  cursor: crosshair;
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size: 24px 100%;
+}
+.animation-timeline-track-lane::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255,255,255,.07);
+  pointer-events: none;
+}
+.animation-timeline-keyframe {
+  position: absolute;
+  touch-action: none;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid rgba(65,217,255,.65);
+  border-radius: 3px;
+  background: rgba(65,217,255,.22);
+  box-shadow: 0 0 0 2px rgba(3,5,8,.78);
+  transform: translate(-50%, -50%) rotate(45deg);
+  cursor: grab;
+  z-index: 4;
+}
+.animation-timeline-keyframe:active {
+  cursor: grabbing;
+}
+.animation-timeline-keyframe.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(65,217,255,.14);
+}
+.animation-timeline-keyframe.required {
+  border-radius: 50%;
+}
+.animation-timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(65,217,255,.35);
+  pointer-events: none;
+  z-index: 3;
+}
+.animation-timeline-playhead::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -35%) rotate(45deg);
+  background: var(--accent);
+}
+.animation-timeline-editor {
+  display: grid;
+  grid-template-columns: minmax(180px,.9fr) 100px minmax(240px,1.6fr) 150px auto;
+  gap: 9px;
+  align-items: end;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(6,9,13,.34);
+}
+.animation-timeline-editor[hidden] {
+  display: none;
+}
+.animation-timeline-selection {
+  min-width: 0;
+  align-self: center;
+}
+.animation-timeline-selection strong,
+.animation-timeline-selection span {
+  display: block;
+}
+.animation-timeline-selection strong {
+  color: var(--text);
+  font-size: .75rem;
+}
+.animation-timeline-selection span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .61rem;
+  overflow-wrap: anywhere;
+}
+.animation-timeline-value-field textarea {
+  min-height: 40px;
+  resize: vertical;
+}
+.animation-timeline-editor-actions {
+  display: flex;
+  gap: 7px;
+}
+.animation-timeline-note {
+  margin-top: 10px;
+}
+.animation-timeline-status.busy {
+  opacity: .7;
+}
+.animation-timeline-status.error {
+  color: #efaaaa;
+}
+.animation-timeline-status.saved {
+  color: #9bdcb8;
+}
+
+@media (max-width: 900px) {
+  .animation-timeline-toolbar {
+    grid-template-columns: 110px minmax(140px,1fr);
+  }
+  .animation-timeline-toolbar #animation-timeline-add {
+    grid-column: 1 / -1;
+  }
+  .animation-timeline-editor {
+    grid-template-columns: 1fr 100px 1fr;
+  }
+  .animation-timeline-selection {
+    grid-column: 1 / -1;
+  }
+  .animation-timeline-editor-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .animation-timeline-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .animation-timeline-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .animation-timeline-toolbar #animation-timeline-add {
+    grid-column: 1 / -1;
+  }
+  .animation-timeline-grid {
+    --timeline-label-width: 112px;
+  }
+  .animation-timeline-track-label {
+    padding: 6px 7px;
+  }
+  .animation-timeline-track-label strong {
+    font-size: .64rem;
+  }
+  .animation-timeline-editor {
+    grid-template-columns: 1fr 1fr;
+  }
+  .animation-timeline-selection,
+  .animation-timeline-value-field,
+  .animation-timeline-editor-actions {
+    grid-column: 1 / -1;
+  }
+  .animation-timeline-editor-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .animation-timeline-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .animation-timeline-toolbar #animation-timeline-add {
+    grid-column: 1;
+  }
+  .animation-timeline-editor {
+    grid-template-columns: 1fr;
+  }
+  .animation-timeline-selection,
+  .animation-timeline-value-field,
+  .animation-timeline-editor-actions {
+    grid-column: 1;
+  }
+}
+
+
+/* Timeline Beta B1: compact sections, mobile focus editor, prompt telemetry */
+#view-animation .animation-layout > article.card > .card-header {
+  cursor: pointer;
+}
+.animation-card-content[hidden] {
+  display: none !important;
+}
+.animation-card-toggle {
+  flex: 0 0 auto;
+  min-width: 36px;
+  min-height: 36px;
+  margin-left: 6px;
+  font-size: 1rem;
+  line-height: 1;
+}
+.animation-card-collapsed > .card-header {
+  margin-bottom: 0;
+}
+.animation-card-collapsed > .card-header .muted {
+  opacity: .72;
+}
+
+.animation-timeline-toolbar {
+  grid-template-columns:
+    minmax(180px,1.35fr)
+    100px
+    minmax(150px,1fr)
+    auto auto auto;
+}
+.animation-timeline-track-picker {
+  min-width: 0;
+}
+.animation-timeline-track-picker select {
+  width: 100%;
+}
+.animation-timeline-mobile-scrubber {
+  display: none;
+  margin: 2px 0 12px;
+}
+.animation-timeline-mobile-scrubber input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.animation-render-prompt-telemetry {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(65,217,255,.18);
+  border-radius: var(--radius-sm);
+  background: rgba(65,217,255,.035);
+}
+.animation-render-prompt-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.animation-render-prompt-applied.applied {
+  color: #9bdcb8;
+  border-color: rgba(114,230,167,.24);
+  background: rgba(114,230,167,.05);
+}
+.animation-render-prompt-applied.skipped {
+  color: #e4c77f;
+  border-color: rgba(243,198,106,.25);
+  background: rgba(243,198,106,.05);
+}
+.animation-render-prompt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.animation-render-prompt-grid > div {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(3,5,8,.36);
+}
+.animation-render-prompt-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: .62rem;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+}
+.animation-render-prompt-grid strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .67rem;
+  line-height: 1.35;
+}
+.animation-render-prompt-grid p {
+  margin: 7px 0 0;
+  color: var(--text);
+  font-size: .72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.animation-render-prompt-meta {
+  margin-top: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .64rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .animation-timeline-toolbar {
+    grid-template-columns: minmax(180px,1fr) 100px 1fr;
+  }
+  .animation-timeline-toolbar #animation-timeline-prev-keyframe,
+  .animation-timeline-toolbar #animation-timeline-next-keyframe,
+  .animation-timeline-toolbar #animation-timeline-add {
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .animation-project-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+  .animation-project-actions #animation-collapse-all,
+  .animation-project-actions #animation-expand-all {
+    font-size: .68rem;
+  }
+
+  .animation-timeline-toolbar {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .animation-timeline-track-picker {
+    grid-column: 1 / -1;
+  }
+  .animation-timeline-scale-control {
+    display: none;
+  }
+  .animation-timeline-toolbar #animation-timeline-prev-keyframe,
+  .animation-timeline-toolbar #animation-timeline-next-keyframe {
+    grid-row: auto;
+  }
+  .animation-timeline-toolbar #animation-timeline-add {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    min-height: 44px;
+  }
+  .animation-timeline-mobile-scrubber {
+    display: block;
+  }
+
+  .animation-timeline-scroll {
+    overflow-x: hidden;
+    touch-action: pan-y;
+  }
+  .animation-timeline-grid.mobile-focused {
+    --timeline-label-width: 0px;
+    min-width: 100%;
+    width: 100%;
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-ruler-row,
+  .animation-timeline-grid.mobile-focused .animation-timeline-track-row {
+    grid-template-columns: var(--timeline-content-width);
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-ruler-label,
+  .animation-timeline-grid.mobile-focused .animation-timeline-track-label {
+    display: none;
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-ruler,
+  .animation-timeline-grid.mobile-focused .animation-timeline-track-lane {
+    width: var(--timeline-content-width);
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-track-lane {
+    min-height: 62px;
+  }
+  .animation-timeline-grid.mobile-focused .animation-timeline-keyframe {
+    width: 22px;
+    height: 22px;
+  }
+  .animation-timeline-editor {
+    grid-template-columns: 1fr 1fr;
+    padding: 9px;
+  }
+  .animation-timeline-selection,
+  .animation-timeline-value-field,
+  .animation-timeline-editor-actions {
+    grid-column: 1 / -1;
+  }
+  .animation-timeline-value-field textarea {
+    min-height: 84px;
+  }
+  .animation-timeline-editor-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .animation-timeline-editor-actions button {
+    min-height: 44px;
+  }
+
+  .animation-render-prompt-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  #view-animation .animation-layout > article.card {
+    padding: 12px;
+  }
+  #view-animation .animation-layout > article.card > .card-header {
+    gap: 8px;
+  }
+  .animation-card-toggle {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .animation-timeline-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .animation-timeline-track-picker,
+  .animation-timeline-toolbar #animation-timeline-add {
+    grid-column: 1;
+  }
+  .animation-timeline-toolbar button {
+    min-height: 44px;
+  }
+  .animation-timeline-editor {
+    grid-template-columns: 1fr;
+  }
+  .animation-timeline-selection,
+  .animation-timeline-value-field,
+  .animation-timeline-editor-actions {
+    grid-column: 1;
+  }
+  .animation-render-prompt-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+
+.animation-timeline-keyframe-list {
+  display: none;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 2px 0 1px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.animation-timeline-keyframe-chip {
+  flex: 0 0 auto;
+  min-width: 52px;
+  min-height: 40px;
+  font-family: var(--font-mono);
+}
+.animation-timeline-keyframe-chip.selected {
+  border-color: rgba(65,217,255,.55);
+  background: rgba(65,217,255,.12);
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .animation-timeline-keyframe-list:not([hidden]) {
+    display: flex;
+  }
+}
+
+
+/* Timeline Beta B2: live 2D/generation render telemetry */
+.animation-render-frame-telemetry {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(124,103,255,.2);
+  border-radius: var(--radius-sm);
+  background: rgba(124,103,255,.035);
+}
+.animation-render-state-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+.animation-render-state-grid > div {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(3,5,8,.34);
+}
+.animation-render-state-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+}
+.animation-render-state-grid strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  font-weight: 550;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .animation-render-state-grid {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .animation-render-state-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }

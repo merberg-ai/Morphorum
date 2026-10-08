@@ -26,6 +26,7 @@ from .animation_motion import (
 from .animation_resolution import resolve_project_frame, validate_project_schedules
 from .console import emit_console
 from .generation import GenerationError, GenerationRequest, generation_manager
+from .loras import lora_catalog
 from .model_index import get_model
 from .paths import OUTPUTS_DIR
 
@@ -288,6 +289,115 @@ def _prompt_conditioning_kwargs(
     )
 
 
+def _prompt_state_for_frame(
+    resolved: dict[str, Any],
+    *,
+    applied: bool,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    prompts = resolved.get("prompts", {}) if isinstance(resolved, dict) else {}
+    positive = prompts.get("positive", {}) if isinstance(prompts, dict) else {}
+    negative = prompts.get("negative", {}) if isinstance(prompts, dict) else {}
+
+    def transition(value: Any) -> dict[str, Any]:
+        source = value if isinstance(value, dict) else {}
+        return {
+            "mode": str(source.get("mode") or "blend"),
+            "from_frame": int(source.get("from_frame") or 0),
+            "to_frame": int(source.get("to_frame") or 0),
+            "from_text": str(source.get("from_text") or ""),
+            "to_text": str(source.get("to_text") or ""),
+            "from_weight": float(source.get("from_weight") or 0.0),
+            "to_weight": float(source.get("to_weight") or 0.0),
+        }
+
+    return {
+        "frame": int(resolved.get("frame") or 0),
+        "applied": bool(applied),
+        "reason": reason,
+        "positive": transition(positive),
+        "negative": transition(negative),
+        "loras": deepcopy(resolved.get("loras", [])),
+    }
+
+
+def _transform_telemetry(
+    matrix: np.ndarray,
+    *,
+    width: int,
+    height: int,
+) -> dict[str, Any]:
+    transform = np.asarray(matrix, dtype=np.float64)
+    center = np.array(
+        [(width - 1) / 2.0, (height - 1) / 2.0, 1.0],
+        dtype=np.float64,
+    )
+    mapped_center = transform @ center
+    scale = float(np.hypot(transform[0, 0], transform[1, 0]))
+    rotation = float(np.degrees(np.arctan2(transform[1, 0], transform[0, 0])))
+    return {
+        "zoom": scale,
+        "rotation_degrees": rotation,
+        "center_offset_x": float(mapped_center[0] - center[0]),
+        "center_offset_y": float(mapped_center[1] - center[1]),
+        "matrix": [
+            [float(value) for value in row]
+            for row in transform.tolist()
+        ],
+    }
+
+
+def _frame_state_for_frame(
+    resolved: dict[str, Any],
+    *,
+    seed: int,
+    diffusion_mode: str,
+    motion_applied: bool,
+    cumulative_matrix: np.ndarray,
+) -> dict[str, Any]:
+    motion = resolved.get("motion", {})
+    generation = resolved.get("generation", {})
+    retention_strength = float(generation.get("strength", 0.0))
+    denoise_strength = (
+        1.0 - retention_strength
+        if diffusion_mode in {"img2img", "transform-only"}
+        else None
+    )
+    dimensions = resolved.get("dimensions", {})
+    width = int(dimensions.get("width") or 1)
+    height = int(dimensions.get("height") or 1)
+    seed_state = generation.get("seed", {})
+    return {
+        "frame": int(resolved.get("frame") or 0),
+        "motion_applied": bool(motion_applied),
+        "motion": {
+            "angle": float(motion.get("angle", 0.0)),
+            "zoom": float(motion.get("zoom", 1.0)),
+            "translation_x": float(motion.get("translation_x", 0.0)),
+            "translation_y": float(motion.get("translation_y", 0.0)),
+            "border_mode": str(motion.get("border_mode") or "replicate"),
+        },
+        "cumulative_2d": _transform_telemetry(
+            cumulative_matrix,
+            width=width,
+            height=height,
+        ),
+        "generation": {
+            "strength": retention_strength,
+            "denoise_strength": denoise_strength,
+            "noise": float(generation.get("noise", 0.0)),
+            "steps": int(generation.get("steps", 1)),
+            "guidance": float(generation.get("guidance", 0.0)),
+            "sampler": str(generation.get("sampler") or ""),
+            "seed": int(seed),
+            "seed_behavior": str(seed_state.get("behavior") or "fixed"),
+            "seed_increment": int(seed_state.get("increment") or 0),
+            "random_at_render": bool(seed_state.get("random_at_render")),
+            "diffusion_mode": str(diffusion_mode),
+        },
+    }
+
+
 def _add_uniform_noise(
     image: Image.Image,
     *,
@@ -428,6 +538,8 @@ class AnimationRenderJob:
     frame_seconds: float | None = None
     average_frame_seconds: float | None = None
     preview: dict[str, Any] | None = None
+    current_prompt_state: dict[str, Any] = field(default_factory=dict)
+    current_frame_state: dict[str, Any] = field(default_factory=dict)
     resumed: bool = False
     _frame_times: list[float] = field(default_factory=list, repr=False)
 
@@ -486,8 +598,25 @@ class AnimationRenderManager:
         total = int(project.get("animation", {}).get("max_frames", 0))
         seeds: list[int] = []
         rng = random.SystemRandom()
+        records: list[dict[str, Any]] | None = None
+        positive_prompts = project.get("prompts", {})
+        has_lora_tags = any(
+            "<lora:" in str(value or "").lower()
+            for value in (
+                positive_prompts.values()
+                if isinstance(positive_prompts, dict)
+                else []
+            )
+        )
+        if has_lora_tags:
+            records = lora_catalog()
+
         for frame in range(total):
-            resolved = resolve_project_frame(project, frame)
+            resolved = resolve_project_frame(
+                project,
+                frame,
+                lora_records=records,
+            )
             seed = resolved.get("generation", {}).get("seed", {})
             value = seed.get("resolved")
             if value is None:
@@ -658,6 +787,8 @@ class AnimationRenderManager:
             load_phase=str(payload.get("load_phase") or ""),
             load_message=str(payload.get("load_message") or ""),
             load_detail=payload.get("load_detail"),
+            current_prompt_state=deepcopy(payload.get("current_prompt_state") or {}),
+            current_frame_state=deepcopy(payload.get("current_frame_state") or {}),
             resumed=True,
         )
         with self._lock:
@@ -839,6 +970,17 @@ class AnimationRenderManager:
         pipe = None
         generator_device = "cpu"
         conditioning_cache: dict[tuple[Any, ...], Any] = {}
+        lora_records: list[dict[str, Any]] | None = None
+        positive_prompts = project.get("prompts", {})
+        if any(
+            "<lora:" in str(value or "").lower()
+            for value in (
+                positive_prompts.values()
+                if isinstance(positive_prompts, dict)
+                else []
+            )
+        ):
+            lora_records = lora_catalog()
 
         def on_model_load(
             progress: float,
@@ -857,11 +999,43 @@ class AnimationRenderManager:
         render_dir = _render_dir(job.project_id, job.id)
         copied_source = render_dir / "source.png"
 
+        cumulative_matrix = np.eye(3, dtype=np.float64)
+        if start_frame > 1:
+            for completed_frame in range(1, start_frame):
+                prior_resolved = resolve_project_frame(
+                    project,
+                    completed_frame,
+                    lora_records=lora_records,
+                )
+                prior_motion = prior_resolved["motion"]
+                prior_step = _frame_transform_matrix(
+                    width=width,
+                    height=height,
+                    angle=float(prior_motion["angle"]),
+                    zoom=float(prior_motion["zoom"]),
+                    translation_x=float(prior_motion["translation_x"]),
+                    translation_y=float(prior_motion["translation_y"]),
+                )
+                cumulative_matrix = prior_step @ cumulative_matrix
+
         if start_frame == 0:
-            resolved = resolve_project_frame(project, 0)
+            resolved = resolve_project_frame(project, 0, lora_records=lora_records)
             seed = int(job.seed_plan[0])
 
             if start_mode == "source":
+                with self._lock:
+                    job.current_prompt_state = _prompt_state_for_frame(
+                        resolved,
+                        applied=False,
+                        reason="Frame 0 uses the uploaded starting image; diffusion is not applied.",
+                    )
+                    job.current_frame_state = _frame_state_for_frame(
+                        resolved,
+                        seed=seed,
+                        diffusion_mode="source",
+                        motion_applied=False,
+                        cumulative_matrix=cumulative_matrix,
+                    )
                 with Image.open(copied_source) as opened:
                     frame_image = _prepare_source(opened, width, height)
                 start_metadata = {
@@ -870,6 +1044,18 @@ class AnimationRenderManager:
                 }
                 job.message = f"Prepared starting image frame 1 of {total}"
             else:
+                with self._lock:
+                    job.current_prompt_state = _prompt_state_for_frame(
+                        resolved,
+                        applied=True,
+                    )
+                    job.current_frame_state = _frame_state_for_frame(
+                        resolved,
+                        seed=seed,
+                        diffusion_mode="txt2img",
+                        motion_applied=False,
+                        cumulative_matrix=cumulative_matrix,
+                    )
                 generation = resolved["generation"]
                 positive = resolved["prompts"]["positive"]
                 negative = resolved["prompts"]["negative"]
@@ -888,6 +1074,7 @@ class AnimationRenderManager:
                     seed=seed,
                     seed_mode="fixed",
                     images=1,
+                    loras=deepcopy(resolved.get("loras", [])),
                 )
 
                 with self._lock:
@@ -1001,6 +1188,7 @@ class AnimationRenderManager:
                     "start_mode": start_mode,
                     **start_metadata,
                     "resolved": resolved,
+                    "render_state": deepcopy(job.current_frame_state),
                 },
             )
             job.results = [
@@ -1037,7 +1225,7 @@ class AnimationRenderManager:
                 return
 
             frame_started = time.monotonic()
-            resolved = resolve_project_frame(project, frame)
+            resolved = resolve_project_frame(project, frame, lora_records=lora_records)
             motion = resolved["motion"]
             step_matrix = _frame_transform_matrix(
                 width=width,
@@ -1052,6 +1240,7 @@ class AnimationRenderManager:
                 step_matrix,
                 border_mode=border_mode,
             )
+            cumulative_matrix = step_matrix @ cumulative_matrix
 
             generation = resolved["generation"]
             retention_strength = float(generation["strength"])
@@ -1061,6 +1250,24 @@ class AnimationRenderManager:
                     "Deforum-style strength must be between 0 and 1."
                 )
             denoise_strength = 1.0 - retention_strength
+
+            with self._lock:
+                job.current_prompt_state = _prompt_state_for_frame(
+                    resolved,
+                    applied=denoise_strength > 0.0,
+                    reason=(
+                        None
+                        if denoise_strength > 0.0
+                        else "Retention strength is 1.0, so this frame skips diffusion."
+                    ),
+                )
+                job.current_frame_state = _frame_state_for_frame(
+                    resolved,
+                    seed=int(job.seed_plan[frame]),
+                    diffusion_mode=("img2img" if denoise_strength > 0.0 else "transform-only"),
+                    motion_applied=True,
+                    cumulative_matrix=cumulative_matrix,
+                )
 
             positive = resolved["prompts"]["positive"]
             negative = resolved["prompts"]["negative"]
@@ -1096,6 +1303,7 @@ class AnimationRenderManager:
                     seed=seed,
                     seed_mode="fixed",
                     images=1,
+                    loras=deepcopy(resolved.get("loras", [])),
                 )
 
                 pipe, generator_device, validated_model = (
@@ -1208,6 +1416,7 @@ class AnimationRenderManager:
                     "family": family,
                     "variant": generation_manager._model_variant(model),
                     "resolved": resolved,
+                    "render_state": deepcopy(job.current_frame_state),
                 },
             )
 

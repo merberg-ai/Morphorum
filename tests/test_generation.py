@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 import morphorum.generation as generation
+import morphorum.loras as loras_module
 from morphorum.generation import GenerationError, GenerationJob, GenerationManager, GenerationRequest
 
 
@@ -88,15 +89,39 @@ def test_incomplete_zimage_managed_package_is_rejected(tmp_path, monkeypatch) ->
         )
 
 
-def test_lora_tag_is_recognized_but_rejected_until_loader_lands(tmp_path, monkeypatch) -> None:
+def test_lora_tag_is_resolved_and_removed_from_prompt(tmp_path, monkeypatch) -> None:
     checkpoint = tmp_path / "model.safetensors"
     checkpoint.write_bytes(b"fake")
+    lora = tmp_path / "detail.safetensors"
+    lora.write_bytes(b"fake-lora")
     monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint, "sdxl"))
+    monkeypatch.setattr(
+        loras_module,
+        "list_models",
+        lambda **_kwargs: [
+            {
+                "id": "lora-detail",
+                "family": "sdxl",
+                "kind": "loras",
+                "name": "detail",
+                "filename": lora.name,
+                "path": str(lora),
+                "size_bytes": lora.stat().st_size,
+                "preview_path": None,
+            }
+        ],
+    )
     manager = GenerationManager()
-    with pytest.raises(GenerationError, match="LoRA loading"):
-        manager._validate_request(
-            GenerationRequest(model_id="model-1", prompt="portrait <lora:detail:0.8>")
-        )
+    request = GenerationRequest(
+        model_id="model-1",
+        prompt="portrait <lora:detail:0.8>",
+    )
+
+    manager._validate_request(request)
+
+    assert request.prompt == "portrait"
+    assert request.loras[0]["id"] == "lora-detail"
+    assert request.loras[0]["weight"] == pytest.approx(0.8)
 
 
 def test_first_adapter_rejects_indexed_unsupported_checkpoint_extension(tmp_path, monkeypatch) -> None:
@@ -613,3 +638,89 @@ def test_model_load_progress_callback_is_clamped() -> None:
     )
 
     assert events == [(1.0, "ready", "done", "detail")]
+
+
+
+class FakeLoRAPipe:
+    def __init__(self) -> None:
+        self.loads: list[dict] = []
+        self.adapter_calls: list[tuple[list[str], list[float]]] = []
+        self.disabled = 0
+        self.enabled = 0
+
+    def load_lora_weights(self, path, **kwargs):
+        self.loads.append({"path": path, **kwargs})
+
+    def set_adapters(self, names, adapter_weights=None):
+        self.adapter_calls.append((list(names), list(adapter_weights or [])))
+
+    def disable_lora(self):
+        self.disabled += 1
+
+    def enable_lora(self):
+        self.enabled += 1
+
+
+def test_lora_adapter_loads_once_reweights_and_disables(tmp_path) -> None:
+    path = tmp_path / "horror.safetensors"
+    path.write_bytes(b"fake-lora")
+    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    manager = GenerationManager()
+    pipe = FakeLoRAPipe()
+    base = {
+        "id": "horror-id",
+        "family": "sdxl",
+        "name": "horror",
+        "path": str(path),
+        "adapter_name": "morphorum_horror-id",
+    }
+
+    manager.configure_loras(pipe, model, [{**base, "weight": 0.25}])
+    manager.configure_loras(pipe, model, [{**base, "weight": 0.75}])
+    manager.configure_loras(pipe, model, [])
+
+    assert len(pipe.loads) == 1
+    assert pipe.loads[0]["weight_name"] == path.name
+    assert pipe.loads[0]["adapter_name"] == "morphorum_horror-id"
+    assert pipe.adapter_calls == [
+        (["morphorum_horror-id"], [0.25]),
+        (["morphorum_horror-id"], [0.75]),
+    ]
+    assert pipe.disabled == 1
+    assert manager._active_lora_signature == ()
+
+
+def test_lora_adapter_rejects_family_mismatch(tmp_path) -> None:
+    path = tmp_path / "flux-style.safetensors"
+    path.write_bytes(b"fake-lora")
+    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    manager = GenerationManager()
+
+    with pytest.raises(GenerationError, match="active model family is sdxl"):
+        manager.configure_loras(
+            FakeLoRAPipe(),
+            model,
+            [{
+                "id": "flux-lora",
+                "family": "flux",
+                "name": "flux-style",
+                "path": str(path),
+                "adapter_name": "morphorum_flux-lora",
+                "weight": 1.0,
+            }],
+        )
+
+
+
+def test_supported_pipeline_families_expose_lora_adapter_api() -> None:
+    from diffusers import FluxPipeline, StableDiffusionXLPipeline, ZImagePipeline
+
+    for pipeline_class in (
+        StableDiffusionXLPipeline,
+        FluxPipeline,
+        ZImagePipeline,
+    ):
+        assert callable(getattr(pipeline_class, "load_lora_weights", None))
+        assert callable(getattr(pipeline_class, "set_adapters", None))
+        assert callable(getattr(pipeline_class, "disable_lora", None))
+        assert callable(getattr(pipeline_class, "enable_lora", None))

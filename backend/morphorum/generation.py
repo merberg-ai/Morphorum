@@ -4,7 +4,6 @@ import gc
 import json
 import math
 import random
-import re
 import threading
 import time
 import uuid
@@ -17,6 +16,7 @@ from typing import Any
 from PIL.PngImagePlugin import PngInfo
 
 from .console import emit_console
+from .loras import LoRAError, parse_and_resolve_prompt_loras
 from .model_index import get_model
 from .paths import CACHE_DIR, OUTPUTS_DIR, ensure_runtime_dirs
 from .settings import load_settings
@@ -27,8 +27,6 @@ FAMILY_IMAGE_EXTENSIONS = {
     "flux": {".safetensors"},
 }
 FLUX_COMPONENT_REPO = "black-forest-labs/FLUX.1-schnell"
-LORA_TAG = re.compile(r"<lora:([^:>]+):([+-]?(?:\d+(?:\.\d*)?|\.\d+))>", re.IGNORECASE)
-
 CAPABILITIES: dict[str, dict[str, Any]] = {
     "sdxl": {
         "supported": True,
@@ -169,6 +167,7 @@ class GenerationRequest:
     seed_mode: str = "fixed"
     seed_increment: int = 1
     images: int = 1
+    loras: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "GenerationRequest":
@@ -236,6 +235,8 @@ class GenerationManager:
         self._pipeline_sampler: str | None = None
         self._pipeline_optimization: str | None = None
         self._pipeline_task: str | None = None
+        self._pipeline_loras: dict[str, dict[str, Any]] = {}
+        self._active_lora_signature: tuple[tuple[str, float], ...] = ()
         self._inference_lock = threading.Lock()
 
     def capabilities(self) -> dict[str, dict[str, Any]]:
@@ -261,6 +262,19 @@ class GenerationManager:
             "sampler": self._pipeline_sampler,
             "optimization": self._pipeline_optimization,
             "task": self._pipeline_task,
+            "loras": [
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "family": item["family"],
+                    "adapter_name": item["adapter_name"],
+                }
+                for item in self._pipeline_loras.values()
+            ],
+            "active_loras": [
+                {"adapter_name": name, "weight": weight}
+                for name, weight in self._active_lora_signature
+            ],
             "busy": active,
         }
 
@@ -412,10 +426,26 @@ class GenerationManager:
                 )
         if not request.prompt:
             raise GenerationError("Prompt cannot be empty.")
-        if LORA_TAG.search(request.prompt) or LORA_TAG.search(request.negative_prompt):
-            raise GenerationError(
-                "LoRA tags are recognized, but LoRA loading is the next adapter step. Remove the <lora:…> tag for this first image test."
+        try:
+            clean_prompt, clean_negative, prompt_loras = parse_and_resolve_prompt_loras(
+                request.prompt,
+                request.negative_prompt,
+                family,
             )
+        except LoRAError as exc:
+            raise GenerationError(str(exc)) from exc
+        request.prompt = clean_prompt
+        request.negative_prompt = clean_negative
+        if prompt_loras:
+            request.loras = prompt_loras
+        for lora in request.loras:
+            if str(lora.get("family") or "").lower() != family:
+                raise GenerationError(
+                    f"LoRA '{lora.get('name') or lora.get('requested_name')}' is for "
+                    f"{lora.get('family')}, but the active model family is {family}."
+                )
+        if not request.prompt:
+            raise GenerationError("Prompt cannot be empty after removing LoRA directives.")
         if request.width < 64 or request.height < 64 or request.width > 4096 or request.height > 4096:
             raise GenerationError("Width and height must be between 64 and 4096 pixels.")
         divisor = 16 if family in {"flux", "zimage"} else 8
@@ -1173,6 +1203,7 @@ class GenerationManager:
             load_progress_callback,
         )
         self._configure_sampler(pipe, model["family"], request.sampler)
+        self.configure_loras(pipe, model, request.loras)
         return pipe, generator_device, model
 
     def build_txt2img_call_args(
@@ -1208,6 +1239,7 @@ class GenerationManager:
             load_progress_callback,
         )
         self._configure_sampler(pipe, model["family"], request.sampler)
+        self.configure_loras(pipe, model, request.loras)
         return pipe, generator_device, model
 
     def build_img2img_call_args(
@@ -1320,6 +1352,111 @@ class GenerationManager:
         )
         return pipe, generator_device
 
+    def configure_loras(
+        self,
+        pipe: Any,
+        model: dict[str, Any],
+        loras: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
+        requested = [
+            dict(item)
+            for item in (loras or [])
+            if isinstance(item, dict)
+        ]
+        family = str(model.get("family") or "").strip().lower()
+
+        if not requested:
+            if self._active_lora_signature:
+                disable = getattr(pipe, "disable_lora", None)
+                if callable(disable):
+                    disable()
+                self._active_lora_signature = ()
+                emit_console("info", "generation", "LoRA adapters disabled for base-model inference.")
+            return []
+
+        load = getattr(pipe, "load_lora_weights", None)
+        set_adapters = getattr(pipe, "set_adapters", None)
+        if not callable(load) or not callable(set_adapters):
+            raise GenerationError(
+                f"The loaded {family} pipeline does not expose Diffusers LoRA adapter APIs."
+            )
+
+        adapter_names: list[str] = []
+        weights: list[float] = []
+        for item in requested:
+            item_family = str(item.get("family") or "").strip().lower()
+            if item_family != family:
+                raise GenerationError(
+                    f"LoRA '{item.get('name') or item.get('requested_name')}' is for "
+                    f"{item_family or 'unknown'}, but the active model family is {family}."
+                )
+            lora_id = str(item.get("id") or "").strip()
+            path = Path(str(item.get("path") or ""))
+            if not lora_id or not path.is_file():
+                raise GenerationError(
+                    f"LoRA '{item.get('name') or item.get('requested_name')}' is missing from disk. "
+                    "Rescan Models and verify its LoRA directory."
+                )
+            adapter_name = str(item.get("adapter_name") or f"morphorum_{lora_id}")
+            weight = float(item.get("weight", 1.0))
+
+            if lora_id not in self._pipeline_loras:
+                try:
+                    load(
+                        str(path.parent),
+                        weight_name=path.name,
+                        adapter_name=adapter_name,
+                        local_files_only=True,
+                    )
+                except Exception as exc:
+                    raise GenerationError(
+                        f"Could not load {family} LoRA '{item.get('name') or path.name}': {exc}"
+                    ) from exc
+                self._pipeline_loras[lora_id] = {
+                    "id": lora_id,
+                    "name": str(item.get("name") or path.stem),
+                    "family": family,
+                    "path": str(path),
+                    "adapter_name": adapter_name,
+                }
+                emit_console(
+                    "info",
+                    "generation",
+                    f"Loaded {family} LoRA adapter: {path.name}.",
+                )
+
+            adapter_names.append(
+                str(self._pipeline_loras[lora_id]["adapter_name"])
+            )
+            weights.append(weight)
+
+        signature = tuple(zip(adapter_names, weights))
+        if signature != self._active_lora_signature:
+            enable = getattr(pipe, "enable_lora", None)
+            if callable(enable):
+                enable()
+            try:
+                set_adapters(adapter_names, adapter_weights=weights)
+            except TypeError:
+                set_adapters(adapter_names, weights)
+            except Exception as exc:
+                raise GenerationError(
+                    f"Could not activate LoRA adapters for {family}: {exc}"
+                ) from exc
+            self._active_lora_signature = signature
+            emit_console(
+                "info",
+                "generation",
+                "Active LoRAs: "
+                + ", ".join(
+                    f"{name}={weight:g}"
+                    for name, weight in signature
+                ),
+            )
+
+        return requested
+
+
     def _configure_sampler(self, pipe: Any, family: str, sampler: str) -> None:
         base_config = self._pipeline_scheduler_config or dict(pipe.scheduler.config)
 
@@ -1385,6 +1522,8 @@ class GenerationManager:
         self._pipeline_sampler = None
         self._pipeline_optimization = None
         self._pipeline_task = None
+        self._pipeline_loras = {}
+        self._active_lora_signature = ()
 
         # Always collect here, even if model loading failed before the pipeline
         # could be registered on the manager.
@@ -1439,6 +1578,7 @@ class GenerationManager:
         load_started = time.monotonic()
         pipe, device = self._load_pipeline(job)
         self._configure_sampler(pipe, job.model["family"], job.request.sampler)
+        self.configure_loras(pipe, job.model, job.request.loras)
         job.model_load_seconds = max(0.0, time.monotonic() - load_started)
         job._started_monotonic = time.monotonic()
         job._last_step_monotonic = None
@@ -1530,6 +1670,7 @@ class GenerationManager:
                 "variant": self._model_variant(job.model),
                 "prompt": job.request.prompt,
                 "negative_prompt": job.request.negative_prompt,
+                "loras": job.request.loras,
                 "seed": seed,
                 "width": job.request.width,
                 "height": job.request.height,

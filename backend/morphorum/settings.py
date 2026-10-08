@@ -11,9 +11,24 @@ import yaml
 from .paths import DEFAULT_CONFIG, ROOT, USER_CONFIG, ensure_runtime_dirs
 
 MODEL_FAMILY_DEFS = {
-    "sdxl": {"label": "SDXL", "supports_loras": True, "source": "external"},
-    "flux": {"label": "Flux", "supports_loras": True, "source": "external"},
-    "zimage": {"label": "Z-Image", "supports_loras": True, "source": "managed"},
+    "sdxl": {
+        "label": "SDXL",
+        "supports_loras": True,
+        "source": "external",
+        "lora_source": "external",
+    },
+    "flux": {
+        "label": "Flux",
+        "supports_loras": True,
+        "source": "external",
+        "lora_source": "external",
+    },
+    "zimage": {
+        "label": "Z-Image",
+        "supports_loras": True,
+        "source": "managed",
+        "lora_source": "external",
+    },
 }
 MODEL_FAMILIES = tuple(MODEL_FAMILY_DEFS)
 EXTERNAL_MODEL_FAMILIES = tuple(
@@ -23,6 +38,11 @@ EXTERNAL_MODEL_FAMILIES = tuple(
 MANAGED_MODEL_FAMILIES = tuple(
     family for family, definition in MODEL_FAMILY_DEFS.items()
     if definition.get("source") == "managed"
+)
+LORA_PATH_FAMILIES = tuple(
+    family for family, definition in MODEL_FAMILY_DEFS.items()
+    if definition.get("supports_loras")
+    and definition.get("lora_source", "external") == "external"
 )
 MODEL_PATH_KEYS = ("checkpoints", "loras")
 
@@ -63,12 +83,20 @@ def _normalize_model_paths(settings: dict[str, Any]) -> dict[str, Any]:
         models = {}
         settings["models"] = models
 
-    for family in EXTERNAL_MODEL_FAMILIES:
+    for family in MODEL_FAMILIES:
+        definition = MODEL_FAMILY_DEFS[family]
         family_settings = models.setdefault(family, {})
         if not isinstance(family_settings, dict):
             family_settings = {}
             models[family] = family_settings
-        for path_key in MODEL_PATH_KEYS:
+
+        path_keys: list[str] = []
+        if definition.get("source") == "external":
+            path_keys.append("checkpoints")
+        if family in LORA_PATH_FAMILIES:
+            path_keys.append("loras")
+
+        for path_key in path_keys:
             paths = family_settings.setdefault(path_key, [])
             if not isinstance(paths, list):
                 paths = []
@@ -239,11 +267,16 @@ def validate_model_paths(settings: dict[str, Any] | None = None) -> list[dict[st
     models = source.get("models", {}) if isinstance(source, dict) else {}
     results: list[dict[str, Any]] = []
 
-    for family in EXTERNAL_MODEL_FAMILIES:
+    for family in MODEL_FAMILIES:
         family_settings = models.get(family, {}) if isinstance(models, dict) else {}
         if not isinstance(family_settings, dict):
             continue
-        for path_key in MODEL_PATH_KEYS:
+        path_keys: list[str] = []
+        if family in EXTERNAL_MODEL_FAMILIES:
+            path_keys.append("checkpoints")
+        if family in LORA_PATH_FAMILIES:
+            path_keys.append("loras")
+        for path_key in path_keys:
             for raw_path in family_settings.get(path_key, []) or []:
                 result = validate_path(str(raw_path))
                 result.update({"family": family, "kind": path_key})

@@ -2,9 +2,9 @@
   'use strict';
 
   let FAMILY_DEFS = [
-    ['sdxl', 'SDXL', 'external'],
-    ['flux', 'Flux', 'external'],
-    ['zimage', 'Z-Image', 'managed'],
+    ['sdxl', 'SDXL', 'external', 'external', true],
+    ['flux', 'Flux', 'external', 'external', true],
+    ['zimage', 'Z-Image', 'managed', 'external', true],
   ];
 
   const PATH_KINDS = [
@@ -555,8 +555,8 @@
     container.appendChild(createAppearanceCard());
     container.appendChild(createPreferencesCard());
     container.appendChild(createManagedModelsCard());
-    for (const [family, fallbackLabel, source] of FAMILY_DEFS) {
-      if (source === 'managed') continue;
+    for (const [family, fallbackLabel, source, loraSource, supportsLoras] of FAMILY_DEFS) {
+      if (source === 'managed' && !(supportsLoras && loraSource === 'external')) continue;
       const familyData = ensureFamily(family);
       const card = document.createElement('article');
       card.className = 'card glass family-card';
@@ -573,12 +573,17 @@
       headingWrap.append(heading, code);
       const count = document.createElement('span');
       count.className = 'badge';
-      count.textContent = `${familyData.checkpoints.length} model path${familyData.checkpoints.length === 1 ? '' : 's'}`;
+      const modelCount = source === 'external' ? familyData.checkpoints.length : 0;
+      const loraCount = supportsLoras && loraSource === 'external' ? familyData.loras.length : 0;
+      count.textContent = `${modelCount} model path${modelCount === 1 ? '' : 's'} · ${loraCount} LoRA path${loraCount === 1 ? '' : 's'}`;
       header.append(headingWrap, count);
       card.appendChild(header);
 
-      for (const [kind, label] of PATH_KINDS) {
-        card.appendChild(createPathSection(family, kind, label));
+      if (source === 'external') {
+        card.appendChild(createPathSection(family, 'checkpoints', 'Model / checkpoint directories'));
+      }
+      if (supportsLoras && loraSource === 'external') {
+        card.appendChild(createPathSection(family, 'loras', 'LoRA directories'));
       }
       container.appendChild(card);
     }
@@ -594,7 +599,13 @@
       const payload = await api('/api/settings');
       state.settings = payload.settings || {};
       if (Array.isArray(payload.model_families) && payload.model_families.length) {
-        FAMILY_DEFS = payload.model_families.map(item => [item.id, item.label || item.id, item.source || 'external']);
+        FAMILY_DEFS = payload.model_families.map(item => [
+          item.id,
+          item.label || item.id,
+          item.source || 'external',
+          item.lora_source || 'external',
+          Boolean(item.supports_loras),
+        ]);
       }
       ingestValidation(payload.validation || []);
       ensurePreferences();
@@ -612,13 +623,16 @@
 
   function modelSettingsPayload() {
     const models = {};
-    for (const [family, , familySource] of FAMILY_DEFS) {
-      if (familySource === 'managed') continue;
+    for (const [family, , familySource, loraSource, supportsLoras] of FAMILY_DEFS) {
       const source = ensureFamily(family);
-      models[family] = {
-        checkpoints: (source.checkpoints || []).map(value => String(value).trim()).filter(Boolean),
-        loras: (source.loras || []).map(value => String(value).trim()).filter(Boolean),
-      };
+      const familyPayload = {};
+      if (familySource === 'external') {
+        familyPayload.checkpoints = (source.checkpoints || []).map(value => String(value).trim()).filter(Boolean);
+      }
+      if (supportsLoras && loraSource === 'external') {
+        familyPayload.loras = (source.loras || []).map(value => String(value).trim()).filter(Boolean);
+      }
+      if (Object.keys(familyPayload).length) models[family] = familyPayload;
     }
     ensurePreferences();
     const managed = ensureManagedModels();

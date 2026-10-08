@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+import morphorum.animation_resolution as animation_resolution
+from morphorum.animation_timeline import build_tracks_from_legacy
 from morphorum.animation_resolution import (
     project_schedule_series,
     resolve_project_frame,
@@ -112,3 +114,158 @@ def test_project_schedule_series() -> None:
 def test_unknown_schedule_field_is_rejected() -> None:
     with pytest.raises(Exception, match="Unknown animation schedule field"):
         project_schedule_series(sample_project(), "motion.teleport")
+
+
+
+def test_resolver_prefers_canonical_tracks_over_legacy_mirror() -> None:
+    project = sample_project()
+    project["schema_version"] = 2
+    project["tracks"] = build_tracks_from_legacy(project)
+    project["tracks"]["camera_2d"]["zoom"]["schedule"] = "0:(1.0), 100:(1.5)"
+    project["tracks"]["prompts"]["positive"]["keyframes"] = [
+        {"frame": 0, "value": "ocean"},
+        {"frame": 100, "value": "desert"},
+    ]
+
+    resolved = resolve_project_frame(project, 50)
+
+    assert resolved["timeline"] == {"schema_version": 1, "source": "tracks"}
+    assert resolved["motion"]["zoom"] == pytest.approx(1.25)
+    assert resolved["prompts"]["positive"]["from_text"] == "ocean"
+    assert resolved["prompts"]["positive"]["to_text"] == "desert"
+    assert resolved["prompts"]["positive"]["from_weight"] == pytest.approx(0.5)
+
+
+def test_numeric_track_hold_interpolation_is_respected() -> None:
+    project = sample_project()
+    project["tracks"] = build_tracks_from_legacy(project)
+    project["tracks"]["camera_2d"]["zoom"]["schedule"] = "0:(1.0), 100:(1.5)"
+    project["tracks"]["camera_2d"]["zoom"]["interpolation"] = "hold"
+
+    resolved = resolve_project_frame(project, 50)
+    series = project_schedule_series(project, "motion.zoom", sample_count=5)
+
+    assert resolved["motion"]["zoom"] == pytest.approx(1.0)
+    assert series["interpolation"] == "hold"
+    assert series["samples"][2]["value"] == pytest.approx(1.0)
+
+
+def test_prompt_tracks_can_use_independent_transition_modes() -> None:
+    project = sample_project()
+    project["tracks"] = build_tracks_from_legacy(project)
+    project["tracks"]["prompts"]["positive"]["interpolation"] = "hold"
+    project["tracks"]["prompts"]["negative"]["interpolation"] = "blend"
+
+    resolved = resolve_project_frame(project, 50)
+
+    positive = resolved["prompts"]["positive"]
+    negative = resolved["prompts"]["negative"]
+    assert positive["mode"] == "hold"
+    assert positive["from_text"] == "forest"
+    assert positive["to_weight"] == pytest.approx(0.0)
+    assert negative["mode"] == "blend"
+    assert negative["from_weight"] == pytest.approx(0.5)
+    assert negative["to_weight"] == pytest.approx(0.5)
+
+
+
+def test_resolved_frame_strips_prompt_lora_and_interpolates_weight(tmp_path) -> None:
+    lora = tmp_path / "horror.safetensors"
+    lora.write_bytes(b"fake")
+    project = sample_project()
+    project["model"]["family"] = "sdxl"
+    project["prompts"] = {
+        "0": "forest <lora:horror:0.0>",
+        "100": "city <lora:horror:1.0>",
+    }
+    records = [{
+        "id": "horror-id",
+        "family": "sdxl",
+        "kind": "loras",
+        "name": "horror",
+        "filename": lora.name,
+        "path": str(lora),
+        "size_bytes": lora.stat().st_size,
+        "preview_path": None,
+    }]
+
+    resolved = resolve_project_frame(
+        project,
+        50,
+        lora_records=records,
+    )
+
+    assert resolved["prompts"]["positive"]["from_text"] == "forest"
+    assert resolved["prompts"]["positive"]["to_text"] == "city"
+    assert resolved["loras"][0]["id"] == "horror-id"
+    assert resolved["loras"][0]["weight"] == pytest.approx(0.5)
+
+
+
+def test_validate_project_schedules_rejects_wrong_family_lora(monkeypatch) -> None:
+    project = sample_project()
+    project["model"]["family"] = "flux"
+    project["prompts"] = {
+        "0": "forest <lora:horror:0.8>",
+        "100": "city",
+    }
+    monkeypatch.setattr(
+        animation_resolution,
+        "lora_catalog",
+        lambda: [
+            {
+                "id": "sdxl-horror",
+                "family": "sdxl",
+                "kind": "loras",
+                "name": "horror",
+                "filename": "horror.safetensors",
+                "path": "/fake/horror.safetensors",
+                "size_bytes": 1,
+                "preview_path": None,
+            }
+        ],
+    )
+
+    result = validate_project_schedules(project)
+
+    assert result["valid"] is False
+    issue = next(
+        item
+        for item in result["issues"]
+        if item["field"] == "tracks.prompts.positive"
+    )
+    assert "found for sdxl" in issue["message"]
+    assert "active model family is flux" in issue["message"]
+
+
+
+def test_zoom_validation_rejects_zero_and_negative_deforum_factors() -> None:
+    for schedule in ("0:(0)", "0:(-0.5)"):
+        project = sample_project()
+        project["motion"]["zoom"] = schedule
+        result = validate_project_schedules(project)
+
+        assert result["valid"] is False
+        issue = next(
+            item for item in result["issues"]
+            if item["field"] == "motion.zoom" and item["severity"] == "error"
+        )
+        assert "positive multiplicative factor" in issue["message"]
+        assert "0.995" in issue["message"]
+
+
+def test_zoom_validation_warns_when_compounding_becomes_extreme() -> None:
+    project = sample_project()
+    project["animation"]["max_frames"] = 60
+    project["motion"]["zoom"] = "0:(1.05)"
+
+    result = validate_project_schedules(project)
+
+    assert result["valid"] is True
+    issue = next(
+        item for item in result["issues"]
+        if item["field"] == "motion.zoom" and item["severity"] == "warning"
+    )
+    assert "compounds every frame" in issue["message"]
+    assert "1.005" in issue["message"]
+    assert "0.995" in issue["message"]

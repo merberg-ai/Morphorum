@@ -11,7 +11,7 @@ from typing import Any
 
 from .console import emit_console
 from .paths import MODEL_INDEX_DB, ensure_runtime_dirs
-from .settings import EXTERNAL_MODEL_FAMILIES, MODEL_PATH_KEYS, load_settings
+from .settings import EXTERNAL_MODEL_FAMILIES, LORA_PATH_FAMILIES, MODEL_FAMILIES, load_settings
 
 CHECKPOINT_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf"}
 LORA_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth"}
@@ -119,11 +119,16 @@ def scan_models() -> dict[str, Any]:
 
     emit_console("info", "model", "Scanning configured model and LoRA directories…")
 
-    for family in EXTERNAL_MODEL_FAMILIES:
+    for family in MODEL_FAMILIES:
         family_settings = model_settings.get(family, {}) if isinstance(model_settings, dict) else {}
         if not isinstance(family_settings, dict):
             continue
-        for kind in MODEL_PATH_KEYS:
+        kinds: list[str] = []
+        if family in EXTERNAL_MODEL_FAMILIES:
+            kinds.append("checkpoints")
+        if family in LORA_PATH_FAMILIES:
+            kinds.append("loras")
+        for kind in kinds:
             extensions = CHECKPOINT_EXTENSIONS if kind == "checkpoints" else LORA_EXTENSIONS
             configured = family_settings.get(kind, []) or []
             for raw_root in configured:

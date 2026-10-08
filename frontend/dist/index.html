@@ -74,6 +74,12 @@
 
             <label class="field-label" for="image-prompt">Prompt</label>
             <textarea id="image-prompt" class="text-area" rows="5" placeholder="Describe the image you want to make…"></textarea>
+            <div class="lora-picker-row" id="image-lora-picker">
+              <select id="image-lora-select" disabled aria-label="LoRA"><option value="">Select a model to browse LoRAs</option></select>
+              <input id="image-lora-weight" type="number" value="1" step="0.05" min="-4" max="4" disabled aria-label="LoRA weight">
+              <button id="image-insert-lora" class="secondary-button compact" type="button" disabled>Insert LoRA</button>
+            </div>
+            <div class="field-help" id="image-lora-help">Morphorum inserts Deforum-style &lt;lora:name:weight&gt; directives into the positive prompt.</div>
             <label class="field-label" for="image-negative-prompt">Negative prompt</label>
             <textarea id="image-negative-prompt" class="text-area" rows="3" placeholder="Things you don't want in the image"></textarea>
 
@@ -128,6 +134,8 @@
             <p class="muted">Build projects, resolve keyframed schedules, inspect exact frame state, and preview motion curves before rendering.</p>
           </div>
           <div class="button-row animation-project-actions">
+            <button class="secondary-button compact" id="animation-collapse-all" type="button">Collapse Sections</button>
+            <button class="secondary-button compact" id="animation-expand-all" type="button">Expand Sections</button>
             <button class="secondary-button busy-button" id="animation-reload" type="button" disabled><span class="spinner"></span><span class="button-label">Reload</span></button>
             <button class="secondary-button busy-button" id="animation-new" type="button"><span class="spinner"></span><span class="button-label">New Project</span></button>
             <button class="primary-button busy-button" id="animation-save" type="button" disabled><span class="spinner"></span><span class="button-label">Save Project</span></button>
@@ -194,6 +202,54 @@
             </div>
           </article>
 
+          <article class="card glass animation-timeline-card" id="animation-timeline-card">
+            <div class="card-header">
+              <div>
+                <h2>Visual Timeline</h2>
+                <p class="muted">Drag keyframes across tracks, edit values at the playhead, and keep Deforum schedules synchronized automatically.</p>
+              </div>
+              <div class="animation-timeline-header-actions">
+                <span class="badge" id="animation-timeline-status">No project</span>
+                <button class="secondary-button compact" id="animation-timeline-refresh" type="button" disabled>Refresh</button>
+              </div>
+            </div>
+
+            <div class="animation-timeline-toolbar">
+              <label class="animation-timeline-track-picker"><span>Track</span><select id="animation-timeline-track-select" disabled><option value="">No track</option></select></label>
+              <label><span>Playhead</span><input id="animation-timeline-frame" type="number" min="0" value="0" disabled></label>
+              <label class="animation-timeline-scale-control"><span>Scale</span><input id="animation-timeline-scale" type="range" min="2" max="14" step="1" value="6" disabled></label>
+              <button class="secondary-button compact" id="animation-timeline-prev-keyframe" type="button" disabled>◀ Prev Keyframe</button>
+              <button class="secondary-button compact" id="animation-timeline-next-keyframe" type="button" disabled>Next Keyframe ▶</button>
+              <button class="primary-button compact" id="animation-timeline-add" type="button" disabled>+ Keyframe Here</button>
+            </div>
+            <label class="animation-timeline-mobile-scrubber"><span>Frame scrubber</span><input id="animation-timeline-scrubber" type="range" min="0" max="119" value="0" disabled></label>
+
+            <div class="animation-timeline-scroll" id="animation-timeline-scroll">
+              <div class="animation-timeline-empty" id="animation-timeline-empty">Create or load a project to view timeline tracks.</div>
+              <div class="animation-timeline-grid" id="animation-timeline-grid" hidden></div>
+            </div>
+            <div class="animation-timeline-keyframe-list" id="animation-timeline-keyframe-list" hidden></div>
+
+            <div class="animation-timeline-editor" id="animation-timeline-editor" hidden>
+              <div class="animation-timeline-selection">
+                <strong id="animation-timeline-selected-track">Select a keyframe</strong>
+                <span id="animation-timeline-selected-meta">Click a track or keyframe to edit it.</span>
+              </div>
+              <label><span>Frame</span><input id="animation-timeline-keyframe-frame" type="number" min="0" value="0"></label>
+              <label class="animation-timeline-value-field"><span>Value / expression</span><textarea id="animation-timeline-keyframe-value" rows="2"></textarea></label>
+              <label><span>Interpolation</span><select id="animation-timeline-interpolation"></select></label>
+              <div class="animation-timeline-editor-actions">
+                <button class="primary-button compact" id="animation-timeline-apply" type="button">Apply</button>
+                <button class="secondary-button compact" id="animation-timeline-delete" type="button">Delete</button>
+              </div>
+            </div>
+
+            <div class="notice subtle animation-timeline-note">
+              <strong>Timeline edits save immediately</strong>
+              <span>Raw schedule fields remain available below as an advanced compatibility editor. Save unsaved form changes before dragging timeline keyframes.</span>
+            </div>
+          </article>
+
           <article class="card glass animation-prompts-card">
             <div class="card-header">
               <div><h2>Prompt Keyframes</h2><p class="muted">Positive and negative prompts resolve into per-frame transition weights.</p></div>
@@ -206,12 +262,12 @@
 
           <article class="card glass">
             <div class="card-header">
-              <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style keyframes and safe math expressions using t, max_f, sin(), cos(), and related functions.</p></div>
+              <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style keyframes and safe math expressions using t, max_f, sin(), cos(), and related functions. 2D zoom is a multiplicative factor per frame, so small changes compound quickly.</p></div>
             </div>
             <div class="animation-schedule-grid">
               <label><span>Border mode</span><select id="animation-border-mode" disabled><option value="replicate">Replicate edges</option><option value="wrap">Wrap opposite edge</option></select></label>
               <label><span>Angle</span><input id="animation-angle" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Zoom</span><input id="animation-zoom" class="animation-schedule" type="text" value="0:(1.0)" disabled></label>
+              <label><span>Zoom factor / frame <small class="muted">(1.0 = none · 1.005 = slow in · 0.995 = slow out)</small></span><input id="animation-zoom" class="animation-schedule" type="text" value="0:(1.0)" disabled></label>
               <label><span>Translation X</span><input id="animation-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
               <label><span>Translation Y</span><input id="animation-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
             </div>
@@ -308,6 +364,49 @@
                 <span>Frame time <strong id="animation-render-frame-time">--</strong></span>
                 <span>ETA <strong id="animation-render-eta">--</strong></span>
               </div>
+              <div class="animation-render-prompt-telemetry" id="animation-render-prompt-telemetry" hidden>
+                <div class="animation-render-prompt-heading">
+                  <span class="field-label">Prompt actually resolved for this frame</span>
+                  <span class="badge" id="animation-render-prompt-applied">--</span>
+                </div>
+                <div class="animation-render-prompt-grid">
+                  <div>
+                    <span>Positive</span>
+                    <strong id="animation-render-positive-weights">--</strong>
+                    <p id="animation-render-positive-prompt">--</p>
+                  </div>
+                  <div>
+                    <span>Negative</span>
+                    <strong id="animation-render-negative-weights">--</strong>
+                    <p id="animation-render-negative-prompt">--</p>
+                  </div>
+                </div>
+                <div class="animation-render-prompt-meta" id="animation-render-prompt-meta">--</div>
+              </div>
+              <div class="animation-render-frame-telemetry" id="animation-render-frame-telemetry" hidden>
+                <div class="animation-render-prompt-heading">
+                  <span class="field-label">Resolved 2D / generation state</span>
+                  <span class="badge" id="animation-render-diffusion-mode">--</span>
+                </div>
+                <div class="animation-render-state-grid">
+                  <div><span>Angle</span><strong id="animation-render-state-angle">--</strong></div>
+                  <div><span>Zoom / frame</span><strong id="animation-render-state-zoom">--</strong></div>
+                  <div><span>Translate X</span><strong id="animation-render-state-x">--</strong></div>
+                  <div><span>Translate Y</span><strong id="animation-render-state-y">--</strong></div>
+                  <div><span>Cumulative zoom</span><strong id="animation-render-state-cum-zoom">--</strong></div>
+                  <div><span>Cumulative angle</span><strong id="animation-render-state-cum-angle">--</strong></div>
+                  <div><span>Center offset</span><strong id="animation-render-state-center">--</strong></div>
+                  <div><span>Border</span><strong id="animation-render-state-border">--</strong></div>
+                  <div><span>Strength</span><strong id="animation-render-state-strength">--</strong></div>
+                  <div><span>Denoise</span><strong id="animation-render-state-denoise">--</strong></div>
+                  <div><span>Noise</span><strong id="animation-render-state-noise">--</strong></div>
+                  <div><span>Steps</span><strong id="animation-render-state-steps">--</strong></div>
+                  <div><span>Guidance</span><strong id="animation-render-state-guidance">--</strong></div>
+                  <div><span>Sampler</span><strong id="animation-render-state-sampler">--</strong></div>
+                  <div><span>Seed</span><strong id="animation-render-state-seed">--</strong></div>
+                  <div><span>Seed mode</span><strong id="animation-render-state-seed-mode">--</strong></div>
+                </div>
+              </div>
             </div>
 
             <div class="animation-render-visuals">
@@ -369,7 +468,7 @@
 
             <div class="animation-resolved-grid" id="animation-resolved-grid">
               <div><span>Time</span><strong id="resolved-time">--</strong></div>
-              <div><span>Zoom</span><strong id="resolved-zoom">--</strong></div>
+              <div><span>Zoom factor / frame</span><strong id="resolved-zoom">--</strong></div>
               <div><span>Angle</span><strong id="resolved-angle">--</strong></div>
               <div><span>Translate X</span><strong id="resolved-translation-x">--</strong></div>
               <div><span>Translate Y</span><strong id="resolved-translation-y">--</strong></div>
@@ -378,6 +477,7 @@
               <div><span>Steps</span><strong id="resolved-steps">--</strong></div>
               <div><span>Guidance</span><strong id="resolved-guidance">--</strong></div>
               <div><span>Seed</span><strong id="resolved-seed">--</strong></div>
+              <div class="animation-resolved-loras"><span>LoRAs</span><strong id="resolved-loras">None</strong></div>
             </div>
 
             <div class="animation-prompt-resolution">

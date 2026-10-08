@@ -26,6 +26,9 @@ models:
     label: Flux
     checkpoints: []
     loras: []
+  zimage:
+    label: Z-Image
+    loras: []
   shared:
     vae: []
     embeddings: []

@@ -19,7 +19,121 @@
     renderHistory: [],
     renderPollTimer: null,
     lastRenderFrameUrl: '',
+    timeline: null,
+    timelineSelection: null,
+    timelineScale: 6,
+    timelineBusy: false,
+    timelineResizeTimer: null,
   };
+
+  const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
+
+  function readAnimationCardState() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ANIMATION_CARD_STORAGE_KEY) || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeAnimationCardState(value) {
+    try {
+      localStorage.setItem(ANIMATION_CARD_STORAGE_KEY, JSON.stringify(value));
+    } catch (_) {
+      // Browser storage can be unavailable in private/restricted contexts.
+    }
+  }
+
+  function animationCardKey(card, index) {
+    if (card.dataset.animationCardKey) return card.dataset.animationCardKey;
+    const heading = qs('h2', card)?.textContent || card.id || ('section-' + index);
+    const slug = String(heading)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || ('section-' + index);
+    card.dataset.animationCardKey = slug;
+    return slug;
+  }
+
+  function setAnimationCardCollapsed(card, collapsed, { persist = true } = {}) {
+    if (!card) return;
+    const key = card.dataset.animationCardKey;
+    card.classList.toggle('animation-card-collapsed', Boolean(collapsed));
+    const content = qs('.animation-card-content', card);
+    if (content) content.hidden = Boolean(collapsed);
+    const toggle = qs('.animation-card-toggle', card);
+    if (toggle) {
+      toggle.textContent = collapsed ? '▸' : '▾';
+      toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      toggle.title = collapsed ? 'Expand section' : 'Collapse section';
+    }
+    if (persist && key) {
+      const stateValue = readAnimationCardState();
+      stateValue[key] = Boolean(collapsed);
+      writeAnimationCardState(stateValue);
+    }
+  }
+
+  function setAllAnimationCards(collapsed) {
+    qsa('#view-animation .animation-layout > article.card').forEach(card => {
+      setAnimationCardCollapsed(card, collapsed);
+    });
+  }
+
+  function setupAnimationAccordions() {
+    const stored = readAnimationCardState();
+    const mobile = window.matchMedia('(max-width: 720px)').matches;
+    const mobileOpenByDefault = new Set([
+      'project',
+      'start-frame',
+      'visual-timeline',
+      'animation-render',
+    ]);
+
+    qsa('#view-animation .animation-layout > article.card').forEach((card, index) => {
+      if (card.dataset.animationAccordionReady === '1') return;
+      card.dataset.animationAccordionReady = '1';
+      const key = animationCardKey(card, index);
+      const header = qs('.card-header', card);
+      if (!header) return;
+
+      const content = document.createElement('div');
+      content.className = 'animation-card-content';
+      const children = [...card.children].filter(child => child !== header);
+      for (const child of children) content.appendChild(child);
+      card.appendChild(content);
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'icon-button animation-card-toggle';
+      toggle.setAttribute('aria-label', 'Collapse or expand section');
+      header.appendChild(toggle);
+
+      const defaultCollapsed = mobile && !mobileOpenByDefault.has(key);
+      const collapsed = Object.prototype.hasOwnProperty.call(stored, key)
+        ? Boolean(stored[key])
+        : defaultCollapsed;
+      setAnimationCardCollapsed(card, collapsed, { persist: false });
+
+      toggle.addEventListener('click', event => {
+        event.stopPropagation();
+        setAnimationCardCollapsed(
+          card,
+          !card.classList.contains('animation-card-collapsed')
+        );
+      });
+
+      header.addEventListener('click', event => {
+        if (event.target.closest('button, input, select, textarea, a, label')) return;
+        setAnimationCardCollapsed(
+          card,
+          !card.classList.contains('animation-card-collapsed')
+        );
+      });
+    });
+  }
 
   const SCHEDULE_INPUTS = {
     'motion.angle': '#animation-angle',
@@ -36,6 +150,13 @@
     'animation-inspector-frame',
     'animation-inspector-slider',
     'animation-curve-field',
+    'animation-timeline-frame',
+    'animation-timeline-scrubber',
+    'animation-timeline-track-select',
+    'animation-timeline-scale',
+    'animation-timeline-keyframe-frame',
+    'animation-timeline-keyframe-value',
+    'animation-timeline-interpolation',
   ]);
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -59,6 +180,53 @@
       throw new Error(detail || `${response.status} ${response.statusText}`);
     }
     return payload;
+  }
+
+  function isMobileTimeline() {
+    return window.matchMedia('(max-width: 720px)').matches;
+  }
+
+  function timelineStatus(text, kind = '') {
+    const badge = qs('#animation-timeline-status');
+    if (!badge) return;
+    badge.textContent = text;
+    badge.className = 'badge animation-timeline-status';
+    if (kind) badge.classList.add(kind);
+  }
+
+  function timelineMaxFrame() {
+    return Math.max(
+      0,
+      Number(state.timeline?.max_frames || state.project?.animation?.max_frames || 1) - 1
+    );
+  }
+
+  function timelinePosition(frame) {
+    const max = timelineMaxFrame();
+    if (max <= 0) return 0;
+    return Math.max(0, Math.min(100, (Number(frame) / max) * 100));
+  }
+
+  function timelineFrameFromClientX(lane, clientX) {
+    const rect = lane.getBoundingClientRect();
+    if (!rect.width) return 0;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.round(ratio * timelineMaxFrame());
+  }
+
+  function syncTimelinePlayhead(frame) {
+    const value = Math.max(0, Math.min(timelineMaxFrame(), Math.trunc(Number(frame) || 0)));
+    const input = qs('#animation-timeline-frame');
+    if (input) input.value = String(value);
+    const scrubber = qs('#animation-timeline-scrubber');
+    if (scrubber) {
+      scrubber.max = String(timelineMaxFrame());
+      scrubber.value = String(value);
+    }
+    const left = timelinePosition(value) + '%';
+    qsa('.animation-timeline-playhead').forEach(playhead => {
+      playhead.style.left = left;
+    });
   }
 
   function setBusy(button, busy) {
@@ -262,6 +430,884 @@
       .sort((a, b) => a - b);
   }
 
+  function timelineTrackDescriptors() {
+    const tracks = state.timeline?.descriptors?.tracks;
+    return Array.isArray(tracks)
+      ? tracks.filter(item => item?.editable && item?.keyframe_editable)
+      : [];
+  }
+
+  function timelineDescriptor(group, name) {
+    return timelineTrackDescriptors().find(
+      item => item.group === group && item.name === name
+    ) || null;
+  }
+
+  function timelineTrack(group, name) {
+    const groupValue = state.timeline?.tracks?.[group];
+    return groupValue && typeof groupValue === 'object'
+      ? (groupValue[name] || null)
+      : null;
+  }
+
+  function timelineGroupLabel(group) {
+    const groups = state.timeline?.descriptors?.groups;
+    const match = Array.isArray(groups)
+      ? groups.find(item => item.id === group)
+      : null;
+    return match?.label || String(group || '').replaceAll('_', ' ');
+  }
+
+  function niceTimelineStep(maxFrames, width) {
+    const approximateTicks = Math.max(2, Math.floor(Number(width || 720) / 90));
+    const raw = Math.max(1, Number(maxFrames || 1) / approximateTicks);
+    const power = 10 ** Math.floor(Math.log10(raw));
+    const normalized = raw / power;
+    const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    return Math.max(1, Math.round(nice * power));
+  }
+
+  function timelineKeyframeAt(track, frame) {
+    const keyframes = Array.isArray(track?.keyframes) ? track.keyframes : [];
+    return keyframes.find(item => Number(item.frame) === Number(frame)) || null;
+  }
+
+  function nearestTimelineValue(track, frame) {
+    const keyframes = (Array.isArray(track?.keyframes) ? track.keyframes : [])
+      .filter(item => Number.isFinite(Number(item.frame)))
+      .sort((a, b) => Number(a.frame) - Number(b.frame));
+    if (!keyframes.length) return '';
+    let selected = keyframes[0];
+    for (const item of keyframes) {
+      if (Number(item.frame) <= Number(frame)) selected = item;
+      else break;
+    }
+    return String(selected?.value ?? '');
+  }
+
+  function renderTimelineEditor() {
+    const editor = qs('#animation-timeline-editor');
+    const selection = state.timelineSelection;
+    const add = qs('#animation-timeline-add');
+    if (add) add.disabled = !state.project || !selection || state.timelineBusy;
+
+    if (!editor || !selection || !state.timeline) {
+      if (editor) editor.hidden = true;
+      return;
+    }
+
+    const descriptor = timelineDescriptor(selection.group, selection.name);
+    const track = timelineTrack(selection.group, selection.name);
+    if (!descriptor || !track) {
+      editor.hidden = true;
+      return;
+    }
+
+    const playhead = Number(qs('#animation-timeline-frame')?.value || 0);
+    const selectedFrame = selection.frame === null || selection.frame === undefined
+      ? playhead
+      : Number(selection.frame);
+    const keyframe = timelineKeyframeAt(track, selectedFrame);
+
+    editor.hidden = false;
+    const title = qs('#animation-timeline-selected-track');
+    if (title) title.textContent = descriptor.label || descriptor.id;
+    const meta = qs('#animation-timeline-selected-meta');
+    if (meta) {
+      const unit = descriptor.unit ? ' · ' + descriptor.unit : '';
+      meta.textContent =
+        timelineGroupLabel(descriptor.group) +
+        ' · ' + descriptor.kind +
+        unit +
+        (keyframe ? ' · keyframe F' + selectedFrame : ' · new keyframe at F' + selectedFrame);
+    }
+
+    const frameInput = qs('#animation-timeline-keyframe-frame');
+    if (frameInput) {
+      frameInput.max = String(timelineMaxFrame());
+      frameInput.value = String(selectedFrame);
+      frameInput.disabled = state.timelineBusy;
+    }
+
+    const valueInput = qs('#animation-timeline-keyframe-value');
+    if (valueInput) {
+      valueInput.value = keyframe
+        ? String(keyframe.value ?? '')
+        : nearestTimelineValue(track, selectedFrame);
+      valueInput.rows = descriptor.kind === 'prompt' ? 3 : 2;
+      valueInput.disabled = state.timelineBusy;
+    }
+
+    const interpolation = qs('#animation-timeline-interpolation');
+    if (interpolation) {
+      interpolation.replaceChildren();
+      for (const mode of descriptor.interpolation_modes || []) {
+        const option = document.createElement('option');
+        option.value = mode;
+        option.textContent = mode;
+        interpolation.appendChild(option);
+      }
+      interpolation.value = track.interpolation || descriptor.interpolation_modes?.[0] || '';
+      interpolation.disabled = state.timelineBusy;
+    }
+
+    const apply = qs('#animation-timeline-apply');
+    if (apply) {
+      apply.textContent = keyframe ? 'Apply' : 'Add keyframe';
+      apply.disabled = state.timelineBusy;
+    }
+
+    const remove = qs('#animation-timeline-delete');
+    if (remove) {
+      const protectedFrame = Boolean(
+        keyframe && descriptor.required_frame_zero && Number(selectedFrame) === 0
+      );
+      remove.disabled = state.timelineBusy || !keyframe || protectedFrame;
+      remove.title = protectedFrame
+        ? 'Frame 0 is required for this track.'
+        : 'Delete selected keyframe';
+    }
+  }
+
+  function renderTimeline() {
+    const grid = qs('#animation-timeline-grid');
+    const empty = qs('#animation-timeline-empty');
+    const refresh = qs('#animation-timeline-refresh');
+    const frameInput = qs('#animation-timeline-frame');
+    const scrubber = qs('#animation-timeline-scrubber');
+    const scaleInput = qs('#animation-timeline-scale');
+    const trackSelect = qs('#animation-timeline-track-select');
+    const prevButton = qs('#animation-timeline-prev-keyframe');
+    const nextButton = qs('#animation-timeline-next-keyframe');
+    const keyframeList = qs('#animation-timeline-keyframe-list');
+
+    if (refresh) refresh.disabled = !state.project || state.timelineBusy;
+    if (frameInput) {
+      frameInput.disabled = !state.project || state.timelineBusy;
+      frameInput.max = String(timelineMaxFrame());
+    }
+    if (scrubber) {
+      scrubber.disabled = !state.project || state.timelineBusy;
+      scrubber.max = String(timelineMaxFrame());
+    }
+    if (scaleInput) {
+      scaleInput.disabled = !state.project || state.timelineBusy || isMobileTimeline();
+      scaleInput.value = String(state.timelineScale);
+    }
+
+    if (!grid || !state.project || !state.timeline) {
+      if (grid) {
+        grid.hidden = true;
+        grid.replaceChildren();
+      }
+      if (trackSelect) {
+        trackSelect.replaceChildren();
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No track';
+        trackSelect.appendChild(option);
+        trackSelect.disabled = true;
+      }
+      if (prevButton) prevButton.disabled = true;
+      if (nextButton) nextButton.disabled = true;
+      if (keyframeList) {
+        keyframeList.hidden = true;
+        keyframeList.replaceChildren();
+      }
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = state.project
+          ? 'Loading timeline tracks…'
+          : 'Create or load a project to view timeline tracks.';
+      }
+      timelineStatus(state.project ? 'Loading…' : 'No project', state.project ? 'busy' : '');
+      renderTimelineEditor();
+      return;
+    }
+
+    const descriptors = timelineTrackDescriptors();
+    if (!descriptors.length) {
+      grid.hidden = true;
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = 'No editable tracks are available.';
+      }
+      if (trackSelect) trackSelect.disabled = true;
+      if (prevButton) prevButton.disabled = true;
+      if (nextButton) nextButton.disabled = true;
+      if (keyframeList) {
+        keyframeList.hidden = true;
+        keyframeList.replaceChildren();
+      }
+      timelineStatus('No tracks');
+      renderTimelineEditor();
+      return;
+    }
+
+    if (
+      !state.timelineSelection ||
+      !timelineDescriptor(state.timelineSelection.group, state.timelineSelection.name)
+    ) {
+      state.timelineSelection = {
+        group: descriptors[0].group,
+        name: descriptors[0].name,
+        frame: null,
+      };
+    }
+
+    if (trackSelect) {
+      const selectedValue =
+        state.timelineSelection.group + '/' + state.timelineSelection.name;
+      trackSelect.replaceChildren();
+      for (const descriptor of descriptors) {
+        const option = document.createElement('option');
+        option.value = descriptor.group + '/' + descriptor.name;
+        option.textContent =
+          timelineGroupLabel(descriptor.group) + ' · ' + (descriptor.label || descriptor.name);
+        trackSelect.appendChild(option);
+      }
+      trackSelect.value = selectedValue;
+      trackSelect.disabled = state.timelineBusy;
+    }
+
+    const selectedDescriptor = timelineDescriptor(
+      state.timelineSelection.group,
+      state.timelineSelection.name
+    );
+    const selectedTrack = timelineTrack(
+      state.timelineSelection.group,
+      state.timelineSelection.name
+    );
+    const playheadFrame = Math.max(
+      0,
+      Math.min(
+        timelineMaxFrame(),
+        Math.trunc(Number(qs('#animation-timeline-frame')?.value || 0))
+      )
+    );
+    const selectedFrames = (selectedTrack?.keyframes || [])
+      .map(item => Number(item.frame))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    if (prevButton) {
+      prevButton.disabled =
+        state.timelineBusy || !selectedFrames.some(frame => frame < playheadFrame);
+    }
+    if (nextButton) {
+      nextButton.disabled =
+        state.timelineBusy || !selectedFrames.some(frame => frame > playheadFrame);
+    }
+
+    const mobile = isMobileTimeline();
+    if (keyframeList) {
+      keyframeList.replaceChildren();
+      keyframeList.hidden = !mobile || !selectedFrames.length;
+      if (mobile) {
+        for (const frame of selectedFrames) {
+          const item = timelineKeyframeAt(selectedTrack, frame);
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'secondary-button compact animation-timeline-keyframe-chip';
+          if (
+            state.timelineSelection?.frame !== null &&
+            state.timelineSelection?.frame !== undefined &&
+            Number(state.timelineSelection.frame) === frame
+          ) {
+            button.classList.add('selected');
+          }
+          button.textContent = 'F' + frame;
+          button.title = String(item?.value ?? '');
+          button.addEventListener('click', () => {
+            state.timelineSelection = {
+              group: state.timelineSelection.group,
+              name: state.timelineSelection.name,
+              frame,
+            };
+            setInspectorFrame(frame);
+            renderTimeline();
+          });
+          keyframeList.appendChild(button);
+        }
+      }
+    }
+
+    const maxFrames = Math.max(1, Number(state.timeline.max_frames || 1));
+    const scroll = qs('#animation-timeline-scroll');
+    const availableWidth = Math.max(300, Number(scroll?.clientWidth || 360) - 4);
+    const contentWidth = mobile
+      ? availableWidth
+      : Math.max(640, Math.round(maxFrames * state.timelineScale));
+    grid.style.setProperty('--timeline-content-width', contentWidth + 'px');
+    grid.classList.toggle('mobile-focused', mobile);
+    grid.replaceChildren();
+    grid.hidden = false;
+    if (empty) empty.hidden = true;
+
+    const rulerRow = document.createElement('div');
+    rulerRow.className = 'animation-timeline-ruler-row';
+    const rulerLabel = document.createElement('div');
+    rulerLabel.className = 'animation-timeline-ruler-label';
+    rulerLabel.textContent =
+      mobile && selectedDescriptor
+        ? (selectedDescriptor.label || selectedDescriptor.name)
+        : (maxFrames + 'f · ' + formatNumber(state.timeline.fps, 2) + 'fps');
+    const ruler = document.createElement('div');
+    ruler.className = 'animation-timeline-ruler';
+
+    const step = niceTimelineStep(maxFrames, contentWidth);
+    const lastFrame = Math.max(0, maxFrames - 1);
+    for (let frame = 0; frame <= lastFrame; frame += step) {
+      const tick = document.createElement('div');
+      tick.className = 'animation-timeline-tick major';
+      tick.style.left = timelinePosition(frame) + '%';
+      const label = document.createElement('span');
+      label.textContent = String(frame);
+      tick.appendChild(label);
+      ruler.appendChild(tick);
+    }
+    if (lastFrame > 0 && lastFrame % step !== 0) {
+      const tick = document.createElement('div');
+      tick.className = 'animation-timeline-tick major';
+      tick.style.left = '100%';
+      const label = document.createElement('span');
+      label.textContent = String(lastFrame);
+      tick.appendChild(label);
+      ruler.appendChild(tick);
+    }
+    const rulerPlayhead = document.createElement('div');
+    rulerPlayhead.className = 'animation-timeline-playhead';
+    ruler.appendChild(rulerPlayhead);
+    ruler.addEventListener('click', event => {
+      const frame = timelineFrameFromClientX(ruler, event.clientX);
+      setInspectorFrame(frame);
+    });
+    rulerRow.append(rulerLabel, ruler);
+    grid.appendChild(rulerRow);
+
+    const visibleDescriptors = mobile && selectedDescriptor
+      ? [selectedDescriptor]
+      : descriptors;
+
+    for (const descriptor of visibleDescriptors) {
+      const track = timelineTrack(descriptor.group, descriptor.name);
+      if (!track) continue;
+      const row = document.createElement('div');
+      row.className = 'animation-timeline-track-row';
+      if (
+        state.timelineSelection?.group === descriptor.group &&
+        state.timelineSelection?.name === descriptor.name
+      ) {
+        row.classList.add('selected');
+      }
+
+      const label = document.createElement('div');
+      label.className = 'animation-timeline-track-label';
+      const strong = document.createElement('strong');
+      strong.textContent = descriptor.label || descriptor.id;
+      const meta = document.createElement('span');
+      meta.textContent =
+        timelineGroupLabel(descriptor.group) +
+        ' · ' + (track.interpolation || '') +
+        (descriptor.unit ? ' · ' + descriptor.unit : '');
+      label.append(strong, meta);
+      label.addEventListener('click', () => {
+        state.timelineSelection = {
+          group: descriptor.group,
+          name: descriptor.name,
+          frame: null,
+        };
+        renderTimeline();
+      });
+
+      const lane = document.createElement('div');
+      lane.className = 'animation-timeline-track-lane';
+      lane.dataset.group = descriptor.group;
+      lane.dataset.track = descriptor.name;
+      lane.addEventListener('click', event => {
+        if (event.target.closest('.animation-timeline-keyframe')) return;
+        const frame = timelineFrameFromClientX(lane, event.clientX);
+        state.timelineSelection = {
+          group: descriptor.group,
+          name: descriptor.name,
+          frame: timelineKeyframeAt(track, frame) ? frame : null,
+        };
+        setInspectorFrame(frame);
+        renderTimeline();
+      });
+
+      const playhead = document.createElement('div');
+      playhead.className = 'animation-timeline-playhead';
+      lane.appendChild(playhead);
+
+      for (const item of track.keyframes || []) {
+        const frame = Number(item.frame);
+        if (!Number.isFinite(frame)) continue;
+        const keyframe = document.createElement('button');
+        keyframe.type = 'button';
+        keyframe.className = 'animation-timeline-keyframe';
+        if (descriptor.required_frame_zero && frame === 0) {
+          keyframe.classList.add('required');
+        }
+        if (
+          state.timelineSelection?.group === descriptor.group &&
+          state.timelineSelection?.name === descriptor.name &&
+          state.timelineSelection?.frame !== null &&
+          state.timelineSelection?.frame !== undefined &&
+          Number(state.timelineSelection.frame) === frame
+        ) {
+          keyframe.classList.add('selected');
+        }
+        keyframe.style.left = timelinePosition(frame) + '%';
+        keyframe.title = descriptor.label + ' · F' + frame + ' · ' + String(item.value ?? '');
+        keyframe.setAttribute('aria-label', descriptor.label + ' keyframe at frame ' + frame);
+        keyframe.addEventListener('click', event => {
+          event.stopPropagation();
+          if (keyframe.dataset.suppressClick === '1') {
+            delete keyframe.dataset.suppressClick;
+            return;
+          }
+          state.timelineSelection = {
+            group: descriptor.group,
+            name: descriptor.name,
+            frame,
+          };
+          setInspectorFrame(frame);
+          renderTimeline();
+        });
+        keyframe.addEventListener('pointerdown', event => {
+          beginTimelineDrag(event, descriptor, item, lane, keyframe);
+        });
+        lane.appendChild(keyframe);
+      }
+
+      row.append(label, lane);
+      grid.appendChild(row);
+    }
+
+    syncTimelinePlayhead(playheadFrame);
+    timelineStatus(mobile ? 'Focused track · Ready' : 'Ready', 'saved');
+    renderTimelineEditor();
+  }
+
+  function navigateTimelineKeyframe(direction) {
+    const selection = state.timelineSelection;
+    if (!selection) return;
+    const track = timelineTrack(selection.group, selection.name);
+    const frames = (track?.keyframes || [])
+      .map(item => Number(item.frame))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    if (!frames.length) return;
+
+    const current = Math.max(
+      0,
+      Math.min(
+        timelineMaxFrame(),
+        Math.trunc(Number(qs('#animation-timeline-frame')?.value || 0))
+      )
+    );
+    const target = direction < 0
+      ? [...frames].reverse().find(frame => frame < current)
+      : frames.find(frame => frame > current);
+    if (target === undefined) return;
+
+    state.timelineSelection = {
+      group: selection.group,
+      name: selection.name,
+      frame: target,
+    };
+    setInspectorFrame(target);
+    renderTimeline();
+  }
+
+  async function persistDirtyBeforeTimelineEdit() {
+    if (!state.project || !state.dirty) return;
+    timelineStatus('Saving form…', 'busy');
+    const payload = await api(
+      '/api/animation/projects/' + encodeURIComponent(state.project.id),
+      {
+        method: 'PUT',
+        body: JSON.stringify(collectProject()),
+      }
+    );
+    state.project = payload.project;
+    state.path = payload.path || state.path;
+    clearDirty();
+  }
+
+  async function loadTimeline() {
+    if (!state.project?.id) {
+      state.timeline = null;
+      state.timelineSelection = null;
+      renderTimeline();
+      return;
+    }
+
+    timelineStatus('Loading…', 'busy');
+    try {
+      state.timeline = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) + '/timeline'
+      );
+      if (state.timelineSelection) {
+        const descriptor = timelineDescriptor(
+          state.timelineSelection.group,
+          state.timelineSelection.name
+        );
+        if (!descriptor) state.timelineSelection = null;
+      }
+      renderTimeline();
+    } catch (error) {
+      state.timeline = null;
+      timelineStatus('Timeline error', 'error');
+      const empty = qs('#animation-timeline-empty');
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = error.message;
+      }
+      const grid = qs('#animation-timeline-grid');
+      if (grid) grid.hidden = true;
+    }
+  }
+
+  async function finishTimelineMutation(payload, selection) {
+    if (payload?.project) {
+      state.project = payload.project;
+      state.timelineSelection = selection || state.timelineSelection;
+      clearDirty();
+      fillForm();
+    }
+    await loadTimeline();
+    refreshInspector();
+  }
+
+  async function moveTimelineKeyframe(descriptor, sourceFrame, targetFrame) {
+    if (!state.project || sourceFrame === targetFrame) return;
+    state.timelineBusy = true;
+    timelineStatus('Moving F' + sourceFrame + ' → F' + targetFrame + '…', 'busy');
+    renderTimelineEditor();
+    try {
+      await persistDirtyBeforeTimelineEdit();
+      const payload = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+        '/' + encodeURIComponent(descriptor.name) +
+        '/keyframes/' + encodeURIComponent(sourceFrame) + '/move',
+        {
+          method: 'POST',
+          body: JSON.stringify({ frame: targetFrame, overwrite: false }),
+        }
+      );
+      await finishTimelineMutation(payload, {
+        group: descriptor.group,
+        name: descriptor.name,
+        frame: targetFrame,
+      });
+    } catch (error) {
+      timelineStatus('Move failed', 'error');
+      toast('Could not move keyframe', error.message, 'error', 6500);
+      await loadTimeline();
+    } finally {
+      state.timelineBusy = false;
+      renderTimeline();
+    }
+  }
+
+  function beginTimelineDrag(event, descriptor, item, lane, button) {
+    const sourceFrame = Number(item.frame);
+    state.timelineSelection = {
+      group: descriptor.group,
+      name: descriptor.name,
+      frame: sourceFrame,
+    };
+    setInspectorFrame(sourceFrame);
+
+    if (isMobileTimeline() || window.matchMedia('(pointer: coarse)').matches) {
+      renderTimeline();
+      return;
+    }
+
+    if (descriptor.required_frame_zero && sourceFrame === 0) {
+      renderTimeline();
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    let targetFrame = sourceFrame;
+    let moved = false;
+
+    const onMove = moveEvent => {
+      if (Math.abs(moveEvent.clientX - event.clientX) > 3) moved = true;
+      if (!moved) return;
+      button.dataset.suppressClick = '1';
+      targetFrame = timelineFrameFromClientX(lane, moveEvent.clientX);
+      button.style.left = timelinePosition(targetFrame) + '%';
+      timelineStatus('Drop at F' + targetFrame, 'busy');
+      syncTimelinePlayhead(targetFrame);
+    };
+
+    const onUp = async () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (moved && targetFrame !== sourceFrame) {
+        await moveTimelineKeyframe(descriptor, sourceFrame, targetFrame);
+      } else {
+        renderTimeline();
+      }
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+  }
+
+  async function addTimelineKeyframeAtPlayhead() {
+    if (!state.project || !state.timelineSelection || state.timelineBusy) return;
+    const descriptor = timelineDescriptor(
+      state.timelineSelection.group,
+      state.timelineSelection.name
+    );
+    const track = timelineTrack(
+      state.timelineSelection.group,
+      state.timelineSelection.name
+    );
+    if (!descriptor || !track) return;
+
+    const frame = Math.max(
+      0,
+      Math.min(timelineMaxFrame(), Math.trunc(Number(qs('#animation-timeline-frame')?.value || 0)))
+    );
+    const existing = timelineKeyframeAt(track, frame);
+    if (existing) {
+      state.timelineSelection.frame = frame;
+      renderTimeline();
+      qs('#animation-timeline-keyframe-value')?.focus();
+      return;
+    }
+
+    state.timelineBusy = true;
+    timelineStatus('Adding keyframe…', 'busy');
+    try {
+      await persistDirtyBeforeTimelineEdit();
+      const payload = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+        '/' + encodeURIComponent(descriptor.name) +
+        '/keyframes/' + encodeURIComponent(frame),
+        {
+          method: 'PUT',
+          body: JSON.stringify({ value: nearestTimelineValue(track, frame) }),
+        }
+      );
+      await finishTimelineMutation(payload, {
+        group: descriptor.group,
+        name: descriptor.name,
+        frame,
+      });
+    } catch (error) {
+      timelineStatus('Add failed', 'error');
+      toast('Could not add keyframe', error.message, 'error', 6500);
+    } finally {
+      state.timelineBusy = false;
+      renderTimeline();
+    }
+  }
+
+  async function applyTimelineEditor() {
+    const selection = state.timelineSelection;
+    if (!state.project || !selection || state.timelineBusy) return;
+    const descriptor = timelineDescriptor(selection.group, selection.name);
+    const track = timelineTrack(selection.group, selection.name);
+    if (!descriptor || !track) return;
+
+    const originalFrame = selection.frame;
+    const targetFrame = Math.max(
+      0,
+      Math.min(
+        timelineMaxFrame(),
+        Math.trunc(Number(qs('#animation-timeline-keyframe-frame')?.value || 0))
+      )
+    );
+    const value = qs('#animation-timeline-keyframe-value')?.value ?? '';
+    const interpolation = qs('#animation-timeline-interpolation')?.value || track.interpolation;
+
+    state.timelineBusy = true;
+    timelineStatus('Saving keyframe…', 'busy');
+    try {
+      await persistDirtyBeforeTimelineEdit();
+      let payload = null;
+      let frame = originalFrame;
+
+      if (frame !== null && frame !== undefined && Number(frame) !== targetFrame) {
+        payload = await api(
+          '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+          '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+          '/' + encodeURIComponent(descriptor.name) +
+          '/keyframes/' + encodeURIComponent(frame) + '/move',
+          {
+            method: 'POST',
+            body: JSON.stringify({ frame: targetFrame, overwrite: false }),
+          }
+        );
+        if (payload?.project) state.project = payload.project;
+        frame = targetFrame;
+      }
+
+      payload = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+        '/' + encodeURIComponent(descriptor.name) +
+        '/keyframes/' + encodeURIComponent(targetFrame),
+        {
+          method: 'PUT',
+          body: JSON.stringify({ value }),
+        }
+      );
+      if (payload?.project) state.project = payload.project;
+
+      if (interpolation && interpolation !== track.interpolation) {
+        payload = await api(
+          '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+          '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+          '/' + encodeURIComponent(descriptor.name) +
+          '/interpolation',
+          {
+            method: 'PUT',
+            body: JSON.stringify({ interpolation }),
+          }
+        );
+      }
+
+      await finishTimelineMutation(payload, {
+        group: descriptor.group,
+        name: descriptor.name,
+        frame: targetFrame,
+      });
+    } catch (error) {
+      timelineStatus('Save failed', 'error');
+      toast('Could not save timeline keyframe', error.message, 'error', 7000);
+      await loadTimeline();
+    } finally {
+      state.timelineBusy = false;
+      renderTimeline();
+    }
+  }
+
+  async function deleteTimelineKeyframe() {
+    const selection = state.timelineSelection;
+    if (!state.project || !selection || selection.frame === null || state.timelineBusy) return;
+    const descriptor = timelineDescriptor(selection.group, selection.name);
+    if (!descriptor) return;
+
+    state.timelineBusy = true;
+    timelineStatus('Deleting keyframe…', 'busy');
+    try {
+      await persistDirtyBeforeTimelineEdit();
+      const payload = await api(
+        '/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
+        '/' + encodeURIComponent(descriptor.name) +
+        '/keyframes/' + encodeURIComponent(selection.frame),
+        { method: 'DELETE' }
+      );
+      await finishTimelineMutation(payload, {
+        group: descriptor.group,
+        name: descriptor.name,
+        frame: null,
+      });
+    } catch (error) {
+      timelineStatus('Delete failed', 'error');
+      toast('Could not delete keyframe', error.message, 'error', 6500);
+    } finally {
+      state.timelineBusy = false;
+      renderTimeline();
+    }
+  }
+
+  function currentAnimationLoras() {
+    const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
+    const model = modelById(modelId);
+    if (!model?.family) return [];
+    return state.models
+      .filter(item => item.kind === 'loras' && item.family === model.family)
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }
+
+  function insertAtCursor(textarea, text) {
+    if (!textarea) return;
+    const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+    const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    const prefix = before && !/\s$/.test(before) ? ' ' : '';
+    const suffix = after && !/^\s/.test(after) ? ' ' : '';
+    const insertion = prefix + text + suffix;
+    textarea.value = before + insertion + after;
+    const cursor = before.length + insertion.length;
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function createLoraTools(promptInput) {
+    const tools = document.createElement('div');
+    tools.className = 'animation-lora-tools';
+
+    const select = document.createElement('select');
+    select.className = 'animation-lora-select';
+    select.setAttribute('aria-label', 'LoRA');
+
+    const loras = currentAnimationLoras();
+    if (!loras.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No compatible indexed LoRAs';
+      select.appendChild(option);
+      select.disabled = true;
+    } else {
+      for (const lora of loras) {
+        const option = document.createElement('option');
+        option.value = lora.name || lora.filename || lora.id;
+        option.textContent = lora.name || lora.filename || lora.id;
+        select.appendChild(option);
+      }
+    }
+
+    const weight = document.createElement('input');
+    weight.className = 'animation-lora-weight';
+    weight.type = 'number';
+    weight.value = '1';
+    weight.step = '0.05';
+    weight.min = '-4';
+    weight.max = '4';
+    weight.setAttribute('aria-label', 'LoRA weight');
+    weight.disabled = !loras.length;
+
+    const insert = document.createElement('button');
+    insert.type = 'button';
+    insert.className = 'secondary-button compact animation-insert-lora';
+    insert.textContent = 'Insert LoRA';
+    insert.disabled = !loras.length;
+    insert.addEventListener('click', () => {
+      const name = String(select.value || '').trim();
+      if (!name) return;
+      const numericWeight = Number(weight.value);
+      const value = Number.isFinite(numericWeight) ? numericWeight : 1;
+      insertAtCursor(
+        promptInput,
+        `<lora:${name}:${Number(value.toFixed(4))}>`
+      );
+    });
+
+    const hint = document.createElement('span');
+    hint.className = 'animation-lora-hint';
+    hint.textContent = loras.length
+      ? 'Deforum syntax · weight can animate between prompt keyframes'
+      : 'Add a LoRA directory for the selected model family, then scan Models.';
+
+    tools.append(select, weight, insert, hint);
+    return tools;
+  }
+
   function createPromptRow(frame, prompt, negativePrompt) {
     const row = document.createElement('div');
     row.className = 'animation-prompt-row';
@@ -315,7 +1361,8 @@
       remove.disabled = Number(frameInput.value) === 0;
     });
 
-    row.append(frameLabel, promptLabel, negativeLabel, remove);
+    const loraTools = createLoraTools(promptInput);
+    row.append(frameLabel, promptLabel, negativeLabel, remove, loraTools);
     return row;
   }
 
@@ -387,6 +1434,7 @@
     const slider = qs('#animation-inspector-slider');
     if (frameInput) frameInput.value = String(frame);
     if (slider) slider.value = String(frame);
+    syncTimelinePlayhead(frame);
     refreshInspector();
   }
 
@@ -398,8 +1446,9 @@
       setEditorEnabled(Boolean(project));
       if (!project) {
         renderPromptRows();
+        renderTimeline();
         qs('#animation-project-path').textContent = 'Create or select an animation project.';
-        qs('#animation-schema-badge').textContent = 'Schema 1';
+        qs('#animation-schema-badge').textContent = 'Schema 2';
         clearInspector();
         clearDirty();
         return;
@@ -438,6 +1487,7 @@
       renderPromptRows();
       renderSourceState();
       syncInspectorBounds();
+      renderTimeline();
       clearDirty();
     } finally {
       state.loading = false;
@@ -551,6 +1601,12 @@
     set('#resolved-noise', formatNumber(resolved.generation?.noise));
     set('#resolved-steps', formatNumber(resolved.generation?.steps));
     set('#resolved-guidance', formatNumber(resolved.generation?.guidance));
+    const loraText = Array.isArray(resolved.loras) && resolved.loras.length
+      ? resolved.loras
+          .map(lora => `${lora.name || lora.requested_name || 'LoRA'} ${formatNumber(lora.weight, 3)}`)
+          .join(' · ')
+      : 'None';
+    set('#resolved-loras', loraText);
 
     const seed = resolved.generation?.seed || {};
     set(
@@ -576,6 +1632,7 @@
       '#resolved-steps',
       '#resolved-guidance',
       '#resolved-seed',
+      '#resolved-loras',
       '#resolved-positive-prompt',
       '#resolved-negative-prompt',
     ]) {
@@ -983,6 +2040,136 @@
     return minutes + 'm ' + remain + 's';
   }
 
+  function renderPromptTelemetryTransition(transition) {
+    if (!transition || typeof transition !== 'object') {
+      return { weights: '--', text: '--' };
+    }
+    const fromFrame = Number(transition.from_frame ?? 0);
+    const toFrame = Number(transition.to_frame ?? fromFrame);
+    const fromWeight = Math.max(0, Math.min(1, Number(transition.from_weight ?? 1)));
+    const toWeight = Math.max(0, Math.min(1, Number(transition.to_weight ?? 0)));
+    const fromText = String(transition.from_text || '(empty)');
+    const toText = String(transition.to_text || fromText);
+    const mode = String(transition.mode || 'blend');
+
+    if (fromFrame === toFrame || toWeight <= 0 || fromText === toText) {
+      return {
+        weights: 'F' + fromFrame + ' · 100% · ' + mode,
+        text: fromText,
+      };
+    }
+
+    return {
+      weights:
+        'F' + fromFrame + ' ' + Math.round(fromWeight * 100) + '% → ' +
+        'F' + toFrame + ' ' + Math.round(toWeight * 100) + '% · ' + mode,
+      text: 'FROM: ' + fromText + '\nTO: ' + toText,
+    };
+  }
+
+  function renderAnimationPromptTelemetry(job) {
+    const panel = qs('#animation-render-prompt-telemetry');
+    if (!panel) return;
+    const promptState = job?.current_prompt_state;
+    if (!promptState || typeof promptState !== 'object' || !Object.keys(promptState).length) {
+      panel.hidden = true;
+      return;
+    }
+
+    panel.hidden = false;
+    const positive = renderPromptTelemetryTransition(promptState.positive);
+    const negative = renderPromptTelemetryTransition(promptState.negative);
+    const positiveWeights = qs('#animation-render-positive-weights');
+    const positiveText = qs('#animation-render-positive-prompt');
+    const negativeWeights = qs('#animation-render-negative-weights');
+    const negativeText = qs('#animation-render-negative-prompt');
+    if (positiveWeights) positiveWeights.textContent = positive.weights;
+    if (positiveText) positiveText.textContent = positive.text;
+    if (negativeWeights) negativeWeights.textContent = negative.weights;
+    if (negativeText) negativeText.textContent = negative.text;
+
+    const applied = qs('#animation-render-prompt-applied');
+    if (applied) {
+      applied.textContent = promptState.applied ? 'Applied to diffusion' : 'Resolved only';
+      applied.className =
+        'badge animation-render-prompt-applied ' +
+        (promptState.applied ? 'applied' : 'skipped');
+    }
+
+    const meta = qs('#animation-render-prompt-meta');
+    if (meta) {
+      const loras = Array.isArray(promptState.loras) && promptState.loras.length
+        ? promptState.loras
+            .map(item => (item.name || item.requested_name || 'LoRA') + ' ' + formatNumber(item.weight, 3))
+            .join(' · ')
+        : 'none';
+      const reason = String(promptState.reason || '').trim();
+      meta.textContent =
+        'Frame ' + Number(promptState.frame ?? job?.current_frame ?? 0) +
+        ' · LoRAs: ' + loras +
+        (reason ? ' · ' + reason : '');
+    }
+  }
+
+  function renderAnimationFrameTelemetry(job) {
+    const panel = qs('#animation-render-frame-telemetry');
+    if (!panel) return;
+    const frameState = job?.current_frame_state;
+    if (!frameState || typeof frameState !== 'object' || !Object.keys(frameState).length) {
+      panel.hidden = true;
+      return;
+    }
+
+    panel.hidden = false;
+    const motion = frameState.motion || {};
+    const cumulative = frameState.cumulative_2d || {};
+    const generation = frameState.generation || {};
+    const set = (selector, value) => {
+      const element = qs(selector);
+      if (element) element.textContent = value;
+    };
+
+    set('#animation-render-state-angle', formatNumber(motion.angle, 4) + '°');
+    set('#animation-render-state-zoom', formatNumber(motion.zoom, 6) + '×');
+    set('#animation-render-state-x', formatNumber(motion.translation_x, 4) + ' px');
+    set('#animation-render-state-y', formatNumber(motion.translation_y, 4) + ' px');
+    set('#animation-render-state-cum-zoom', formatNumber(cumulative.zoom, 6) + '×');
+    set('#animation-render-state-cum-angle', formatNumber(cumulative.rotation_degrees, 4) + '°');
+    set(
+      '#animation-render-state-center',
+      formatNumber(cumulative.center_offset_x, 3) + ', ' +
+      formatNumber(cumulative.center_offset_y, 3) + ' px'
+    );
+    set('#animation-render-state-border', String(motion.border_mode || '--'));
+    set('#animation-render-state-strength', formatNumber(generation.strength, 4));
+    set(
+      '#animation-render-state-denoise',
+      generation.denoise_strength === null || generation.denoise_strength === undefined
+        ? 'n/a'
+        : formatNumber(generation.denoise_strength, 4)
+    );
+    set('#animation-render-state-noise', formatNumber(generation.noise, 4));
+    set('#animation-render-state-steps', String(generation.steps ?? '--'));
+    set('#animation-render-state-guidance', formatNumber(generation.guidance, 4));
+    set('#animation-render-state-sampler', String(generation.sampler || '--'));
+    set('#animation-render-state-seed', String(generation.seed ?? '--'));
+    set(
+      '#animation-render-state-seed-mode',
+      String(generation.seed_behavior || '--') +
+      (generation.seed_behavior === 'increment'
+        ? ' +' + String(generation.seed_increment ?? 0)
+        : '')
+    );
+
+    const mode = qs('#animation-render-diffusion-mode');
+    if (mode) {
+      const label = String(generation.diffusion_mode || '--').replaceAll('-', ' ');
+      mode.textContent = frameState.motion_applied
+        ? label + ' · motion applied'
+        : label + ' · frame 0';
+    }
+  }
+
   function resetRenderUi() {
     window.clearTimeout(state.renderPollTimer);
     state.renderPollTimer = null;
@@ -994,6 +2181,8 @@
     if (loadProgress) loadProgress.hidden = true;
     const progress = qs('#animation-render-progress');
     if (progress) progress.hidden = true;
+    renderAnimationPromptTelemetry(null);
+    renderAnimationFrameTelemetry(null);
     const error = qs('#animation-render-error');
     if (error) { error.hidden = true; error.textContent = ''; }
     const frame = qs('#animation-render-latest-frame');
@@ -1094,6 +2283,9 @@
       if (preview) preview.hidden = true;
       if (previewEmpty) previewEmpty.hidden = false;
     }
+
+    renderAnimationPromptTelemetry(job);
+    renderAnimationFrameTelemetry(job);
 
     const error = qs('#animation-render-error');
     if (error) {
@@ -1271,7 +2463,10 @@
       resetRenderUi();
       state.project = payload.project;
       state.path = payload.path || '';
+      state.timeline = null;
+      state.timelineSelection = null;
       fillForm();
+      await loadTimeline();
       await loadRenderHistory();
     } catch (error) {
       toast('Could not load animation project', error.message, 'error', 6500);
@@ -1300,8 +2495,11 @@
       resetRenderUi();
       state.project = payload.project;
       state.path = payload.path || '';
+      state.timeline = null;
+      state.timelineSelection = null;
       await loadProjectList();
       fillForm();
+      await loadTimeline();
       await loadRenderHistory();
       toast('Animation project created', `${state.project.name} is ready for editing.`, 'success');
     } catch (error) {
@@ -1327,6 +2525,7 @@
       state.path = payload.path || state.path;
       await loadProjectList();
       fillForm();
+      await loadTimeline();
       await loadRenderHistory();
       toast('Animation project saved', `${state.project.name} was written to project.json.`, 'success');
     } catch (error) {
@@ -1352,11 +2551,42 @@
   }
 
   function bind() {
+    qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
+    qs('#animation-expand-all')?.addEventListener('click', () => setAllAnimationCards(false));
     qs('#animation-new')?.addEventListener('click', createProject);
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
     qs('#animation-add-prompt')?.addEventListener('click', addPromptKeyframe);
     qs('#animation-validate-schedules')?.addEventListener('click', () => validateSchedules(true));
+    qs('#animation-timeline-refresh')?.addEventListener('click', async () => {
+      try {
+        await persistDirtyBeforeTimelineEdit();
+        await loadTimeline();
+      } catch (error) {
+        toast('Could not refresh timeline', error.message, 'error', 6500);
+      }
+    });
+    qs('#animation-timeline-track-select')?.addEventListener('change', event => {
+      const [group, name] = String(event.target.value || '').split('/');
+      if (!group || !name) return;
+      state.timelineSelection = { group, name, frame: null };
+      renderTimeline();
+    });
+    qs('#animation-timeline-frame')?.addEventListener('input', event => {
+      setInspectorFrame(event.target.value);
+    });
+    qs('#animation-timeline-scrubber')?.addEventListener('input', event => {
+      setInspectorFrame(event.target.value);
+    });
+    qs('#animation-timeline-prev-keyframe')?.addEventListener('click', () => navigateTimelineKeyframe(-1));
+    qs('#animation-timeline-next-keyframe')?.addEventListener('click', () => navigateTimelineKeyframe(1));
+    qs('#animation-timeline-scale')?.addEventListener('input', event => {
+      state.timelineScale = Math.max(2, Math.min(14, Number(event.target.value) || 6));
+      renderTimeline();
+    });
+    qs('#animation-timeline-add')?.addEventListener('click', addTimelineKeyframeAtPlayhead);
+    qs('#animation-timeline-apply')?.addEventListener('click', applyTimelineEditor);
+    qs('#animation-timeline-delete')?.addEventListener('click', deleteTimelineKeyframe);
 
     qs('#animation-source-file')?.addEventListener('change', event => {
       const file = event.target.files?.[0];
@@ -1378,6 +2608,7 @@
 
     qs('#animation-model')?.addEventListener('change', () => {
       populateSamplerSelect('');
+      renderPromptRows();
       markDirty();
       renderSourceState();
     });
@@ -1421,12 +2652,19 @@
         input.max = String(max);
       });
       syncInspectorBounds();
+      syncTimelinePlayhead(qs('#animation-inspector-frame')?.value || 0);
     });
   }
 
   async function start() {
+    setupAnimationAccordions();
     bind();
     setEditorEnabled(false);
+
+    window.addEventListener('resize', () => {
+      window.clearTimeout(state.timelineResizeTimer);
+      state.timelineResizeTimer = window.setTimeout(() => renderTimeline(), 140);
+    });
     try {
       await Promise.all([
         loadCapabilities(),
