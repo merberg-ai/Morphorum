@@ -1774,7 +1774,7 @@
         ? (count === 1
           ? 'Cadence 1: diffusion on every eligible frame.'
           : 'Cadence ' + count + ': run diffusion on every ' + count +
-            'th frame; between anchors, only camera transforms run.')
+            ' frames; between anchors, only camera transforms run.')
         : 'Custom keyframe schedule: the renderer resolves cadence at each frame.';
     }
   }
