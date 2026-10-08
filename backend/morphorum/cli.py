@@ -149,6 +149,9 @@ def command_self_test(_: argparse.Namespace) -> int:
                     "seed_behavior": "fixed",
                     "seed_increment": 1,
                 },
+                "cadence": {
+                    "diffusion": "0:(2)",
+                },
             }
             resolved_response = client.post(
                 "/api/animation/resolve-frame",
@@ -160,6 +163,8 @@ def command_self_test(_: argparse.Namespace) -> int:
                 raise RuntimeError("animation schedule resolver returned an unexpected frame state")
             if abs(float(resolved.get("camera_3d", {}).get("fov", -999)) - 40.0) > 1e-6:
                 raise RuntimeError("3D camera resolver returned an unexpected default FOV")
+            if int(resolved.get("cadence", {}).get("diffusion", -1)) != 2:
+                raise RuntimeError("diffusion cadence resolver returned an unexpected value")
 
             motion_source = Image.new("RGB", (16, 16), "black")
             motion_matrix = _frame_transform_matrix(
@@ -199,7 +204,7 @@ def command_self_test(_: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API, frontend, settings, animation mode/schedules, 2D/3D render state, PEFT LoRA backend, torchvision image backend, depth registry, managed models, model index, generation capabilities, and console OK.")
+    print("Morphorum self-test passed: API, frontend, settings, animation mode/schedules/cadence, 2D/3D render state, PEFT LoRA backend, torchvision image backend, depth registry, managed models, model index, generation capabilities, and console OK.")
     return 0
 
 
