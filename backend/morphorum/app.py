@@ -642,12 +642,6 @@ def api_start_animation_render(payload: dict[str, Any]) -> dict[str, Any]:
             existing=project_payload,
             project_id=project_id,
         )
-        if str(normalized.get("animation", {}).get("mode") or "2d").lower() == "3d":
-            raise AnimationRenderError(
-                "Depth-aware 3D rendering is not active in this phase yet. "
-                "Generate/verify the depth preview, or switch Animation Mode to 2D "
-                "for the existing renderer."
-            )
         source_path = animation_project_directory(project_id) / "assets" / "source.png"
         return animation_render_manager.submit(
             project=normalized,
