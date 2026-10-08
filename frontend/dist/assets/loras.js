@@ -331,7 +331,7 @@
     refreshRuntime();
   }
 
-  window.MorphorumLoras = { reload };
+  window.MorphorumLoras = { reload, refreshRuntime };
   window.addEventListener('morphorum:settings-changed', reload);
   window.addEventListener('DOMContentLoaded', init);
 })();
