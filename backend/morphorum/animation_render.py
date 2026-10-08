@@ -8,6 +8,7 @@ import threading
 import time
 import uuid
 from copy import deepcopy
+from functools import wraps
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -160,6 +161,44 @@ def _detach_conditioning_to_cpu(value: Any):
     return value
 
 
+# Multiple LoRA weights and keyframed prompts can create a distinct conditioning
+# cache key on each animation anchor. Retain only the most recent small set of
+# embeddings; old entries otherwise keep CUDA tensors (and potentially autograd
+# graphs) alive across the entire render.
+MAX_CONDITIONING_CACHE_ENTRIES = 8
+
+
+def _inference_only_conditioning(function):
+    """Diffusers encode_prompt() is not itself decorated with no_grad.
+
+    Pipeline.__call__() wraps its own inference in no_grad, but our animation
+    renderer encodes blended prompts *before* entering pipeline.__call__.
+    Without this guard, encoding a new prompt for every LoRA strength can
+    retain a whole CLIP forward graph in conditioning_cache each frame.
+    """
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        import torch
+
+        with torch.inference_mode():
+            return function(*args, **kwargs)
+
+    return wrapped
+
+
+def _cache_conditioning_value(
+    cache: dict[tuple[Any, ...], Any] | None,
+    key: tuple[Any, ...],
+    value: Any,
+) -> None:
+    if cache is None:
+        return
+    while len(cache) >= MAX_CONDITIONING_CACHE_ENTRIES:
+        cache.pop(next(iter(cache)))
+    cache[key] = value
+
+
+@_inference_only_conditioning
 def _prompt_conditioning_kwargs(
     pipe: Any,
     family: str,
@@ -217,8 +256,7 @@ def _prompt_conditioning_kwargs(
                     num_images_per_prompt=1,
                     do_classifier_free_guidance=do_cfg,
                 )
-                if conditioning_cache is not None:
-                    conditioning_cache[key] = encoded
+                _cache_conditioning_value(conditioning_cache, key, encoded)
                 return encoded
 
             first = sdxl_encoded(from_prompt, from_negative)
@@ -258,8 +296,7 @@ def _prompt_conditioning_kwargs(
                     num_images_per_prompt=1,
                     max_sequence_length=max_sequence_length,
                 )
-                if conditioning_cache is not None:
-                    conditioning_cache[key] = encoded
+                _cache_conditioning_value(conditioning_cache, key, encoded)
                 return encoded
 
             first = flux_encoded(from_prompt)
@@ -294,8 +331,7 @@ def _prompt_conditioning_kwargs(
                     encoded = _detach_conditioning_to_cpu(encoded)
                     generation_manager.release_inference_memory()
 
-                if conditioning_cache is not None:
-                    conditioning_cache[key] = encoded
+                _cache_conditioning_value(conditioning_cache, key, encoded)
                 return encoded
 
             first = zimage_embeds(from_prompt)
