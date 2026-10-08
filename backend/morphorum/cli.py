@@ -55,6 +55,10 @@ def command_self_test(_: argparse.Namespace) -> int:
             import peft  # noqa: F401
         except Exception as exc:
             raise RuntimeError(f"PEFT LoRA backend is unavailable: {exc}") from exc
+        try:
+            import torchvision  # noqa: F401
+        except Exception as exc:
+            raise RuntimeError(f"torchvision image backend is unavailable: {exc}") from exc
 
         with TestClient(app) as client:
             health_response = client.get("/api/health")
@@ -195,7 +199,7 @@ def command_self_test(_: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API, frontend, settings, animation mode/schedules, 2D motion/3D camera state, PEFT LoRA backend, depth registry, managed models, model index, generation capabilities, and console OK.")
+    print("Morphorum self-test passed: API, frontend, settings, animation mode/schedules, 2D/3D render state, PEFT LoRA backend, torchvision image backend, depth registry, managed models, model index, generation capabilities, and console OK.")
     return 0
 
 
