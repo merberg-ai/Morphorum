@@ -885,12 +885,12 @@ class GenerationManager:
             return None
 
     def _load_zimage_pipeline(
-        _configure_external_runtime_noise()
         self,
         job: GenerationJob,
         cache_dir: Path,
         load_progress_callback: Any = None,
     ):
+        _configure_external_runtime_noise()
         try:
             import torch
             from diffusers import ZImagePipeline
