@@ -1374,6 +1374,14 @@ class GenerationManager:
                 emit_console("info", "generation", "LoRA adapters disabled for base-model inference.")
             return []
 
+        try:
+            import peft  # noqa: F401
+        except Exception as exc:
+            raise GenerationError(
+                "PEFT is required for Diffusers LoRA adapters but is not available. "
+                "Run the Morphorum updater so Python dependencies are refreshed."
+            ) from exc
+
         load = getattr(pipe, "load_lora_weights", None)
         set_adapters = getattr(pipe, "set_adapters", None)
         if not callable(load) or not callable(set_adapters):
