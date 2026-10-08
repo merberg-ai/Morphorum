@@ -347,6 +347,30 @@ class DepthManager:
             if release_after:
                 self.unload()
 
+    def estimate_path(
+        self,
+        path: Path,
+        *,
+        model_id: str | None = None,
+        device: str = "auto",
+        force: bool = False,
+        release_after: bool = True,
+    ) -> dict[str, Any]:
+        if not path.is_file():
+            raise DepthError(f"Depth source image not found: {path}")
+        try:
+            with Image.open(path) as image:
+                source = image.convert("RGB").copy()
+        except Exception as exc:
+            raise DepthError(f"Could not decode depth source image: {exc}") from exc
+        return self.estimate(
+            source,
+            model_id=model_id,
+            device=device,
+            force=force,
+            release_after=release_after,
+        )
+
     def cached(self, cache_key: str) -> dict[str, Any] | None:
         paths = _cache_paths(cache_key)
         if not all(path.is_file() for path in paths.values()):
