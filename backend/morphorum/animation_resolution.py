@@ -327,6 +327,55 @@ def _zoom_schedule_issues(
     return issues
 
 
+def _fov_schedule_issues(
+    project: dict[str, Any],
+    *,
+    max_frames: int,
+    fps: float,
+    seed: int,
+) -> list[dict[str, Any]]:
+    schedule = _schedule_text(project, "camera_3d.fov")
+    interpolation = _track_interpolation(project, "camera_3d.fov")
+    if max_frames <= 5000:
+        frames = range(max_frames)
+    else:
+        last = max_frames - 1
+        frames = sorted(
+            {
+                int(round(index * last / 999))
+                for index in range(1000)
+            }
+        )
+
+    for frame in frames:
+        try:
+            value = float(
+                resolve_numeric_schedule(
+                    schedule,
+                    frame=frame,
+                    max_frames=max_frames,
+                    seed=seed,
+                    fps=fps,
+                    interpolation=interpolation,
+                )
+            )
+        except ScheduleError:
+            return []
+        if not math.isfinite(value) or value <= 1.0 or value >= 179.0:
+            return [
+                {
+                    "severity": "error",
+                    "frame": frame,
+                    "message": (
+                        "3D field of view must resolve between 1 and 179 degrees. "
+                        f"Frame {frame} resolves to {value:g}; 40 degrees is the "
+                        "default starting point."
+                    ),
+                }
+            ]
+    return []
+
+
 def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
     max_frames, fps, expression_seed = _project_context(project)
     fields: dict[str, Any] = {}
@@ -368,6 +417,20 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
             zoom_field["valid"] = False
         for issue in zoom_issues:
             all_issues.append({"field": "motion.zoom", **issue})
+
+    fov_field = fields.get("camera_3d.fov", {})
+    if fov_field.get("valid", False):
+        fov_issues = _fov_schedule_issues(
+            project,
+            max_frames=max_frames,
+            fps=fps,
+            seed=expression_seed,
+        )
+        fov_field.setdefault("issues", []).extend(fov_issues)
+        if any(issue.get("severity") == "error" for issue in fov_issues):
+            fov_field["valid"] = False
+        for issue in fov_issues:
+            all_issues.append({"field": "camera_3d.fov", **issue})
 
     family = str(project.get("model", {}).get("family") or "").strip().lower()
     prompt_records: list[dict[str, Any]] | None = None
