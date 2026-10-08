@@ -32,6 +32,7 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
         "width": 1024,
         "height": 1024,
         "prompt_transition": "blend",
+        "mode": "2d",
         "start_mode": "prompt",
         "source_image": "",
         "source_image_name": "",
@@ -275,3 +276,60 @@ def test_unsaved_payload_detects_legacy_changes_against_stale_tracks(tmp_path, m
 
     assert normalized["tracks"]["camera_2d"]["zoom"]["schedule"] == "0:(1.0), 119:(1.4)"
     assert normalized["tracks"]["generation"]["strength"]["schedule"] == "0:(1)"
+
+
+
+def test_animation_mode_normalizes_to_2d_or_3d() -> None:
+    project_3d = normalize_animation_project(
+        {
+            "name": "3D Project",
+            "animation": {"mode": "3d"},
+        },
+        project_id="3d-project",
+    )
+    invalid = normalize_animation_project(
+        {
+            "name": "Invalid Mode",
+            "animation": {"mode": "volumetric-ish"},
+        },
+        project_id="invalid-mode",
+    )
+
+    assert project_3d["animation"]["mode"] == "3d"
+    assert invalid["animation"]["mode"] == "2d"
+
+
+def test_legacy_project_without_animation_mode_defaults_to_2d() -> None:
+    payload = {
+        "schema_version": 1,
+        "id": "legacy-mode",
+        "name": "Legacy Mode",
+        "animation": {
+            "max_frames": 10,
+            "fps": 12,
+            "width": 512,
+            "height": 512,
+        },
+        "prompts": {"0": "test"},
+        "negative_prompts": {"0": ""},
+        "motion": {
+            "angle": "0:(0)",
+            "zoom": "0:(1)",
+            "translation_x": "0:(0)",
+            "translation_y": "0:(0)",
+        },
+        "generation": {
+            "strength": "0:(0.65)",
+            "noise": "0:(0.02)",
+            "steps": "0:(9)",
+            "guidance": "0:(0)",
+        },
+    }
+
+    normalized = normalize_animation_project(
+        payload,
+        existing=payload,
+        project_id=payload["id"],
+    )
+
+    assert normalized["animation"]["mode"] == "2d"
