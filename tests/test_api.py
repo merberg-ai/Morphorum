@@ -67,6 +67,12 @@ def test_frontend_and_health() -> None:
         assert 'id="animation-render-state-3d-ry"' in frontend.text
         assert 'id="animation-render-state-depth"' in frontend.text
         assert 'id="animation-render-state-coverage"' in frontend.text
+        assert 'id="animation-render-state-cadence"' in frontend.text
+        assert 'id="animation-render-state-timing"' in frontend.text
+        assert 'id="animation-cadence"' in frontend.text
+        assert 'id="animation-3d-depth-resolution"' in frontend.text
+        assert 'id="resolved-cadence"' in frontend.text
+        assert 'value="cadence.diffusion"' in frontend.text
         assert 'id="resolved-3d-z"' in frontend.text
         assert 'id="resolved-3d-ry"' in frontend.text
         assert 'id="resolved-3d-fov"' in frontend.text
@@ -110,6 +116,9 @@ def test_frontend_and_health() -> None:
         assert "generateDepthPreview" in animation_js.text
         assert "animation-timeline-keyframe-chip" in animation_js.text
         assert "animation-timeline-track-select" in animation_js.text
+        assert "cadence.diffusion" in animation_js.text
+        assert "animation-3d-depth-resolution" in animation_js.text
+        assert "animation-render-state-timing" in animation_js.text
 
 
 def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
