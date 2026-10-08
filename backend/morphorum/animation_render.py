@@ -1238,6 +1238,17 @@ class AnimationRenderManager:
             with Image.open(previous_path) as opened:
                 frame_image = opened.convert("RGB").copy()
 
+        previous_camera_fov = 40.0
+        if animation_mode == "3d" and start_frame > 0:
+            previous_resolved = resolve_project_frame(
+                project,
+                start_frame - 1,
+                lora_records=lora_records,
+            )
+            previous_camera_fov = float(
+                previous_resolved.get("camera_3d", {}).get("fov", 40.0)
+            )
+
         for frame in range(start_frame, total):
             if job.cancel_requested:
                 self._cancel(job)
@@ -1268,7 +1279,9 @@ class AnimationRenderManager:
                         rotation_y=float(camera["rotation_y"]),
                         rotation_z=float(camera["rotation_z"]),
                         fov=float(camera["fov"]),
+                        source_fov=previous_camera_fov,
                     )
+                    previous_camera_fov = float(camera["fov"])
                     transformed = warp.image
                     depth_state = {
                         "cache_key": str(depth_result["cache_key"]),
