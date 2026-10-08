@@ -136,6 +136,21 @@ def test_first_adapter_rejects_indexed_unsupported_checkpoint_extension(tmp_path
         manager._validate_request(GenerationRequest(model_id="model-1", prompt="test"))
 
 
+def test_cuda_pinned_host_oom_reports_memory_lock_failure_separately() -> None:
+    manager = GenerationManager()
+    error = manager._friendly_error(
+        RuntimeError(
+            "CUDA error: out of memory; "
+            "Returning 2 (CUDA_ERROR_OUT_OF_MEMORY) from cuMemHostAlloc"
+        ),
+        action="loading Flux model",
+    )
+    assert "pinned-host-memory allocation" in str(error)
+    assert "cuMemHostAlloc" in str(error)
+    assert "non-streamed" in str(error)
+    assert "ordinary RAM and VRAM" in str(error)
+
+
 def test_flux_fp8_lora_error_is_rewritten_with_compatibility_guidance() -> None:
     manager = GenerationManager()
     error = manager._friendly_error(
