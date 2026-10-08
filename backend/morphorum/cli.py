@@ -51,6 +51,11 @@ def command_doctor(args: argparse.Namespace) -> int:
 def command_self_test(_: argparse.Namespace) -> int:
     ensure_runtime_dirs()
     try:
+        try:
+            import peft  # noqa: F401
+        except Exception as exc:
+            raise RuntimeError(f"PEFT LoRA backend is unavailable: {exc}") from exc
+
         with TestClient(app) as client:
             health_response = client.get("/api/health")
             health_response.raise_for_status()
@@ -119,6 +124,7 @@ def command_self_test(_: argparse.Namespace) -> int:
                     "width": 512,
                     "height": 512,
                     "prompt_transition": "blend",
+                    "mode": "2d",
                 },
                 "model": {"model_id": "", "family": "", "variant": ""},
                 "prompts": {"0": "start", "10": "end"},
@@ -189,7 +195,7 @@ def command_self_test(_: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API, frontend, settings, animation projects/schedules/2D motion/3D camera state, depth registry, managed models, model index, generation capabilities, and console OK.")
+    print("Morphorum self-test passed: API, frontend, settings, animation mode/schedules, 2D motion/3D camera state, PEFT LoRA backend, depth registry, managed models, model index, generation capabilities, and console OK.")
     return 0
 
 
