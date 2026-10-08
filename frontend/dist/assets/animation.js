@@ -236,6 +236,7 @@
   function renderDepthState() {
     const hasProject = Boolean(state.project);
     const hasSource = Boolean(state.project?.animation?.source_image);
+    const renderActive = renderIsActive();
     const preview = state.depthPreview;
     const model = qs('#animation-depth-model');
     const device = qs('#animation-depth-device');
@@ -247,11 +248,11 @@
     const empty = qs('#animation-depth-empty');
     const meta = qs('#animation-depth-meta');
 
-    if (model) model.disabled = !hasProject || state.depthBusy || !state.depthModels.length;
-    if (device) device.disabled = !hasProject || state.depthBusy;
-    if (generate) generate.disabled = !hasProject || !hasSource || state.depthBusy || !state.depthModels.length;
-    if (recompute) recompute.disabled = !hasProject || !hasSource || state.depthBusy || !state.depthModels.length;
-    if (clear) clear.disabled = !hasProject || !preview || state.depthBusy;
+    if (model) model.disabled = !hasProject || state.depthBusy || renderActive || !state.depthModels.length;
+    if (device) device.disabled = !hasProject || state.depthBusy || renderActive;
+    if (generate) generate.disabled = !hasProject || !hasSource || state.depthBusy || renderActive || !state.depthModels.length;
+    if (recompute) recompute.disabled = !hasProject || !hasSource || state.depthBusy || renderActive || !state.depthModels.length;
+    if (clear) clear.disabled = !hasProject || !preview || state.depthBusy || renderActive;
 
     if (badge) {
       badge.textContent = state.depthBusy
