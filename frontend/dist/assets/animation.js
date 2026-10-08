@@ -1597,6 +1597,13 @@
     set('#resolved-angle', `${formatNumber(resolved.motion?.angle)}°`);
     set('#resolved-translation-x', `${formatNumber(resolved.motion?.translation_x)} px`);
     set('#resolved-translation-y', `${formatNumber(resolved.motion?.translation_y)} px`);
+    set('#resolved-3d-x', formatNumber(resolved.camera_3d?.translation_x));
+    set('#resolved-3d-y', formatNumber(resolved.camera_3d?.translation_y));
+    set('#resolved-3d-z', formatNumber(resolved.camera_3d?.translation_z));
+    set('#resolved-3d-rx', `${formatNumber(resolved.camera_3d?.rotation_x)}°`);
+    set('#resolved-3d-ry', `${formatNumber(resolved.camera_3d?.rotation_y)}°`);
+    set('#resolved-3d-rz', `${formatNumber(resolved.camera_3d?.rotation_z)}°`);
+    set('#resolved-3d-fov', `${formatNumber(resolved.camera_3d?.fov)}°`);
     set('#resolved-strength', formatNumber(resolved.generation?.strength));
     set('#resolved-noise', formatNumber(resolved.generation?.noise));
     set('#resolved-steps', formatNumber(resolved.generation?.steps));
@@ -1627,6 +1634,13 @@
       '#resolved-angle',
       '#resolved-translation-x',
       '#resolved-translation-y',
+      '#resolved-3d-x',
+      '#resolved-3d-y',
+      '#resolved-3d-z',
+      '#resolved-3d-rx',
+      '#resolved-3d-ry',
+      '#resolved-3d-rz',
+      '#resolved-3d-fov',
       '#resolved-strength',
       '#resolved-noise',
       '#resolved-steps',
