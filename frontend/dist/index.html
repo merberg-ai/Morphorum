@@ -677,6 +677,12 @@
             <div id="lora-manager-detail-body" class="lora-manager-detail-body" aria-live="polite">
               <div class="model-empty">Select a LoRA to inspect its local file.</div>
             </div>
+            <div class="lora-manager-runtime">
+              <div class="card-header"><div><h3>Runtime adapter state</h3><p class="muted">Registered weights are not proof of visible LoRA influence.</p></div>
+                <button class="secondary-button compact" type="button" id="lora-manager-refresh-runtime">Refresh</button>
+              </div>
+              <div id="lora-manager-runtime-details" class="lora-manager-fields"><span class="muted">No runtime sample yet.</span></div>
+            </div>
             <div class="lora-manager-insert">
               <div class="lora-manager-insert-controls">
                 <label class="field-label" for="lora-manager-weight">Strength</label>
