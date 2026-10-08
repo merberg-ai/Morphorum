@@ -264,6 +264,35 @@
     }
   }
 
+  async function refreshRuntime() {
+    const holder = qs('#lora-manager-runtime-details');
+    if (!holder) return;
+    try {
+      const status = await api('/api/generation/model');
+      holder.replaceChildren();
+      field(holder, 'Checkpoint', status.model_name || 'Not loaded');
+      field(holder, 'Model family', status.family || 'None');
+      field(holder, 'Task', status.task);
+      field(holder, 'Pipeline adapter count', (status.loras || []).length);
+      field(holder, 'Active adapters', (status.active_loras || []).map(x => x.adapter_name + '=' + x.weight).join(', ') || 'None');
+      const current = (status.loras || []).find(item => item.id === state.selected?.id);
+      if (current) {
+        field(holder, 'Selected adapter status', current.compatibility || 'normal loader');
+        const stats = current.diagnostics || {};
+        field(holder, 'Injected UNet tensors', stats.tensors);
+        field(holder, 'Injected UNet modules', stats.modules);
+        field(holder, 'Injected parameters', stats.parameters);
+        field(holder, 'Injected abs-sum', stats.abs_sum);
+        const active = (status.active_loras || []).find(a => a.adapter_name === current.adapter_name);
+        field(holder, 'Selected adapter weight', active?.weight ?? 'Not active');
+      } else if (state.selected) {
+        field(holder, 'Selected LoRA', 'Not loaded on this pipeline');
+      }
+    } catch (error) {
+      holder.replaceChildren(text('p', error.message, 'lora-manager-warning'));
+    }
+  }
+
   function insertIntoImage() {
     const detail = state.detail;
     if (!detail) return;
@@ -289,8 +318,10 @@
     qs('#lora-manager-search')?.addEventListener('input', renderLibrary);
     qs('#lora-manager-scan')?.addEventListener('click', scan);
     qs('#lora-manager-civitai')?.addEventListener('click', lookupCivitai);
+    qs('#lora-manager-refresh-runtime')?.addEventListener('click', refreshRuntime);
     qs('#lora-manager-insert')?.addEventListener('click', insertIntoImage);
     reload();
+    refreshRuntime();
   }
 
   window.MorphorumLoras = { reload };
