@@ -452,8 +452,8 @@
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       renderButton.title = mode === '3d'
-        ? 'Depth-aware 3D rendering is the next renderer phase. A2 supports 3D schedules and depth preview only.'
-        : '';
+        ? 'Render with depth-aware 3D camera warping.'
+        : 'Render with the 2D affine motion engine.';
     }
 
     renderTimeline();
@@ -2231,8 +2231,7 @@
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
-      const modeReady = animationMode() === '2d';
-      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive || state.depthBusy || !modeReady;
+      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive || state.depthBusy;
     }
   }
 
@@ -2488,7 +2487,21 @@
     panel.hidden = false;
     const motion = frameState.motion || {};
     const cumulative = frameState.cumulative_2d || {};
+    const camera3d = frameState.camera_3d || {};
+    const depth3d = frameState.depth_3d || {};
     const generation = frameState.generation || {};
+    const renderMode = String(frameState.animation_mode || '2d').toLowerCase() === '3d' ? '3d' : '2d';
+
+    qsa('[data-render-motion]').forEach(element => {
+      element.hidden = element.dataset.renderMotion !== renderMode;
+    });
+    const label = qs('#animation-render-frame-state-label');
+    if (label) {
+      label.textContent = renderMode === '3d'
+        ? 'Resolved 3D / generation state'
+        : 'Resolved 2D / generation state';
+    }
+
     const set = (selector, value) => {
       const element = qs(selector);
       if (element) element.textContent = value;
@@ -2506,6 +2519,25 @@
       formatNumber(cumulative.center_offset_y, 3) + ' px'
     );
     set('#animation-render-state-border', String(motion.border_mode || '--'));
+    set('#animation-render-state-3d-x', formatNumber(camera3d.translation_x, 5));
+    set('#animation-render-state-3d-y', formatNumber(camera3d.translation_y, 5));
+    set('#animation-render-state-3d-z', formatNumber(camera3d.translation_z, 5));
+    set('#animation-render-state-3d-rx', formatNumber(camera3d.rotation_x, 4) + '°');
+    set('#animation-render-state-3d-ry', formatNumber(camera3d.rotation_y, 4) + '°');
+    set('#animation-render-state-3d-rz', formatNumber(camera3d.rotation_z, 4) + '°');
+    set('#animation-render-state-3d-fov', formatNumber(camera3d.fov, 3) + '°');
+    set(
+      '#animation-render-state-depth',
+      depth3d.cache_key
+        ? ((depth3d.cache_hit ? 'cache' : 'CPU') + ' · ' + formatNumber(depth3d.seconds, 2) + 's')
+        : '--'
+    );
+    set(
+      '#animation-render-state-coverage',
+      depth3d.projected_coverage === undefined
+        ? '--'
+        : Math.round(Number(depth3d.projected_coverage) * 1000) / 10 + '%'
+    );
     set('#animation-render-state-strength', formatNumber(generation.strength, 4));
     set(
       '#animation-render-state-denoise',
@@ -2738,15 +2770,6 @@
 
   async function startAnimationRender() {
     if (!state.project || renderIsActive()) return;
-    if (animationMode() === '3d') {
-      toast(
-        '3D renderer not active yet',
-        'This phase supports 3D schedules and depth estimation. Depth-aware camera warping is the next renderer step.',
-        'warning',
-        7000
-      );
-      return;
-    }
     const button = qs('#animation-start-render');
     if (button) { button.classList.add('busy'); button.disabled = true; }
     try {
