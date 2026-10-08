@@ -50,7 +50,8 @@ def _plain_html(text: Any) -> str:
         parser.feed(str(text or "")[:30000])
     except (ValueError, TypeError):
         return ""
-    return " ".join(" ".join(parser.parts).split())[:MAX_DESC_LENGTH]
+    normalized = " ".join(" ".join(parser.parts).split())
+    return re.sub(r"\\s+([.,!?;:])", r"\\1", normalized)[:MAX_DESC_LENGTH]
 
 
 def _local_info(path: Path) -> dict[str, Any]:
