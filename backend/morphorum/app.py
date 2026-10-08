@@ -62,6 +62,7 @@ from .console import (
     sse_events,
 )
 from .generation import GenerationError, generation_manager
+from .loras import LoRAError
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -641,6 +642,12 @@ def api_start_animation_render(payload: dict[str, Any]) -> dict[str, Any]:
             existing=project_payload,
             project_id=project_id,
         )
+        if str(normalized.get("animation", {}).get("mode") or "2d").lower() == "3d":
+            raise AnimationRenderError(
+                "Depth-aware 3D rendering is not active in this phase yet. "
+                "Generate/verify the depth preview, or switch Animation Mode to 2D "
+                "for the existing renderer."
+            )
         source_path = animation_project_directory(project_id) / "assets" / "source.png"
         return animation_render_manager.submit(
             project=normalized,
@@ -730,7 +737,19 @@ def api_resolve_animation_frame(payload: dict[str, Any]) -> dict[str, Any]:
         )
         frame = int(payload.get("frame", 0))
         return {"resolved": resolve_project_frame(normalized, frame)}
-    except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
+    except (
+        AnimationProjectError,
+        ScheduleError,
+        TimelineError,
+        LoRAError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        emit_console(
+            "warning",
+            "animation",
+            f"Resolved-frame preview failed for {project_id}: {exc}",
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
