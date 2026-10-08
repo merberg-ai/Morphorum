@@ -891,6 +891,36 @@ def api_lora_civitai_lookup(model_id: str) -> dict[str, Any]:
     return result
 
 
+@app.post("/api/loras/{model_id}/runtime-audit")
+def api_lora_runtime_audit(model_id: str) -> dict[str, Any]:
+    """Record an explicit read-only snapshot of LoRA state on the live pipeline."""
+    record = get_model(model_id)
+    if not record or record.get("kind") != "loras":
+        raise HTTPException(status_code=404, detail="Indexed LoRA not found.")
+    status = generation_manager.model_status()
+    entry = next((item for item in status.get("loras", []) if item.get("id") == model_id), None)
+    active = next(
+        (item for item in status.get("active_loras", [])
+         if entry and item.get("adapter_name") == entry.get("adapter_name")),
+        None,
+    )
+    name = str(record.get("name") or "")[:130].replace("\n", " ").replace("\r", " ")
+    diagnostics = (entry or {}).get("diagnostics") or {}
+    emit_console(
+        "info", "lora",
+        f"Runtime audit [{record.get('family')}] {name}: "
+        f"checkpoint={status.get('model_name') or 'none'}, "
+        f"family={status.get('family') or 'none'}, task={status.get('task') or 'none'}, "
+        f"attached={'yes' if entry else 'no'}, "
+        f"active_weight={active.get('weight') if active else 'none'}, "
+        f"compatibility={(entry or {}).get('compatibility') or 'unspecified'}, "
+        f"injected_modules={diagnostics.get('modules', 'unknown')}, "
+        f"tensor_abs_sum={diagnostics.get('abs_sum', 'unknown')}. "
+        "Adapter registration does not establish pixel-level influence.",
+    )
+    return status
+
+
 @app.post("/api/loras/{model_id}/activity")
 def api_lora_manager_activity(model_id: str, payload: dict[str, Any]) -> dict[str, str]:
     """Record prompt insertion outcomes without accepting arbitrary log messages."""
