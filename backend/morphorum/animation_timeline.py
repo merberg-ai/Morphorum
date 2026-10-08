@@ -413,7 +413,7 @@ def normalize_tracks(
         )
     result["prompts"] = prompt_result
 
-    for group in ("camera_2d", "camera_3d", "generation"):
+    for group in ("camera_2d", "camera_3d", "generation", "cadence"):
         group_source = source.get(group, {})
         group_source = group_source if isinstance(group_source, dict) else {}
         group_result = deepcopy(group_source)
@@ -544,7 +544,7 @@ TRACK_GROUP_DEFS: dict[str, dict[str, Any]] = {
     "camera_2d": {"label": "2D Camera", "order": 10, "reserved": False},
     "camera_3d": {"label": "3D Camera", "order": 20, "reserved": False},
     "generation": {"label": "Generation", "order": 30, "reserved": False},
-    "cadence": {"label": "Cadence", "order": 40, "reserved": True},
+    "cadence": {"label": "Cadence", "order": 40, "reserved": False},
     "loras": {"label": "LoRAs", "order": 50, "reserved": True},
 }
 
@@ -684,6 +684,14 @@ _TRACK_META: dict[tuple[str, str], dict[str, Any]] = {
         "unit": None,
         "interpolation_modes": ["linear", "hold"],
         "legacy_field": "generation.guidance",
+    },
+    ("cadence", "diffusion"): {
+        "label": "Diffusion Cadence",
+        "kind": "numeric",
+        "value_type": "integer",
+        "unit": "frames",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "cadence.diffusion",
     },
 }
 
