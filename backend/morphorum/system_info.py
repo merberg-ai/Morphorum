@@ -49,6 +49,16 @@ def git_commit() -> str | None:
     return _run(["git", "-C", str(ROOT), "rev-parse", "--short=12", "HEAD"])
 
 
+def git_branch() -> str | None:
+    branch = _run(["git", "-C", str(ROOT), "branch", "--show-current"])
+    if branch:
+        return branch
+    detached = _run(["git", "-C", str(ROOT), "rev-parse", "--abbrev-ref", "HEAD"])
+    if detached and detached != "HEAD":
+        return detached
+    return None
+
+
 def gpu_info() -> dict:
     if not shutil.which("nvidia-smi"):
         return {"backend": None, "devices": []}
@@ -187,6 +197,7 @@ def doctor_report() -> dict:
         "ok": all(check.ok for check in checks if check.name not in {"ffmpeg", "CUDA"}),
         "version": __version__,
         "commit": git_commit(),
+        "branch": git_branch(),
         "python": platform.python_version(),
         "platform": platform.platform(),
         "root": str(ROOT),
@@ -209,6 +220,7 @@ def write_install_manifest(extra: dict | None = None) -> None:
     payload = {
         "morphorum_version": __version__,
         "git_commit": git_commit(),
+        "git_branch": git_branch(),
         "python": platform.python_version(),
         "platform": platform.platform(),
         "root": str(ROOT),
