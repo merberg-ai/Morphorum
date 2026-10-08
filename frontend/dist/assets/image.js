@@ -649,11 +649,11 @@
     const numeric = Number(weight);
     if (!Number.isFinite(numeric) || numeric < -4 || numeric > 4) return false;
     // Safe tags cannot contain colons, angle brackets, or control characters.
-    if (!name || /[:<>\\r\\n]/.test(name)) {
+    if (!name || /[:<>\r\n]/.test(name)) {
       toast('Invalid LoRA name', 'This filename cannot be represented by a Deforum-style directive.', 'warning');
       return false;
     }
-    const words = Array.isArray(triggers) ? triggers.filter(value => typeof value === 'string' && !/[<>\\r\\n]/.test(value)).slice(0, 20) : [];
+    const words = Array.isArray(triggers) ? triggers.filter(value => typeof value === 'string' && !/[<>\r\n]/.test(value)).slice(0, 20) : [];
     const tag = `<lora:${name}:${Number(numeric.toFixed(4))}>`;
     insertAtCursor(prompt, [...words, tag].join(words.length ? ', ' : ''));
     qs('.nav-button[data-view="image"]')?.click();
