@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import gc
 import json
+import logging
 import math
+import os
 import random
 import threading
 import time
 import uuid
+import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +23,59 @@ from .loras import LoRAError, parse_and_resolve_prompt_loras
 from .model_index import get_model
 from .paths import CACHE_DIR, OUTPUTS_DIR, ensure_runtime_dirs
 from .settings import load_settings
+
+class _KnownDiffusersNoiseFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        return not (
+            message.startswith("There are modules in ")
+            and "should be kept in float32: []" in message
+        )
+
+
+_runtime_noise_configured = False
+
+
+def _configure_external_runtime_noise() -> None:
+    global _runtime_noise_configured
+    if _runtime_noise_configured:
+        return
+
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*Already found a `peft_config` attribute.*",
+        category=UserWarning,
+        module=r"peft\.tuners\.tuners_utils",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*`upcast_vae` is deprecated.*",
+        category=FutureWarning,
+        module=r"diffusers\.pipelines\.stable_diffusion_xl.*",
+    )
+
+    try:
+        from huggingface_hub.utils import disable_progress_bars
+
+        disable_progress_bars()
+    except Exception:
+        pass
+
+    try:
+        from diffusers.utils import logging as diffusers_logging
+
+        diffusers_logging.disable_progress_bar()
+        filter_instance = _KnownDiffusersNoiseFilter()
+        for handler in logging.getLogger("diffusers").handlers:
+            handler.addFilter(filter_instance)
+    except Exception:
+        pass
+
+    _runtime_noise_configured = True
+
 
 SUPPORTED_FAMILIES = {"sdxl", "flux", "zimage"}
 FAMILY_IMAGE_EXTENSIONS = {
@@ -602,6 +658,7 @@ class GenerationManager:
             )
 
     def _load_sdxl_pipeline(self, job: GenerationJob, cache_dir: Path):
+        _configure_external_runtime_noise()
         try:
             import torch
             from diffusers import StableDiffusionXLPipeline
@@ -627,6 +684,7 @@ class GenerationManager:
         return pipe, device, device
 
     def _load_flux_pipeline(self, job: GenerationJob, cache_dir: Path):
+        _configure_external_runtime_noise()
         try:
             import torch
             from diffusers import FluxPipeline, FluxTransformer2DModel
@@ -827,6 +885,7 @@ class GenerationManager:
             return None
 
     def _load_zimage_pipeline(
+        _configure_external_runtime_noise()
         self,
         job: GenerationJob,
         cache_dir: Path,
