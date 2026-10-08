@@ -157,6 +157,10 @@ def test_interrupted_manifest_can_resume_from_last_completed_frame(
     started = first_manager.submit(project=sample_project(), source_path=source)
     completed = wait_for(first_manager, started["id"])
     assert completed["status"] == "completed"
+    # The public status can become "completed" just before the worker finishes
+    # its final manifest write. Synchronize before simulating a process crash,
+    # otherwise that final write can overwrite the synthetic interrupted state.
+    first_manager._queue.join()
 
     render_dir = (
         tmp_path / "outputs" / "animations" / "render-test" / started["id"]
