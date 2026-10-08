@@ -6,6 +6,7 @@ import time
 from fastapi.testclient import TestClient
 from PIL import Image
 
+import morphorum.animation_depth as animation_depth
 import morphorum.animation_motion as animation_motion
 import morphorum.animation_projects as animation_projects
 import morphorum.animation_render as animation_render
@@ -60,6 +61,10 @@ def test_frontend_and_health() -> None:
         assert 'id="resolved-3d-fov"' in frontend.text
         assert 'value="camera_3d.translation_z"' in frontend.text
         assert 'value="camera_3d.fov"' in frontend.text
+        assert 'id="animation-depth-card"' in frontend.text
+        assert 'id="animation-depth-model"' in frontend.text
+        assert 'id="animation-generate-depth"' in frontend.text
+        assert 'id="animation-depth-preview"' in frontend.text
         assert 'id="copy-console-view"' in frontend.text
         assert 'id="copy-console-buffer"' in frontend.text
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
@@ -81,6 +86,8 @@ def test_frontend_and_health() -> None:
         assert "animation-render-state-cum-zoom" in animation_js.text
         assert "resolved.camera_3d?.translation_z" in animation_js.text
         assert "resolved.camera_3d?.fov" in animation_js.text
+        assert "/api/animation/depth/models" in animation_js.text
+        assert "generateDepthPreview" in animation_js.text
         assert "animation-timeline-keyframe-chip" in animation_js.text
         assert "animation-timeline-track-select" in animation_js.text
 
