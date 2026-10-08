@@ -114,7 +114,7 @@ def _local_html_info(path: Path) -> dict[str, Any] | None:
             raw = candidate.read_text(encoding="utf-8-sig", errors="replace")
             parser = _SidecarHTMLText()
             parser.feed(raw)
-            match = re.search(r"https?://(?:www\\.)?civitai\\.com/models/(\\d+)(?:\\?[^\\s\"<>]*)?", raw, re.I)
+            match = re.search(r"https?://(?:www\.)?civitai\.com/models/(\d+)(?:\?[^\s\"<>]*)?", raw, re.I)
             return {
                 "filename": candidate.name,
                 "text_excerpt": " ".join(" ".join(parser.words).split())[:3000],
