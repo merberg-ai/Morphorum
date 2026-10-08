@@ -27,6 +27,7 @@
     depthModels: [],
     depthPreview: null,
     depthBusy: false,
+    depthPollTimer: null,
   };
 
   const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
@@ -317,12 +318,41 @@
     renderDepthState();
   }
 
+  async function pollDepthManagerStatus() {
+    if (!state.depthBusy) return;
+    try {
+      const payload = await api('/api/animation/depth/models');
+      const status = payload.status || {};
+      const badge = qs('#animation-depth-status');
+      const meta = qs('#animation-depth-meta');
+      if (badge && status.phase) {
+        const labels = {
+          loading: 'Loading model…',
+          ready: 'Model ready',
+          estimating: 'Estimating…',
+          idle: 'Working…',
+          error: 'Depth error',
+        };
+        badge.textContent = labels[status.phase] || status.phase;
+      }
+      if (meta && status.message) meta.textContent = status.message;
+    } catch (_) {
+      // The primary preview request will surface any real error.
+    }
+    window.clearTimeout(state.depthPollTimer);
+    if (state.depthBusy) {
+      state.depthPollTimer = window.setTimeout(pollDepthManagerStatus, 450);
+    }
+  }
+
   async function generateDepthPreview(force = false) {
     if (!state.project?.id || !state.project?.animation?.source_image || state.depthBusy) return;
     const button = qs(force ? '#animation-recompute-depth' : '#animation-generate-depth');
     state.depthBusy = true;
     setBusy(button, true);
     renderDepthState();
+    renderSourceState();
+    pollDepthManagerStatus();
     try {
       const payload = await api(
         '/api/animation/projects/' +
@@ -349,8 +379,11 @@
       toast('Depth preview failed', error.message, 'error', 8000);
     } finally {
       state.depthBusy = false;
+      window.clearTimeout(state.depthPollTimer);
+      state.depthPollTimer = null;
       setBusy(button, false);
       renderDepthState();
+      renderSourceState();
     }
   }
 
@@ -2066,13 +2099,13 @@
     if (meta) meta.textContent = hasSource
       ? ((requiresSource ? 'Starting frame · ' : 'Optional preview reference · ') + (state.project.animation.source_image_name || 'uploaded image'))
       : (requiresSource ? 'No starting image uploaded.' : 'No image uploaded. Prompt mode does not require one.');
-    if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive;
-    if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive;
-    if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive;
+    if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
-      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive;
+      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive || state.depthBusy;
     }
   }
 
