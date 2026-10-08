@@ -371,4 +371,52 @@ class DepthManager:
         return path
 
 
+def project_depth_manifest_path(project_dir: Path) -> Path:
+    return project_dir / "assets" / "depth-preview.json"
+
+
+def save_project_depth_manifest(project_dir: Path, result: dict[str, Any]) -> Path:
+    path = project_depth_manifest_path(project_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        key: result.get(key)
+        for key in (
+            "cache_key",
+            "model_id",
+            "model_label",
+            "repo_id",
+            "depth_type",
+            "device",
+            "width",
+            "height",
+            "raw_min",
+            "raw_max",
+            "normalized_min",
+            "normalized_max",
+            "convention",
+            "preview_convention",
+            "source_sha256",
+            "created_at",
+            "cache_hit",
+        )
+    }
+    _write_json_atomic(path, payload)
+    return path
+
+
+def load_project_depth_manifest(project_dir: Path) -> dict[str, Any] | None:
+    path = project_depth_manifest_path(project_dir)
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def clear_project_depth_manifest(project_dir: Path) -> None:
+    project_depth_manifest_path(project_dir).unlink(missing_ok=True)
+
+
 depth_manager = DepthManager()
