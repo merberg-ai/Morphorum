@@ -293,6 +293,7 @@ class GenerationManager:
         self._pipeline_task: str | None = None
         self._pipeline_loras: dict[str, dict[str, Any]] = {}
         self._active_lora_signature: tuple[tuple[str, float], ...] = ()
+        self._verified_lora_adapters: tuple[str, ...] = ()
         self._inference_lock = threading.Lock()
 
     def capabilities(self) -> dict[str, dict[str, Any]]:
@@ -1202,6 +1203,32 @@ class GenerationManager:
         old_pipe = self._pipeline
         self._pipeline = self._convert_pipeline_task(old_pipe, family, task)
         self._pipeline_task = task
+
+        # LoRA adapters live on shared PEFT-enabled components, but task conversion
+        # creates a new pipeline wrapper. Never trust wrapper-local activation state
+        # across that boundary: inspect what survived and force configure_loras()
+        # to reassert the requested adapters on the new task.
+        known_adapters = self._pipeline_adapter_names(self._pipeline)
+        if known_adapters is not None:
+            missing_ids = [
+                lora_id
+                for lora_id, item in self._pipeline_loras.items()
+                if str(item.get("adapter_name") or "") not in known_adapters
+            ]
+            for lora_id in missing_ids:
+                self._pipeline_loras.pop(lora_id, None)
+            if missing_ids:
+                emit_console(
+                    "warning",
+                    "generation",
+                    (
+                        f"{len(missing_ids)} cached LoRA adapter(s) did not survive the "
+                        f"{previous} → {task} pipeline switch; they will be reloaded."
+                    ),
+                )
+        self._active_lora_signature = ()
+        self._verified_lora_adapters = ()
+
         del old_pipe
         self.release_inference_memory()
         self._notify_load_progress(
@@ -1413,29 +1440,76 @@ class GenerationManager:
         return pipe, generator_device
 
     @staticmethod
-    def _pipeline_has_adapter(pipe: Any, adapter_name: str) -> bool:
+    def _pipeline_adapter_names(pipe: Any) -> set[str] | None:
         list_adapters = getattr(pipe, "get_list_adapters", None)
         if callable(list_adapters):
             try:
                 listed = list_adapters()
                 if isinstance(listed, dict):
-                    for names in listed.values():
-                        if isinstance(names, (list, tuple, set)) and adapter_name in names:
-                            return True
+                    names: set[str] = set()
+                    for values in listed.values():
+                        if isinstance(values, (list, tuple, set)):
+                            names.update(str(value) for value in values)
+                    return names
             except Exception:
                 pass
 
+        names: set[str] = set()
+        inspected = False
         for component_name in ("unet", "transformer", "text_encoder", "text_encoder_2"):
             component = getattr(pipe, component_name, None)
             config = getattr(component, "peft_config", None)
             if config is None:
                 continue
+            inspected = True
             try:
-                if adapter_name in config:
-                    return True
+                names.update(str(value) for value in config.keys())
             except Exception:
+                try:
+                    names.update(str(value) for value in config)
+                except Exception:
+                    pass
+        return names if inspected else None
+
+    @classmethod
+    def _pipeline_has_adapter(cls, pipe: Any, adapter_name: str) -> bool:
+        names = cls._pipeline_adapter_names(pipe)
+        return names is not None and adapter_name in names
+
+    @staticmethod
+    def _pipeline_active_adapters(pipe: Any) -> set[str] | None:
+        getter = getattr(pipe, "get_active_adapters", None)
+        if callable(getter):
+            try:
+                active = getter()
+                if isinstance(active, str):
+                    return {active}
+                if isinstance(active, (list, tuple, set)):
+                    return {str(value) for value in active}
+            except Exception:
+                pass
+
+        active_names: set[str] = set()
+        inspected = False
+        for component_name in ("unet", "transformer", "text_encoder", "text_encoder_2"):
+            component = getattr(pipe, component_name, None)
+            if component is None:
                 continue
-        return False
+            for attribute in ("active_adapters", "active_adapter"):
+                active = getattr(component, attribute, None)
+                if active is None:
+                    continue
+                inspected = True
+                try:
+                    if callable(active):
+                        active = active()
+                except Exception:
+                    continue
+                if isinstance(active, str):
+                    active_names.add(active)
+                elif isinstance(active, (list, tuple, set)):
+                    active_names.update(str(value) for value in active)
+        return active_names if inspected else None
 
     @staticmethod
     def _sdxl_unet_only_state_dict(path: Path) -> tuple[dict[str, Any], int]:
@@ -1503,6 +1577,7 @@ class GenerationManager:
                 if callable(disable):
                     disable()
                 self._active_lora_signature = ()
+                self._verified_lora_adapters = ()
                 emit_console("info", "generation", "LoRA adapters disabled for base-model inference.")
             return []
 
@@ -1539,6 +1614,28 @@ class GenerationManager:
                 )
             adapter_name = str(item.get("adapter_name") or f"morphorum_{lora_id}")
             weight = float(item.get("weight", 1.0))
+
+            cached = self._pipeline_loras.get(lora_id)
+            if cached is not None:
+                known_adapters = self._pipeline_adapter_names(pipe)
+                cached_adapter_name = str(
+                    cached.get("adapter_name") or adapter_name
+                )
+                if (
+                    known_adapters is not None
+                    and cached_adapter_name not in known_adapters
+                ):
+                    self._pipeline_loras.pop(lora_id, None)
+                    self._active_lora_signature = ()
+                    self._verified_lora_adapters = ()
+                    emit_console(
+                        "warning",
+                        "generation",
+                        (
+                            f"Cached LoRA {cached.get('name') or path.name} is missing "
+                            "from the active pipeline; reloading its adapter weights."
+                        ),
+                    )
 
             if lora_id not in self._pipeline_loras:
                 compatibility: str | None = None
@@ -1630,7 +1727,56 @@ class GenerationManager:
                 raise GenerationError(
                     f"Could not activate LoRA adapters for {family}: {exc}"
                 ) from exc
+
+            known_adapters = self._pipeline_adapter_names(pipe)
+            if known_adapters is not None:
+                missing = [
+                    name for name in adapter_names
+                    if name not in known_adapters
+                ]
+                if missing:
+                    raise GenerationError(
+                        "LoRA activation returned without an error, but the active "
+                        "pipeline does not contain adapter(s): "
+                        + ", ".join(missing)
+                    )
+
+            active_adapters = self._pipeline_active_adapters(pipe)
+            if active_adapters is not None:
+                inactive = [
+                    name for name in adapter_names
+                    if name not in active_adapters
+                ]
+                if inactive:
+                    raise GenerationError(
+                        "LoRA adapter weights were set, but Diffusers/PEFT reports "
+                        "adapter(s) inactive: "
+                        + ", ".join(inactive)
+                    )
+
             self._active_lora_signature = signature
+            adapter_signature = tuple(adapter_names)
+            if adapter_signature != self._verified_lora_adapters:
+                verification = (
+                    "Diffusers active-adapter state"
+                    if active_adapters is not None
+                    else (
+                        "PEFT adapter registry"
+                        if known_adapters is not None
+                        else "adapter API call"
+                    )
+                )
+                emit_console(
+                    "info",
+                    "generation",
+                    (
+                        f"Verified LoRA attachment on {self._pipeline_task or 'current'} "
+                        f"pipeline via {verification}: "
+                        + ", ".join(adapter_names)
+                    ),
+                )
+                self._verified_lora_adapters = adapter_signature
+
             emit_console(
                 "info",
                 "generation",
@@ -1711,6 +1857,7 @@ class GenerationManager:
         self._pipeline_task = None
         self._pipeline_loras = {}
         self._active_lora_signature = ()
+        self._verified_lora_adapters = ()
 
         # Always collect here, even if model loading failed before the pipeline
         # could be registered on the manager.
