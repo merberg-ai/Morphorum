@@ -404,7 +404,7 @@ def _frame_state_for_frame(
     retention_strength = float(generation.get("strength", 0.0))
     denoise_strength = (
         1.0 - retention_strength
-        if diffusion_mode in {"img2img", "transform-only"}
+        if diffusion_mode in {"img2img", "transform-only", "cadence-transform"}
         else None
     )
     dimensions = resolved.get("dimensions", {})
