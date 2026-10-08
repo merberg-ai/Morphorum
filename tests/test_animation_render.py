@@ -1202,8 +1202,8 @@ def test_animation_img2img_frame_requests_resolve_loras_before_shared_generation
     project = sample_project(max_frames=4)
     project["generation"]["strength"] = "0:(0.5)"
     project["prompts"] = {
-        "0": "dreamy forest <lora:CreepyDroneStyle:0.2>",
-        "3": "haunted city <lora:CreepyDroneStyle:0.8>",
+        "0": "forest <lora:CreepyDroneStyle:0.2>",
+        "3": "city <lora:CreepyDroneStyle:0.8>",
     }
 
     manager = AnimationRenderManager()
