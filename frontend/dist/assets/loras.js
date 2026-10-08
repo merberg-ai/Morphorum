@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const state = { records: [], selected: null, detail: null, request: 0 };
+  const state = { records: [], selected: null, detail: null, civitai: null, request: 0 };
   const qs = selector => document.querySelector(selector);
   const toast = (title, message, type = 'info') => window.MorphorumToast?.(title, message, type, 6000);
   const api = async (url, options = {}) => {
@@ -61,6 +61,8 @@
     target.replaceChildren();
     const d = state.detail;
     insert.disabled = !d;
+    qs('#lora-manager-civitai').disabled = !d;
+    renderCivitai();
     if (!d) {
       title.textContent = state.selected?.name || 'Choose a LoRA';
       subtitle.textContent = state.selected ? 'Reading local metadata…' : 'Metadata and architecture diagnostics appear here.';
@@ -147,6 +149,7 @@
   async function selectLora(record) {
     state.selected = record;
     state.detail = null;
+    state.civitai = null;
     const request = ++state.request;
     renderLibrary();
     renderDetail();
@@ -168,7 +171,7 @@
       const result = await api('/api/loras');
       state.records = result.loras || [];
       const selected = state.records.find(item => item.id === state.selected?.id);
-      if (!selected) { state.selected = null; state.detail = null; ++state.request; }
+      if (!selected) { state.selected = null; state.detail = null; state.civitai = null; ++state.request; }
       renderLibrary();
       if (selected) await selectLora(selected);
       else renderDetail();
@@ -195,6 +198,65 @@
     }
   }
 
+  function renderCivitai() {
+    const holder = qs('#lora-manager-civitai-result');
+    if (!holder) return;
+    holder.replaceChildren();
+    const info = state.civitai;
+    if (!info) return;
+    if (!info.found) {
+      holder.append(text('p', info.message || 'No matching version found.', 'muted lora-manager-small'));
+      return;
+    }
+    const content = document.createElement('div');
+    content.className = 'lora-manager-fields';
+    field(content, 'Match confidence', info.confidence);
+    field(content, 'Model / version', [info.model_name, info.version_name].filter(Boolean).join(' · '));
+    field(content, 'Civitai base model', info.base_model);
+    field(content, 'Creator', info.creator);
+    field(content, 'Model type', info.type);
+    field(content, 'Reported triggers', (info.trained_words || []).join(', ') || 'Not recorded');
+    field(content, 'Version ID', info.version_id);
+    const card = section('Civitai model version', content);
+    if (typeof info.url === 'string' && /^https:\/\/civitai\.com\/models\/\d+\?modelVersionId=\d+$/.test(info.url)) {
+      const link = document.createElement('a');
+      link.href = info.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Open this version on Civitai ↗';
+      link.className = 'lora-manager-civitai-link';
+      card.append(link);
+    }
+    if (info.description_text) card.appendChild(text('p', info.description_text, 'muted lora-manager-small'));
+    holder.append(card);
+  }
+
+  async function lookupCivitai() {
+    const detail = state.detail;
+    if (!detail) return;
+    const button = qs('#lora-manager-civitai');
+    const request = state.request;
+    button.disabled = true;
+    button.classList.add('busy');
+    try {
+      const result = await api('/api/loras/' + encodeURIComponent(detail.id) + '/civitai-lookup', {
+        method: 'POST', body: '{}',
+      });
+      if (request !== state.request) return;
+      state.civitai = result;
+      renderCivitai();
+      toast('Civitai lookup finished', result.found ? 'Version found (' + result.confidence + ').' : result.message, result.found ? 'success' : 'warning');
+    } catch (error) {
+      if (request !== state.request) return;
+      toast('Civitai unavailable', error.message, 'warning');
+    } finally {
+      if (request === state.request) {
+        button.disabled = false;
+        button.classList.remove('busy');
+      }
+    }
+  }
+
   function insertIntoImage() {
     const detail = state.detail;
     if (!detail) return;
@@ -203,7 +265,9 @@
       toast('Invalid LoRA strength', 'Use a value between -4 and 4.', 'warning');
       return;
     }
-    const triggers = qs('#lora-manager-add-triggers').checked ? detail.trigger_words : [];
+    const triggers = qs('#lora-manager-add-triggers').checked
+      ? ((detail.trigger_words || []).length ? detail.trigger_words : state.civitai?.trained_words || [])
+      : [];
     const applied = window.MorphorumImage?.insertFromManager?.({
       family: detail.family, name: detail.name, weight: raw, triggers,
     });
@@ -212,11 +276,12 @@
 
   function init() {
     qs('#lora-manager-family')?.addEventListener('change', () => {
-      state.selected = null; state.detail = null; ++state.request;
+      state.selected = null; state.detail = null; state.civitai = null; ++state.request;
       renderLibrary(); renderDetail();
     });
     qs('#lora-manager-search')?.addEventListener('input', renderLibrary);
     qs('#lora-manager-scan')?.addEventListener('click', scan);
+    qs('#lora-manager-civitai')?.addEventListener('click', lookupCivitai);
     qs('#lora-manager-insert')?.addEventListener('click', insertIntoImage);
     reload();
   }
