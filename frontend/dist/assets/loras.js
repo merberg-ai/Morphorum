@@ -79,8 +79,15 @@
     field(overview, 'Container', d.format);
     field(overview, 'File size', (d.size_bytes / (1024 * 1024)).toFixed(1) + ' MiB');
     field(overview, 'Trigger source', d.trigger_source);
-    field(overview, 'Sidecar', d.sidecar);
+    field(overview, 'JSON sidecar', d.sidecar);
+    field(overview, 'HTML sidecar', d.html_sidecar?.filename);
     target.appendChild(section('Identification', overview));
+    if (d.html_sidecar?.text_excerpt) {
+      const htmlData = document.createElement('div');
+      htmlData.append(text('p', d.html_sidecar.text_excerpt, 'muted lora-manager-small'));
+      if (d.html_sidecar.civitai_model_id) field(htmlData, 'Civitai model ID', d.html_sidecar.civitai_model_id);
+      target.appendChild(section('Local HTML information', htmlData));
+    }
 
     target.appendChild(section('Recorded trigger words', pillRow(d.trigger_words)));
     const tags = document.createElement('div');
