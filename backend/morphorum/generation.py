@@ -1540,8 +1540,9 @@ class GenerationManager:
 
     @staticmethod
     def _adapter_diagnostics(component: Any, adapter_name: str) -> dict[str, Any]:
-        if component is None:
+        if component is None or not callable(getattr(component, "named_parameters", None)):
             return {
+                "available": False,
                 "modules": 0,
                 "tensors": 0,
                 "parameters": 0,
@@ -1587,6 +1588,7 @@ class GenerationManager:
                 pass
 
         return {
+            "available": True,
             "modules": module_count,
             "tensors": tensor_count,
             "parameters": parameter_count,
@@ -1603,9 +1605,8 @@ class GenerationManager:
     ) -> dict[str, Any]:
         component = getattr(pipe, component_name, None)
         diagnostics = cls._adapter_diagnostics(component, adapter_name)
-        if (
-            diagnostics["modules"] <= 0
-            or diagnostics["tensors"] <= 0
+        if diagnostics.get("available") and (
+            diagnostics["tensors"] <= 0
             or diagnostics["parameters"] <= 0
             or diagnostics["abs_sum"] <= 0.0
         ):
