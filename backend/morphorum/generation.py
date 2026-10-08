@@ -268,6 +268,7 @@ class GenerationManager:
                     "name": item["name"],
                     "family": item["family"],
                     "adapter_name": item["adapter_name"],
+                    "compatibility": item.get("compatibility"),
                 }
                 for item in self._pipeline_loras.values()
             ],
@@ -1352,6 +1353,78 @@ class GenerationManager:
         )
         return pipe, generator_device
 
+    @staticmethod
+    def _pipeline_has_adapter(pipe: Any, adapter_name: str) -> bool:
+        list_adapters = getattr(pipe, "get_list_adapters", None)
+        if callable(list_adapters):
+            try:
+                listed = list_adapters()
+                if isinstance(listed, dict):
+                    for names in listed.values():
+                        if isinstance(names, (list, tuple, set)) and adapter_name in names:
+                            return True
+            except Exception:
+                pass
+
+        for component_name in ("unet", "transformer", "text_encoder", "text_encoder_2"):
+            component = getattr(pipe, component_name, None)
+            config = getattr(component, "peft_config", None)
+            if config is None:
+                continue
+            try:
+                if adapter_name in config:
+                    return True
+            except Exception:
+                continue
+        return False
+
+    @staticmethod
+    def _sdxl_unet_only_state_dict(path: Path) -> tuple[dict[str, Any], int]:
+        try:
+            from safetensors.torch import load_file
+        except Exception as exc:
+            raise GenerationError(
+                "Safetensors is required for the SDXL LoRA compatibility fallback."
+            ) from exc
+
+        try:
+            state_dict = load_file(str(path), device="cpu")
+        except Exception as exc:
+            raise GenerationError(
+                f"Could not read SDXL LoRA safetensors for compatibility fallback: {exc}"
+            ) from exc
+
+        def is_text_encoder_key(key: str) -> bool:
+            value = str(key).lower()
+            return (
+                value.startswith("lora_te_")
+                or value.startswith("lora_te1_")
+                or value.startswith("lora_te2_")
+                or value.startswith("text_encoder.")
+                or value.startswith("text_encoder_2.")
+                or value.startswith("te1.")
+                or value.startswith("te2.")
+            )
+
+        filtered = {
+            key: value
+            for key, value in state_dict.items()
+            if not is_text_encoder_key(key)
+        }
+        removed = len(state_dict) - len(filtered)
+        if removed <= 0:
+            raise GenerationError(
+                "The SDXL LoRA loader hit the current Diffusers/PEFT rank bug, "
+                "but the file did not contain recognizable text-encoder keys that "
+                "Morphorum can safely omit."
+            )
+        if not filtered:
+            raise GenerationError(
+                "The SDXL LoRA contains only text-encoder weights; Morphorum cannot "
+                "apply the U-Net-only compatibility fallback."
+            )
+        return filtered, removed
+
     def configure_loras(
         self,
         pipe: Any,
@@ -1409,6 +1482,7 @@ class GenerationManager:
             weight = float(item.get("weight", 1.0))
 
             if lora_id not in self._pipeline_loras:
+                compatibility: str | None = None
                 try:
                     load(
                         str(path.parent),
@@ -1416,9 +1490,51 @@ class GenerationManager:
                         adapter_name=adapter_name,
                         local_files_only=True,
                     )
+                except IndexError as exc:
+                    if family != "sdxl" or path.suffix.lower() != ".safetensors":
+                        raise GenerationError(
+                            f"Could not load {family} LoRA '{item.get('name') or path.name}': "
+                            f"{type(exc).__name__}: {exc}"
+                        ) from exc
+
+                    if self._pipeline_has_adapter(pipe, adapter_name):
+                        compatibility = "sdxl-unet-only"
+                        emit_console(
+                            "warning",
+                            "generation",
+                            (
+                                f"SDXL LoRA {path.name} hit the Diffusers/PEFT text-encoder "
+                                "rank compatibility bug after its U-Net adapter loaded. "
+                                "Continuing with the U-Net portion only."
+                            ),
+                        )
+                    else:
+                        try:
+                            state_dict, removed_keys = self._sdxl_unet_only_state_dict(path)
+                            load(
+                                state_dict,
+                                adapter_name=adapter_name,
+                            )
+                        except Exception as fallback_exc:
+                            raise GenerationError(
+                                f"Could not load sdxl LoRA '{item.get('name') or path.name}'. "
+                                f"Normal loader failed with {type(exc).__name__}: {exc}; "
+                                f"U-Net-only compatibility fallback also failed: {fallback_exc}"
+                            ) from fallback_exc
+                        compatibility = "sdxl-unet-only"
+                        emit_console(
+                            "warning",
+                            "generation",
+                            (
+                                f"SDXL LoRA {path.name} hit the Diffusers/PEFT text-encoder "
+                                f"rank compatibility bug. Retried with U-Net weights only "
+                                f"({removed_keys} text-encoder tensor(s) skipped)."
+                            ),
+                        )
                 except Exception as exc:
                     raise GenerationError(
-                        f"Could not load {family} LoRA '{item.get('name') or path.name}': {exc}"
+                        f"Could not load {family} LoRA '{item.get('name') or path.name}': "
+                        f"{type(exc).__name__}: {exc}"
                     ) from exc
                 self._pipeline_loras[lora_id] = {
                     "id": lora_id,
@@ -1426,11 +1542,15 @@ class GenerationManager:
                     "family": family,
                     "path": str(path),
                     "adapter_name": adapter_name,
+                    "compatibility": compatibility,
                 }
                 emit_console(
                     "info",
                     "generation",
-                    f"Loaded {family} LoRA adapter: {path.name}.",
+                    (
+                        f"Loaded {family} LoRA adapter: {path.name}"
+                        + (" (U-Net-only compatibility mode)." if compatibility else ".")
+                    ),
                 )
 
             adapter_names.append(
