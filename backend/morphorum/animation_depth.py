@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -95,6 +96,7 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
 class DepthManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
+        self._inference_lock = threading.Lock()
         self._model: Any = None
         self._processor: Any = None
         self._loaded_model_id: str | None = None
@@ -159,9 +161,15 @@ class DepthManager:
             )
             emit_console("info", "depth", self._message)
             try:
+                os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+                os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
                 import torch
+                from huggingface_hub.utils import disable_progress_bars
                 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+                from transformers.utils import logging as transformers_logging
 
+                disable_progress_bars()
+                transformers_logging.disable_progress_bar()
                 processor = AutoImageProcessor.from_pretrained(spec.repo_id)
                 model = AutoModelForDepthEstimation.from_pretrained(spec.repo_id)
                 model.eval()
@@ -312,11 +320,31 @@ class DepthManager:
 
         emit_console("info", "depth", f"Estimating depth for {rgb.width}x{rgb.height} image.")
         try:
-            raw, resolved_device = self._run_inference(
-                rgb,
-                model_id=spec.id,
-                device=device,
-            )
+            with self._inference_lock:
+                if not force and all(path.is_file() for path in paths.values()):
+                    try:
+                        metadata = json.loads(
+                            paths["metadata"].read_text(encoding="utf-8")
+                        )
+                    except (OSError, json.JSONDecodeError):
+                        metadata = {}
+                    result = {
+                        **metadata,
+                        "cache_key": cache_key,
+                        "cache_hit": True,
+                        "data_path": str(paths["data"]),
+                        "preview_path": str(paths["preview"]),
+                        "metadata_path": str(paths["metadata"]),
+                    }
+                    with self._lock:
+                        self._last_result = dict(result)
+                    return result
+
+                raw, resolved_device = self._run_inference(
+                    rgb,
+                    model_id=spec.id,
+                    device=device,
+                )
             normalized, raw_min, raw_max = self._normalize_depth(raw)
             data_temp = paths["data"].with_name(paths["data"].name + ".tmp")
             with data_temp.open("wb") as handle:
