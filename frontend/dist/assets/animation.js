@@ -2540,7 +2540,13 @@
     set(
       '#animation-render-state-depth',
       depth3d.cache_key
-        ? ((depth3d.cache_hit ? 'cache' : 'CPU') + ' · ' + formatNumber(depth3d.seconds, 2) + 's')
+        ? (
+            (depth3d.cache_hit ? 'cache' : 'CPU') +
+            ' · ' + formatNumber(depth3d.seconds, 2) + 's' +
+            (depth3d.internal_width && depth3d.internal_height
+              ? ' · ' + depth3d.internal_width + '×' + depth3d.internal_height
+              : '')
+          )
         : '--'
     );
     set(
