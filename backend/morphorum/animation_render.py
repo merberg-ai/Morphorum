@@ -18,6 +18,8 @@ import numpy as np
 from PIL import Image, ImageOps
 from PIL.PngImagePlugin import PngInfo
 
+from .animation_3d import Camera3DError, render_depth_warp
+from .animation_depth import DepthError, depth_manager
 from .animation_motion import (
     _frame_transform_matrix,
     capture_frames,
@@ -354,6 +356,7 @@ def _frame_state_for_frame(
     diffusion_mode: str,
     motion_applied: bool,
     cumulative_matrix: np.ndarray,
+    depth_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     motion = resolved.get("motion", {})
     generation = resolved.get("generation", {})
@@ -367,8 +370,11 @@ def _frame_state_for_frame(
     width = int(dimensions.get("width") or 1)
     height = int(dimensions.get("height") or 1)
     seed_state = generation.get("seed", {})
+    camera_3d = resolved.get("camera_3d", {})
+    animation_mode = str(resolved.get("animation_mode") or "2d")
     return {
         "frame": int(resolved.get("frame") or 0),
+        "animation_mode": animation_mode,
         "motion_applied": bool(motion_applied),
         "motion": {
             "angle": float(motion.get("angle", 0.0)),
@@ -382,6 +388,16 @@ def _frame_state_for_frame(
             width=width,
             height=height,
         ),
+        "camera_3d": {
+            "translation_x": float(camera_3d.get("translation_x", 0.0)),
+            "translation_y": float(camera_3d.get("translation_y", 0.0)),
+            "translation_z": float(camera_3d.get("translation_z", 0.0)),
+            "rotation_x": float(camera_3d.get("rotation_x", 0.0)),
+            "rotation_y": float(camera_3d.get("rotation_y", 0.0)),
+            "rotation_z": float(camera_3d.get("rotation_z", 0.0)),
+            "fov": float(camera_3d.get("fov", 40.0)),
+        },
+        "depth_3d": deepcopy(depth_state) if depth_state else None,
         "generation": {
             "strength": retention_strength,
             "denoise_strength": denoise_strength,
