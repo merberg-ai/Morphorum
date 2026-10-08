@@ -306,3 +306,191 @@ v0.1.0a1 · feature/3d-depth-a2 · abc123def456
 
 The browser does not hard-code a branch or release label. Switching branches with the
 Morphorum updater and restarting the server changes the badge automatically.
+
+
+## B3-A3: depth-aware 3D camera renderer
+
+A3 turns the canonical 3D schedules and A2 depth maps into actual frame motion.
+
+### Render pipeline
+
+For every frame after frame 0 in a 3D project:
+
+```text
+previous rendered RGB frame
+  -> content-addressed depth lookup
+  -> CPU Depth Anything V2 Small on cache miss
+  -> normalized relative depth
+  -> perspective unprojection
+  -> signed camera translation / rotation
+  -> perspective reprojection
+  -> nearest-depth z-buffer
+  -> nearest-surface hole fill
+  -> scheduled noise
+  -> existing img2img diffusion
+  -> next rendered frame
+```
+
+The diffusion model remains on its existing GPU path.
+
+Depth Anything stays on CPU during an active 3D render. This is intentional for the
+16 GiB acceptance target: SDXL can already consume almost all available VRAM during
+img2img, so keeping the depth estimator resident on CUDA would make the first 3D
+implementation unnecessarily fragile.
+
+The CPU depth model is loaded lazily on the first cache miss, reused for subsequent
+frames, and unloaded when the render completes, fails, or is cancelled.
+
+### Camera conventions
+
+Relative inverse depth is converted to a stable pseudo-scene range:
+
+```text
+near relative depth -> Z = 1 scene unit
+far relative depth  -> Z = 4 scene units
+```
+
+These are projection units, not meters.
+
+Camera schedules are applied per frame to the previous rendered image, so motion
+compounds naturally.
+
+Initial practical ranges:
+
+```text
+Translation Z:  about +/-0.02 to +/-0.08 per frame
+Translation X/Y: about +/-0.01 to +/-0.05 per frame
+Rotation X/Y:   about +/-0.25 to +/-1.0 degrees per frame
+Rotation Z:     about +/-0.25 to +/-1.0 degrees per frame
+FOV:            normally 25 to 80 degrees
+```
+
+Larger values are accepted but can expose large image regions or move the virtual
+camera outside useful geometry.
+
+Positive Translation Z moves the virtual camera forward into the scene; negative moves
+backward. Translation X/Y and rotations are signed camera-space motion.
+
+### FOV
+
+FOV is an absolute camera property rather than a per-frame multiplier.
+
+The previous frame's resolved FOV is used to unproject the source image, and the
+current frame's resolved FOV is used for reprojection. This means an FOV keyframe
+actually changes perspective rather than cancelling itself during unproject/project.
+
+### Projection and holes
+
+A3 uses a forward depth projection with a nearest-depth z-buffer.
+
+When multiple source pixels project to the same destination pixel, the nearest
+projected surface wins. Newly exposed pixels are filled from the nearest valid
+projected surface before diffusion.
+
+The render telemetry reports:
+
+- current 3D translation and rotation,
+- source and target FOV,
+- depth cache hit/miss,
+- depth-estimation time,
+- projected pixel coverage,
+- filled/exposed fraction,
+- depth-warp implementation identifier.
+
+The same state is persisted into each PNG's Morphorum metadata.
+
+### Resume
+
+3D resume uses the last completed RGB frame as the new source, resolves the prior FOV,
+and obtains or recomputes that frame's depth map.
+
+Because depth cache keys are based on source RGB pixels, an unchanged saved frame can
+reuse the exact depth map created before interruption.
+
+## Runtime-noise cleanup included with A3
+
+A3 also reduces third-party terminal noise without muting Morphorum errors.
+
+### torchvision
+
+Morphorum now installs the official companion image package for Torch 2.14:
+
+```text
+torch 2.14.0
+torchvision 0.29.0
+```
+
+This removes Transformers' CLIP/SigLIP PIL-fallback warnings and enables the normal
+image-processor backend.
+
+### Diffusers 0.40 empty float32 warning
+
+Diffusers 0.40 emits a known spurious warning whenever its
+`_keep_in_fp32_modules` list exists but is empty:
+
+```text
+There are modules in ... that should be kept in float32: [] ...
+```
+
+Morphorum filters only this empty-list warning. Non-empty float32 preservation warnings
+remain visible.
+
+### Other targeted noise
+
+Morphorum also suppresses:
+
+- Diffusers' internal SDXL `upcast_vae` deprecation warning,
+- PEFT's multiple-adapter warning in Morphorum's intentional adapter-management path,
+- Hugging Face and Diffusers progress bars during model/pipeline loading.
+
+Morphorum's own Console progress, warnings, failures, model-load state and render
+telemetry remain enabled.
+
+## Physical A3 acceptance
+
+Start with a short project before attempting a cinematic odyssey.
+
+Recommended first test:
+
+```text
+Mode:          3D depth-aware
+Frames:        12 to 20
+Resolution:    512x512
+Start mode:    source image
+Translation Z: 0:(0.03)
+Rotation X:    0:(0)
+Rotation Y:    0:(0)
+Rotation Z:    0:(0)
+FOV:           0:(40)
+Strength:      0:(0.65)
+Noise:         0:(0.01)
+```
+
+Expected result: foreground objects expand/move more than distant background regions
+as the camera advances.
+
+Then test a gentle yaw:
+
+```text
+Translation Z: 0:(0.02)
+Rotation Y:    0:(0.4)
+```
+
+Finally test FOV independently:
+
+```text
+FOV: 0:(40), 10:(55)
+```
+
+Acceptance criteria:
+
+1. Render launches in 3D mode rather than falling back to 2D.
+2. Depth inference reports CPU or cache in live telemetry.
+3. Foreground/background show visible parallax.
+4. Translation Z and Rotation Y visibly affect perspective.
+5. FOV changes perspective across its keyframes.
+6. Projection coverage remains sensible for gentle motion.
+7. Diffusion stabilizes filled/exposed regions instead of catastrophic tearing.
+8. Cancel unloads the depth estimator.
+9. Resume continues from the last completed frame.
+10. Existing 2D rendering still follows the unchanged affine path.
