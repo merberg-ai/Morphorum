@@ -326,6 +326,7 @@ class GenerationManager:
                     "family": item["family"],
                     "adapter_name": item["adapter_name"],
                     "compatibility": item.get("compatibility"),
+                    "diagnostics": deepcopy(item.get("diagnostics") or {}),
                 }
                 for item in self._pipeline_loras.values()
             ],
@@ -1512,51 +1513,204 @@ class GenerationManager:
         return active_names if inspected else None
 
     @staticmethod
-    def _sdxl_unet_only_state_dict(path: Path) -> tuple[dict[str, Any], int]:
-        try:
-            from safetensors.torch import load_file
-        except Exception as exc:
-            raise GenerationError(
-                "Safetensors is required for the SDXL LoRA compatibility fallback."
-            ) from exc
+    def _delete_adapter_from_component(component: Any, adapter_name: str) -> None:
+        if component is None:
+            return
+        delete_many = getattr(component, "delete_adapters", None)
+        if callable(delete_many):
+            try:
+                delete_many(adapter_name)
+                return
+            except Exception:
+                pass
+        delete_one = getattr(component, "delete_adapter", None)
+        if callable(delete_one):
+            try:
+                delete_one(adapter_name)
+            except Exception:
+                pass
 
-        try:
-            state_dict = load_file(str(path), device="cpu")
-        except Exception as exc:
-            raise GenerationError(
-                f"Could not read SDXL LoRA safetensors for compatibility fallback: {exc}"
-            ) from exc
-
-        def is_text_encoder_key(key: str) -> bool:
-            value = str(key).lower()
-            return (
-                value.startswith("lora_te_")
-                or value.startswith("lora_te1_")
-                or value.startswith("lora_te2_")
-                or value.startswith("text_encoder.")
-                or value.startswith("text_encoder_2.")
-                or value.startswith("te1.")
-                or value.startswith("te2.")
+    @classmethod
+    def _delete_pipeline_adapter(cls, pipe: Any, adapter_name: str) -> None:
+        for component_name in ("unet", "transformer", "text_encoder", "text_encoder_2"):
+            cls._delete_adapter_from_component(
+                getattr(pipe, component_name, None),
+                adapter_name,
             )
 
-        filtered = {
+    @staticmethod
+    def _adapter_diagnostics(component: Any, adapter_name: str) -> dict[str, Any]:
+        if component is None:
+            return {
+                "modules": 0,
+                "tensors": 0,
+                "parameters": 0,
+                "abs_sum": 0.0,
+            }
+
+        module_count = 0
+        tensor_count = 0
+        parameter_count = 0
+        absolute_sum = 0.0
+
+        for _module_name, module in component.named_modules():
+            found = False
+            for attribute in (
+                "lora_A",
+                "lora_B",
+                "lora_embedding_A",
+                "lora_embedding_B",
+                "lora_magnitude_vector",
+            ):
+                container = getattr(module, attribute, None)
+                if container is None:
+                    continue
+                try:
+                    present = adapter_name in container
+                except Exception:
+                    present = False
+                if present:
+                    found = True
+            if found:
+                module_count += 1
+
+        for name, parameter in component.named_parameters():
+            if adapter_name not in str(name):
+                continue
+            tensor_count += 1
+            parameter_count += int(parameter.numel())
+            try:
+                absolute_sum += float(
+                    parameter.detach().float().abs().sum().cpu().item()
+                )
+            except Exception:
+                pass
+
+        return {
+            "modules": module_count,
+            "tensors": tensor_count,
+            "parameters": parameter_count,
+            "abs_sum": absolute_sum,
+        }
+
+    @classmethod
+    def _verify_adapter_weights(
+        cls,
+        pipe: Any,
+        adapter_name: str,
+        *,
+        component_name: str,
+    ) -> dict[str, Any]:
+        component = getattr(pipe, component_name, None)
+        diagnostics = cls._adapter_diagnostics(component, adapter_name)
+        if (
+            diagnostics["modules"] <= 0
+            or diagnostics["tensors"] <= 0
+            or diagnostics["parameters"] <= 0
+            or diagnostics["abs_sum"] <= 0.0
+        ):
+            raise GenerationError(
+                f"LoRA adapter '{adapter_name}' is registered on {component_name}, "
+                "but no usable injected LoRA weights were found "
+                f"(modules={diagnostics['modules']}, "
+                f"tensors={diagnostics['tensors']}, "
+                f"parameters={diagnostics['parameters']}, "
+                f"abs_sum={diagnostics['abs_sum']:.6g})."
+            )
+        return diagnostics
+
+    @classmethod
+    def _load_sdxl_unet_only_adapter(
+        cls,
+        pipe: Any,
+        path: Path,
+        adapter_name: str,
+    ) -> dict[str, Any]:
+        state_loader = getattr(pipe, "lora_state_dict", None)
+        unet_loader = getattr(pipe, "load_lora_into_unet", None)
+        unet = getattr(pipe, "unet", None)
+        if not callable(state_loader) or not callable(unet_loader) or unet is None:
+            raise GenerationError(
+                "The active SDXL pipeline does not expose the Diffusers "
+                "state-dict and UNet-only LoRA loader APIs."
+            )
+
+        try:
+            parsed = state_loader(
+                str(path.parent),
+                weight_name=path.name,
+                local_files_only=True,
+            )
+        except TypeError:
+            parsed = state_loader(
+                str(path.parent),
+                weight_name=path.name,
+            )
+        except Exception as exc:
+            raise GenerationError(
+                f"Could not parse SDXL LoRA '{path.name}' for UNet-only loading: {exc}"
+            ) from exc
+
+        if not isinstance(parsed, tuple) or len(parsed) < 2:
+            raise GenerationError(
+                "Diffusers returned an unexpected SDXL LoRA state-dict result."
+            )
+
+        state_dict = parsed[0]
+        network_alphas = parsed[1]
+        metadata = parsed[2] if len(parsed) >= 3 else None
+        if not isinstance(state_dict, dict) or not state_dict:
+            raise GenerationError("Diffusers parsed an empty SDXL LoRA state dict.")
+
+        unet_state = {
             key: value
             for key, value in state_dict.items()
-            if not is_text_encoder_key(key)
+            if not str(key).startswith(("text_encoder.", "text_encoder_2."))
         }
-        removed = len(state_dict) - len(filtered)
-        if removed <= 0:
+        skipped = len(state_dict) - len(unet_state)
+        if not unet_state:
             raise GenerationError(
-                "The SDXL LoRA loader hit the current Diffusers/PEFT rank bug, "
-                "but the file did not contain recognizable text-encoder keys that "
-                "Morphorum can safely omit."
+                "The SDXL LoRA contains no denoiser/UNet weights after parsing."
             )
-        if not filtered:
+
+        if isinstance(network_alphas, dict):
+            unet_alphas = {
+                key: value
+                for key, value in network_alphas.items()
+                if not str(key).startswith(("text_encoder.", "text_encoder_2."))
+            }
+        else:
+            unet_alphas = network_alphas
+
+        cls._delete_pipeline_adapter(pipe, adapter_name)
+
+        kwargs = {
+            "state_dict": unet_state,
+            "network_alphas": unet_alphas,
+            "unet": unet,
+            "adapter_name": adapter_name,
+            "_pipeline": pipe,
+        }
+        if metadata is not None:
+            kwargs["metadata"] = metadata
+        try:
+            unet_loader(**kwargs)
+        except TypeError:
+            kwargs.pop("metadata", None)
+            unet_loader(**kwargs)
+        except Exception as exc:
             raise GenerationError(
-                "The SDXL LoRA contains only text-encoder weights; Morphorum cannot "
-                "apply the U-Net-only compatibility fallback."
-            )
-        return filtered, removed
+                f"Could not inject SDXL LoRA '{path.name}' directly into the UNet: {exc}"
+            ) from exc
+
+        diagnostics = cls._verify_adapter_weights(
+            pipe,
+            adapter_name,
+            component_name="unet",
+        )
+        diagnostics["parsed_tensors"] = len(unet_state)
+        diagnostics["skipped_text_encoder_tensors"] = skipped
+        return diagnostics
 
     def configure_loras(
         self,
@@ -1653,45 +1807,54 @@ class GenerationManager:
                             f"{type(exc).__name__}: {exc}"
                         ) from exc
 
-                    if self._pipeline_has_adapter(pipe, adapter_name):
-                        compatibility = "sdxl-unet-only"
-                        emit_console(
-                            "warning",
-                            "generation",
-                            (
-                                f"SDXL LoRA {path.name} hit the Diffusers/PEFT text-encoder "
-                                "rank compatibility bug after its U-Net adapter loaded. "
-                                "Continuing with the U-Net portion only."
-                            ),
+                    try:
+                        diagnostics = self._load_sdxl_unet_only_adapter(
+                            pipe,
+                            path,
+                            adapter_name,
                         )
-                    else:
-                        try:
-                            state_dict, removed_keys = self._sdxl_unet_only_state_dict(path)
-                            load(
-                                state_dict,
-                                adapter_name=adapter_name,
-                            )
-                        except Exception as fallback_exc:
-                            raise GenerationError(
-                                f"Could not load sdxl LoRA '{item.get('name') or path.name}'. "
-                                f"Normal loader failed with {type(exc).__name__}: {exc}; "
-                                f"U-Net-only compatibility fallback also failed: {fallback_exc}"
-                            ) from fallback_exc
-                        compatibility = "sdxl-unet-only"
-                        emit_console(
-                            "warning",
-                            "generation",
-                            (
-                                f"SDXL LoRA {path.name} hit the Diffusers/PEFT text-encoder "
-                                f"rank compatibility bug. Retried with U-Net weights only "
-                                f"({removed_keys} text-encoder tensor(s) skipped)."
-                            ),
-                        )
+                    except Exception as fallback_exc:
+                        raise GenerationError(
+                            f"Could not load sdxl LoRA '{item.get('name') or path.name}'. "
+                            f"Normal loader failed with {type(exc).__name__}: {exc}; "
+                            f"clean UNet-only compatibility reload also failed: "
+                            f"{fallback_exc}"
+                        ) from fallback_exc
+
+                    compatibility = "sdxl-clean-unet-only"
+                    emit_console(
+                        "warning",
+                        "generation",
+                        (
+                            f"SDXL LoRA {path.name} hit the Diffusers/PEFT text-encoder "
+                            "rank compatibility bug. Removed the partial adapter and "
+                            "reloaded converted UNet weights directly."
+                        ),
+                    )
+                    emit_console(
+                        "info",
+                        "generation",
+                        (
+                            f"Verified SDXL LoRA payload {adapter_name}: "
+                            f"{diagnostics['modules']} injected module(s), "
+                            f"{diagnostics['tensors']} parameter tensor(s), "
+                            f"{diagnostics['parameters']:,} parameter(s), "
+                            f"abs-sum {diagnostics['abs_sum']:.4g}; "
+                            f"{diagnostics['skipped_text_encoder_tensors']} "
+                            "text-encoder tensor(s) skipped."
+                        ),
+                    )
                 except Exception as exc:
                     raise GenerationError(
                         f"Could not load {family} LoRA '{item.get('name') or path.name}': "
                         f"{type(exc).__name__}: {exc}"
                     ) from exc
+                component_name = "unet" if family == "sdxl" else "transformer"
+                diagnostics = self._verify_adapter_weights(
+                    pipe,
+                    adapter_name,
+                    component_name=component_name,
+                )
                 self._pipeline_loras[lora_id] = {
                     "id": lora_id,
                     "name": str(item.get("name") or path.stem),
@@ -1699,6 +1862,7 @@ class GenerationManager:
                     "path": str(path),
                     "adapter_name": adapter_name,
                     "compatibility": compatibility,
+                    "diagnostics": diagnostics,
                 }
                 emit_console(
                     "info",
