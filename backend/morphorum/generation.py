@@ -632,6 +632,16 @@ class GenerationManager:
         if isinstance(exc, GenerationError) and not self._is_cuda_oom(exc):
             return exc
         if self._is_cuda_oom(exc):
+            if "cumemhostalloc" in str(exc).lower():
+                return GenerationError(
+                    f"CUDA pinned-host-memory allocation failed while {action} "
+                    "(cuMemHostAlloc). This can exhaust locked system-memory resources "
+                    "even when ordinary RAM and VRAM appear available. Morphorum will "
+                    "unload the failed pipeline; use the current non-streamed Flux "
+                    "group-offload path on 16/24 GB GPUs and restart Morphorum before "
+                    "retrying. Close other GPU-heavy applications if the allocation "
+                    "still fails."
+                )
             return GenerationError(
                 f"GPU memory exhausted while {action}. Morphorum will unload the failed pipeline and clear "
                 "the CUDA cache. Try a lower resolution, close other GPU-heavy applications, generate fewer "
