@@ -630,32 +630,68 @@
     qs('#unload-model')?.addEventListener('click', unloadModel);
   }
 
-  function insertFromManager({ family, name, weight = 1, triggers = [] } = {}) {
+  function reportManagerInsertion({ id, event, reason = '', weight, imageFamily = '', triggerCount = 0 }) {
+    if (!id) return;
+    // Send diagnostic facts, not the user's prompt or third-party sidecar text.
+    api('/api/loras/' + encodeURIComponent(id) + '/activity', {
+      method: 'POST',
+      body: JSON.stringify({
+        event, reason, weight,
+        image_family: imageFamily, trigger_count: triggerCount,
+      }),
+    }).catch(error => console.warn('LoRA Manager console event unavailable:', error.message));
+  }
+
+  function insertFromManager({ id, family, name, weight = 1, triggers = [] } = {}) {
     const prompt = qs('#image-prompt');
     const model = state.model;
-    if (!prompt || !model) {
-      toast('Select an image model', 'Choose a checkpoint in the Image tab first.', 'warning');
+    const rawWeight = Number(weight);
+    const imageFamily = model?.family || '';
+    const reject = (reason, title, message) => {
+      reportManagerInsertion({
+        id, event: 'prompt_rejected', reason,
+        weight: Number.isFinite(rawWeight) ? rawWeight : 1,
+        imageFamily, triggerCount: 0,
+      });
+      toast(title, message, 'warning');
       return false;
+    };
+
+    if (!prompt || !model) {
+      return reject('no_model', 'Select an image model',
+        'Choose a checkpoint in the Image tab first.');
     }
     if (model.family !== family) {
-      toast('LoRA family mismatch', `Selected image checkpoint is ${model.family}; this LoRA is ${family}. Choose a matching checkpoint first.`, 'warning');
-      return false;
+      return reject('wrong_family', 'LoRA family mismatch',
+        'Selected image checkpoint is ' + model.family + '; this LoRA is ' +
+        family + '. Choose a matching checkpoint first.');
     }
-    const candidate = state.loras.find(lora => lora.name === name || lora.filename === name);
+    // IDs are unambiguous even when two directories contain the same filename.
+    const candidate = state.loras.find(lora => lora.id === id) ||
+      (!id && state.loras.find(lora => lora.name === name || lora.filename === name));
     if (!candidate) {
-      toast('LoRA not indexed for image model', 'Refresh the library and reselect your checkpoint before inserting.', 'warning');
-      return false;
+      return reject('not_indexed', 'LoRA not indexed for image model',
+        'Refresh the library and reselect your checkpoint before inserting.');
     }
-    const numeric = Number(weight);
-    if (!Number.isFinite(numeric) || numeric < -4 || numeric > 4) return false;
-    // Safe tags cannot contain colons, angle brackets, or control characters.
+    if (!Number.isFinite(rawWeight) || rawWeight < -4 || rawWeight > 4) {
+      return reject('invalid_strength', 'Invalid LoRA strength', 'Use a finite value between -4 and 4.');
+    }
+    // Only literal colons, angle brackets and real CR/LF characters are invalid.
+    // Do not double-escape CR/LF patterns: doing so rejects ordinary r and n in names.
     if (!name || /[:<>\r\n]/.test(name)) {
-      toast('Invalid LoRA name', 'This filename cannot be represented by a Deforum-style directive.', 'warning');
-      return false;
+      return reject('invalid_name', 'Invalid LoRA name',
+        'This filename cannot be represented by a Deforum-style directive.');
     }
-    const words = Array.isArray(triggers) ? triggers.filter(value => typeof value === 'string' && !/[<>\r\n]/.test(value)).slice(0, 20) : [];
-    const tag = `<lora:${name}:${Number(numeric.toFixed(4))}>`;
+    const words = Array.isArray(triggers)
+      ? [...new Set(triggers.filter(value => typeof value === 'string' && !/[<>\r\n]/.test(value))
+        .map(value => value.trim()).filter(Boolean))].slice(0, 20)
+      : [];
+    const tag = '<lora:' + name + ':' + Number(rawWeight.toFixed(4)) + '>';
     insertAtCursor(prompt, [...words, tag].join(words.length ? ', ' : ''));
+    reportManagerInsertion({
+      id, event: 'prompt_inserted', weight: rawWeight,
+      imageFamily, triggerCount: words.length,
+    });
     qs('.nav-button[data-view="image"]')?.click();
     return true;
   }
