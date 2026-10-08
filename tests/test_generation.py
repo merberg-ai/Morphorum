@@ -136,6 +136,16 @@ def test_first_adapter_rejects_indexed_unsupported_checkpoint_extension(tmp_path
         manager._validate_request(GenerationRequest(model_id="model-1", prompt="test"))
 
 
+def test_flux_fp8_lora_error_is_rewritten_with_compatibility_guidance() -> None:
+    manager = GenerationManager()
+    error = manager._friendly_error(
+        RuntimeError('"addmm_cuda" not implemented for \'Float8_e4m3fn\''),
+    )
+    assert "FP8 CUDA matrix multiplication" in str(error)
+    assert "BF16" in str(error)
+    assert "updated B4 branch" in str(error)
+
+
 def test_cuda_oom_is_rewritten_as_actionable_error() -> None:
     manager = GenerationManager()
     error = manager._friendly_error(
