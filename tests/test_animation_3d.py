@@ -76,3 +76,23 @@ def test_depth_warp_rejects_shape_and_projection_errors() -> None:
             np.zeros((16, 16), dtype=np.float32),
             fov=180.0,
         )
+
+
+
+def test_fov_change_uses_previous_frame_intrinsics() -> None:
+    image = Image.new("RGB", (40, 30), "black")
+    for x in range(12, 28):
+        for y in range(8, 22):
+            image.putpixel((x, y), (40, 220, 80))
+    depth = np.full((30, 40), 0.5, dtype=np.float32)
+
+    result = render_depth_warp(
+        image,
+        depth,
+        source_fov=40.0,
+        fov=60.0,
+    )
+
+    assert not np.array_equal(np.asarray(result.image), np.asarray(image))
+    assert result.telemetry["source_fov"] == pytest.approx(40.0)
+    assert result.telemetry["fov"] == pytest.approx(60.0)
