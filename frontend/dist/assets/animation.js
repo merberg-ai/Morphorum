@@ -156,6 +156,7 @@
     'generation.noise': '#animation-noise',
     'generation.steps': '#animation-steps',
     'generation.guidance': '#animation-guidance',
+    'cadence.diffusion': '#animation-cadence',
   };
 
   const INSPECTOR_INPUT_IDS = new Set([
@@ -1795,10 +1796,12 @@
       qs('#animation-3d-rotation-y').value = project.camera_3d?.rotation_y || '0:(0)';
       qs('#animation-3d-rotation-z').value = project.camera_3d?.rotation_z || '0:(0)';
       qs('#animation-3d-fov').value = project.camera_3d?.fov || '0:(40)';
+      qs('#animation-3d-depth-resolution').value = project.camera_3d?.depth_resolution || 'auto';
       qs('#animation-strength').value = project.generation?.strength || '0:(0.65)';
       qs('#animation-noise').value = project.generation?.noise || '0:(0.02)';
       qs('#animation-steps').value = project.generation?.steps || '0:(20)';
       qs('#animation-guidance').value = project.generation?.guidance || '0:(0)';
+      qs('#animation-cadence').value = project.cadence?.diffusion || '0:(1)';
       qs('#animation-seed').value = project.generation?.seed ?? -1;
       qs('#animation-seed-behavior').value = project.generation?.seed_behavior || 'fixed';
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
@@ -1895,6 +1898,7 @@
         rotation_y: qs('#animation-3d-rotation-y')?.value || '0:(0)',
         rotation_z: qs('#animation-3d-rotation-z')?.value || '0:(0)',
         fov: qs('#animation-3d-fov')?.value || '0:(40)',
+        depth_resolution: qs('#animation-3d-depth-resolution')?.value || 'auto',
       },
       generation: {
         ...(state.project.generation || {}),
@@ -1906,6 +1910,10 @@
         seed: Number(qs('#animation-seed')?.value ?? -1),
         seed_behavior: qs('#animation-seed-behavior')?.value || 'fixed',
         seed_increment: Number(qs('#animation-seed-increment')?.value || 1),
+      },
+      cadence: {
+        ...(state.project.cadence || {}),
+        diffusion: qs('#animation-cadence')?.value || '0:(1)',
       },
       notes: qs('#animation-notes')?.value || '',
     };
@@ -1955,6 +1963,7 @@
     set('#resolved-noise', formatNumber(resolved.generation?.noise));
     set('#resolved-steps', formatNumber(resolved.generation?.steps));
     set('#resolved-guidance', formatNumber(resolved.generation?.guidance));
+    set('#resolved-cadence', formatNumber(resolved.cadence?.diffusion));
     const loraText = Array.isArray(resolved.loras) && resolved.loras.length
       ? resolved.loras
           .map(lora => `${lora.name || lora.requested_name || 'LoRA'} ${formatNumber(lora.weight, 3)}`)
@@ -1992,6 +2001,7 @@
       '#resolved-noise',
       '#resolved-steps',
       '#resolved-guidance',
+      '#resolved-cadence',
       '#resolved-seed',
       '#resolved-loras',
       '#resolved-positive-prompt',
@@ -2558,6 +2568,24 @@
         ? ' +' + String(generation.seed_increment ?? 0)
         : '')
     );
+    set(
+      '#animation-render-state-cadence',
+      String(frameState.cadence?.diffusion ?? '--') +
+      (frameState.cadence?.anchor === false ? ' · transform frame' : ' · anchor')
+    );
+    const timings = frameState.timings || {};
+    const timingParts = [
+      ['depth', timings.depth],
+      ['warp', timings.warp],
+      ['cond', timings.conditioning],
+      ['diff', timings.diffusion],
+      ['save', timings.save],
+      ['manifest', timings.manifest],
+      ['mem', timings.memory],
+    ]
+      .filter(([, value]) => Number.isFinite(Number(value)))
+      .map(([name, value]) => name + ' ' + formatNumber(value, 2) + 's');
+    set('#animation-render-state-timing', timingParts.length ? timingParts.join(' · ') : '--');
 
     const mode = qs('#animation-render-diffusion-mode');
     if (mode) {
