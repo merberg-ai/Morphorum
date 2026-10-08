@@ -145,6 +145,13 @@
     'motion.zoom': '#animation-zoom',
     'motion.translation_x': '#animation-translation-x',
     'motion.translation_y': '#animation-translation-y',
+    'camera_3d.translation_x': '#animation-3d-translation-x',
+    'camera_3d.translation_y': '#animation-3d-translation-y',
+    'camera_3d.translation_z': '#animation-3d-translation-z',
+    'camera_3d.rotation_x': '#animation-3d-rotation-x',
+    'camera_3d.rotation_y': '#animation-3d-rotation-y',
+    'camera_3d.rotation_z': '#animation-3d-rotation-z',
+    'camera_3d.fov': '#animation-3d-fov',
     'generation.strength': '#animation-strength',
     'generation.noise': '#animation-noise',
     'generation.steps': '#animation-steps',
@@ -404,6 +411,56 @@
     }
   }
 
+  function animationMode() {
+    const value = String(
+      qs('#animation-mode')?.value ||
+      state.project?.animation?.mode ||
+      '2d'
+    ).trim().toLowerCase();
+    return value === '3d' ? '3d' : '2d';
+  }
+
+  function syncAnimationModeUi() {
+    const mode = animationMode();
+    qsa('[data-animation-mode]').forEach(element => {
+      element.hidden = element.dataset.animationMode !== mode;
+    });
+
+    const curve = qs('#animation-curve-field');
+    if (curve) {
+      for (const option of curve.options) {
+        const value = String(option.value || '');
+        const is2d = value.startsWith('motion.');
+        const is3d = value.startsWith('camera_3d.');
+        option.hidden = (mode === '2d' && is3d) || (mode === '3d' && is2d);
+        option.disabled = option.hidden;
+      }
+      const selected = curve.options[curve.selectedIndex];
+      if (!selected || selected.hidden) {
+        curve.value = mode === '3d' ? 'camera_3d.translation_z' : 'motion.zoom';
+      }
+    }
+
+    if (
+      state.timelineSelection &&
+      ((mode === '2d' && state.timelineSelection.group === 'camera_3d') ||
+       (mode === '3d' && state.timelineSelection.group === 'camera_2d'))
+    ) {
+      state.timelineSelection = null;
+    }
+
+    const renderButton = qs('#animation-start-render');
+    if (renderButton) {
+      renderButton.title = mode === '3d'
+        ? 'Depth-aware 3D rendering is the next renderer phase. A2 supports 3D schedules and depth preview only.'
+        : '';
+    }
+
+    renderTimeline();
+    renderDepthState();
+    renderSourceState();
+  }
+
   function timelineStatus(text, kind = '') {
     const badge = qs('#animation-timeline-status');
     if (!badge) return;
@@ -650,9 +707,14 @@
 
   function timelineTrackDescriptors() {
     const tracks = state.timeline?.descriptors?.tracks;
-    return Array.isArray(tracks)
-      ? tracks.filter(item => item?.editable && item?.keyframe_editable)
-      : [];
+    if (!Array.isArray(tracks)) return [];
+    const mode = animationMode();
+    return tracks.filter(item => {
+      if (!item?.editable || !item?.keyframe_editable) return false;
+      if (mode === '2d' && item.group === 'camera_3d') return false;
+      if (mode === '3d' && item.group === 'camera_2d') return false;
+      return true;
+    });
   }
 
   function timelineDescriptor(group, name) {
@@ -1678,6 +1740,7 @@
       qs('#animation-fps').value = project.animation?.fps ?? 24;
       qs('#animation-width').value = project.animation?.width ?? 1024;
       qs('#animation-height').value = project.animation?.height ?? 1024;
+      qs('#animation-mode').value = project.animation?.mode || '2d';
       qs('#animation-prompt-transition').value = project.animation?.prompt_transition || 'blend';
       qs('#animation-start-mode').value = project.animation?.start_mode || (project.animation?.source_image ? 'source' : 'prompt');
       qs('#animation-angle').value = project.motion?.angle || '0:(0)';
@@ -1685,6 +1748,13 @@
       qs('#animation-translation-x').value = project.motion?.translation_x || '0:(0)';
       qs('#animation-translation-y').value = project.motion?.translation_y || '0:(0)';
       qs('#animation-border-mode').value = project.motion?.border_mode || 'replicate';
+      qs('#animation-3d-translation-x').value = project.camera_3d?.translation_x || '0:(0)';
+      qs('#animation-3d-translation-y').value = project.camera_3d?.translation_y || '0:(0)';
+      qs('#animation-3d-translation-z').value = project.camera_3d?.translation_z || '0:(0)';
+      qs('#animation-3d-rotation-x').value = project.camera_3d?.rotation_x || '0:(0)';
+      qs('#animation-3d-rotation-y').value = project.camera_3d?.rotation_y || '0:(0)';
+      qs('#animation-3d-rotation-z').value = project.camera_3d?.rotation_z || '0:(0)';
+      qs('#animation-3d-fov').value = project.camera_3d?.fov || '0:(40)';
       qs('#animation-strength').value = project.generation?.strength || '0:(0.65)';
       qs('#animation-noise').value = project.generation?.noise || '0:(0.02)';
       qs('#animation-steps').value = project.generation?.steps || '0:(20)';
@@ -1704,6 +1774,7 @@
       populateModelSelect();
       populateSamplerSelect(project.generation?.sampler || '');
       renderPromptRows();
+      syncAnimationModeUi();
       renderSourceState();
       renderDepthState();
       syncInspectorBounds();
@@ -1751,6 +1822,7 @@
         fps: Number(qs('#animation-fps')?.value || 24),
         width: Number(qs('#animation-width')?.value || 1024),
         height: Number(qs('#animation-height')?.value || 1024),
+        mode: animationMode(),
         prompt_transition: qs('#animation-prompt-transition')?.value || 'blend',
         start_mode: qs('#animation-start-mode')?.value || 'prompt',
       },
@@ -1768,6 +1840,16 @@
         translation_x: qs('#animation-translation-x')?.value || '0:(0)',
         translation_y: qs('#animation-translation-y')?.value || '0:(0)',
         border_mode: qs('#animation-border-mode')?.value || 'replicate',
+      },
+      camera_3d: {
+        ...(state.project.camera_3d || {}),
+        translation_x: qs('#animation-3d-translation-x')?.value || '0:(0)',
+        translation_y: qs('#animation-3d-translation-y')?.value || '0:(0)',
+        translation_z: qs('#animation-3d-translation-z')?.value || '0:(0)',
+        rotation_x: qs('#animation-3d-rotation-x')?.value || '0:(0)',
+        rotation_y: qs('#animation-3d-rotation-y')?.value || '0:(0)',
+        rotation_z: qs('#animation-3d-rotation-z')?.value || '0:(0)',
+        fov: qs('#animation-3d-fov')?.value || '0:(40)',
       },
       generation: {
         ...(state.project.generation || {}),
@@ -2105,7 +2187,8 @@
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
-      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive || state.depthBusy;
+      const modeReady = animationMode() === '2d';
+      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive || state.depthBusy || !modeReady;
     }
   }
 
@@ -2611,6 +2694,15 @@
 
   async function startAnimationRender() {
     if (!state.project || renderIsActive()) return;
+    if (animationMode() === '3d') {
+      toast(
+        '3D renderer not active yet',
+        'This phase supports 3D schedules and depth estimation. Depth-aware camera warping is the next renderer step.',
+        'warning',
+        7000
+      );
+      return;
+    }
     const button = qs('#animation-start-render');
     if (button) { button.classList.add('busy'); button.disabled = true; }
     try {
@@ -2849,6 +2941,12 @@
 
     qs('#animation-project-select')?.addEventListener('change', event => {
       loadProject(event.target.value);
+    });
+
+    qs('#animation-mode')?.addEventListener('change', () => {
+      markDirty({ validate: true });
+      syncAnimationModeUi();
+      refreshInspector();
     });
 
     qs('#animation-model')?.addEventListener('change', () => {
