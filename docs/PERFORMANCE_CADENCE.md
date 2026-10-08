@@ -30,7 +30,8 @@ B4 no longer accepts that state as success.
 
 When the known SDXL loader IndexError occurs, Morphorum now:
 
-1. asks Diffusers to parse/convert the original LoRA state dict,
+1. asks Diffusers to parse/convert the original LoRA state dict using the live
+   SDXL UNet configuration (required to map Kohya/SGM block indices correctly),
 2. separates UNet state from text-encoder state,
 3. deletes the partially-created adapter from pipeline components,
 4. injects the converted state directly through Diffusers' UNet LoRA loader,
@@ -38,6 +39,18 @@ When the known SDXL loader IndexError occurs, Morphorum now:
 6. only then allows adapter activation.
 
 The text-encoder portion is skipped only on this compatibility path.
+
+#### B4 SDXL SGM remapping correction
+
+Physical test of `ChalkDustStyleSDXL` on `colossusSdxl_v10` showed that the
+initial B4 compatibility path called `lora_state_dict()` without
+`unet_config`. For Kohya/SGM checkpoints, this incorrectly interpreted
+input/output block IDs as Diffusers block IDs, producing missing UNet targets
+such as `down_blocks.7.1`. The fallback now passes the loaded UNet config and
+requests LoRA metadata, matching Diffusers 0.40.0's native SDXL loader.
+The test suite includes a real SGM-format state-dict conversion regression.
+This fix still needs the physical A/B gate below; CI alone does not prove image
+appearance.
 
 ### Payload audit
 
