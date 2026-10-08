@@ -903,3 +903,87 @@ def test_source_frame_telemetry_marks_motion_and_diffusion_not_applied(
     assert state["cumulative_2d"]["rotation_degrees"] == pytest.approx(0.0)
     assert state["generation"]["diffusion_mode"] == "source"
     assert state["generation"]["denoise_strength"] is None
+
+
+
+def test_3d_render_uses_cpu_depth_and_persists_warp_telemetry(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    depth_calls = []
+    unload_calls = []
+
+    def fake_estimate(image, *, device, release_after, **_kwargs):
+        depth_calls.append((image.size, device, release_after))
+        return {
+            "cache_key": "a" * 64,
+            "cache_hit": False,
+            "device": device,
+        }
+
+    def fake_depth_array(_cache_key):
+        depth = np.full((64, 64), 0.2, dtype=np.float32)
+        depth[16:48, 16:48] = 0.9
+        return depth
+
+    monkeypatch.setattr(animation_render.depth_manager, "estimate", fake_estimate)
+    monkeypatch.setattr(
+        animation_render.depth_manager,
+        "load_cached_array",
+        fake_depth_array,
+    )
+    monkeypatch.setattr(
+        animation_render.depth_manager,
+        "unload",
+        lambda: unload_calls.append(True),
+    )
+
+    source = tmp_path / "source.png"
+    image = Image.new("RGB", (64, 64), "black")
+    for x in range(18, 46):
+        for y in range(18, 46):
+            image.putpixel((x, y), (255, 120, 0))
+    image.save(source)
+
+    project = sample_project(max_frames=3)
+    project["animation"]["mode"] = "3d"
+    project["camera_3d"] = {
+        "translation_x": "0:(0)",
+        "translation_y": "0:(0)",
+        "translation_z": "0:(0.05)",
+        "rotation_x": "0:(0)",
+        "rotation_y": "0:(0.4)",
+        "rotation_z": "0:(0)",
+        "fov": "0:(40)",
+    }
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished
+    assert len(depth_calls) == 2
+    assert all(device == "cpu" for _size, device, _release in depth_calls)
+    assert all(release is False for _size, _device, release in depth_calls)
+    assert unload_calls
+
+    state = finished["current_frame_state"]
+    assert state["animation_mode"] == "3d"
+    assert state["camera_3d"]["translation_z"] == pytest.approx(0.05)
+    assert state["camera_3d"]["rotation_y"] == pytest.approx(0.4)
+    assert state["depth_3d"]["device"] == "cpu"
+    assert state["depth_3d"]["projected_coverage"] > 0.0
+    assert state["depth_3d"]["warp"] == "depth-forward-zbuffer-nearest-fill"
+
+    render_dir = (
+        tmp_path / "outputs" / "animations" / "render-test" / started["id"]
+    )
+    with Image.open(render_dir / "frames" / "frame_000002.png") as final:
+        metadata = json.loads(final.text["Morphorum"])
+    assert metadata["resolved"]["animation_mode"] == "3d"
+    assert metadata["render_state"]["depth_3d"]["cache_key"] == "a" * 64
