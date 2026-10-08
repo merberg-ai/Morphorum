@@ -24,6 +24,9 @@
     timelineScale: 6,
     timelineBusy: false,
     timelineResizeTimer: null,
+    depthModels: [],
+    depthPreview: null,
+    depthBusy: false,
   };
 
   const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
@@ -88,6 +91,7 @@
     const mobileOpenByDefault = new Set([
       'project',
       'start-frame',
+      '3d-depth',
       'visual-timeline',
       'animation-render',
     ]);
@@ -157,6 +161,8 @@
     'animation-timeline-keyframe-frame',
     'animation-timeline-keyframe-value',
     'animation-timeline-interpolation',
+    'animation-depth-model',
+    'animation-depth-device',
   ]);
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -184,6 +190,185 @@
 
   function isMobileTimeline() {
     return window.matchMedia('(max-width: 720px)').matches;
+  }
+
+  function renderDepthModels() {
+    const select = qs('#animation-depth-model');
+    if (!select) return;
+    const current = select.value;
+    select.replaceChildren();
+    if (!state.depthModels.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No depth estimators available';
+      select.appendChild(option);
+      return;
+    }
+    for (const model of state.depthModels) {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = model.label || model.id;
+      select.appendChild(option);
+    }
+    if (state.depthModels.some(model => model.id === current)) {
+      select.value = current;
+    }
+  }
+
+  function depthPreviewUrl(preview = state.depthPreview) {
+    if (!state.project?.id || !preview?.cache_key) return '';
+    return (
+      '/api/animation/projects/' +
+      encodeURIComponent(state.project.id) +
+      '/depth-preview/image?v=' +
+      encodeURIComponent(String(preview.cache_key).slice(0, 12))
+    );
+  }
+
+  function renderDepthState() {
+    const hasProject = Boolean(state.project);
+    const hasSource = Boolean(state.project?.animation?.source_image);
+    const preview = state.depthPreview;
+    const model = qs('#animation-depth-model');
+    const device = qs('#animation-depth-device');
+    const generate = qs('#animation-generate-depth');
+    const recompute = qs('#animation-recompute-depth');
+    const clear = qs('#animation-clear-depth');
+    const badge = qs('#animation-depth-status');
+    const image = qs('#animation-depth-preview');
+    const empty = qs('#animation-depth-empty');
+    const meta = qs('#animation-depth-meta');
+
+    if (model) model.disabled = !hasProject || state.depthBusy || !state.depthModels.length;
+    if (device) device.disabled = !hasProject || state.depthBusy;
+    if (generate) generate.disabled = !hasProject || !hasSource || state.depthBusy || !state.depthModels.length;
+    if (recompute) recompute.disabled = !hasProject || !hasSource || state.depthBusy || !state.depthModels.length;
+    if (clear) clear.disabled = !hasProject || !preview || state.depthBusy;
+
+    if (badge) {
+      badge.textContent = state.depthBusy
+        ? 'Estimating…'
+        : preview
+          ? (preview.cache_hit ? 'Cached' : 'Ready')
+          : hasSource
+            ? 'Ready to estimate'
+            : 'Need source image';
+    }
+
+    if (image) {
+      const url = depthPreviewUrl(preview);
+      image.hidden = !url;
+      if (url) image.src = url;
+      else image.removeAttribute('src');
+    }
+    if (empty) empty.hidden = Boolean(preview);
+
+    if (meta) {
+      if (state.depthBusy) {
+        meta.textContent = 'Loading estimator / calculating relative depth…';
+      } else if (preview) {
+        const modelLabel = preview.model_label || preview.model_id || 'Depth model';
+        const cache = preview.cache_hit ? 'cache hit' : 'new estimate';
+        meta.textContent =
+          modelLabel +
+          ' · ' + String(preview.device || 'unknown device') +
+          ' · ' + String(preview.width || '?') + ' × ' + String(preview.height || '?') +
+          ' · raw ' + formatNumber(preview.raw_min, 4) + '…' + formatNumber(preview.raw_max, 4) +
+          ' · ' + cache +
+          ' · white=near / black=far';
+      } else {
+        meta.textContent = hasSource
+          ? 'Depth preview has not been generated for this source image.'
+          : 'Upload an image in Start Frame to generate a depth map.';
+      }
+    }
+  }
+
+  async function loadDepthModels() {
+    try {
+      const payload = await api('/api/animation/depth/models');
+      state.depthModels = Array.isArray(payload.models) ? payload.models : [];
+      renderDepthModels();
+      renderDepthState();
+    } catch (error) {
+      state.depthModels = [];
+      renderDepthModels();
+      renderDepthState();
+      throw error;
+    }
+  }
+
+  async function loadDepthPreviewStatus() {
+    state.depthPreview = null;
+    if (!state.project?.id) {
+      renderDepthState();
+      return;
+    }
+    try {
+      const payload = await api(
+        '/api/animation/projects/' +
+        encodeURIComponent(state.project.id) +
+        '/depth-preview/status'
+      );
+      state.depthPreview = payload.available ? payload.preview : null;
+    } catch (_) {
+      state.depthPreview = null;
+    }
+    renderDepthState();
+  }
+
+  async function generateDepthPreview(force = false) {
+    if (!state.project?.id || !state.project?.animation?.source_image || state.depthBusy) return;
+    const button = qs(force ? '#animation-recompute-depth' : '#animation-generate-depth');
+    state.depthBusy = true;
+    setBusy(button, true);
+    renderDepthState();
+    try {
+      const payload = await api(
+        '/api/animation/projects/' +
+        encodeURIComponent(state.project.id) +
+        '/depth-preview',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            model_id: qs('#animation-depth-model')?.value || undefined,
+            device: qs('#animation-depth-device')?.value || 'auto',
+            force: Boolean(force),
+          }),
+        }
+      );
+      state.depthPreview = payload.preview || null;
+      const cacheLabel = state.depthPreview?.cache_hit ? 'Cache hit' : 'New depth estimate';
+      toast(
+        'Depth preview ready',
+        cacheLabel + ' · depth estimator unloaded after inference.',
+        'success',
+        5200
+      );
+    } catch (error) {
+      toast('Depth preview failed', error.message, 'error', 8000);
+    } finally {
+      state.depthBusy = false;
+      setBusy(button, false);
+      renderDepthState();
+    }
+  }
+
+  async function clearDepthPreview() {
+    if (!state.project?.id || state.depthBusy) return;
+    try {
+      await api(
+        '/api/animation/projects/' +
+        encodeURIComponent(state.project.id) +
+        '/depth-preview',
+        { method: 'DELETE' }
+      );
+      state.depthPreview = null;
+      renderDepthState();
+      toast('Depth preview cleared', 'Cached depth data remains available for reuse.', 'info');
+    } catch (error) {
+      toast('Could not clear depth preview', error.message, 'error', 6500);
+    }
   }
 
   function timelineStatus(text, kind = '') {
@@ -1447,6 +1632,7 @@
       if (!project) {
         renderPromptRows();
         renderTimeline();
+        renderDepthState();
         qs('#animation-project-path').textContent = 'Create or select an animation project.';
         qs('#animation-schema-badge').textContent = 'Schema 2';
         clearInspector();
@@ -1486,6 +1672,7 @@
       populateSamplerSelect(project.generation?.sampler || '');
       renderPromptRows();
       renderSourceState();
+      renderDepthState();
       syncInspectorBounds();
       renderTimeline();
       clearDirty();
@@ -1931,8 +2118,10 @@
           source_image_name: payload.project?.animation?.source_image_name || file.name,
         },
       };
+      state.depthPreview = null;
       clearMotionPreviewResult();
       renderSourceState();
+      renderDepthState();
       toast('Source image uploaded', payload.source.width + ' × ' + payload.source.height + ' · ' + file.name, 'success');
     } catch (error) {
       toast('Source image upload failed', error.message, 'error', 7000);
@@ -1952,8 +2141,10 @@
         updated_at: payload.project?.updated_at || state.project.updated_at,
         animation: { ...(state.project.animation || {}), source_image: '', source_image_name: '' },
       };
+      state.depthPreview = null;
       clearMotionPreviewResult();
       renderSourceState();
+      renderDepthState();
       toast('Source image cleared', 'The project source image was removed.', 'success');
     } catch (error) {
       toast('Could not clear source image', error.message, 'error', 6500);
@@ -2479,8 +2670,10 @@
       state.path = payload.path || '';
       state.timeline = null;
       state.timelineSelection = null;
+      state.depthPreview = null;
       fillForm();
       await loadTimeline();
+      await loadDepthPreviewStatus();
       await loadRenderHistory();
     } catch (error) {
       toast('Could not load animation project', error.message, 'error', 6500);
@@ -2511,9 +2704,11 @@
       state.path = payload.path || '';
       state.timeline = null;
       state.timelineSelection = null;
+      state.depthPreview = null;
       await loadProjectList();
       fillForm();
       await loadTimeline();
+      await loadDepthPreviewStatus();
       await loadRenderHistory();
       toast('Animation project created', `${state.project.name} is ready for editing.`, 'success');
     } catch (error) {
@@ -2607,6 +2802,9 @@
       if (file) uploadSourceImage(file);
     });
     qs('#animation-clear-source')?.addEventListener('click', clearSourceImage);
+    qs('#animation-generate-depth')?.addEventListener('click', () => generateDepthPreview(false));
+    qs('#animation-recompute-depth')?.addEventListener('click', () => generateDepthPreview(true));
+    qs('#animation-clear-depth')?.addEventListener('click', clearDepthPreview);
     qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
 
     qs('#animation-start-render')?.addEventListener('click', startAnimationRender);
@@ -2683,8 +2881,9 @@
       await Promise.all([
         loadCapabilities(),
         loadModels(),
-        loadProjectList({ loadFirst: true }),
+        loadDepthModels(),
       ]);
+      await loadProjectList({ loadFirst: true });
       populateSamplerSelect(state.project?.generation?.sampler || '');
     } catch (error) {
       toast('Animation workspace initialization failed', error.message, 'error', 7000);
