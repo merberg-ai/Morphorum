@@ -981,6 +981,9 @@ class AnimationRenderManager:
         family = str(model["family"])
         capability = generation_manager._effective_capability(model)
         start_mode = str(animation.get("start_mode", "prompt") or "prompt").lower()
+        animation_mode = str(animation.get("mode", "2d") or "2d").strip().lower()
+        if animation_mode not in {"2d", "3d"}:
+            animation_mode = "2d"
 
         load_started = time.monotonic()
         pipe = None
@@ -1016,7 +1019,7 @@ class AnimationRenderManager:
         copied_source = render_dir / "source.png"
 
         cumulative_matrix = np.eye(3, dtype=np.float64)
-        if start_frame > 1:
+        if animation_mode == "2d" and start_frame > 1:
             for completed_frame in range(1, start_frame):
                 prior_resolved = resolve_project_frame(
                     project,
@@ -1242,21 +1245,58 @@ class AnimationRenderManager:
 
             frame_started = time.monotonic()
             resolved = resolve_project_frame(project, frame, lora_records=lora_records)
-            motion = resolved["motion"]
-            step_matrix = _frame_transform_matrix(
-                width=width,
-                height=height,
-                angle=float(motion["angle"]),
-                zoom=float(motion["zoom"]),
-                translation_x=float(motion["translation_x"]),
-                translation_y=float(motion["translation_y"]),
-            )
-            transformed = render_affine(
-                frame_image,
-                step_matrix,
-                border_mode=border_mode,
-            )
-            cumulative_matrix = step_matrix @ cumulative_matrix
+            depth_state: dict[str, Any] | None = None
+            if animation_mode == "3d":
+                depth_started = time.monotonic()
+                try:
+                    depth_result = depth_manager.estimate(
+                        frame_image,
+                        device="cpu",
+                        release_after=False,
+                    )
+                    depth_map = depth_manager.load_cached_array(
+                        str(depth_result["cache_key"])
+                    )
+                    camera = resolved["camera_3d"]
+                    warp = render_depth_warp(
+                        frame_image,
+                        depth_map,
+                        translation_x=float(camera["translation_x"]),
+                        translation_y=float(camera["translation_y"]),
+                        translation_z=float(camera["translation_z"]),
+                        rotation_x=float(camera["rotation_x"]),
+                        rotation_y=float(camera["rotation_y"]),
+                        rotation_z=float(camera["rotation_z"]),
+                        fov=float(camera["fov"]),
+                    )
+                    transformed = warp.image
+                    depth_state = {
+                        "cache_key": str(depth_result["cache_key"]),
+                        "cache_hit": bool(depth_result.get("cache_hit")),
+                        "device": str(depth_result.get("device") or "cpu"),
+                        "seconds": max(0.0, time.monotonic() - depth_started),
+                        **warp.telemetry,
+                    }
+                except (DepthError, Camera3DError) as exc:
+                    raise AnimationRenderError(
+                        f"3D depth/camera warp failed at frame {frame}: {exc}"
+                    ) from exc
+            else:
+                motion = resolved["motion"]
+                step_matrix = _frame_transform_matrix(
+                    width=width,
+                    height=height,
+                    angle=float(motion["angle"]),
+                    zoom=float(motion["zoom"]),
+                    translation_x=float(motion["translation_x"]),
+                    translation_y=float(motion["translation_y"]),
+                )
+                transformed = render_affine(
+                    frame_image,
+                    step_matrix,
+                    border_mode=border_mode,
+                )
+                cumulative_matrix = step_matrix @ cumulative_matrix
 
             generation = resolved["generation"]
             retention_strength = float(generation["strength"])
@@ -1283,6 +1323,7 @@ class AnimationRenderManager:
                     diffusion_mode=("img2img" if denoise_strength > 0.0 else "transform-only"),
                     motion_applied=True,
                     cumulative_matrix=cumulative_matrix,
+                    depth_state=depth_state,
                 )
 
             positive = resolved["prompts"]["positive"]
@@ -1475,6 +1516,13 @@ class AnimationRenderManager:
                     f"reserved {memory['reserved_gib']:.1f} GiB."
                 )
 
+            depth_text = ""
+            if depth_state is not None:
+                depth_text = (
+                    f" 3D depth {depth_state['seconds']:.2f}s "
+                    f"({'cache' if depth_state['cache_hit'] else 'CPU'}), "
+                    f"coverage {depth_state['projected_coverage'] * 100:.1f}%."
+                )
             emit_console(
                 "info",
                 "animation",
@@ -1482,7 +1530,7 @@ class AnimationRenderManager:
                 f"in {frame_seconds:.1f}s, seed {seed}, "
                 f"strength {retention_strength:g} "
                 f"(denoise {denoise_strength:g}), noise {noise_amount:g}."
-                f"{memory_text}",
+                f"{depth_text}{memory_text}",
             )
 
         if generation_manager.unload_after_job_enabled():
