@@ -1178,6 +1178,89 @@ def test_diffusion_cadence_skips_intermediate_diffusion_but_keeps_motion(
 
 
 
+def test_animation_sdxl_blended_conditioning_never_retains_autograd_graphs() -> None:
+    """Diffusers SDXL encode_prompt is NOT decorated with no_grad.
+
+    The animation renderer calls it outside pipeline.__call__. A keyframed LoRA
+    gets a new cache signature each anchor, so raw autograd graphs otherwise
+    pile up and can consume hundreds of MiB per frame.
+    """
+    class GradientSDXLPipe:
+        def __init__(self):
+            self.weight = torch.nn.Parameter(torch.ones((1, 8), dtype=torch.float32))
+            self.grad_enabled = []
+            self.calls = 0
+
+        def encode_prompt(self, **kwargs):
+            self.calls += 1
+            self.grad_enabled.append(torch.is_grad_enabled())
+            # Without inference_mode this output has a live grad_fn and holds
+            # model intermediates, exactly what render-long cache must avoid.
+            embedding = self.weight * float(self.calls)
+            return embedding, embedding, embedding, embedding
+
+    pipe = GradientSDXLPipe()
+    cache = {}
+    positive = {
+        "from_frame": 0, "to_frame": 25,
+        "from_text": "forest", "to_text": "city",
+        "from_weight": 0.5, "to_weight": 0.5,
+    }
+    negative = {
+        "from_frame": 0, "to_frame": 25,
+        "from_text": "noise", "to_text": "artifact",
+        "from_weight": 0.5, "to_weight": 0.5,
+    }
+
+    with torch.enable_grad():
+        for frame in range(1, 15):
+            conditioning = _prompt_conditioning_kwargs(
+                pipe, "sdxl", positive, negative, guidance_scale=6.0,
+                conditioning_cache=cache,
+                lora_signature=(("style", frame / 25),),
+            )
+            assert not conditioning["prompt_embeds"].requires_grad
+            assert conditioning["prompt_embeds"].grad_fn is None
+            assert not conditioning["pooled_prompt_embeds"].requires_grad
+            assert not conditioning["negative_prompt_embeds"].requires_grad
+
+    assert pipe.calls == 28, "Changing LoRA weight means distinct prompt encodings"
+    assert pipe.grad_enabled == [False] * pipe.calls
+    assert len(cache) == animation_render.MAX_CONDITIONING_CACHE_ENTRIES
+    for encoded in cache.values():
+        assert all(not value.requires_grad and value.grad_fn is None
+                   for value in encoded)
+
+
+def test_animation_flux_blended_conditioning_is_inference_only_and_bounded() -> None:
+    class GradientFluxPipe:
+        def __init__(self):
+            self.weight = torch.nn.Parameter(torch.ones((1, 4)))
+            self.grad_enabled = []
+
+        def encode_prompt(self, **kwargs):
+            self.grad_enabled.append(torch.is_grad_enabled())
+            return self.weight * 2, self.weight * 3
+
+    pipe = GradientFluxPipe()
+    cache = {}
+    positive = {
+        "from_frame": 0, "to_frame": 20,
+        "from_text": "forest", "to_text": "city",
+        "from_weight": 0.5, "to_weight": 0.5,
+    }
+    with torch.enable_grad():
+        for frame in range(10):
+            result = _prompt_conditioning_kwargs(
+                pipe, "flux", positive, {}, guidance_scale=1.0,
+                conditioning_cache=cache, lora_signature=(("test", frame),),
+            )
+            assert not result["prompt_embeds"].requires_grad
+            assert not result["pooled_prompt_embeds"].requires_grad
+    assert not any(pipe.grad_enabled)
+    assert len(cache) <= animation_render.MAX_CONDITIONING_CACHE_ENTRIES
+
+
 def test_sdxl_conditioning_cache_is_isolated_by_lora_signature() -> None:
     class CountingSDXLPipe(FakeSDXLPipe):
         def __init__(self) -> None:
