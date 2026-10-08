@@ -57,6 +57,13 @@ def test_depth_estimate_caches_numeric_data_and_preview(tmp_path, monkeypatch) -
     assert stored["raw"].shape == (2, 3)
     assert stored["normalized"][0, 0] == 0.0
     assert stored["normalized"][-1, -1] == 1.0
+    stored.close()
+
+    cached_normalized = manager.load_cached_array(first["cache_key"])
+    cached_raw = manager.load_cached_array(first["cache_key"], normalized=False)
+    assert cached_normalized.shape == (2, 3)
+    assert cached_normalized[-1, -1] == 1.0
+    assert cached_raw[-1, -1] == 3.0
 
     with Image.open(preview_path) as preview:
         assert preview.mode == "L"
