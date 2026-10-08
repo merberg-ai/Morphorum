@@ -165,6 +165,8 @@
       if (request !== state.request) return;
       state.detail = detail;
       renderDetail();
+      // Refresh the selected adapter's actual runtime state and log an audit.
+      refreshRuntime();
     } catch (error) {
       if (request !== state.request) return;
       qs('#lora-manager-detail-body').replaceChildren(text('p', error.message, 'lora-manager-warning'));
@@ -268,7 +270,12 @@
     const holder = qs('#lora-manager-runtime-details');
     if (!holder) return;
     try {
-      const status = await api('/api/generation/model');
+      const selectedId = state.selected?.id;
+      const status = selectedId
+        ? await api('/api/loras/' + encodeURIComponent(selectedId) + '/runtime-audit', {
+            method: 'POST', body: '{}',
+          })
+        : await api('/api/generation/model');
       holder.replaceChildren();
       field(holder, 'Checkpoint', status.model_name || 'Not loaded');
       field(holder, 'Model family', status.family || 'None');
