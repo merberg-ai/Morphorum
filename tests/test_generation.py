@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -732,6 +733,7 @@ class FakeRankBugUNet:
     def __init__(self) -> None:
         self.peft_config = {}
         self.deleted = []
+        self.config = SimpleNamespace(layers_per_block=2)
 
     def delete_adapters(self, adapter_name):
         self.deleted.append(adapter_name)
@@ -744,6 +746,7 @@ class FakeSDXLRankBugPipe(FakeLoRAPipe):
         self.partial_unet = partial_unet
         self.unet = FakeRankBugUNet()
         self.unet_loads = []
+        self.state_dict_calls = []
 
     def load_lora_weights(self, source, **kwargs):
         self.loads.append({"path": source, **kwargs})
@@ -752,7 +755,12 @@ class FakeSDXLRankBugPipe(FakeLoRAPipe):
             self.unet.peft_config[adapter_name] = object()
         raise IndexError("list index out of range")
 
-    def lora_state_dict(self, *_args, **_kwargs):
+    def lora_state_dict(self, *_args, **kwargs):
+        self.state_dict_calls.append(kwargs)
+        # Real SDXL conversion requires the model's UNet config to map SGM blocks.
+        assert kwargs["unet_config"] is self.unet.config
+        assert kwargs["return_lora_metadata"] is True
+        assert kwargs["local_files_only"] is True
         return (
             {
                 "unet.down_blocks.0.attentions.0.to_q.lora_A.weight": torch.ones(2, 2),
@@ -809,6 +817,7 @@ def test_sdxl_rank_bug_retries_with_unet_only_state_dict(tmp_path) -> None:
     assert len(pipe.loads) == 1
     assert pipe.loads[0]["weight_name"] == path.name
     assert len(pipe.unet_loads) == 1
+    assert len(pipe.state_dict_calls) == 1
     fallback = pipe.unet_loads[0]
     assert fallback["adapter_name"] == "morphorum_mixed-id"
     assert fallback["state_dict"]
@@ -819,6 +828,33 @@ def test_sdxl_rank_bug_retries_with_unet_only_state_dict(tmp_path) -> None:
     assert any(key.startswith("unet.") for key in fallback["state_dict"])
     assert manager._pipeline_loras["mixed-id"]["compatibility"] == "sdxl-clean-unet-only"
     assert pipe.adapter_calls == [(["morphorum_mixed-id"], [0.8])]
+
+
+def test_sdxl_sgm_block_indices_remap_with_unet_config(tmp_path) -> None:
+    """Regression for real Kohya keys that became missing 7.1 UNet targets in B4."""
+    from diffusers import StableDiffusionXLPipeline
+    from safetensors.torch import save_file
+
+    path = tmp_path / "sgm-sdxl.safetensors"
+    sgm_key = "lora_unet_input_blocks_7_1_transformer_blocks_3_attn1_to_q"
+    save_file(
+        {
+            f"{sgm_key}.lora_down.weight": torch.ones(2, 2),
+            f"{sgm_key}.lora_up.weight": torch.ones(2, 2),
+            f"{sgm_key}.alpha": torch.tensor(2.0),
+        },
+        str(path),
+    )
+    # Mirrors the UNet config passed by SDXL's own load_lora_weights method.
+    state_dict, _alphas = StableDiffusionXLPipeline.lora_state_dict(
+        str(path.parent),
+        weight_name=path.name,
+        local_files_only=True,
+        unet_config=SimpleNamespace(layers_per_block=2),
+    )
+    assert state_dict
+    assert all(key.startswith("unet.down_blocks.2.attentions.0.") for key in state_dict)
+    assert all("down_blocks.7.1." not in key for key in state_dict)
 
 
 def test_sdxl_rank_bug_accepts_already_loaded_unet_adapter(tmp_path) -> None:
