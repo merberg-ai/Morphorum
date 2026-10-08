@@ -686,6 +686,42 @@ class GenerationManager:
             ) from exc
         return pipe, device, device
 
+    @staticmethod
+    def _flux_uses_fp8_layerwise(*, supports_fp8: bool, loras: list[dict[str, Any]]) -> bool:
+        """Keep FP8 for base Flux, but not when PEFT LoRA wraps its linear layers.
+
+        Diffusers layerwise casting is applied to the original linear modules.
+        After PEFT wraps them, the casting hook may no longer mediate the
+        matrix multiplication, causing addmm_cuda(Float8_e4m3fn) to fail.
+        """
+        return bool(supports_fp8 and not loras)
+
+    def _ensure_flux_lora_compatible_pipeline(
+        self,
+        model: dict[str, Any],
+        loras: list[dict[str, Any]],
+    ) -> None:
+        """A cached base Flux FP8 pipeline cannot be retrofitted safely.
+
+        Recover the checkpoint's original BF16 weights by reloading instead
+        of upcasting already-rounded FP8 weights or altering live casting hooks.
+        """
+        if (
+            str(model.get("family") or "") == "flux"
+            and loras
+            and self._pipeline is not None
+            and self._pipeline_model_id == model.get("id")
+            and "fp8-layerwise" in str(self._pipeline_optimization or "")
+        ):
+            emit_console(
+                "warning",
+                "generation",
+                "Flux LoRA requested while FP8 layerwise base-model pipeline is cached. "
+                "Reloading Flux transformer with BF16 weights and streamed group offload "
+                "because PEFT LoRA layers can bypass FP8 casting hooks.",
+            )
+            self._unload_pipeline()
+
     def _load_flux_pipeline(self, job: GenerationJob, cache_dir: Path):
         _configure_external_runtime_noise()
         try:
@@ -732,7 +768,10 @@ class GenerationManager:
                 and hasattr(torch, "float8_e4m3fn")
                 and hasattr(transformer, "enable_layerwise_casting")
             )
-            if supports_native_fp8:
+            if self._flux_uses_fp8_layerwise(
+                supports_fp8=supports_native_fp8,
+                loras=job.request.loras,
+            ):
                 transformer.enable_layerwise_casting(
                     storage_dtype=torch.float8_e4m3fn,
                     compute_dtype=dtype,
@@ -742,6 +781,14 @@ class GenerationManager:
                     "info",
                     "generation",
                     "Flux fast path enabled: FP8 layerwise weight storage with BF16 compute.",
+                )
+            elif job.request.loras:
+                emit_console(
+                    "info",
+                    "generation",
+                    f"Flux LoRA compatibility mode: keeping transformer weights in "
+                    f"{dtype} instead of FP8; PEFT adapters will use BF16/FP16 "
+                    "compute with streamed group offload.",
                 )
             else:
                 emit_console(
@@ -1322,6 +1369,7 @@ class GenerationManager:
         model_id = model["id"]
         family = str(model.get("family", ""))
 
+        self._ensure_flux_lora_compatible_pipeline(model, job.request.loras)
         if self._pipeline is not None and self._pipeline_model_id == model_id:
             pipe = self._switch_loaded_pipeline_task(
                 model,
@@ -1454,6 +1502,7 @@ class GenerationManager:
         model_id = model["id"]
         family = str(model.get("family", ""))
 
+        self._ensure_flux_lora_compatible_pipeline(model, job.request.loras)
         if self._pipeline is not None and self._pipeline_model_id == model_id:
             pipe = self._switch_loaded_pipeline_task(
                 model,
