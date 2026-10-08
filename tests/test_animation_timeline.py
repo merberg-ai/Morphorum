@@ -57,11 +57,14 @@ def test_timeline_descriptors_expose_canonical_tracks_and_reserved_groups() -> N
     tracks = {item["id"]: item for item in descriptors["tracks"]}
 
     assert descriptors["schema_version"] == 1
-    assert groups["camera_3d"]["reserved"] is True
+    assert groups["camera_3d"]["reserved"] is False
     assert groups["cadence"]["reserved"] is True
     assert groups["loras"]["reserved"] is True
     assert tracks["prompts.positive"]["interpolation_modes"] == ["blend", "hold"]
     assert tracks["camera_2d.zoom"]["legacy_field"] == "motion.zoom"
+    assert tracks["camera_3d.translation_z"]["legacy_field"] == "camera_3d.translation_z"
+    assert tracks["camera_3d.rotation_y"]["unit"] == "deg"
+    assert tracks["camera_3d.fov"]["unit"] == "deg"
     assert tracks["generation.steps"]["value_type"] == "integer"
 
 
@@ -262,3 +265,28 @@ def test_track_edit_validation_rejects_bad_frame_and_empty_numeric_value() -> No
 
     with pytest.raises(TimelineError, match="Unknown timeline track"):
         get_timeline_track(project, "camera_3d", "teleport")
+
+
+
+def test_3d_camera_keyframe_crud_updates_project_bridge() -> None:
+    project = sample_project()
+
+    upsert_track_keyframe(
+        project,
+        "camera_3d",
+        "translation_z",
+        frame=10,
+        value="-2.5",
+    )
+    track = get_timeline_track(project, "camera_3d", "translation_z")["track"]
+
+    assert track["schedule"] == "0:(0), 10:(-2.5)"
+    assert project["camera_3d"]["translation_z"] == track["schedule"]
+
+    set_track_interpolation(
+        project,
+        "camera_3d",
+        "translation_z",
+        interpolation="hold",
+    )
+    assert project["tracks"]["camera_3d"]["translation_z"]["interpolation"] == "hold"
