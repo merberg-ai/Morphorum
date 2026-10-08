@@ -18,6 +18,7 @@ def sample_project() -> dict:
         "name": "Phase 2 Test",
         "animation": {
             "max_frames": 101,
+            "mode": "2d",
             "fps": 20.0,
             "width": 1024,
             "height": 768,
@@ -68,6 +69,7 @@ def test_resolve_project_frame_contract() -> None:
     resolved = resolve_project_frame(sample_project(), 50)
 
     assert resolved["frame"] == 50
+    assert resolved["animation_mode"] == "2d"
     assert resolved["time_seconds"] == pytest.approx(2.5)
     assert resolved["dimensions"] == {"width": 1024, "height": 768}
     assert resolved["motion"]["angle"] == pytest.approx(5)
@@ -290,6 +292,7 @@ def test_zoom_validation_warns_when_compounding_becomes_extreme() -> None:
 
 def test_3d_camera_schedule_series_and_hold_interpolation() -> None:
     project = sample_project()
+    project["animation"]["mode"] = "3d"
     project["tracks"] = build_tracks_from_legacy(project)
     project["tracks"]["camera_3d"]["translation_z"]["interpolation"] = "hold"
 
@@ -309,6 +312,7 @@ def test_3d_camera_schedule_series_and_hold_interpolation() -> None:
 @pytest.mark.parametrize("schedule", ["0:(0)", "0:(180)", "0:(-30)"])
 def test_3d_fov_validation_rejects_invalid_projection_ranges(schedule: str) -> None:
     project = sample_project()
+    project["animation"]["mode"] = "3d"
     project["camera_3d"]["fov"] = schedule
 
     result = validate_project_schedules(project)
@@ -325,6 +329,7 @@ def test_3d_fov_validation_rejects_invalid_projection_ranges(schedule: str) -> N
 
 def test_3d_translation_and_rotation_accept_signed_values() -> None:
     project = sample_project()
+    project["animation"]["mode"] = "3d"
     project["camera_3d"]["translation_z"] = "0:(-3), 100:(2)"
     project["camera_3d"]["rotation_y"] = "0:(-15), 100:(20)"
 
@@ -334,3 +339,34 @@ def test_3d_translation_and_rotation_accept_signed_values() -> None:
     assert result["valid"] is True
     assert resolved["camera_3d"]["translation_z"] == pytest.approx(-0.5)
     assert resolved["camera_3d"]["rotation_y"] == pytest.approx(2.5)
+
+
+
+def test_inactive_3d_schedule_error_does_not_break_2d_resolver() -> None:
+    project = sample_project()
+    project["animation"]["mode"] = "2d"
+    project["camera_3d"]["fov"] = "0:(totally_not_math(t))"
+
+    resolved = resolve_project_frame(project, 50)
+    validation = validate_project_schedules(project)
+
+    assert resolved["animation_mode"] == "2d"
+    assert resolved["motion"]["zoom"] == pytest.approx(1.05)
+    assert resolved["camera_3d"]["fov"] == pytest.approx(40.0)
+    assert "camera_3d.fov" not in validation["fields"]
+    assert validation["valid"] is True
+
+
+def test_inactive_2d_schedule_error_does_not_break_3d_resolver() -> None:
+    project = sample_project()
+    project["animation"]["mode"] = "3d"
+    project["motion"]["zoom"] = "0:(totally_not_math(t))"
+
+    resolved = resolve_project_frame(project, 50)
+    validation = validate_project_schedules(project)
+
+    assert resolved["animation_mode"] == "3d"
+    assert resolved["camera_3d"]["translation_z"] == pytest.approx(-2.0)
+    assert resolved["motion"]["zoom"] == pytest.approx(1.0)
+    assert "motion.zoom" not in validation["fields"]
+    assert validation["valid"] is True
