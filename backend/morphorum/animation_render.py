@@ -1684,14 +1684,6 @@ class AnimationRenderManager:
             )
             job.results.sort(key=lambda item: int(item["frame"]))
 
-            frame_seconds = max(0.0, time.monotonic() - frame_started)
-            timings["total"] = frame_seconds
-            job._frame_times.append(frame_seconds)
-            recent = job._frame_times[-8:]
-            job.frame_seconds = frame_seconds
-            job.average_frame_seconds = sum(recent) / len(recent)
-            remaining = max(0, total - frame - 1)
-            job.eta_seconds = job.average_frame_seconds * remaining
             job.current_frame = frame
             job.current_step = steps if should_diffuse else 0
             job.progress = (frame + 1) / total
@@ -1711,7 +1703,16 @@ class AnimationRenderManager:
                 0.0,
                 time.monotonic() - memory_started,
             )
-            timings["total"] = max(0.0, time.monotonic() - frame_started)
+            timings["memory_trimmed"] = 1.0 if memory_maintenance.get("trimmed") else 0.0
+
+            frame_seconds = max(0.0, time.monotonic() - frame_started)
+            timings["total"] = frame_seconds
+            job._frame_times.append(frame_seconds)
+            recent = job._frame_times[-8:]
+            job.frame_seconds = frame_seconds
+            job.average_frame_seconds = sum(recent) / len(recent)
+            remaining = max(0, total - frame - 1)
+            job.eta_seconds = job.average_frame_seconds * remaining
             with self._lock:
                 job.current_frame_state["timings"] = deepcopy(timings)
 
