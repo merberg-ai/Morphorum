@@ -1099,3 +1099,129 @@ def test_sdxl_runtime_exposes_direct_unet_lora_loader_api() -> None:
         "_pipeline",
     ):
         assert name in parameters
+
+@pytest.mark.parametrize("family", ["sdxl", "flux", "zimage"])
+def test_animation_prepare_txt2img_and_img2img_share_lora_engine(
+    family: str, tmp_path: Path, monkeypatch
+) -> None:
+    """Regression: animation's starting frame and subsequent frames reuse the
+    same GenerationManager adapter loading/activation engine as still images.
+    No GPU or model downloads required.
+    """
+    if family == "zimage":
+        checkpoint = create_zimage_layout(tmp_path / "Z-Image-Turbo")
+    else:
+        checkpoint = tmp_path / "base.safetensors"
+        checkpoint.write_bytes(b"fake-model")
+    model = fake_model(checkpoint, family)
+    lora_path = tmp_path / "CreepyDroneStyle.safetensors"
+    lora_path.write_bytes(b"fake-lora")
+    adapter_name = "morphorum_animation-style"
+    item = {
+        "id": "animation-style", "name": "CreepyDroneStyle",
+        "family": family, "adapter_name": adapter_name,
+        "path": str(lora_path), "weight": 0.8,
+    }
+    monkeypatch.setattr(generation, "get_model", lambda _model_id: model)
+
+    class ObservablePipe(FakeTrackedLoRAPipe):
+        def disable_lora(self) -> None:
+            super().disable_lora()
+            self.active_adapters = []
+
+    txt2img_pipe = ObservablePipe()
+    # Diffusers from_pipe() normally shares adapter-bearing components.
+    img2img_pipe = ObservablePipe([adapter_name])
+    manager = GenerationManager()
+    manager._pipeline = txt2img_pipe
+    manager._pipeline_model_id = model["id"]
+    manager._pipeline_task = "txt2img"
+    manager._pipeline_device = "cpu"
+    monkeypatch.setattr(
+        manager, "_load_pipeline",
+        lambda _job, _progress=None: (txt2img_pipe, "cpu"),
+    )
+    monkeypatch.setattr(
+        manager, "_convert_pipeline_task",
+        lambda _pipe, _family, task: img2img_pipe if task == "img2img" else txt2img_pipe,
+    )
+    monkeypatch.setattr(manager, "_configure_sampler", lambda *_args: None)
+    monkeypatch.setattr(manager, "release_inference_memory", lambda **_kwargs: None)
+
+    sampler = "euler" if family == "sdxl" else "flowmatch_euler"
+    guidance = 6.0 if family == "sdxl" else (1.0 if family == "flux" else 0.0)
+
+    def request(loras):
+        return GenerationRequest(
+            model_id=model["id"], prompt="cinematic landscape",
+            width=64, height=64, steps=5, sampler=sampler,
+            guidance_scale=guidance, loras=loras,
+        )
+
+    start, _device, _model = manager.prepare_txt2img(request([item]))
+    assert start is txt2img_pipe
+    assert len(txt2img_pipe.loads) == 1
+    assert txt2img_pipe.adapter_calls[-1] == ([adapter_name], [0.8])
+    assert manager._active_lora_signature == ((adapter_name, 0.8),)
+
+    # Animation switches to img2img for the following frame.
+    after, _device, _model = manager.prepare_img2img(request([item]))
+    assert after is img2img_pipe
+    assert img2img_pipe.disabled == 1
+    assert not img2img_pipe.loads, "The converted wrapper should reuse the injected LoRA."
+    assert img2img_pipe.adapter_calls[-1] == ([adapter_name], [0.8])
+    assert img2img_pipe.active_adapters == [adapter_name]
+
+    # A subsequent keyframe changes only strength, never reloads the file.
+    different = {**item, "weight": 0.35}
+    manager.prepare_img2img(request([different]))
+    assert len(img2img_pipe.loads) == 0
+    assert img2img_pipe.adapter_calls[-1] == ([adapter_name], [0.35])
+
+    # A frame with no LoRA has to genuinely deactivate the PEFT layers.
+    manager.prepare_img2img(request([]))
+    assert img2img_pipe.disabled == 2
+    assert img2img_pipe.active_adapters == []
+    assert manager._active_lora_signature == ()
+
+    # A later frame can re-enable the cached adapter without reloading it.
+    manager.prepare_img2img(request([item]))
+    assert img2img_pipe.active_adapters == [adapter_name]
+    assert len(img2img_pipe.loads) == 0
+
+
+@pytest.mark.parametrize("family", ["sdxl", "flux", "zimage"])
+def test_task_switch_deactivates_loras_when_next_frame_is_base_only(
+    family: str, tmp_path: Path, monkeypatch
+) -> None:
+    """A txt2img LoRA must not contaminate a LoRA-free img2img frame."""
+    path = tmp_path / "style.safetensors"
+    path.write_bytes(b"fake-lora")
+    model = fake_model(tmp_path / "base.safetensors", family)
+    adapter_name = "morphorum-style-id"
+    manager = GenerationManager()
+    source = FakeTrackedLoRAPipe([adapter_name])
+    converted = FakeTrackedLoRAPipe([adapter_name])
+    manager._pipeline = source
+    manager._pipeline_model_id = model["id"]
+    manager._pipeline_task = "txt2img"
+    manager._active_lora_signature = ((adapter_name, 1.0),)
+    manager._pipeline_loras = {
+        "style-id": {
+            "id": "style-id", "family": family, "name": "style",
+            "path": str(path), "adapter_name": adapter_name,
+        },
+    }
+    monkeypatch.setattr(
+        manager, "_convert_pipeline_task",
+        lambda _pipe, _family, _task: converted,
+    )
+    monkeypatch.setattr(manager, "release_inference_memory", lambda **_kwargs: None)
+
+    switched = manager._switch_loaded_pipeline_task(model, "img2img")
+    assert switched is converted
+    assert converted.disabled == 1
+    assert manager._active_lora_signature == ()
+    manager.configure_loras(switched, model, [])
+    assert converted.disabled == 1, "The task switch disabled the stale active LoRA."
+    assert converted.adapter_calls == []
