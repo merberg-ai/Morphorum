@@ -32,6 +32,8 @@ def test_frontend_and_health() -> None:
         assert 'id="view-loras"' in frontend.text
         assert 'id="lora-manager-family"' in frontend.text
         assert 'id="lora-manager-civitai"' in frontend.text
+        assert 'id="lora-manager-refresh-runtime"' in frontend.text
+        assert 'value="lora" checked' in frontend.text
         assert 'id="lora-manager-insert"' in frontend.text
         assert 'id="view-animation"' in frontend.text
         assert '<select id="animation-sampler"' in frontend.text
@@ -692,3 +694,68 @@ def test_lora_inspection_api_rejects_unindexed_file_and_requires_explicit_online
         lookup = client.post("/api/loras/synthetic-id/civitai-lookup")
         assert lookup.status_code == 200
         assert calls == ["synthetic-id"]
+
+def test_lora_manager_server_audit_logs_and_validation(monkeypatch) -> None:
+    import importlib
+    from morphorum.console import snapshot
+
+    module = importlib.import_module("morphorum.app")
+    record = {
+        "id": "audit-529922", "kind": "loras", "family": "sdxl",
+        "name": "DonMCr33pyD0115XL_529922",
+    }
+    monkeypatch.setattr(
+        module, "get_model",
+        lambda model_id: record if model_id == "audit-529922" else None,
+    )
+    monkeypatch.setattr(
+        module.generation_manager, "model_status",
+        lambda: {
+            "loaded": True, "model_name": "artUniverse", "family": "sdxl",
+            "task": "txt2img",
+            "loras": [{
+                "id": record["id"], "adapter_name": "morphorum_audit",
+                "compatibility": "unet-only",
+                "diagnostics": {"modules": 12, "abs_sum": 42.25},
+            }],
+            "active_loras": [{"adapter_name": "morphorum_audit", "weight": 0.8}],
+        },
+    )
+    events = snapshot(limit=1500)
+    last_id = events[-1]["id"] if events else 0
+    with TestClient(app) as client:
+        audit = client.post("/api/loras/audit-529922/runtime-audit")
+        assert audit.status_code == 200
+        assert audit.json()["active_loras"][0]["weight"] == 0.8
+
+        payload = {
+            "event": "prompt_inserted", "weight": 0.85,
+            "image_family": "sdxl", "trigger_count": 2,
+        }
+        ok = client.post("/api/loras/audit-529922/activity", json=payload)
+        assert ok.status_code == 200
+        assert ok.json()["status"] == "recorded"
+        fail = client.post(
+            "/api/loras/audit-529922/activity",
+            json={**payload, "event": "prompt_rejected", "reason": "invalid_name"},
+        )
+        assert fail.status_code == 200
+        assert client.post(
+            "/api/loras/audit-529922/activity", json={**payload, "reason": "spoofed message"},
+        ).status_code == 400
+        assert client.post(
+            "/api/loras/no-such-file/activity", json=payload,
+        ).status_code == 404
+        assert client.post(
+            "/api/loras/audit-529922/activity",
+            json={**payload, "weight": float("nan")},
+        ).status_code in (400, 422)
+
+    lora_lines = [
+        event for event in snapshot(after_id=last_id, limit=1500)
+        if event["category"] == "lora"
+    ]
+    assert any("Runtime audit" in event["message"] and "12" in event["message"] for event in lora_lines)
+    assert any("insertion succeeded" in event["message"] for event in lora_lines)
+    assert any("insertion rejected" in event["message"] for event in lora_lines)
+    assert any("DonMCr33pyD0115XL" in event["message"] for event in lora_lines)
