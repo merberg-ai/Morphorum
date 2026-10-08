@@ -655,7 +655,7 @@
     }
     const words = Array.isArray(triggers) ? triggers.filter(value => typeof value === 'string' && !/[<>\\r\\n]/.test(value)).slice(0, 20) : [];
     const tag = `<lora:${name}:${Number(numeric.toFixed(4))}>`;
-    insertAtCursor(prompt, [tag, ...words].join(', '));
+    insertAtCursor(prompt, [...words, tag].join(words.length ? ', ' : ''));
     qs('.nav-button[data-view="image"]')?.click();
     return true;
   }
