@@ -1225,3 +1225,132 @@ def test_task_switch_deactivates_loras_when_next_frame_is_base_only(
     manager.configure_loras(switched, model, [])
     assert converted.disabled == 1, "The task switch disabled the stale active LoRA."
     assert converted.adapter_calls == []
+
+
+@pytest.mark.parametrize(
+    ("supports_fp8", "has_lora", "expect_fp8"),
+    [
+        (True, False, True),
+        (True, True, False),
+        (False, False, False),
+        (False, True, False),
+    ],
+)
+def test_flux_fp8_fast_path_is_gated_by_lora_use(
+    supports_fp8: bool, has_lora: bool, expect_fp8: bool
+) -> None:
+    manager = GenerationManager()
+    assert manager._flux_uses_fp8_layerwise(
+        supports_fp8=supports_fp8,
+        loras=[{"id": "test-lora"}] if has_lora else [],
+    ) is expect_fp8
+
+
+@pytest.mark.parametrize("task", ["txt2img", "img2img"])
+def test_flux_lora_request_reloads_cached_fp8_pipeline_before_adapter_loading(
+    task: str, tmp_path: Path, monkeypatch
+) -> None:
+    """Base Flux can keep FP8. A new LoRA must reload *original* BF16
+    transformer weights rather than attempting PEFT over the existing FP8
+    casted linears, which can cause addmm_cuda(Float8_e4m3fn).
+    """
+    checkpoint = tmp_path / "artsyDream_v6FP8.safetensors"
+    checkpoint.write_bytes(b"fake-flux-weights")
+    model = fake_model(checkpoint, "flux", "dev")
+    item = {"id": "unsettling", "family": "flux", "weight": 1.0}
+    request = GenerationRequest(
+        model_id=model["id"], prompt="haunted mansion",
+        sampler="flowmatch_euler", guidance_scale=1.0,
+        loras=[item],
+    )
+    job = GenerationJob(id="flux-adapter", request=request, model=model)
+    old_pipe = SimpleNamespace(scheduler=SimpleNamespace(config={"kind": "fake"}))
+    new_pipe = SimpleNamespace(scheduler=SimpleNamespace(config={"kind": "fake"}))
+    manager = GenerationManager()
+    manager._pipeline = old_pipe
+    manager._pipeline_model_id = model["id"]
+    manager._pipeline_task = "txt2img"
+    manager._pipeline_device = "cuda-offload"
+    manager._pipeline_optimization = "fp8-layerwise-bf16-compute+streamed-group-offload"
+    manager._pipeline_loras = {"stale": {"adapter_name": "stale"}}
+    manager._active_lora_signature = (("stale", 0.7),)
+    loads: list[list[dict]] = []
+
+    def load_flux(loaded_job, _cache_dir):
+        loads.append(list(loaded_job.request.loras))
+        manager._pipeline_optimization = "bf16-cpu-offload+streamed-group-offload"
+        return new_pipe, "cuda-offload", "cpu"
+
+    monkeypatch.setattr(manager, "_load_flux_pipeline", load_flux)
+    monkeypatch.setattr(
+        manager, "_convert_pipeline_task",
+        lambda pipe, _family, _task: pipe,
+    )
+    monkeypatch.setattr(manager, "release_inference_memory", lambda **_kwargs: None)
+
+    if task == "txt2img":
+        pipe, device = manager._load_pipeline(job)
+    else:
+        pipe, device = manager._load_img2img_pipeline(job)
+
+    assert pipe is new_pipe
+    assert device == "cpu"
+    assert loads == [[item]]
+    assert manager._pipeline is new_pipe
+    assert manager._pipeline_loras == {}
+    assert manager._active_lora_signature == ()
+    assert manager._pipeline_optimization == "bf16-cpu-offload+streamed-group-offload"
+
+
+def test_flux_without_lora_reuses_fp8_base_pipeline(tmp_path, monkeypatch) -> None:
+    checkpoint = tmp_path / "artsyDream_v6FP8.safetensors"
+    checkpoint.write_bytes(b"fake-flux-weights")
+    model = fake_model(checkpoint, "flux", "dev")
+    manager = GenerationManager()
+    pipe = SimpleNamespace(scheduler=SimpleNamespace(config={"kind": "fake"}))
+    manager._pipeline = pipe
+    manager._pipeline_model_id = model["id"]
+    manager._pipeline_device = "cuda-offload"
+    manager._pipeline_task = "txt2img"
+    manager._pipeline_optimization = "fp8-layerwise-bf16-compute+streamed-group-offload"
+    monkeypatch.setattr(manager, "_load_flux_pipeline", lambda *_args: pytest.fail("unexpected reload"))
+
+    job = GenerationJob(
+        id="flux-base",
+        request=GenerationRequest(
+            model_id=model["id"], prompt="forest",
+            sampler="flowmatch_euler", guidance_scale=1.0,
+        ),
+        model=model,
+    )
+    got, device = manager._load_pipeline(job)
+    assert got is pipe
+    assert device == "cpu"
+    assert manager._pipeline_optimization.startswith("fp8-layerwise")
+
+
+def test_flux_lora_safe_bf16_pipeline_is_reused(tmp_path, monkeypatch) -> None:
+    checkpoint = tmp_path / "artsyDream_v6FP8.safetensors"
+    checkpoint.write_bytes(b"fake-flux-weights")
+    model = fake_model(checkpoint, "flux", "dev")
+    manager = GenerationManager()
+    pipe = SimpleNamespace(scheduler=SimpleNamespace(config={"kind": "fake"}))
+    manager._pipeline = pipe
+    manager._pipeline_model_id = model["id"]
+    manager._pipeline_device = "cuda-offload"
+    manager._pipeline_task = "txt2img"
+    manager._pipeline_optimization = "bf16-cpu-offload+streamed-group-offload"
+    monkeypatch.setattr(manager, "_load_flux_pipeline", lambda *_args: pytest.fail("unexpected reload"))
+
+    job = GenerationJob(
+        id="flux-lora",
+        request=GenerationRequest(
+            model_id=model["id"], prompt="forest",
+            sampler="flowmatch_euler", guidance_scale=1.0,
+            loras=[{"id": "style", "family": "flux", "weight": 1.0}],
+        ),
+        model=model,
+    )
+    got, device = manager._load_pipeline(job)
+    assert got is pipe
+    assert device == "cpu"
