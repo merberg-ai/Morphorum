@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 import warnings
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
