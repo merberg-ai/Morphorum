@@ -51,6 +51,7 @@
       <button class="nav-button active" data-view="image"><span class="nav-icon">▣</span><span>Image</span></button>
       <button class="nav-button" data-view="animation"><span class="nav-icon">▶</span><span>Animation</span></button>
       <button class="nav-button" data-view="models"><span class="nav-icon">◫</span><span>Models</span></button>
+      <button class="nav-button" data-view="loras"><span class="nav-icon">◇</span><span>LoRAs</span></button>
       <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
       <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
     </nav>
@@ -648,6 +649,42 @@
         </article>
       </section>
 
+
+      <section class="view" id="view-loras">
+        <div class="page-heading">
+          <div><p class="eyebrow">LORA LABORATORY</p><h1>LoRA Manager</h1><p class="muted">Inspect indexed LoRA metadata and tensor layout without loading models onto the GPU.</p></div>
+          <button class="primary-button busy-button" id="lora-manager-scan" type="button"><span class="spinner"></span><span class="button-label">Scan Directories</span></button>
+        </div>
+        <div class="lora-manager-grid">
+          <article class="card glass lora-manager-library">
+            <div class="card-header"><div><h2>Library</h2><p class="muted" id="lora-manager-count">Scanning indexed LoRAs…</p></div></div>
+            <div class="lora-manager-toolbar">
+              <label class="field-label" for="lora-manager-family">Model family</label>
+              <select id="lora-manager-family"><option value="sdxl">SDXL</option><option value="flux">Flux</option><option value="zimage">Z-Image</option></select>
+              <label class="field-label" for="lora-manager-search">Find a LoRA</label>
+              <input id="lora-manager-search" type="search" placeholder="Search name or filename…">
+            </div>
+            <div id="lora-manager-list" class="lora-manager-list" role="listbox" aria-label="LoRA library"><div class="model-empty">Loading library…</div></div>
+            <p class="muted lora-manager-footnote">Uses the directories in Settings. Scanning refreshes the shared Models index.</p>
+          </article>
+          <article class="card glass lora-manager-details">
+            <div class="card-header"><div><h2 id="lora-manager-title">Choose a LoRA</h2><p class="muted" id="lora-manager-subtitle">Metadata and architecture diagnostics appear here.</p></div></div>
+            <div id="lora-manager-detail-body" class="lora-manager-detail-body" aria-live="polite">
+              <div class="model-empty">Select a LoRA to inspect its local file.</div>
+            </div>
+            <div class="lora-manager-insert">
+              <div class="lora-manager-insert-controls">
+                <label class="field-label" for="lora-manager-weight">Strength</label>
+                <input type="number" id="lora-manager-weight" min="-4" max="4" step=".05" value="1.0">
+                <label class="lora-manager-checkbox"><input id="lora-manager-add-triggers" type="checkbox" checked> Include recorded trigger words</label>
+              </div>
+              <button class="primary-button" id="lora-manager-insert" type="button" disabled>Add to Image Prompt</button>
+              <p class="muted lora-manager-footnote">A prompt directive selects the LoRA. Trigger words only come from explicit file or sidecar metadata, never guessed training tags. Image model family must match.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section class="view" id="view-settings">
         <div class="page-heading settings-heading">
           <div><p class="eyebrow">CONFIGURATION</p><h1>Settings</h1><p class="muted">External libraries stay where you keep them; managed models use Morphorum-controlled storage.</p></div>
@@ -709,6 +746,7 @@
   <script src="/assets/app.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/loras.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>
