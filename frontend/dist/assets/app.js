@@ -956,7 +956,7 @@
     qs('#clear-console-server')?.addEventListener('click', clearServerConsole);
 
     const requested = location.hash.replace('#', '');
-    if (['image', 'animation', 'models', 'settings', 'console'].includes(requested)) switchView(requested);
+    if (['image', 'animation', 'models', 'loras', 'settings', 'console'].includes(requested)) switchView(requested);
   }
 
   async function start() {
