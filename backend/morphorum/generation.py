@@ -852,6 +852,12 @@ class GenerationManager:
             pass
 
     def release_inference_memory(self, *, synchronize: bool = True) -> None:
+        """Aggressively release transient inference memory.
+
+        This is intentionally reserved for model/task transitions, unloads, failures,
+        and other cold-path cleanup. Animation's hot loop uses
+        maintain_inference_memory() instead so the CUDA allocator stays warm.
+        """
         gc.collect()
         try:
             import torch
@@ -866,6 +872,45 @@ class GenerationManager:
             torch.cuda.empty_cache()
         except Exception:
             pass
+
+    def maintain_inference_memory(
+        self,
+        *,
+        minimum_free_gib: float = 0.15,
+        minimum_reclaimable_gib: float = 0.50,
+    ) -> dict[str, Any]:
+        """Keep the hot inference allocator intact unless cache pressure is real."""
+        status = self.cuda_memory_status()
+        result: dict[str, Any] = {
+            "trimmed": False,
+            "reason": "allocator-kept-hot",
+            "before": status,
+        }
+        if status is None:
+            result["reason"] = "cuda-unavailable"
+            return result
+
+        reclaimable = max(
+            0.0,
+            float(status["reserved_gib"]) - float(status["allocated_gib"]),
+        )
+        result["reclaimable_gib"] = reclaimable
+        if (
+            float(status["free_gib"]) >= float(minimum_free_gib)
+            or reclaimable < float(minimum_reclaimable_gib)
+        ):
+            return result
+
+        try:
+            import torch
+
+            torch.cuda.empty_cache()
+            result["trimmed"] = True
+            result["reason"] = "low-free-vram-reclaimed-cache"
+            result["after"] = self.cuda_memory_status()
+        except Exception as exc:
+            result["reason"] = f"trim-failed:{exc}"
+        return result
 
     def pipeline_optimization(self) -> str | None:
         return self._pipeline_optimization
