@@ -231,6 +231,12 @@ def resolve_project_frame(
     generation["sampler"] = str(source_generation.get("sampler", "") or "")
     generation["seed"] = _resolved_seed(project, frame)
 
+    cadence = {
+        key.split(".", 1)[1]: _resolve_field(project, key, frame)
+        for key in SCHEDULE_FIELDS
+        if key.startswith("cadence.")
+    }
+
     tracks = project.get("tracks", {})
     timeline_schema = (
         int(tracks.get("schema_version", TIMELINE_SCHEMA_VERSION))
@@ -261,6 +267,7 @@ def resolve_project_frame(
         "motion": motion,
         "camera_3d": camera_3d,
         "generation": generation,
+        "cadence": cadence,
     }
 
 
@@ -412,6 +419,43 @@ def _fov_schedule_issues(
     return []
 
 
+def _cadence_schedule_issues(
+    project: dict[str, Any],
+    *,
+    max_frames: int,
+    fps: float,
+    seed: int,
+) -> list[dict[str, Any]]:
+    schedule = _schedule_text(project, "cadence.diffusion")
+    interpolation = _track_interpolation(project, "cadence.diffusion")
+    frames = range(max_frames) if max_frames <= 5000 else sorted(
+        {int(round(index * (max_frames - 1) / 999)) for index in range(1000)}
+    )
+    for frame in frames:
+        try:
+            value = int(round(resolve_numeric_schedule(
+                schedule,
+                frame=frame,
+                max_frames=max_frames,
+                seed=seed,
+                fps=fps,
+                interpolation=interpolation,
+            )))
+        except ScheduleError:
+            return []
+        if value < 1 or value > 64:
+            return [{
+                "severity": "error",
+                "frame": frame,
+                "message": (
+                    "Diffusion cadence must resolve to an integer from 1 through 64. "
+                    f"Frame {frame} resolves to {value}; cadence 1 diffuses every frame, "
+                    "while higher values diffuse anchor frames and transform the frames between them."
+                ),
+            }]
+    return []
+
+
 def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
     max_frames, fps, expression_seed = _project_context(project)
     fields: dict[str, Any] = {}
@@ -475,6 +519,20 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
             fov_field["valid"] = False
         for issue in fov_issues:
             all_issues.append({"field": "camera_3d.fov", **issue})
+
+    cadence_field = fields.get("cadence.diffusion", {})
+    if cadence_field.get("valid", False):
+        cadence_issues = _cadence_schedule_issues(
+            project,
+            max_frames=max_frames,
+            fps=fps,
+            seed=expression_seed,
+        )
+        cadence_field.setdefault("issues", []).extend(cadence_issues)
+        if any(issue.get("severity") == "error" for issue in cadence_issues):
+            cadence_field["valid"] = False
+        for issue in cadence_issues:
+            all_issues.append({"field": "cadence.diffusion", **issue})
 
     family = str(project.get("model", {}).get("family") or "").strip().lower()
     prompt_records: list[dict[str, Any]] | None = None
