@@ -33,6 +33,13 @@ def test_frontend_and_health() -> None:
         assert '<select id="animation-sampler"' in frontend.text
         assert 'id="animation-start-render"' in frontend.text
         assert 'id="animation-start-mode"' in frontend.text
+        assert 'id="animation-mode"' in frontend.text
+        assert 'id="animation-2d-motion-card"' in frontend.text
+        assert 'id="animation-3d-camera-card"' in frontend.text
+        assert 'id="animation-3d-translation-z"' in frontend.text
+        assert 'id="animation-3d-rotation-y"' in frontend.text
+        assert 'id="animation-3d-fov"' in frontend.text
+        assert 'data-animation-mode="3d"' in frontend.text
         assert 'id="animation-model-load-progress"' in frontend.text
         assert 'id="animation-model-load-status"' in frontend.text
         assert 'id="animation-resume-render"' in frontend.text
@@ -92,6 +99,9 @@ def test_frontend_and_health() -> None:
         assert "animation-render-state-cum-zoom" in animation_js.text
         assert "resolved.camera_3d?.translation_z" in animation_js.text
         assert "resolved.camera_3d?.fov" in animation_js.text
+        assert "function animationMode()" in animation_js.text
+        assert "syncAnimationModeUi" in animation_js.text
+        assert "repairConstantGuidanceForSelectedModel" in animation_js.text
         assert "/api/animation/depth/models" in animation_js.text
         assert "generateDepthPreview" in animation_js.text
         assert "animation-timeline-keyframe-chip" in animation_js.text
@@ -417,6 +427,16 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
         render_project["generation"]["steps"] = "0:(5)"
         render_project["generation"]["guidance"] = "0:(6)"
         render_project["generation"]["sampler"] = "euler"
+
+        render_project_3d = dict(render_project)
+        render_project_3d["animation"] = dict(render_project["animation"])
+        render_project_3d["animation"]["mode"] = "3d"
+        blocked_3d = client.post(
+            "/api/animation/renders",
+            json={"project": render_project_3d},
+        )
+        assert blocked_3d.status_code == 400
+        assert "Depth-aware 3D rendering is not active" in blocked_3d.json()["detail"]
 
         render_started = client.post(
             "/api/animation/renders",
