@@ -59,7 +59,7 @@ test('choosing cadence 2 writes the existing canonical Deforum schedule', () => 
   a.apply();
   assert.equal(a.field.value, '0:(2)');
   assert.equal(a.preset.value, '2');
-  assert.match(a.help.textContent, /every 2th frame/);
+  assert.match(a.help.textContent, /every 2 frames/);
   assert.equal(a.dirty.length, 1);
   assert.equal(a.dirty[0].validate, true);
 });
