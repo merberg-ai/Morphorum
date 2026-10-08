@@ -1251,6 +1251,32 @@ class GenerationManager:
         self._pipeline = self._convert_pipeline_task(old_pipe, family, task)
         self._pipeline_task = task
 
+        # The new wrapper can share UNet/transformer PEFT layers with the old
+        # pipeline. Resetting the signature alone is unsafe: a LoRA used on
+        # a txt2img starting frame may keep influencing the next img2img
+        # frame even when that frame requests no LoRA at all. Disable on the
+        # converted wrapper before resetting bookkeeping. configure_loras()
+        # will explicitly re-enable and reweight on the next request.
+        if self._active_lora_signature:
+            disable = getattr(self._pipeline, "disable_lora", None)
+            if not callable(disable):
+                raise GenerationError(
+                    f"Cannot safely switch {family} from {previous} to {task}: "
+                    "the converted pipeline cannot disable a previously active LoRA."
+                )
+            try:
+                disable()
+            except Exception as exc:
+                raise GenerationError(
+                    f"Could not deactivate LoRAs after switching {family} "
+                    f"from {previous} to {task}: {exc}"
+                ) from exc
+            emit_console(
+                "info", "generation",
+                f"Disabled previously active LoRAs on {task} task switch; "
+                "the next frame will explicitly configure its requested adapters.",
+            )
+
         # LoRA adapters live on shared PEFT-enabled components, but task conversion
         # creates a new pipeline wrapper. Never trust wrapper-local activation state
         # across that boundary: inspect what survived and force configure_loras()
