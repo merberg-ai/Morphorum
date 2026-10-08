@@ -34,15 +34,15 @@ def _rotation_matrix(
 
     mx = np.array(
         [[1.0, 0.0, 0.0], [0.0, cx, -sx], [0.0, sx, cx]],
-        dtype=np.float64,
+        dtype=np.float32,
     )
     my = np.array(
         [[cy, 0.0, sy], [0.0, 1.0, 0.0], [-sy, 0.0, cy]],
-        dtype=np.float64,
+        dtype=np.float32,
     )
     mz = np.array(
         [[cz, -sz, 0.0], [sz, cz, 0.0], [0.0, 0.0, 1.0]],
-        dtype=np.float64,
+        dtype=np.float32,
     )
     return mz @ my @ mx
 
@@ -100,7 +100,7 @@ def render_depth_warp(
     if not 0.0 < near_depth < far_depth:
         raise Camera3DError("3D pseudo-depth range must satisfy 0 < near < far.")
 
-    normalized = np.clip(depth_map, 0.0, 1.0).astype(np.float64, copy=False)
+    normalized = np.clip(depth_map, 0.0, 1.0).astype(np.float32, copy=False)
     z = near_depth + (1.0 - normalized) * (far_depth - near_depth)
 
     source_focal = (width * 0.5) / math.tan(math.radians(source_fov_value) * 0.5)
@@ -108,14 +108,14 @@ def render_depth_warp(
     cx = (width - 1.0) * 0.5
     cy = (height - 1.0) * 0.5
 
-    yy, xx = np.indices((height, width), dtype=np.float64)
+    yy, xx = np.indices((height, width), dtype=np.float32)
     x = (xx - cx) * z / source_focal
     y = (yy - cy) * z / source_focal
 
     points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
     camera_translation = np.array(
         [float(translation_x), float(translation_y), float(translation_z)],
-        dtype=np.float64,
+        dtype=np.float32,
     )
 
     # Camera motion is the inverse transform of the scene in camera coordinates.
