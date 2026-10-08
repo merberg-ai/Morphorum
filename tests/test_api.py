@@ -63,6 +63,10 @@ def test_frontend_and_health() -> None:
         assert 'id="animation-render-state-cum-zoom"' in frontend.text
         assert 'id="animation-render-state-strength"' in frontend.text
         assert 'id="animation-render-state-seed"' in frontend.text
+        assert 'id="animation-render-state-3d-z"' in frontend.text
+        assert 'id="animation-render-state-3d-ry"' in frontend.text
+        assert 'id="animation-render-state-depth"' in frontend.text
+        assert 'id="animation-render-state-coverage"' in frontend.text
         assert 'id="resolved-3d-z"' in frontend.text
         assert 'id="resolved-3d-ry"' in frontend.text
         assert 'id="resolved-3d-fov"' in frontend.text
@@ -427,16 +431,6 @@ def test_animation_project_api_round_trip(tmp_path, monkeypatch) -> None:
         render_project["generation"]["steps"] = "0:(5)"
         render_project["generation"]["guidance"] = "0:(6)"
         render_project["generation"]["sampler"] = "euler"
-
-        render_project_3d = dict(render_project)
-        render_project_3d["animation"] = dict(render_project["animation"])
-        render_project_3d["animation"]["mode"] = "3d"
-        blocked_3d = client.post(
-            "/api/animation/renders",
-            json={"project": render_project_3d},
-        )
-        assert blocked_3d.status_code == 400
-        assert "Depth-aware 3D rendering is not active" in blocked_3d.json()["detail"]
 
         render_started = client.post(
             "/api/animation/renders",
