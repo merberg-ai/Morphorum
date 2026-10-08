@@ -173,6 +173,30 @@ If no triggers exist in the local file or sidecar, the prompt insertion
 control may use explicit Civitai trained words after a successful lookup.
 Metadata and source provenance are kept distinct.
 
+### LoRA Manager console diagnostics
+
+The Console now has a **LoRAs** source filter, enabled by default. The
+manager emits human-readable server events for:
+- library counts grouped by model family,
+- selected LoRA inspection (architecture hints, UNet/transformer/text-encoder
+  key counts, rank, source of recorded triggers, JSON/HTML sidecars and warnings),
+- explicit Civitai lookups (exact SHA-256 vs unverified sidecar version-ID
+  fallback, version/base-model and trigger count; only a short hash prefix
+  appears in logs),
+- selected LoRA runtime audits (checkpoint, task, registered adapter,
+  active weight, compatibility mode and injection summaries),
+- insertion or rejection of a LoRA tag into the Image prompt, with a compact
+  failure reason. **Prompt text and trigger phrases are not logged.**
+
+The frontend validates the Deforum tag name by rejecting only colons,
+angle brackets and actual CR/LF characters. A previous JS regex erroneously
+rejected ordinary `r` and `n` in filenames; B4 regression tests cover the
+real `DonMCr33pyD0115XL_529922` case and repeated insertions.
+
+A LoRA may be attached and listed as active in the runtime audit while
+*not affecting output*. Only an actual same-seed, same-sampler physical
+A/B test or denoiser-output check can confirm influence.
+
 ## Runtime implementation
 
 Morphorum uses the current Diffusers LoRA APIs exposed by its supported pipelines:
