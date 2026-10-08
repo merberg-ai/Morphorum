@@ -1084,6 +1084,9 @@ class AnimationRenderManager:
         animation_mode = str(animation.get("mode", "2d") or "2d").strip().lower()
         if animation_mode not in {"2d", "3d"}:
             animation_mode = "2d"
+        depth_resolution_setting = str(
+            project.get("camera_3d", {}).get("depth_resolution") or "auto"
+        ).strip().lower()
 
         load_started = time.monotonic()
         pipe = None
@@ -1356,20 +1359,35 @@ class AnimationRenderManager:
                 return
 
             frame_started = time.monotonic()
+            timings: dict[str, float] = {}
+            resolve_started = time.monotonic()
             resolved = resolve_project_frame(project, frame, lora_records=lora_records)
+            timings["resolve"] = max(0.0, time.monotonic() - resolve_started)
             depth_state: dict[str, Any] | None = None
             if animation_mode == "3d":
-                depth_started = time.monotonic()
                 try:
-                    depth_result = depth_manager.estimate(
+                    depth_input, depth_resolution_label = _prepare_depth_input(
                         frame_image,
+                        depth_resolution_setting,
+                    )
+                    depth_started = time.monotonic()
+                    depth_result = depth_manager.estimate(
+                        depth_input,
                         device="cpu",
                         release_after=False,
                     )
                     depth_map = depth_manager.load_cached_array(
                         str(depth_result["cache_key"])
                     )
+                    timings["depth"] = max(0.0, time.monotonic() - depth_started)
+
+                    depth_map = _resize_depth_map(
+                        depth_map,
+                        width=width,
+                        height=height,
+                    )
                     camera = resolved["camera_3d"]
+                    warp_started = time.monotonic()
                     warp = render_depth_warp(
                         frame_image,
                         depth_map,
@@ -1382,13 +1400,17 @@ class AnimationRenderManager:
                         fov=float(camera["fov"]),
                         source_fov=previous_camera_fov,
                     )
+                    timings["warp"] = max(0.0, time.monotonic() - warp_started)
                     previous_camera_fov = float(camera["fov"])
                     transformed = warp.image
                     depth_state = {
                         "cache_key": str(depth_result["cache_key"]),
                         "cache_hit": bool(depth_result.get("cache_hit")),
                         "device": str(depth_result.get("device") or "cpu"),
-                        "seconds": max(0.0, time.monotonic() - depth_started),
+                        "seconds": timings["depth"],
+                        "internal_width": depth_input.width,
+                        "internal_height": depth_input.height,
+                        "resolution_setting": depth_resolution_label,
                         **warp.telemetry,
                     }
                 except (DepthError, Camera3DError) as exc:
@@ -1396,6 +1418,7 @@ class AnimationRenderManager:
                         f"3D depth/camera warp failed at frame {frame}: {exc}"
                     ) from exc
             else:
+                warp_started = time.monotonic()
                 motion = resolved["motion"]
                 step_matrix = _frame_transform_matrix(
                     width=width,
@@ -1411,6 +1434,7 @@ class AnimationRenderManager:
                     border_mode=border_mode,
                 )
                 cumulative_matrix = step_matrix @ cumulative_matrix
+                timings["warp"] = max(0.0, time.monotonic() - warp_started)
 
             generation = resolved["generation"]
             retention_strength = float(generation["strength"])
