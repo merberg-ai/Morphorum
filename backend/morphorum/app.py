@@ -36,6 +36,14 @@ from .animation_timeline import (
     timeline_track_descriptors,
     upsert_track_keyframe,
 )
+from .animation_depth import (
+    DepthError,
+    clear_project_depth_manifest,
+    depth_manager,
+    depth_model_catalog,
+    load_project_depth_manifest,
+    save_project_depth_manifest,
+)
 from .animation_motion import (
     MotionPreviewError,
     motion_preview_manager,
@@ -410,6 +418,7 @@ async def api_upload_animation_source_image(project_id: str, request: Request) -
         project.setdefault("animation", {})["source_image"] = "assets/source.png"
         project["animation"]["source_image_name"] = filename
         saved = save_animation_project(project_id, project)
+        clear_project_depth_manifest(animation_project_directory(project_id))
         emit_console(
             "info",
             "animation",
@@ -453,9 +462,120 @@ def api_delete_animation_source_image(project_id: str) -> dict[str, Any]:
         path.unlink(missing_ok=True)
         project.setdefault("animation", {})["source_image"] = ""
         project["animation"]["source_image_name"] = ""
+        clear_project_depth_manifest(animation_project_directory(project_id))
         saved = save_animation_project(project_id, project)
         emit_console("info", "animation", f"Cleared source image for animation project {project_id}.")
         return {"status": "cleared", "project": saved}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/depth/models")
+def api_animation_depth_models() -> dict[str, Any]:
+    return {
+        "models": depth_model_catalog(),
+        "status": depth_manager.status(),
+    }
+
+
+@app.get("/api/animation/projects/{project_id}/depth-preview/status")
+def api_animation_depth_preview_status(project_id: str) -> dict[str, Any]:
+    try:
+        project_dir = animation_project_directory(project_id)
+        load_animation_project(project_id)
+        manifest = load_project_depth_manifest(project_dir)
+        if not manifest:
+            return {
+                "available": False,
+                "preview": None,
+                "manager": depth_manager.status(),
+            }
+        cache_key = str(manifest.get("cache_key") or "")
+        cached = depth_manager.cached(cache_key) if cache_key else None
+        return {
+            "available": bool(cached),
+            "preview": ({**manifest, "cache_hit": True} if cached else manifest),
+            "manager": depth_manager.status(),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DepthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/depth-preview")
+def api_generate_animation_depth_preview(
+    project_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        project_dir = animation_project_directory(project_id)
+        source_rel = str(project.get("animation", {}).get("source_image") or "").strip()
+        if not source_rel:
+            raise DepthError(
+                "Upload an animation source image before generating a depth preview."
+            )
+        source_path = (project_dir / source_rel).resolve(strict=False)
+        project_root = project_dir.resolve(strict=False)
+        if source_path != project_root and project_root not in source_path.parents:
+            raise DepthError("Animation source image path escaped the project directory.")
+        if not source_path.is_file():
+            raise DepthError("Animation source image not found.")
+
+        result = depth_manager.estimate_path(
+            source_path,
+            model_id=payload.get("model_id"),
+            device=str(payload.get("device") or "auto"),
+            force=bool(payload.get("force", False)),
+            release_after=True,
+        )
+        save_project_depth_manifest(project_dir, result)
+        return {
+            "status": "ready",
+            "preview": {
+                **{
+                    key: value
+                    for key, value in result.items()
+                    if key not in {"data_path", "preview_path", "metadata_path"}
+                },
+                "url": f"/api/animation/projects/{project_id}/depth-preview/image?v={result['cache_key'][:12]}",
+            },
+            "manager": depth_manager.status(),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DepthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/depth-preview/image")
+def api_animation_depth_preview_image(project_id: str):
+    try:
+        project_dir = animation_project_directory(project_id)
+        load_animation_project(project_id)
+        manifest = load_project_depth_manifest(project_dir)
+        cache_key = str((manifest or {}).get("cache_key") or "")
+        if not cache_key:
+            raise DepthError("No depth preview has been generated for this project.")
+        return FileResponse(
+            depth_manager.preview_path(cache_key),
+            media_type="image/png",
+            filename="depth-preview.png",
+        )
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DepthError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/animation/projects/{project_id}/depth-preview")
+def api_clear_animation_depth_preview(project_id: str) -> dict[str, Any]:
+    try:
+        project_dir = animation_project_directory(project_id)
+        load_animation_project(project_id)
+        clear_project_depth_manifest(project_dir)
+        return {"status": "cleared"}
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
