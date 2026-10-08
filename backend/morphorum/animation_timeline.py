@@ -40,6 +40,62 @@ NUMERIC_TRACK_DEFS: dict[str, dict[str, str]] = {
         "value_type": "float",
         "default_schedule": "0:(0)",
     },
+    "camera_3d.translation_x": {
+        "group": "camera_3d",
+        "name": "translation_x",
+        "legacy_section": "camera_3d",
+        "legacy_key": "translation_x",
+        "value_type": "float",
+        "default_schedule": "0:(0)",
+    },
+    "camera_3d.translation_y": {
+        "group": "camera_3d",
+        "name": "translation_y",
+        "legacy_section": "camera_3d",
+        "legacy_key": "translation_y",
+        "value_type": "float",
+        "default_schedule": "0:(0)",
+    },
+    "camera_3d.translation_z": {
+        "group": "camera_3d",
+        "name": "translation_z",
+        "legacy_section": "camera_3d",
+        "legacy_key": "translation_z",
+        "value_type": "float",
+        "default_schedule": "0:(0)",
+    },
+    "camera_3d.rotation_x": {
+        "group": "camera_3d",
+        "name": "rotation_x",
+        "legacy_section": "camera_3d",
+        "legacy_key": "rotation_x",
+        "value_type": "float",
+        "default_schedule": "0:(0)",
+    },
+    "camera_3d.rotation_y": {
+        "group": "camera_3d",
+        "name": "rotation_y",
+        "legacy_section": "camera_3d",
+        "legacy_key": "rotation_y",
+        "value_type": "float",
+        "default_schedule": "0:(0)",
+    },
+    "camera_3d.rotation_z": {
+        "group": "camera_3d",
+        "name": "rotation_z",
+        "legacy_section": "camera_3d",
+        "legacy_key": "rotation_z",
+        "value_type": "float",
+        "default_schedule": "0:(0)",
+    },
+    "camera_3d.fov": {
+        "group": "camera_3d",
+        "name": "fov",
+        "legacy_section": "camera_3d",
+        "legacy_key": "fov",
+        "value_type": "float",
+        "default_schedule": "0:(40)",
+    },
     "generation.strength": {
         "group": "generation",
         "name": "strength",
@@ -85,7 +141,7 @@ PROMPT_TRACK_DEFS: dict[str, dict[str, str]] = {
     },
 }
 
-RESERVED_TRACK_GROUPS = ("camera_3d", "cadence", "loras")
+RESERVED_TRACK_GROUPS = ("cadence", "loras")
 
 
 def _project_context(project: dict[str, Any]) -> tuple[int, float, int]:
@@ -349,7 +405,7 @@ def normalize_tracks(
         )
     result["prompts"] = prompt_result
 
-    for group in ("camera_2d", "generation"):
+    for group in ("camera_2d", "camera_3d", "generation"):
         group_source = source.get(group, {})
         group_source = group_source if isinstance(group_source, dict) else {}
         group_result = deepcopy(group_source)
@@ -478,7 +534,7 @@ class TimelineError(ValueError):
 TRACK_GROUP_DEFS: dict[str, dict[str, Any]] = {
     "prompts": {"label": "Prompts", "order": 0, "reserved": False},
     "camera_2d": {"label": "2D Camera", "order": 10, "reserved": False},
-    "camera_3d": {"label": "3D Camera", "order": 20, "reserved": True},
+    "camera_3d": {"label": "3D Camera", "order": 20, "reserved": False},
     "generation": {"label": "Generation", "order": 30, "reserved": False},
     "cadence": {"label": "Cadence", "order": 40, "reserved": True},
     "loras": {"label": "LoRAs", "order": 50, "reserved": True},
@@ -532,6 +588,62 @@ _TRACK_META: dict[tuple[str, str], dict[str, Any]] = {
         "unit": "px",
         "interpolation_modes": ["linear", "hold"],
         "legacy_field": "motion.translation_y",
+    },
+    ("camera_3d", "translation_x"): {
+        "label": "3D Translate X",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "scene",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "camera_3d.translation_x",
+    },
+    ("camera_3d", "translation_y"): {
+        "label": "3D Translate Y",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "scene",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "camera_3d.translation_y",
+    },
+    ("camera_3d", "translation_z"): {
+        "label": "3D Translate Z",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "depth",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "camera_3d.translation_z",
+    },
+    ("camera_3d", "rotation_x"): {
+        "label": "3D Rotate X",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "deg",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "camera_3d.rotation_x",
+    },
+    ("camera_3d", "rotation_y"): {
+        "label": "3D Rotate Y",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "deg",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "camera_3d.rotation_y",
+    },
+    ("camera_3d", "rotation_z"): {
+        "label": "3D Rotate Z",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "deg",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "camera_3d.rotation_z",
+    },
+    ("camera_3d", "fov"): {
+        "label": "3D Field of View",
+        "kind": "numeric",
+        "value_type": "float",
+        "unit": "deg",
+        "interpolation_modes": ["linear", "hold"],
+        "legacy_field": "camera_3d.fov",
     },
     ("generation", "strength"): {
         "label": "Strength",
