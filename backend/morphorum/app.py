@@ -63,6 +63,7 @@ from .console import (
 )
 from .generation import GenerationError, generation_manager
 from .loras import LoRAError
+from .lora_inspector import LoRAInspectionError, inspect_lora
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -806,6 +807,24 @@ def api_animation_schedule_series(payload: dict[str, Any]) -> dict[str, Any]:
         )
     except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/loras")
+def api_lora_library(family: str | None = None, search: str | None = None) -> dict[str, Any]:
+    """List LoRAs already indexed from configured directories."""
+    supported = {"sdxl", "flux", "zimage"}
+    if family is not None and family not in supported:
+        raise HTTPException(status_code=400, detail="Unsupported LoRA family.")
+    return {"loras": list_models(family=family, kind="loras", search=search, limit=2000)}
+
+
+@app.get("/api/loras/{model_id}/inspect")
+def api_lora_inspect(model_id: str) -> dict[str, Any]:
+    """Inspect the file referenced by an indexed LoRA ID, never an arbitrary path."""
+    try:
+        return inspect_lora(model_id)
+    except LoRAInspectionError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/models/families")
