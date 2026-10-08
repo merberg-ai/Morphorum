@@ -50,6 +50,45 @@ A/B/C effect; adapter state and effectiveness across real task conversions;
 LoRA keyframe scheduling and cleanup. Static CI tests verify integration
 control flow but cannot prove real-world pixel effect.
 
+## Flux group-offload pinned-memory allocation fix (Oct 8, second GPU test)
+
+A physical retest found a **separate offload-setup OOM**, even on a no-LoRA
+run. The LoRA run chose the BF16 compatibility path and failed at startup
+while installing Flux group-offloading hooks, without reaching LoRA injection.
+A subsequent base-model FP8 run also failed during offload setup; its log
+included `CUDA_ERROR_OUT_OF_MEMORY from cuMemHostAlloc`.
+
+Diffusers 0.40.0's `apply_group_offloading(..., use_stream=True)` pins CPU
+parameter tensors in its `ModuleGroup._init_cpu_param_dict()`, producing
+large CUDA pinned-host allocations. This consumes page-locked host resources
+even with ample ordinary RAM and GPU VRAM. The previous Morphorum loader
+always enabled `use_stream=True` across all Flux components and retried
+`leaf_level` on an already-partially-initialized transformer after errors.
+
+**Fix on B4:**
+
+- On 16/24 GB GPUs, use **non-streamed** block-level transformer offload
+  (one transformer block per group) and non-streamed leaf-level offload for
+  CLIP/T5/VAE. With `use_stream=False`, the Diffusers hook avoids
+  pre-pinning the entire parameter set; CPU weights remain resident on CPU.
+- Only enable streamed/prefetched offloading with at least **32 GiB VRAM**
+  for base Flux and **48 GiB** for BF16/FP16 LoRA Flux.
+- When offload setup itself runs out of CUDA/host-pinned memory, **do not
+  retry another offloader** against a partially hooked model; fail cleanly.
+- Emit explicit console messages describing the selected streaming mode and
+  the resulting pipeline optimization string.
+- Keep the existing FP8 layerwise mode for base Flux when available; keep
+  BF16/FP16 storage for LoRA Flux as required to prevent
+  `addmm_cuda(Float8_e4m3fn)`.
+- Regression tests verify that the actual mocked 16 GB loader passes
+  `use_stream=False` to all four components and that OOM does not trigger
+  an unsafe second offload attempt.
+
+This is a resource-management fix, not yet proof that Flux LoRA generation
+completes on the user GPU. With synchronous non-streamed transfer, throughput
+may be lower, but setup should no longer spend pinned memory on the full Flux
+pipeline. Physically retest at the same settings before further animation.
+
 ## Flux FP8 / PEFT LoRA failure and compatibility mode (Oct 8)
 
 **Physical bug report:** `artsyDream_v6FP8.safetensors` (Flux Dev) generated
