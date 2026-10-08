@@ -181,6 +181,12 @@ def resolve_project_frame(
         project.get("motion", {}).get("border_mode", "replicate") or "replicate"
     ).strip().lower()
 
+    camera_3d = {
+        key.split(".", 1)[1]: _resolve_field(project, key, frame)
+        for key in SCHEDULE_FIELDS
+        if key.startswith("camera_3d.")
+    }
+
     generation = {
         key.split(".", 1)[1]: _resolve_field(project, key, frame)
         for key in SCHEDULE_FIELDS
@@ -217,6 +223,7 @@ def resolve_project_frame(
         },
         "loras": resolved_loras,
         "motion": motion,
+        "camera_3d": camera_3d,
         "generation": generation,
     }
 
