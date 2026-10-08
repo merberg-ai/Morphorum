@@ -322,6 +322,7 @@
               <label><span>Rotation Y</span><input id="animation-3d-rotation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
               <label><span>Rotation Z</span><input id="animation-3d-rotation-z" class="animation-schedule" type="text" value="0:(0)" disabled></label>
               <label><span>Field of view <small class="muted">(degrees)</small></span><input id="animation-3d-fov" class="animation-schedule" type="text" value="0:(40)" disabled></label>
+              <label><span>Depth resolution</span><select id="animation-3d-depth-resolution" disabled><option value="auto">Auto</option><option value="384">384 px</option><option value="512">512 px</option><option value="768">768 px</option><option value="full">Full render size</option></select></label>
             </div>
             <div class="notice subtle">
               <strong>Renderer status</strong>
@@ -338,6 +339,7 @@
               <label><span>Noise schedule <small class="muted">(uniform)</small></span><input id="animation-noise" class="animation-schedule" type="text" value="0:(0.02)" disabled></label>
               <label><span>Steps schedule</span><input id="animation-steps" class="animation-schedule" type="text" value="0:(20)" disabled></label>
               <label><span>Guidance schedule</span><input id="animation-guidance" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Diffusion cadence <small class="muted">(1 = every frame)</small></span><input id="animation-cadence" class="animation-schedule" type="text" value="0:(1)" disabled></label>
               <label><span>Sampler</span><select id="animation-sampler" disabled><option value="">Select a model first</option></select></label>
               <label><span>Seed</span><input id="animation-seed" type="number" min="-1" max="4294967295" value="-1" disabled></label>
               <label><span>Seed behavior</span><select id="animation-seed-behavior" disabled><option value="fixed">Fixed</option><option value="increment">Increment</option><option value="random">Random</option></select></label>
@@ -470,6 +472,8 @@
                   <div><span>Sampler</span><strong id="animation-render-state-sampler">--</strong></div>
                   <div><span>Seed</span><strong id="animation-render-state-seed">--</strong></div>
                   <div><span>Seed mode</span><strong id="animation-render-state-seed-mode">--</strong></div>
+                  <div><span>Cadence</span><strong id="animation-render-state-cadence">--</strong></div>
+                  <div><span>Stage timing</span><strong id="animation-render-state-timing">--</strong></div>
                 </div>
               </div>
             </div>
