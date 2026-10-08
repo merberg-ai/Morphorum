@@ -34,6 +34,7 @@ _KNOWN_TOP_LEVEL = {
     "motion",
     "camera_3d",
     "generation",
+    "cadence",
     "tracks",
     "notes",
 }
@@ -130,6 +131,7 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "rotation_y": "0:(0)",
             "rotation_z": "0:(0)",
             "fov": "0:(40)",
+            "depth_resolution": "auto",
         },
         "generation": {
             "strength": "0:(0.65)",
@@ -140,6 +142,9 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "seed": -1,
             "seed_behavior": "fixed",
             "seed_increment": 1,
+        },
+        "cadence": {
+            "diffusion": "0:(1)",
         },
         "notes": "",
     }
@@ -210,6 +215,7 @@ def _legacy_timeline_changed(
             "fov",
         ),
         "generation": ("strength", "noise", "steps", "guidance"),
+        "cadence": ("diffusion",),
     }.items():
         incoming = payload.get(section)
         current = existing.get(section, {})
@@ -375,7 +381,16 @@ def normalize_animation_project(
             "rotation_y": "0:(0)",
             "rotation_z": "0:(0)",
             "fov": "0:(40)",
+            "depth_resolution": "auto",
         },
+    )
+    depth_resolution = str(
+        project["camera_3d"].get("depth_resolution") or "auto"
+    ).strip().lower()
+    project["camera_3d"]["depth_resolution"] = (
+        depth_resolution
+        if depth_resolution in {"auto", "384", "512", "768", "full"}
+        else "auto"
     )
 
     generation_source = payload.get("generation", project.get("generation", {}))
@@ -395,6 +410,11 @@ def normalize_animation_project(
     generation["seed_behavior"] = behavior if behavior in {"fixed", "increment", "random"} else "fixed"
     generation["seed_increment"] = _safe_int(generation.get("seed_increment"), 1, -2**31, 2**31 - 1)
     project["generation"] = generation
+
+    project["cadence"] = _normalize_string_section(
+        payload.get("cadence", project.get("cadence")),
+        {"diffusion": "0:(1)"},
+    )
 
     project["notes"] = str(payload.get("notes", project.get("notes", "")) or "")
 
