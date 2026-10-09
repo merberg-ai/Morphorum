@@ -36,6 +36,7 @@ _KNOWN_TOP_LEVEL = {
     "generation",
     "cadence",
     "temporal",
+    "hybrid",
     "tracks",
     "notes",
 }
