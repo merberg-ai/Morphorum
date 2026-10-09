@@ -28,6 +28,10 @@ from .animation_motion import (
 )
 from .animation_resolution import resolve_project_frame, validate_project_schedules
 from .animation_temporal import blend_future_anchor
+from .animation_performance import (
+    AnimationPerformance, append_performance_record, load_performance_records,
+    performance_record, summarize_records,
+)
 from .console import emit_console
 from .generation import GenerationError, GenerationRequest, generation_manager
 from .loras import lora_catalog
@@ -819,6 +823,7 @@ class AnimationRenderJob:
     current_prompt_state: dict[str, Any] = field(default_factory=dict)
     current_frame_state: dict[str, Any] = field(default_factory=dict)
     resumed: bool = False
+    performance: dict[str, Any] = field(default_factory=dict)
     _frame_times: list[float] = field(default_factory=list, repr=False)
 
     def public(self) -> dict[str, Any]:
@@ -1281,6 +1286,17 @@ class AnimationRenderManager:
                 job.message = str(message)
 
         render_dir = _render_dir(job.project_id, job.id)
+        performance_path = render_dir / "performance.jsonl"
+        # Keep a bounded summary in the render manifest, and a detailed
+        # per-frame diagnostic sidecar that survives cancellation/restart.
+        performance_tracker = AnimationPerformance()
+        try:
+            for prior_record in load_performance_records(performance_path):
+                if int(prior_record.get("frame", -1)) < start_frame:
+                    performance_tracker.observe(prior_record)
+        except OSError as exc:
+            emit_console("warning", "animation", f"{job.id}: previous performance records unavailable: {exc}")
+        job.performance = performance_tracker.public()
         copied_source = render_dir / "source.png"
 
         cumulative_matrix = np.eye(3, dtype=np.float64)
@@ -1518,6 +1534,9 @@ class AnimationRenderManager:
             )
 
         for frame in range(start_frame, total):
+            # Read-only allocator snapshot; never synchronize or clear CUDA
+            # caches in the hot frame loop just to collect diagnostics.
+            cuda_before = generation_manager.cuda_memory_status()
             if job.cancel_requested:
                 self._cancel(job)
                 return
@@ -1925,6 +1944,40 @@ class AnimationRenderManager:
                 job.current_frame_state["timings"] = deepcopy(timings)
 
             memory = generation_manager.cuda_memory_status()
+            status_method = getattr(generation_manager, "model_status", None)
+            try:
+                pipeline_status = status_method() if callable(status_method) else {}
+            except Exception:
+                pipeline_status = {}
+            record = performance_record(
+                frame=frame,
+                diffused=should_diffuse,
+                timings=timings,
+                cuda_before=cuda_before,
+                cuda_after=memory,
+                model_status=pipeline_status,
+                conditioning_cache_entries=len(conditioning_cache),
+            )
+            performance_tracker.observe(record)
+            job.performance = performance_tracker.public()
+            try:
+                append_performance_record(performance_path, record)
+            except OSError as exc:
+                emit_console(
+                    "warning", "animation",
+                    f"{job.id}: cannot write B5.5 performance diagnostics for frame {frame}: {exc}",
+                )
+            if should_diffuse and timings["diffusion"] >= 30.0:
+                emit_console(
+                    "warning", "animation",
+                    f"{job.id}: slow diffusion anchor {frame} took "
+                    f"{timings['diffusion']:.1f}s; execution device "
+                    f"{record.get('pipeline_device') or 'unknown'}, "
+                    f"cached LoRAs {record['resident_loras']}, "
+                    f"active {len(record['active_loras'])}. "
+                    "See performance.jsonl for allocator growth; "
+                    "no automatic CPU fallback was activated.",
+                )
             memory_text = ""
             if memory is not None:
                 memory_text = (
