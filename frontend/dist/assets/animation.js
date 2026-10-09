@@ -3963,6 +3963,7 @@
       if (
         input.id === 'animation-project-select' ||
         input.id.startsWith('animation-deforum-') ||
+        input.id.startsWith('animation-hybrid-') ||
         input.id === 'animation-model' ||
         input.id === 'animation-source-file' ||
         input.id === 'animation-start-mode' ||
