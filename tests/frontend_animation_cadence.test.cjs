@@ -83,3 +83,15 @@ test('selecting Custom preserves the raw schedule and focuses its editor', () =>
   assert.equal(a.field.focused, true);
   assert.equal(a.dirty.length, 0);
 });
+
+test('B5.1 projection quality and hole fill are editable and round-trip through Animation', () => {
+  assert.equal((html.match(/id="animation-3d-projection-mode"/g) || []).length, 1);
+  assert.equal((html.match(/id="animation-3d-hole-fill"/g) || []).length, 1);
+  assert.match(html, /value="legacy".*Legacy: nearest-pixel Z-buffer/);
+  assert.match(html, /value="splat".*subpixel depth-tested splat/);
+  assert.match(html, /value="background".*Prefer background layer/);
+  assert.match(source, /project\.camera_3d\?\.projection_mode \|\| 'legacy'/);
+  assert.match(source, /project\.camera_3d\?\.hole_fill \|\| 'nearest'/);
+  assert.match(source, /projection_mode: qs\('#animation-3d-projection-mode'\)/);
+  assert.match(source, /hole_fill: qs\('#animation-3d-hole-fill'\)/);
+});
