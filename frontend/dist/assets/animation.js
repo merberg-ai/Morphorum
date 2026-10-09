@@ -3204,80 +3204,9 @@
     }
   }
 
-  function higherResolutionRenderRisk(project) {
-    const animation = project?.animation || {};
-    const width = Number(animation.width);
-    const height = Number(animation.height);
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-      return null;
-    }
-    const verifiedPixels = 512 * 512;
-    const pixels = width * height;
-    if (pixels <= verifiedPixels) return null;
-    return {
-      width: Math.round(width),
-      height: Math.round(height),
-      pixels,
-      verified_pixels: verifiedPixels,
-      pixel_ratio: pixels / verifiedPixels,
-    };
-  }
-
-  function gpuMemorySnapshotText(profile) {
-    const parts = [];
-    const cuda = profile?.cuda;
-    if (cuda) {
-      const number = value => Number.isFinite(Number(value))
-        ? Number(value).toFixed(2) + ' GiB'
-        : 'unknown';
-      parts.push(
-        'PyTorch device now: ' +
-        number(cuda.free_gib) + ' free, ' +
-        number(cuda.allocated_gib) + ' allocated, ' +
-        number(cuda.reserved_gib) + ' reserved' +
-        (cuda.allocator_backend ? ' (' + cuda.allocator_backend + ' allocator)' : '')
-      );
-    }
-    const wddm = profile?.windows_wddm;
-    if (wddm?.available) {
-      parts.push(
-        'Windows process GPU counters: ' +
-        Number(wddm.dedicated_gib || 0).toFixed(2) + ' GiB dedicated, ' +
-        Number(wddm.shared_gib || 0).toFixed(2) + ' GiB shared'
-      );
-    }
-    return parts.join('\n');
-  }
-
-  async function confirmHigherResolutionRender(project) {
-    const risk = higherResolutionRenderRisk(project);
-    if (!risk) return true;
-
-    let profile = null;
-    try {
-      profile = await api('/api/system/gpu-memory');
-    } catch (_) {
-      // A diagnostic snapshot must never make render submission impossible.
-    }
-
-    const memory = gpuMemorySnapshotText(profile);
-    const ratio = risk.pixel_ratio.toFixed(2);
-    const message =
-      'This render is ' + risk.width + ' × ' + risk.height +
-      ' (' + ratio + '× the pixel count of a 512 × 512 image).\n\n' +
-      'This is a caution, not a VRAM prediction or a hardware limit.' +
-      (memory ? '\n\n' + memory : '') +
-      '\n\nTry a short render first if you have not used this resolution before. Continue?';
-    return window.MorphorumDialog.confirm({
-      title: 'High-resolution render warning', message, variant: 'warning',
-      confirmText: 'Start Render', cancelText: 'Cancel',
-    });
-  }
-
   async function startAnimationRender() {
     if (!state.project || renderIsActive()) return;
     const project = collectProject();
-    if (!(await confirmHigherResolutionRender(project))) return;
     const button = qs('#animation-start-render');
     if (button) { button.classList.add('busy'); button.disabled = true; }
     try {

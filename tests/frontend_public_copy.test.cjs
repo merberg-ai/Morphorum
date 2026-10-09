@@ -28,9 +28,12 @@ test('the wording-only pass preserves controls for previously implemented featur
   ];
   for (const id of kept) assert.ok(html.includes('id="' + id + '"'), id + ' must remain available');
 });
-test('render cautions and UI status are customer-facing without changing safety guards', () => {
-  assert.match(animation, /not a VRAM prediction or a hardware limit/);
-  assert.match(animation, /return window\.MorphorumDialog\.confirm/);
+test('render UI drops obsolete 512px modal while retaining informational size guidance', () => {
+  const resolution = read('frontend/dist/assets/resolution.js');
+  assert.doesNotMatch(animation, /confirmHigherResolutionRender|higherResolutionRenderRisk/);
+  assert.match(animation, /async function startAnimationRender/);
+  assert.match(animation, /api\('\/api\/animation\/renders'/);
+  assert.match(resolution, /more GPU memory/);
   assert.doesNotMatch(animation, /physically verified 512|B6\.1 accepts/);
   assert.match(app, /text\.textContent = 'Connected'/);
   assert.match(app, /text\.textContent = 'Disconnected'/);

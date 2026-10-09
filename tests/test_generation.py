@@ -1000,6 +1000,171 @@ def test_sdxl_rank_bug_retries_with_unet_only_state_dict(tmp_path) -> None:
     assert pipe.adapter_calls == [(["morphorum_mixed-id"], [0.8])]
 
 
+class FakeVerifiedSDXLComponent:
+    """Small PEFT observable stand-in with a selectable CLIP module namespace."""
+
+    def __init__(self, target: str):
+        self.target = target
+        self.config = SimpleNamespace(layers_per_block=2)
+        self.peft_config = {}
+        self.lora_A = {}
+
+    def named_modules(self):
+        yield "", self
+        yield self.target, self
+        if ".q_proj" in self.target:
+            yield self.target.replace(".q_proj", ".out_proj"), self
+
+    def named_parameters(self):
+        for adapter in self.peft_config:
+            yield f"{self.target}.lora_A.{adapter}.weight", torch.ones(2, 2)
+            yield f"{self.target}.lora_B.{adapter}.weight", torch.ones(2, 2)
+
+    def inject(self, adapter: str):
+        self.peft_config[adapter] = object()
+        self.lora_A[adapter] = object()
+
+    def delete_adapters(self, adapter: str):
+        self.peft_config.pop(adapter, None)
+        self.lora_A.pop(adapter, None)
+
+
+class FakeSDXLFullRankRepairPipe(FakeSDXLRankBugPipe):
+    """The real Diffusers loader fails; the component loader verifies the fix."""
+
+    def __init__(self, *, second_encoder_has_wrapper=False, key_style="peft"):
+        super().__init__(partial_unet=True)
+        self.key_style = key_style
+        self.unet = FakeVerifiedSDXLComponent("down_blocks.0.attentions.0.to_q")
+        self.text_encoder = FakeVerifiedSDXLComponent(
+            "encoder.layers.0.self_attn.q_proj"
+        )
+        second_name = "encoder.layers.0.self_attn.q_proj"
+        if second_encoder_has_wrapper:
+            second_name = "text_model." + second_name
+        self.text_encoder_2 = FakeVerifiedSDXLComponent(second_name)
+        self.encoder_loads = []
+
+    def load_lora_weights(self, source, **kwargs):
+        self.loads.append({"path": source, **kwargs})
+        self.unet.inject(str(kwargs["adapter_name"]))
+        raise IndexError("list index out of range")
+
+    def lora_state_dict(self, *_args, **kwargs):
+        assert kwargs["unet_config"] is self.unet.config
+        target = "text_model.encoder.layers.0.self_attn.q_proj"
+        if self.key_style == "kohya":
+            target = target.replace(".q_proj", ".to_q_lora")
+            down, up = ".down.weight", ".up.weight"
+        else:
+            down, up = ".lora_A.weight", ".lora_B.weight"
+        weights = {
+            "unet.down_blocks.0.attentions.0.to_q.lora_A.weight": torch.ones(2, 2),
+            "unet.down_blocks.0.attentions.0.to_q.lora_B.weight": torch.ones(2, 2),
+            f"text_encoder.{target}{down}": torch.ones(2, 2),
+            f"text_encoder.{target}{up}": torch.ones(2, 2),
+            f"text_encoder_2.{target}{down}": torch.ones(2, 2),
+            f"text_encoder_2.{target}{up}": torch.ones(2, 2),
+        }
+        if self.key_style == "kohya":
+            # Diffusers' old-format detector keys off to_out_lora.
+            out_target = target.replace("to_q_lora", "to_out_lora")
+            for name in ("text_encoder", "text_encoder_2"):
+                weights[f"{name}.{out_target}.down.weight"] = torch.ones(2, 2)
+                weights[f"{name}.{out_target}.up.weight"] = torch.ones(2, 2)
+        return (
+            weights,
+            {
+                f"text_encoder.{target}.alpha": 2.0,
+                f"text_encoder_2.{target}.alpha": 4.0,
+            },
+            None,
+        )
+
+    def load_lora_into_unet(self, **kwargs):
+        self.unet_loads.append(kwargs)
+        self.unet.inject(kwargs["adapter_name"])
+
+    def load_lora_into_text_encoder(self, state_dict, **kwargs):
+        encoder = kwargs["text_encoder"]
+        prefix = kwargs["prefix"]
+        module = encoder.target
+        if self.key_style == "kohya":
+            module = module.replace(".q_proj", ".to_q_lora")
+            down, up = ".down.weight", ".up.weight"
+        else:
+            down, up = ".lora_A.weight", ".lora_B.weight"
+        assert f"{prefix}.{module}{down}" in state_dict
+        assert f"{prefix}.{module}{up}" in state_dict
+        assert f"{prefix}.{module}.alpha" in kwargs["network_alphas"]
+        encoder.inject(kwargs["adapter_name"])
+        self.encoder_loads.append(prefix)
+
+    def get_list_adapters(self):
+        return {
+            name: list(getattr(self, name).peft_config)
+            for name in ("unet", "text_encoder", "text_encoder_2")
+        }
+
+
+@pytest.mark.parametrize("second_encoder_has_wrapper", [False, True])
+@pytest.mark.parametrize("key_style", ["peft", "kohya"])
+def test_sdxl_rank_bug_restores_both_text_encoders_and_alphas(
+    tmp_path, second_encoder_has_wrapper, key_style,
+) -> None:
+    path = tmp_path / "mixed-sdxl.safetensors"
+    _write_mixed_sdxl_lora(path)
+    manager = GenerationManager()
+    pipe = FakeSDXLFullRankRepairPipe(
+        second_encoder_has_wrapper=second_encoder_has_wrapper,
+        key_style=key_style,
+    )
+    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    item = {
+        "id": "fixed-id",
+        "family": "sdxl",
+        "name": "mixed",
+        "path": str(path),
+        "adapter_name": "morphorum_fixed-id",
+        "weight": 0.4,
+    }
+    manager.configure_loras(pipe, model, [item])
+
+    assert pipe.encoder_loads == ["text_encoder", "text_encoder_2"]
+    assert pipe.unet_loads, "UNet weights must remain present"
+    assert "morphorum_fixed-id" in pipe.unet.peft_config
+    assert "morphorum_fixed-id" in pipe.text_encoder.peft_config
+    assert "morphorum_fixed-id" in pipe.text_encoder_2.peft_config
+    assert manager._pipeline_loras["fixed-id"]["compatibility"] == (
+        "sdxl-text-encoder-normalized"
+    )
+    verified = manager._pipeline_loras["fixed-id"]["diagnostics"]
+    assert set(verified["components"]) == {
+        "unet", "text_encoder", "text_encoder_2"
+    }
+    assert verified["normalized_text_encoder_tensors"] == (8 if key_style == "kohya" else 4)
+    assert pipe.adapter_calls == [(["morphorum_fixed-id"], [0.4])]
+    # Weight scheduling reuses one registered adapter, with no new load.
+    manager.configure_loras(pipe, model, [{**item, "weight": 0.85}])
+    assert len(pipe.loads) == 1
+    assert len(pipe.encoder_loads) == 2
+    assert pipe.adapter_calls[-1] == (["morphorum_fixed-id"], [0.85])
+
+
+def test_sdxl_namespace_normalizer_rejects_unsupported_clip_modules() -> None:
+    pipe = FakeSDXLFullRankRepairPipe()
+    state = {
+        "text_encoder.text_model.unknown.layers.0.q_proj.lora_A.weight":
+            torch.ones(2, 2),
+        "text_encoder.text_model.unknown.layers.0.q_proj.lora_B.weight":
+            torch.ones(2, 2),
+    }
+    with pytest.raises(GenerationError, match="no complete CLIP LoRA rank match"):
+        GenerationManager._normalize_sdxl_text_encoder_keys(
+            pipe, state, {}, None
+        )
+
+
 def test_sdxl_sgm_block_indices_remap_with_unet_config(tmp_path) -> None:
     """Regression for real Kohya keys that became missing 7.1 UNet targets in B4."""
     from diffusers import StableDiffusionXLPipeline
