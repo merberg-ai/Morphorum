@@ -473,6 +473,8 @@ def _frame_state_for_frame(
             "rotation_y": float(camera_3d.get("rotation_y", 0.0)),
             "rotation_z": float(camera_3d.get("rotation_z", 0.0)),
             "fov": float(camera_3d.get("fov", 40.0)),
+            "projection_mode": str(camera_3d.get("projection_mode") or "legacy"),
+            "hole_fill": str(camera_3d.get("hole_fill") or "nearest"),
         },
         "depth_3d": deepcopy(depth_state) if depth_state else None,
         "cadence": deepcopy(cadence_state) if cadence_state else {
@@ -1434,11 +1436,20 @@ class AnimationRenderManager:
                         rotation_z=float(camera["rotation_z"]),
                         fov=float(camera["fov"]),
                         source_fov=previous_camera_fov,
+                        projection_mode=str(camera.get("projection_mode") or "legacy"),
+                        fill_mode=str(camera.get("hole_fill") or "nearest"),
                     )
                     timings["warp"] = max(0.0, time.monotonic() - warp_started)
                     previous_camera_fov = float(camera["fov"])
                     transformed = warp.image
+                    mask_path = _render_dir(job.project_id, job.id) / "masks" / f"frame_{frame:06d}.png"
+                    if warp.hole_mask is not None:
+                        mask_path.parent.mkdir(parents=True, exist_ok=True)
+                        warp.hole_mask.save(mask_path)
                     depth_state = {
+                        "disocclusion_mask": (
+                            f"masks/frame_{frame:06d}.png" if warp.hole_mask is not None else None
+                        ),
                         "cache_key": str(depth_result["cache_key"]),
                         "cache_hit": bool(depth_result.get("cache_hit")),
                         "device": str(depth_result.get("device") or "cpu"),
