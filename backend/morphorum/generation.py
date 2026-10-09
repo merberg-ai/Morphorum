@@ -1025,6 +1025,8 @@ class GenerationManager:
                 "total_gib": total_bytes / 1024**3,
                 "allocated_gib": torch.cuda.memory_allocated() / 1024**3,
                 "reserved_gib": torch.cuda.memory_reserved() / 1024**3,
+                "peak_allocated_gib": torch.cuda.max_memory_allocated() / 1024**3,
+                "peak_reserved_gib": torch.cuda.max_memory_reserved() / 1024**3,
             }
         except Exception:
             return None
