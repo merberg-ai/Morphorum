@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image, ImageOps
 from PIL.PngImagePlugin import PngInfo
 
-from .animation_3d import Camera3DError, render_depth_warp
+from .animation_3d import Camera3DError, render_depth_warp, reverse_camera_chain
 from .animation_depth import DepthError, depth_manager
 from .animation_motion import (
     _frame_transform_matrix,
@@ -27,6 +27,7 @@ from .animation_motion import (
     render_affine,
 )
 from .animation_resolution import resolve_project_frame, validate_project_schedules
+from .animation_temporal import blend_future_anchor
 from .console import emit_console
 from .generation import GenerationError, GenerationRequest, generation_manager
 from .loras import lora_catalog
@@ -600,6 +601,129 @@ def _save_frame(
         optimize=False,
     )
     temp.replace(path)
+
+
+def _last_diffused_anchor(
+    project_id: str, render_id: str, before_frame: int,
+) -> int:
+    """Resume-safe: determine which already saved frame last ran diffusion."""
+    for frame in range(before_frame - 1, 0, -1):
+        path = _frame_path(project_id, render_id, frame)
+        if not path.is_file():
+            continue
+        with Image.open(path) as opened:
+            try:
+                metadata = json.loads(opened.info.get("Morphorum", "{}"))
+            except (ValueError, TypeError):
+                continue
+        state = metadata.get("render_state") or {}
+        if (state.get("generation") or {}).get("diffusion_mode") == "img2img":
+            return frame
+    return 0
+
+
+def _tween_between_depth_anchors(
+    job: "AnimationRenderJob",
+    *,
+    previous_anchor: int,
+    future_anchor: int,
+    future_image: Image.Image,
+    depth_resolution_setting: str,
+    lora_records: list[dict[str, Any]] | None,
+) -> int:
+    """Refine already-rendered cadence frames after the next anchor exists.
+
+    Does not modify the forward input used for subsequent diffusion. Runs on
+    CPU only; depth of the future anchor is computed once and cached on disk.
+    Every changed PNG is written atomically, retaining frame metadata.
+    """
+    distance = future_anchor - previous_anchor
+    if distance <= 1:
+        return 0
+    if distance > 32:
+        emit_console(
+            "warning", "animation",
+            f"{job.id}: skipping temporal tween over {distance} frames; "
+            "maximum supported anchor gap is 32.",
+        )
+        return 0
+
+    width = future_image.width
+    height = future_image.height
+    depth_input, _label = _prepare_depth_input(
+        future_image, depth_resolution_setting,
+    )
+    result = depth_manager.estimate(
+        depth_input, device="cpu", release_after=False,
+    )
+    depth = _resize_depth_map(
+        depth_manager.load_cached_array(str(result["cache_key"])),
+        width=width, height=height,
+    )
+    camera_states = {
+        index: resolve_project_frame(
+            job.project, index, lora_records=lora_records,
+        )["camera_3d"]
+        for index in range(previous_anchor + 1, future_anchor + 1)
+    }
+    source_camera = camera_states[future_anchor]
+    settings = job.project.get("temporal") or {}
+    mix = float(settings.get("mix", 0.65))
+    contrast = float(settings.get("contrast_threshold", 96.0))
+
+    # Complete all calculations before replacing any PNG. If reprojection
+    # fails, preserve the entire forward-only segment.
+    changes: list[tuple[Path, Image.Image, dict[str, Any]]] = []
+    for frame in range(previous_anchor + 1, future_anchor):
+        matrix, offset = reverse_camera_chain([
+            camera_states[index]
+            for index in range(frame + 1, future_anchor + 1)
+        ])
+        camera = camera_states[frame]
+        projected = render_depth_warp(
+            future_image,
+            depth,
+            source_fov=float(source_camera["fov"]),
+            fov=float(camera["fov"]),
+            projection_mode="splat",
+            fill_mode="nearest",
+            transform_matrix=matrix,
+            transform_offset=offset,
+        )
+        path = _frame_path(job.project_id, job.id, frame)
+        with Image.open(path) as opened:
+            forward_image = opened.convert("RGB").copy()
+            metadata = json.loads(opened.info["Morphorum"])
+        mask_path = _render_dir(job.project_id, job.id) / "masks" / f"frame_{frame:06d}.png"
+        forward_holes = None
+        if mask_path.is_file():
+            with Image.open(mask_path) as mask_opened:
+                forward_holes = mask_opened.convert("L").copy()
+
+        blend = blend_future_anchor(
+            forward_image,
+            projected.image,
+            future_holes=projected.hole_mask,
+            forward_holes=forward_holes,
+            position=(frame - previous_anchor) / distance,
+            mix=mix,
+            contrast_threshold=contrast,
+        )
+        metadata.setdefault("render_state", {})["temporal"] = {
+            "mode": "future-anchor",
+            "previous_anchor": previous_anchor,
+            "future_anchor": future_anchor,
+            "mix": mix,
+            "contrast_threshold": contrast,
+            "fraction_blended": blend.fraction_blended,
+            "fraction_repaired": blend.fraction_replaced,
+            "average_weight": blend.average_weight,
+            "future_coverage": projected.telemetry["projected_coverage"],
+        }
+        changes.append((path, blend.image, metadata))
+    for path, image, metadata in changes:
+        _save_frame(image, path, metadata=metadata)
+    return len(changes)
 
 
 def _build_render_preview(
@@ -1379,6 +1503,9 @@ class AnimationRenderManager:
             with Image.open(previous_path) as opened:
                 frame_image = opened.convert("RGB").copy()
 
+        previous_diffusion_anchor = _last_diffused_anchor(
+            job.project_id, job.id, start_frame,
+        )
         previous_camera_fov = 40.0
         if animation_mode == "3d" and start_frame > 0:
             previous_resolved = resolve_project_frame(
@@ -1742,6 +1869,40 @@ class AnimationRenderManager:
                 0.0,
                 time.monotonic() - manifest_started,
             )
+
+            if (
+                should_diffuse
+                and animation_mode == "3d"
+                and str(project.get("temporal", {}).get("mode") or "forward")
+                == "future-anchor"
+                and float(project.get("temporal", {}).get("mix", 0.0)) > 0
+            ):
+                tween_started = time.monotonic()
+                try:
+                    refined = _tween_between_depth_anchors(
+                        job,
+                        previous_anchor=previous_diffusion_anchor,
+                        future_anchor=frame,
+                        future_image=image,
+                        depth_resolution_setting=depth_resolution_setting,
+                        lora_records=lora_records,
+                    )
+                    if refined:
+                        emit_console(
+                            "info", "animation",
+                            f"{job.id}: B5.2 future-anchor refinement updated "
+                            f"{refined} intermediate frame(s) between anchors "
+                            f"{previous_diffusion_anchor} and {frame}.",
+                        )
+                except (Camera3DError, DepthError, ValueError, OSError) as exc:
+                    emit_console(
+                        "warning", "animation",
+                        f"{job.id}: B5.2 temporal refinement skipped for "
+                        f"anchor {frame}: {exc}. Original cadence frames retained.",
+                    )
+                timings["temporal"] = max(0.0, time.monotonic() - tween_started)
+            if should_diffuse:
+                previous_diffusion_anchor = frame
 
             frame_image = image
             memory_started = time.monotonic()
