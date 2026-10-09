@@ -15,6 +15,8 @@ from PIL import Image, ImageOps
 from scipy.ndimage import map_coordinates
 
 from .animation_resolution import resolve_project_frame
+from .animation_3d import Camera3DError, render_depth_warp
+from .animation_depth import DepthError, depth_manager
 from .console import emit_console
 from .paths import OUTPUTS_DIR
 
@@ -203,6 +205,151 @@ def capture_frames(max_frames: int, maximum: int = PREVIEW_MAX_CAPTURE_FRAMES) -
     return sorted(frames)
 
 
+def _render_3d_motion_preview(
+    project: dict[str, Any],
+    source: Image.Image,
+    destination: Path,
+    *,
+    max_dimension: int,
+    max_capture_frames: int,
+    progress_callback=None,
+    highlight_holes: bool = False,
+) -> dict[str, Any]:
+    """B5.3: simulate the actual sequential depth camera path without diffusion.
+
+    Depth inference runs entirely on CPU, with cached 320px (or smaller)
+    input frames; there is no diffusion or GPU model allocation.
+    """
+    animation = project.get("animation", {})
+    max_frames = max(1, int(animation.get("max_frames", 120)))
+    if max_frames > 180:
+        raise MotionPreviewError(
+            "B5.3 3D camera preview currently supports up to 180 frames. "
+            "Reduce the frame count for this geometry-only diagnostic preview."
+        )
+    fps = max(1.0, float(animation.get("fps", 24.0)))
+    base = prepare_preview_source(
+        source,
+        width=int(animation.get("width", source.width)),
+        height=int(animation.get("height", source.height)),
+        max_dimension=max_dimension,
+    )
+    current = base
+    wanted = set(capture_frames(max_frames, max_capture_frames))
+    captured: list[tuple[int, Image.Image]] = [(0, base.copy())]
+    coverage: list[dict[str, Any]] = [
+        {"frame": 0, "projected_coverage": 1.0, "filled_fraction": 0.0},
+    ]
+    previous_fov = float(
+        resolve_project_frame(project, 0)["camera_3d"]["fov"]
+    )
+    try:
+        for frame in range(1, max_frames):
+            camera = resolve_project_frame(project, frame)["camera_3d"]
+            estimation = depth_manager.estimate(
+                current,
+                device="cpu",
+                release_after=False,
+            )
+            depth = depth_manager.load_cached_array(str(estimation["cache_key"]))
+            if depth.shape != (current.height, current.width):
+                resized = Image.fromarray(np.asarray(depth, dtype=np.float32), mode="F")
+                depth = np.asarray(
+                    resized.resize(current.size, Image.Resampling.BILINEAR),
+                    dtype=np.float32,
+                )
+            warped = render_depth_warp(
+                current,
+                depth,
+                translation_x=float(camera["translation_x"]),
+                translation_y=float(camera["translation_y"]),
+                translation_z=float(camera["translation_z"]),
+                rotation_x=float(camera["rotation_x"]),
+                rotation_y=float(camera["rotation_y"]),
+                rotation_z=float(camera["rotation_z"]),
+                source_fov=previous_fov,
+                fov=float(camera["fov"]),
+                projection_mode=str(camera.get("projection_mode") or "legacy"),
+                fill_mode=str(camera.get("hole_fill") or "nearest"),
+            )
+            previous_fov = float(camera["fov"])
+            # The preview's next step must use the true RGB projection,
+            # never the optional red mask overlay.
+            current = warped.image
+            coverage.append({
+                "frame": frame,
+                "projected_coverage": warped.telemetry["projected_coverage"],
+                "filled_fraction": warped.telemetry["filled_fraction"],
+            })
+            if frame in wanted:
+                preview_frame = current.copy()
+                if highlight_holes and warped.hole_mask is not None:
+                    rgb = np.asarray(preview_frame, dtype=np.float32).copy()
+                    holes = np.asarray(warped.hole_mask, dtype=np.uint8) > 0
+                    rgb[holes] = rgb[holes] * 0.35 + np.array(
+                        [255.0, 32.0, 52.0], dtype=np.float32,
+                    ) * 0.65
+                    preview_frame = Image.fromarray(rgb.astype(np.uint8), mode="RGB")
+                captured.append((frame, preview_frame))
+            if progress_callback is not None:
+                progress_callback(frame, max_frames - 1)
+    except (DepthError, Camera3DError) as exc:
+        raise MotionPreviewError(f"3D camera preview failed at frame {frame}: {exc}") from exc
+    finally:
+        depth_manager.unload()
+
+    _save_motion_preview_gif(captured, destination, fps)
+    counts = [float(item["projected_coverage"]) for item in coverage]
+    worst = min(coverage, key=lambda item: item["projected_coverage"])
+    return {
+        "mode": "3d",
+        "depth_device": "cpu",
+        "preview_width": base.width,
+        "preview_height": base.height,
+        "source_frames": max_frames,
+        "captured_frames": len(captured),
+        "captured_frame_numbers": [frame for frame, _ in captured],
+        "fps": fps,
+        "duration_seconds": max_frames / fps,
+        "bytes": destination.stat().st_size,
+        "highlight_holes": bool(highlight_holes),
+        "average_coverage": sum(counts) / len(counts),
+        "minimum_coverage": float(worst["projected_coverage"]),
+        "worst_coverage_frame": int(worst["frame"]),
+        "last_coverage": counts[-1],
+        "per_frame_coverage": coverage,
+    }
+
+
+def _save_motion_preview_gif(
+    captured: list[tuple[int, Image.Image]],
+    destination: Path,
+    fps: float,
+) -> None:
+    durations: list[int] = []
+    for index, (frame, _image) in enumerate(captured):
+        if index + 1 < len(captured):
+            delta = max(1, captured[index + 1][0] - frame)
+        elif index:
+            delta = max(1, frame - captured[index - 1][0])
+        else:
+            delta = 1
+        durations.append(max(20, int(round(1000.0 * delta / fps))))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temp = destination.with_name(destination.name + ".tmp")
+    captured[0][1].save(
+        temp,
+        format="GIF",
+        save_all=True,
+        append_images=[image for _frame, image in captured[1:]],
+        duration=durations,
+        loop=0,
+        optimize=False,
+        disposal=2,
+    )
+    temp.replace(destination)
+
+
 def render_motion_preview(
     project: dict[str, Any],
     source: Image.Image,
@@ -211,6 +358,7 @@ def render_motion_preview(
     max_dimension: int | None = None,
     max_capture_frames: int | None = None,
     progress_callback=None,
+    highlight_holes: bool = False,
 ) -> dict[str, Any]:
     if max_dimension is None:
         max_dimension = PREVIEW_MAX_DIMENSION
@@ -232,6 +380,14 @@ def render_motion_preview(
         max_dimension=max_dimension,
     )
     preview_width, preview_height = base.size
+    if str(animation.get("mode") or "2d").strip().lower() == "3d":
+        return _render_3d_motion_preview(
+            project, source, destination,
+            max_dimension=min(int(max_dimension), 320),
+            max_capture_frames=int(max_capture_frames),
+            progress_callback=progress_callback,
+            highlight_holes=highlight_holes,
+        )
     scale_x = preview_width / project_width
     scale_y = preview_height / project_height
 
@@ -345,6 +501,7 @@ class MotionPreviewManager:
         *,
         project: dict[str, Any],
         source_path: Path,
+        highlight_holes: bool = False,
     ) -> dict[str, Any]:
         project_id = str(project.get("id") or "").strip()
         if not project_id:
@@ -362,7 +519,7 @@ class MotionPreviewManager:
 
         thread = threading.Thread(
             target=self._run,
-            args=(job.id, deepcopy(project), source_path),
+            args=(job.id, deepcopy(project), source_path, highlight_holes),
             daemon=True,
             name=f"Morphorum-{job.id}",
         )
@@ -391,15 +548,17 @@ class MotionPreviewManager:
         job_id: str,
         project: dict[str, Any],
         source_path: Path,
+        highlight_holes: bool = False,
     ) -> None:
         with self._render_lock:
-            self._run_serialized(job_id, project, source_path)
+            self._run_serialized(job_id, project, source_path, highlight_holes)
 
     def _run_serialized(
         self,
         job_id: str,
         project: dict[str, Any],
         source_path: Path,
+        highlight_holes: bool = False,
     ) -> None:
         with self._lock:
             job = self._jobs[job_id]
@@ -412,17 +571,23 @@ class MotionPreviewManager:
 
             output = OUTPUTS_DIR / "motion-previews" / job_id / "preview.gif"
 
+            is3d = str(project.get("animation", {}).get("mode") or "2d") == "3d"
+
             def progress(frame: int, last_frame: int) -> None:
                 with self._lock:
                     active = self._jobs[job_id]
                     active.progress = min(0.98, frame / max(1, last_frame))
-                    active.message = f"Resolving 2D motion frame {frame} of {last_frame}"
+                    active.message = (
+                        f"Resolving {'3D camera' if is3d else '2D motion'} "
+                        f"frame {frame} of {last_frame}"
+                    )
 
             result = render_motion_preview(
                 project,
                 source,
                 output,
                 progress_callback=progress,
+                highlight_holes=highlight_holes,
             )
             with self._lock:
                 job = self._jobs[job_id]
