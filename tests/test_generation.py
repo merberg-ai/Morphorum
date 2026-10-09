@@ -1012,6 +1012,8 @@ class FakeVerifiedSDXLComponent:
     def named_modules(self):
         yield "", self
         yield self.target, self
+        if ".q_proj" in self.target:
+            yield self.target.replace(".q_proj", ".out_proj"), self
 
     def named_parameters(self):
         for adapter in self.peft_config:
@@ -1056,15 +1058,22 @@ class FakeSDXLFullRankRepairPipe(FakeSDXLRankBugPipe):
             down, up = ".down.weight", ".up.weight"
         else:
             down, up = ".lora_A.weight", ".lora_B.weight"
+        weights = {
+            "unet.down_blocks.0.attentions.0.to_q.lora_A.weight": torch.ones(2, 2),
+            "unet.down_blocks.0.attentions.0.to_q.lora_B.weight": torch.ones(2, 2),
+            f"text_encoder.{target}{down}": torch.ones(2, 2),
+            f"text_encoder.{target}{up}": torch.ones(2, 2),
+            f"text_encoder_2.{target}{down}": torch.ones(2, 2),
+            f"text_encoder_2.{target}{up}": torch.ones(2, 2),
+        }
+        if self.key_style == "kohya":
+            # Diffusers' old-format detector keys off to_out_lora.
+            out_target = target.replace("to_q_lora", "to_out_lora")
+            for name in ("text_encoder", "text_encoder_2"):
+                weights[f"{name}.{out_target}.down.weight"] = torch.ones(2, 2)
+                weights[f"{name}.{out_target}.up.weight"] = torch.ones(2, 2)
         return (
-            {
-                "unet.down_blocks.0.attentions.0.to_q.lora_A.weight": torch.ones(2, 2),
-                "unet.down_blocks.0.attentions.0.to_q.lora_B.weight": torch.ones(2, 2),
-                f"text_encoder.{target}{down}": torch.ones(2, 2),
-                f"text_encoder.{target}{up}": torch.ones(2, 2),
-                f"text_encoder_2.{target}{down}": torch.ones(2, 2),
-                f"text_encoder_2.{target}{up}": torch.ones(2, 2),
-            },
+            weights,
             {
                 f"text_encoder.{target}.alpha": 2.0,
                 f"text_encoder_2.{target}.alpha": 4.0,
@@ -1133,7 +1142,7 @@ def test_sdxl_rank_bug_restores_both_text_encoders_and_alphas(
     assert set(verified["components"]) == {
         "unet", "text_encoder", "text_encoder_2"
     }
-    assert verified["normalized_text_encoder_tensors"] == 4
+    assert verified["normalized_text_encoder_tensors"] == (8 if key_style == "kohya" else 4)
     assert pipe.adapter_calls == [(["morphorum_fixed-id"], [0.4])]
     # Weight scheduling reuses one registered adapter, with no new load.
     manager.configure_loras(pipe, model, [{**item, "weight": 0.85}])
