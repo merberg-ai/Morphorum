@@ -33,6 +33,12 @@
     videoJob: null,
     videoRenderId: '',
     videoPollTimer: null,
+    deforumImport: {
+      content: '',
+      filename: '',
+      report: null,
+      busy: false,
+    },
   };
 
   const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
@@ -545,6 +551,9 @@
     qsa(
       '#view-animation input, #view-animation select, #view-animation textarea'
     ).forEach(input => {
+      if (input.id.startsWith('animation-deforum-')) {
+        return;
+      }
       if (input.id === 'animation-project-select') {
         input.disabled = state.projects.length === 0;
       } else {
@@ -3182,9 +3191,356 @@
       const payload = await api('/api/models?limit=2000');
       state.models = Array.isArray(payload.models) ? payload.models : [];
       populateModelSelect();
+      populateDeforumModelSelect();
       populateSamplerSelect(state.project?.generation?.sampler || '');
     } catch (error) {
       toast('Animation model list unavailable', error.message, 'warning', 6000);
+    }
+  }
+
+
+  function deforumCheckpointModels() {
+    return state.models.filter(model => model.kind === 'checkpoints');
+  }
+
+  function populateDeforumModelSelect() {
+    const select = qs('#animation-deforum-model');
+    if (!select) return;
+    const selected = select.value || '';
+    const models = deforumCheckpointModels();
+    select.replaceChildren();
+
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = models.length
+      ? 'Choose an indexed checkpoint…'
+      : 'No indexed checkpoints available';
+    select.appendChild(none);
+
+    for (const model of models) {
+      const option = document.createElement('option');
+      option.value = model.id;
+      const variant = model.variant ? ' · ' + model.variant : '';
+      option.textContent =
+        String(model.name || model.id) +
+        ' · ' + String(model.family || '').toUpperCase() +
+        variant;
+      select.appendChild(option);
+    }
+    select.value = models.some(model => model.id === selected) ? selected : '';
+  }
+
+  function setDeforumImportBusy(busy, message = '') {
+    state.deforumImport.busy = Boolean(busy);
+    const refresh = qs('#animation-deforum-refresh');
+    const create = qs('#animation-deforum-create');
+    const status = qs('#animation-deforum-status');
+    if (refresh) {
+      setBusy(refresh, busy);
+      refresh.disabled = busy || !state.deforumImport.content;
+    }
+    if (create) {
+      setBusy(create, busy);
+      create.disabled =
+        busy ||
+        !state.deforumImport.report?.can_create ||
+        !state.deforumImport.content;
+    }
+    if (status && message) status.textContent = message;
+  }
+
+  function closeDeforumImport() {
+    const dialog = qs('#animation-deforum-dialog');
+    if (!dialog) return;
+    if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+    else dialog.removeAttribute('open');
+  }
+
+  function resetDeforumImport() {
+    state.deforumImport = {
+      content: '',
+      filename: '',
+      report: null,
+      busy: false,
+    };
+    const file = qs('#animation-deforum-file');
+    const name = qs('#animation-deforum-name');
+    const filename = qs('#animation-deforum-filename');
+    const status = qs('#animation-deforum-status');
+    const summary = qs('#animation-deforum-summary');
+    const warnings = qs('#animation-deforum-warnings');
+    const mappings = qs('#animation-deforum-mappings');
+    const warningCount = qs('#animation-deforum-warning-count');
+    const mappingCount = qs('#animation-deforum-mapping-count');
+    if (file) file.value = '';
+    if (name) name.value = '';
+    if (filename) filename.textContent = 'No file selected';
+    if (status) status.textContent = 'Waiting';
+    if (summary) {
+      summary.hidden = true;
+      summary.textContent = '';
+    }
+    if (warnings) {
+      warnings.replaceChildren();
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Choose a settings file to inspect compatibility warnings.';
+      warnings.appendChild(empty);
+    }
+    if (mappings) {
+      mappings.replaceChildren();
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Mapped, unsupported, and preserved fields will appear here.';
+      mappings.appendChild(empty);
+    }
+    if (warningCount) warningCount.textContent = '0';
+    if (mappingCount) mappingCount.textContent = '0';
+    populateDeforumModelSelect();
+    setDeforumImportBusy(false);
+  }
+
+  function compactImportValue(value) {
+    let text;
+    try {
+      text = typeof value === 'string' ? value : JSON.stringify(value);
+    } catch (_) {
+      text = String(value ?? '');
+    }
+    text = String(text ?? '').replace(/\s+/g, ' ').trim();
+    return text.length > 180 ? text.slice(0, 177) + '…' : text;
+  }
+
+  function renderDeforumImportReport(report) {
+    state.deforumImport.report = report || null;
+    const summary = qs('#animation-deforum-summary');
+    const warnings = qs('#animation-deforum-warnings');
+    const mappings = qs('#animation-deforum-mappings');
+    const warningCount = qs('#animation-deforum-warning-count');
+    const mappingCount = qs('#animation-deforum-mapping-count');
+    const status = qs('#animation-deforum-status');
+    const create = qs('#animation-deforum-create');
+    const project = report?.project || {};
+    const animation = project.animation || {};
+
+    if (summary) {
+      if (report) {
+        const mapped = (report.mappings || []).filter(item =>
+          String(item.status || '').startsWith('mapped')
+        ).length;
+        const model = report.selected_model;
+        summary.textContent = [
+          (animation.mode || '2d').toUpperCase(),
+          String(animation.width || '?') + ' × ' + String(animation.height || '?'),
+          String(animation.max_frames || '?') + ' frames',
+          String(animation.fps || '?') + ' fps',
+          mapped + ' mapped fields',
+          model ? String(model.name || model.id) : 'model not selected',
+        ].join(' · ');
+        summary.hidden = false;
+      } else {
+        summary.hidden = true;
+        summary.textContent = '';
+      }
+    }
+
+    const warningItems = Array.isArray(report?.warnings) ? report.warnings : [];
+    if (warningCount) warningCount.textContent = String(warningItems.length);
+    if (warnings) {
+      warnings.replaceChildren();
+      if (!warningItems.length) {
+        const clean = document.createElement('p');
+        clean.className = 'animation-import-ok';
+        clean.textContent = 'No compatibility warnings for the currently selected model.';
+        warnings.appendChild(clean);
+      } else {
+        for (const message of warningItems) {
+          const item = document.createElement('div');
+          item.className = 'animation-import-warning';
+          item.textContent = String(message);
+          warnings.appendChild(item);
+        }
+      }
+    }
+
+    const mappingItems = Array.isArray(report?.mappings) ? report.mappings : [];
+    if (mappingCount) mappingCount.textContent = String(mappingItems.length);
+    if (mappings) {
+      mappings.replaceChildren();
+      for (const item of mappingItems) {
+        const row = document.createElement('div');
+        row.className =
+          'animation-import-mapping status-' +
+          String(item.status || 'unknown').replace(/[^a-z0-9_-]/gi, '-');
+
+        const source = document.createElement('div');
+        const sourceKey = document.createElement('strong');
+        sourceKey.textContent = String(item.source_key || 'unknown');
+        const sourceValue = document.createElement('code');
+        sourceValue.textContent = compactImportValue(item.source_value);
+        source.append(sourceKey, sourceValue);
+
+        const arrow = document.createElement('span');
+        arrow.className = 'animation-import-map-arrow';
+        arrow.textContent = '→';
+
+        const target = document.createElement('div');
+        const targetKey = document.createElement('strong');
+        targetKey.textContent = item.target ? String(item.target) : String(item.status || 'preserved');
+        const mappedValue = document.createElement('code');
+        mappedValue.textContent =
+          item.mapped_value === undefined
+            ? (item.message || 'Passive compatibility metadata')
+            : compactImportValue(item.mapped_value);
+        target.append(targetKey, mappedValue);
+
+        row.append(source, arrow, target);
+        mappings.appendChild(row);
+      }
+      if (!mappingItems.length) {
+        const empty = document.createElement('p');
+        empty.className = 'muted';
+        empty.textContent = 'No recognized settings were found in this file.';
+        mappings.appendChild(empty);
+      }
+    }
+
+    if (status) {
+      if (!report) status.textContent = 'Waiting';
+      else if (report.can_create) status.textContent = 'Ready to create';
+      else if (report.model_required) status.textContent = 'Choose a model';
+      else if (report.validation && !report.validation.valid) status.textContent = 'Validation errors';
+      else status.textContent = 'Review required';
+    }
+    if (create) create.disabled = state.deforumImport.busy || !report?.can_create;
+  }
+
+  async function previewDeforumImport({ preserveName = true } = {}) {
+    if (!state.deforumImport.content || state.deforumImport.busy) return;
+    const model = qs('#animation-deforum-model');
+    const name = qs('#animation-deforum-name');
+    const priorName = preserveName ? String(name?.value || '').trim() : '';
+    setDeforumImportBusy(true, 'Inspecting…');
+    try {
+      const report = await api('/api/animation/import/deforum/preview', {
+        method: 'POST',
+        body: JSON.stringify({
+          content: state.deforumImport.content,
+          filename: state.deforumImport.filename,
+          model_id: model?.value || null,
+          name: priorName || null,
+        }),
+      });
+      renderDeforumImportReport(report);
+      if (name && !priorName && report?.project?.name) {
+        name.value = String(report.project.name);
+      }
+    } catch (error) {
+      state.deforumImport.report = null;
+      renderDeforumImportReport(null);
+      const status = qs('#animation-deforum-status');
+      if (status) status.textContent = 'Import error';
+      toast('Deforum import preview failed', error.message, 'error', 8000);
+    } finally {
+      setDeforumImportBusy(false);
+    }
+  }
+
+  async function chooseDeforumFile(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    if (file.size > 1048576) {
+      toast(
+        'Deforum settings file is too large',
+        'B6.1 accepts settings files up to 1 MiB.',
+        'warning',
+        6500
+      );
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      const content = await file.text();
+      resetDeforumImport();
+      state.deforumImport.content = content;
+      state.deforumImport.filename = file.name || 'deforum-settings.json';
+      const filename = qs('#animation-deforum-filename');
+      if (filename) filename.textContent = state.deforumImport.filename;
+      const dialog = qs('#animation-deforum-dialog');
+      if (dialog) {
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', '');
+      }
+      await previewDeforumImport({ preserveName: false });
+    } catch (error) {
+      toast('Could not read Deforum settings', error.message, 'error', 7000);
+    }
+  }
+
+  async function createDeforumProject() {
+    const report = state.deforumImport.report;
+    if (!report?.can_create || !state.deforumImport.content || state.deforumImport.busy) {
+      return;
+    }
+    if (
+      state.dirty &&
+      !window.confirm(
+        'This opens the imported project and discards unsaved changes in the current browser project. Continue?'
+      )
+    ) {
+      return;
+    }
+
+    const model = qs('#animation-deforum-model');
+    const name = qs('#animation-deforum-name');
+    setDeforumImportBusy(true, 'Creating…');
+    try {
+      const payload = await api('/api/animation/import/deforum/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          content: state.deforumImport.content,
+          filename: state.deforumImport.filename,
+          model_id: model?.value || null,
+          name: String(name?.value || '').trim() || null,
+        }),
+      });
+
+      clearMotionPreviewResult();
+      resetRenderUi();
+      state.project = payload.project;
+      state.path = payload.path || '';
+      state.timeline = null;
+      state.timelineSelection = null;
+      state.depthPreview = null;
+      state.dirty = false;
+      closeDeforumImport();
+
+      await loadProjectList();
+      fillForm();
+      await loadTimeline();
+      await loadDepthPreviewStatus();
+      await loadRenderHistory();
+
+      const count = Array.isArray(payload.import?.warnings)
+        ? payload.import.warnings.length
+        : 0;
+      toast(
+        'Deforum project imported',
+        state.project.name +
+          ' created as a new Morphorum project' +
+          (count ? ' · ' + count + ' warning' + (count === 1 ? '' : 's') : '') +
+          '.',
+        count ? 'warning' : 'success',
+        6500
+      );
+      resetDeforumImport();
+    } catch (error) {
+      const status = qs('#animation-deforum-status');
+      if (status) status.textContent = 'Create failed';
+      toast('Deforum import failed', error.message, 'error', 8000);
+    } finally {
+      setDeforumImportBusy(false);
     }
   }
 
@@ -3312,6 +3668,19 @@
   function bind() {
     qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
     qs('#animation-expand-all')?.addEventListener('click', () => setAllAnimationCards(false));
+    qs('#animation-import-deforum')?.addEventListener('click', () => {
+      const input = qs('#animation-deforum-file');
+      if (input) {
+        input.value = '';
+        input.click();
+      }
+    });
+    qs('#animation-deforum-file')?.addEventListener('change', chooseDeforumFile);
+    qs('#animation-deforum-close')?.addEventListener('click', closeDeforumImport);
+    qs('#animation-deforum-cancel')?.addEventListener('click', closeDeforumImport);
+    qs('#animation-deforum-refresh')?.addEventListener('click', () => previewDeforumImport());
+    qs('#animation-deforum-create')?.addEventListener('click', createDeforumProject);
+    qs('#animation-deforum-model')?.addEventListener('change', () => previewDeforumImport());
     qs('#animation-new')?.addEventListener('click', createProject);
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
@@ -3406,6 +3775,7 @@
     ).forEach(input => {
       if (
         input.id === 'animation-project-select' ||
+        input.id.startsWith('animation-deforum-') ||
         input.id === 'animation-model' ||
         input.id === 'animation-source-file' ||
         input.id === 'animation-start-mode' ||

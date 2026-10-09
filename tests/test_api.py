@@ -39,6 +39,12 @@ def test_frontend_and_health() -> None:
         assert 'id="view-animation"' in frontend.text
         assert '<select id="animation-sampler"' in frontend.text
         assert 'id="animation-start-render"' in frontend.text
+        assert 'id="animation-import-deforum"' in frontend.text
+        assert 'id="animation-deforum-file"' in frontend.text
+        assert 'id="animation-deforum-dialog"' in frontend.text
+        assert 'id="animation-deforum-model"' in frontend.text
+        assert 'id="animation-deforum-mappings"' in frontend.text
+        assert 'id="animation-deforum-create"' in frontend.text
         assert 'id="animation-start-mode"' in frontend.text
         assert 'id="animation-mode"' in frontend.text
         assert 'id="animation-2d-motion-card"' in frontend.text
@@ -127,6 +133,9 @@ def test_frontend_and_health() -> None:
         assert "cadence.diffusion" in animation_js.text
         assert "animation-3d-depth-resolution" in animation_js.text
         assert "animation-render-state-timing" in animation_js.text
+        assert "/api/animation/import/deforum/preview" in animation_js.text
+        assert "/api/animation/import/deforum/create" in animation_js.text
+        assert "file.text()" in animation_js.text
 
 
 def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:

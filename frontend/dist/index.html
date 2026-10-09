@@ -138,6 +138,8 @@
             <button class="secondary-button compact" id="animation-collapse-all" type="button">Collapse Sections</button>
             <button class="secondary-button compact" id="animation-expand-all" type="button">Expand Sections</button>
             <button class="secondary-button busy-button" id="animation-reload" type="button" disabled><span class="spinner"></span><span class="button-label">Reload</span></button>
+            <button class="secondary-button busy-button" id="animation-import-deforum" type="button"><span class="spinner"></span><span class="button-label">Import Deforum</span></button>
+            <input id="animation-deforum-file" type="file" accept=".json,.txt,application/json,text/plain" hidden>
             <button class="secondary-button busy-button" id="animation-new" type="button"><span class="spinner"></span><span class="button-label">New Project</span></button>
             <button class="primary-button busy-button" id="animation-save" type="button" disabled><span class="spinner"></span><span class="button-label">Save Project</span></button>
           </div>
@@ -147,6 +149,64 @@
           <span class="badge" id="animation-project-status">No project loaded</span>
           <code id="animation-project-path" title="">Create or select an animation project.</code>
         </div>
+
+        <dialog class="animation-import-dialog" id="animation-deforum-dialog">
+          <form method="dialog" class="animation-import-shell" id="animation-deforum-form">
+            <div class="animation-import-heading">
+              <div>
+                <p class="eyebrow">B6.1 LEGACY SETTINGS TRANSLATOR</p>
+                <h2>Import Deforum Settings</h2>
+                <p class="muted">Preview legacy settings before Morphorum creates a new native project. Imported checkpoint paths are never trusted.</p>
+              </div>
+              <button class="icon-button animation-import-close" id="animation-deforum-close" type="button" aria-label="Close Deforum importer">×</button>
+            </div>
+
+            <div class="animation-import-source">
+              <div>
+                <span class="muted">Source</span>
+                <strong id="animation-deforum-filename">No file selected</strong>
+              </div>
+              <span class="badge" id="animation-deforum-status">Waiting</span>
+            </div>
+
+            <div class="field-grid animation-import-fields">
+              <label class="animation-span-2"><span>New project name</span><input id="animation-deforum-name" type="text" maxlength="160" placeholder="Use name from Deforum settings"></label>
+              <label class="animation-span-2"><span>Morphorum model <small class="muted">(required, imported model paths are ignored)</small></span><select id="animation-deforum-model"><option value="">Choose an indexed checkpoint…</option></select></label>
+            </div>
+
+            <div class="notice subtle animation-import-safety">
+              <span>JSON only. A <code>.txt</code> file is accepted only when it contains JSON-serialized settings. Morphorum never executes Python from an import and never opens host paths embedded in the source.</span>
+            </div>
+
+            <div class="animation-import-summary" id="animation-deforum-summary" hidden></div>
+
+            <section class="animation-import-section">
+              <div class="animation-import-section-heading">
+                <h3>Warnings</h3>
+                <span class="badge" id="animation-deforum-warning-count">0</span>
+              </div>
+              <div class="animation-import-list" id="animation-deforum-warnings">
+                <p class="muted">Choose a settings file to inspect compatibility warnings.</p>
+              </div>
+            </section>
+
+            <section class="animation-import-section">
+              <div class="animation-import-section-heading">
+                <h3>Field Mapping Preview</h3>
+                <span class="badge" id="animation-deforum-mapping-count">0</span>
+              </div>
+              <div class="animation-import-mappings" id="animation-deforum-mappings">
+                <p class="muted">Mapped, unsupported, and preserved fields will appear here.</p>
+              </div>
+            </section>
+
+            <div class="animation-import-actions">
+              <button class="secondary-button" id="animation-deforum-cancel" type="button">Cancel</button>
+              <button class="secondary-button busy-button" id="animation-deforum-refresh" type="button" disabled><span class="spinner"></span><span class="button-label">Refresh Preview</span></button>
+              <button class="primary-button busy-button" id="animation-deforum-create" type="button" disabled><span class="spinner"></span><span class="button-label">Create New Project</span></button>
+            </div>
+          </form>
+        </dialog>
 
         <div class="grid animation-layout">
           <article class="card glass animation-project-card">

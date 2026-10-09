@@ -1613,3 +1613,173 @@
   font-size: .73rem;
   line-height: 1.45;
 }
+
+
+/* B6.1: safe Deforum import preview. */
+.animation-import-dialog {
+  width: min(980px, calc(100vw - 32px));
+  max-height: min(880px, calc(100vh - 32px));
+  padding: 0;
+  border: 1px solid rgba(65,217,255,.3);
+  border-radius: var(--radius);
+  background: rgba(8,12,17,.98);
+  color: var(--text);
+  box-shadow: 0 24px 90px rgba(0,0,0,.72);
+}
+.animation-import-dialog::backdrop {
+  background: rgba(0,0,0,.72);
+  backdrop-filter: blur(5px);
+}
+.animation-import-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: inherit;
+  padding: 20px;
+  overflow: auto;
+}
+.animation-import-heading,
+.animation-import-source,
+.animation-import-section-heading,
+.animation-import-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.animation-import-heading { align-items: flex-start; }
+.animation-import-heading h2,
+.animation-import-section h3 { margin: 0; }
+.animation-import-heading p { margin: 3px 0 0; }
+.animation-import-close {
+  flex: 0 0 auto;
+  min-width: 40px;
+  min-height: 40px;
+  font-size: 1.25rem;
+}
+.animation-import-source {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(3,5,8,.42);
+}
+.animation-import-source span,
+.animation-import-source strong { display: block; }
+.animation-import-source strong {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  overflow-wrap: anywhere;
+}
+.animation-import-safety { margin: 0; }
+.animation-import-summary {
+  padding: 10px 12px;
+  border: 1px solid rgba(65,217,255,.22);
+  border-radius: var(--radius-sm);
+  background: rgba(65,217,255,.045);
+  font-family: var(--font-mono);
+  font-size: .76rem;
+  line-height: 1.55;
+}
+.animation-import-section {
+  min-height: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(3,5,8,.32);
+}
+.animation-import-section-heading { margin-bottom: 10px; }
+.animation-import-list,
+.animation-import-mappings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+.animation-import-warning,
+.animation-import-ok {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: .76rem;
+  line-height: 1.45;
+}
+.animation-import-warning {
+  border: 1px solid rgba(255,188,75,.25);
+  background: rgba(255,188,75,.055);
+}
+.animation-import-ok {
+  border: 1px solid rgba(70,220,150,.22);
+  background: rgba(70,220,150,.045);
+}
+.animation-import-mapping {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.animation-import-mapping > div { min-width: 0; }
+.animation-import-mapping strong,
+.animation-import-mapping code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.animation-import-mapping strong {
+  font-size: .72rem;
+  margin-bottom: 4px;
+}
+.animation-import-mapping code {
+  color: var(--muted);
+  font-size: .67rem;
+  white-space: normal;
+}
+.animation-import-map-arrow {
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+.animation-import-mapping.status-unsupported,
+.animation-import-mapping.status-rejected,
+.animation-import-mapping.status-ignored_path {
+  border-color: rgba(255,188,75,.22);
+}
+.animation-import-actions {
+  justify-content: flex-end;
+  position: sticky;
+  bottom: -20px;
+  margin: 0 -20px -20px;
+  padding: 14px 20px 20px;
+  background: linear-gradient(to bottom, rgba(8,12,17,.72), rgba(8,12,17,.99) 32%);
+}
+@media (max-width: 720px) {
+  .animation-project-actions { grid-template-columns: 1fr 1fr; }
+  .animation-import-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+  }
+  .animation-import-shell { padding: 14px; }
+  .animation-import-mapping {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .animation-import-map-arrow { transform: rotate(90deg); justify-self: start; }
+  .animation-import-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    bottom: -14px;
+    margin: 0 -14px -14px;
+    padding: 12px 14px 14px;
+  }
+  .animation-import-actions #animation-deforum-create {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+}
+@media (max-width: 440px) {
+  .animation-import-actions { grid-template-columns: 1fr; }
+  .animation-import-actions #animation-deforum-create { grid-column: 1; }
+  .animation-import-actions button { min-height: 44px; }
+}
