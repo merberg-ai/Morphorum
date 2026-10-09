@@ -93,6 +93,8 @@ def freeze_hybrid_source(project: dict[str, Any], render_dir: Path) -> dict[str,
                 raise HybridRenderError(
                     "The uploaded source video changed after extraction. Extract frames again."
                 )
+        except HybridRenderError:
+            raise
         except (OSError, ValueError, TypeError, KeyError) as exc:
             raise HybridRenderError(
                 "The extracted video revision cannot be verified. Extract frames again."
