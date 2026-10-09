@@ -20,6 +20,71 @@ Morphorum already has:
 
 Morphorum does **not** yet have a Deforum settings importer or hybrid video-frame source/compositor. Legacy Deforum JSON must translate into the native Morphorum project, not become a new parallel render engine.
 
+## B6.0-P: High-resolution GPU memory investigation (priority before full-size B6 rendering)
+
+The B5.5 verified run succeeded for 75 SDXL frames at 512x512 with
+cadence 3, three resident LoRAs, CUDA `native-gpu`, 14.41 GiB
+maximum *observed live* allocation, 15.36 GiB process maximum tensor
+allocation, and 16.43 GiB process maximum reserved allocator statistic
+on a 15.99-GiB physical device. It did not exhibit slow-anchor warnings.
+This establishes correct GPU inference at 512px; it **does not**
+demonstrate that 768, 1024, or higher resolutions fit.
+
+**Critical interpretation:** `torch.cuda.max_memory_reserved()` is a
+process-lifetime caching allocator high-water statistic, not an
+unambiguous readout of simultaneous physical VRAM residency. PyTorch
+documents that under `cudaMallocAsync` the maximum may conservatively
+sum peaks from separate pools observed at different times. Windows
+WDDM also uses GPU virtual memory and manages residency; possible
+shared-memory oversubscription must be corroborated using Windows
+dedicated/shared GPU memory counters. Do not present a single >16GiB
+peak as proof of paging or a GPU leak.
+
+### B6.0-P plan and physical gate
+
+1. **Metrics correctness:** log allocator backend (`native` vs
+   `cudaMallocAsync`), `mem_get_info()`, current/peak
+   allocated/reserved, PyTorch `memory_stats()` categories and actual
+   Windows dedicated/shared GPU residency where available. Keep
+   per-frame diagnostics low-overhead. Ensure clear differentiation
+   between *current* memory, *cumulative peak*, cached blocks, and
+   Windows memory. Add before/after phase checkpoints around
+   model+LoRA load, text conditioning, UNet, VAE encode/decode,
+   3D depth and export. No forced synchronization inside the hot loop.
+2. **Baseline reproducibility:** identical SDXL model, 512x512,
+   one then three LoRAs, one image and short cadence-3 animation.
+   Capture latency and memory before testing alternative memory modes.
+3. **Targeted opt-in strategies:** assess SDXL VAE tiling and decode
+   allocations first; assess memory-efficient attention backend;
+   consider preencoding/offloading text encoders while keeping the
+   UNet on CUDA and preserving scheduled LoRA/text-encoder behavior.
+   Only use model-level CPU offload as an explicit memory-constrained
+   fallback, and never silently enable slow sequential offload.
+   Validate interactions with `from_pipe()`, cached adapters,
+   dynamic LoRA weights and `encode_prompt()`.
+4. **Safe, stepped resolution matrix:** 512x512, 768x768, 896x1152,
+   1024x1024, 1216x832, 1536x1024, then 1536x1536 or
+   2048x2048 only if headroom and measured performance permit.
+   Start with single-image GPU tests, progress to 3-frame runs,
+   then longer 3D cadence renders. 1024x1024 contains **4x** as
+   many pixels as 512x512; 1536x1536 contains **9x**.
+   These ratios are not predictions of exact total VRAM.
+5. **OOM behavior:** detect likely insufficient headroom before
+   queueing extreme settings; provide a **warning/confirmation** and
+   alternatives, not an invented fixed hardware maximum. A failed
+   CUDA attempt must cleanly unload/restore its partial pipeline,
+   preserve checkpoints, and never silently switch to CPU or corrupt
+   the render. Protect other user workloads on a shared 16GiB GPU.
+6. **Acceptance:** 768 and 1024 tests with visually verified SDXL
+   LoRA influence, working 3D depth/temporal cadence, exports, and
+   cancel/resume. Compare native/tiling/offload modes with
+   repeatable metrics. No physical high-resolution result has been
+   established yet; gate each mode and leave verified B5 untouched.
+
+This investigation can progress alongside B6.1 import UI work. Any
+memory-mode code should live behind explicit settings and regression
+tests; avoid entangling importer correctness with GPU experiments.
+
 ## B6.1: Safe legacy Deforum JSON/TXT import
 
 **First implementation milestone.** Separate parsing, translation/compatibility warnings, and persistence.
