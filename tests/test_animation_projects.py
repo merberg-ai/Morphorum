@@ -51,6 +51,9 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
     assert project["tracks"]["camera_3d"]["translation_z"]["schedule"] == "0:(0)"
     assert project["tracks"]["camera_3d"]["fov"]["schedule"] == "0:(40)"
     assert project["cadence"]["diffusion"] == "0:(1)"
+    assert project["temporal"] == {
+        "mode": "forward", "mix": 0.65, "contrast_threshold": 96.0,
+    }
     assert project["camera_3d"]["depth_resolution"] == "auto"
     assert project["camera_3d"]["projection_mode"] == "legacy"
     assert project["camera_3d"]["hole_fill"] == "nearest"
@@ -401,3 +404,41 @@ def test_b51_existing_project_without_quality_fields_defaults_to_legacy(
     loaded = load_animation_project(created["id"])
     assert loaded["camera_3d"]["projection_mode"] == "legacy"
     assert loaded["camera_3d"]["hole_fill"] == "nearest"
+
+
+def test_b52_temporal_options_round_trip_and_invalid_values_use_defaults(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    project = create_animation_project({"name": "B5.2 Tween"})
+    payload = deepcopy(project)
+    payload["temporal"] = {
+        "mode": "future-anchor", "mix": 0.4, "contrast_threshold": 80,
+    }
+    saved = save_animation_project(project["id"], payload)
+    assert saved["temporal"]["mode"] == "future-anchor"
+    assert saved["temporal"]["mix"] == pytest.approx(0.4)
+    assert saved["temporal"]["contrast_threshold"] == pytest.approx(80)
+    assert load_animation_project(project["id"])["temporal"] == saved["temporal"]
+
+    invalid = deepcopy(saved)
+    invalid["temporal"] = {
+        "mode": "invalid", "mix": -100, "contrast_threshold": 100000,
+    }
+    normalized = save_animation_project(project["id"], invalid)
+    assert normalized["temporal"]["mode"] == "forward"
+    assert 0.0 <= normalized["temporal"]["mix"] <= 1.0
+    assert 1.0 <= normalized["temporal"]["contrast_threshold"] <= 255.0
+
+
+def test_b52_legacy_project_without_temporal_settings_defaults_to_forward(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "Legacy B5.1"})
+    path = tmp_path / created["id"] / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload.pop("temporal")
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    loaded = load_animation_project(created["id"])
+    assert loaded["temporal"]["mode"] == "forward"
