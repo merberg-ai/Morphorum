@@ -1994,20 +1994,25 @@ class GenerationManager:
         network_alphas: Any,
         metadata: Any,
     ) -> tuple[dict[str, Any], Any, Any, dict[str, int]]:
-        """Reconcile Diffusers' TE key names with the *loaded* CLIP modules.
+        """Align SDXL CLIP LoRA namespaces to the actual Transformers modules.
 
-        Transformers 5 flattened the CLIPTextModel text_model wrapper; Kohya
-        conversion still emits text_model.encoder.* keys. Diffusers 0.40 builds
-        its PEFT rank table from exact named_modules() matches and raises an
-        IndexError if none match. Only rewrite affected SDXL text encoders.
+        Kohya-converted SDXL TE keys often end in `to_q_lora.down/up`,
+        rather than `lora_A/B`. Compare rank targets only *after* the same
+        Diffusers -> PEFT conversions performed by the text encoder loader.
         """
+        from diffusers.utils.state_dict_utils import (
+            convert_state_dict_to_diffusers,
+            convert_state_dict_to_peft,
+        )
+
         mappings: dict[str, str] = {}
         component_counts: dict[str, int] = {}
+        modules_by_component: dict[str, set[str]] = {}
         for component_name in ("text_encoder", "text_encoder_2"):
             prefix = f"{component_name}."
             source_keys = [
                 key for key in state_dict
-                if str(key).startswith(prefix) and ".lora_" in str(key)
+                if str(key).startswith(prefix) and "lora" in str(key).lower()
             ]
             if not source_keys:
                 continue
@@ -2018,49 +2023,21 @@ class GenerationManager:
                     f"Cannot inspect {component_name} modules for SDXL LoRA compatibility."
                 )
             module_names = {name for name, _ in named_modules()}
-            source_modules = {
-                str(key)[len(prefix):].split(".lora_", 1)[0]
+            modules_by_component[component_name] = module_names
+            has_model_wrapper = any(name.startswith("text_model.") for name in module_names)
+            has_flat_encoder = any(name.startswith("encoder.") for name in module_names)
+            has_legacy_keys = any(
+                str(key).startswith(prefix + "text_model.")
                 for key in source_keys
-            }
-            for source_module in source_modules:
-                target_module = source_module
-                if target_module not in module_names:
-                    if (
-                        source_module.startswith("text_model.")
-                        and source_module[len("text_model."):] in module_names
-                    ):
-                        target_module = source_module[len("text_model."):]
-                    elif f"text_model.{source_module}" in module_names:
-                        target_module = f"text_model.{source_module}"
-                    else:
-                        raise GenerationError(
-                            f"SDXL {component_name} LoRA module "
-                            f"'{source_module}' has no match in the loaded CLIP model."
-                        )
-                if target_module != source_module:
-                    mappings[prefix + source_module + "."] = (
-                        prefix + target_module + "."
-                    )
-            # At least one B matrix must target a rank-supported CLIP layer.
-            supported = (".q_proj", ".k_proj", ".v_proj", ".out_proj", ".fc1", ".fc2")
-            rank_keys = [
-                key for key in source_keys
-                if str(key).endswith(".lora_B.weight")
-            ]
-            if not rank_keys or not any(
-                (
-                    str(key)[len(prefix):].split(".lora_", 1)[0]
-                    in module_names
-                    or mappings.get(
-                        prefix + str(key)[len(prefix):].split(".lora_", 1)[0] + ".",
-                        "",
-                    ).removeprefix(prefix).rstrip(".") in module_names
-                ) and str(key).split(".lora_", 1)[0].endswith(supported)
-                for key in rank_keys
-            ):
-                raise GenerationError(
-                    f"SDXL {component_name} has no compatible LoRA rank targets."
-                )
+            )
+            has_flat_keys = any(
+                str(key).startswith(prefix + "encoder.")
+                for key in source_keys
+            )
+            if has_legacy_keys and has_flat_encoder and not has_model_wrapper:
+                mappings[prefix + "text_model."] = prefix
+            elif has_flat_keys and has_model_wrapper and not has_flat_encoder:
+                mappings[prefix + "encoder."] = prefix + "text_model.encoder."
             component_counts[component_name] = len(source_keys)
 
         if not mappings:
@@ -2068,9 +2045,8 @@ class GenerationManager:
                 "No SDXL text-encoder module namespace mismatch was detected."
             )
 
-        # Use the same module remapping for PEFT weights, network alphas, and
-        # Diffusers metadata, so rank/alpha scaling stays associated with the
-        # correct modules. Reject collisions instead of silently dropping data.
+        # Remap *all* weight keys, network alphas, and metadata in the affected
+        # text-encoder namespace, never UNet or unrelated model families.
         prefixes = sorted(mappings, key=len, reverse=True)
 
         def remap(values: Any) -> Any:
@@ -2090,8 +2066,43 @@ class GenerationManager:
                 result[target] = value
             return result
 
+        fixed_state = remap(state_dict)
+        # This is Diffusers 0.40's own two-pass text-encoder conversion.
+        supported = (".q_proj", ".k_proj", ".v_proj", ".out_proj", ".fc1", ".fc2")
+        for component_name, module_names in modules_by_component.items():
+            prefix = f"{component_name}."
+            relative = {
+                key[len(prefix):]: value
+                for key, value in fixed_state.items()
+                if str(key).startswith(prefix)
+            }
+            try:
+                peft_state = convert_state_dict_to_peft(
+                    convert_state_dict_to_diffusers(relative)
+                )
+            except Exception as exc:
+                raise GenerationError(
+                    f"Cannot convert {component_name} LoRA keys to PEFT: {exc}"
+                ) from exc
+            rank_keys = [
+                key for key in peft_state
+                if key.endswith(".lora_B.weight")
+            ]
+            supported_modules = {
+                name for name in module_names if name.endswith(supported)
+            }
+            mismatched = [
+                key for key in rank_keys
+                if key.removesuffix(".lora_B.weight") not in supported_modules
+            ]
+            if not rank_keys or mismatched:
+                raise GenerationError(
+                    f"SDXL {component_name} has no complete CLIP LoRA rank match "
+                    f"({len(mismatched)} unmatched of {len(rank_keys)} B matrices)."
+                )
+
         return (
-            remap(state_dict),
+            fixed_state,
             remap(network_alphas),
             remap(metadata),
             component_counts,
