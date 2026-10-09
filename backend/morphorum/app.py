@@ -486,7 +486,7 @@ async def api_upload_hybrid_video(project_id: str, request: Request) -> dict[str
         filename = str(request.headers.get("x-filename") or "source.mp4")
         info = await store_managed_video(project_id, filename, request.stream())
         emit_console("info", "animation",
-                     f"B6.2 managed hybrid source accepted for {project_id}.")
+                     f"Source video uploaded and inspected for project {project_id}.")
         return {"status": "uploaded", "video": info, "render_enabled": False}
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

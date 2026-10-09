@@ -237,7 +237,7 @@ class VideoExportManager:
         )
         thread.start()
         emit_console("info", "animation",
-                     f"Queued B5.4 {fmt.upper()} export {job.id} from {render_id} ({count} PNG frames).")
+                     f"Queued {fmt.upper()} video export {job.id} from {render_id} ({count} frames).")
         return job.public()
 
     def get(self, job_id: str) -> dict[str, Any]:
@@ -359,7 +359,7 @@ class VideoExportManager:
                 job.completed_at = _timestamp()
                 _atomic_json(record_path, job.public())
             emit_console("info", "animation",
-                         f"B5.4 video export {job.id} complete: {output.name}, {job.bytes} bytes.")
+                         f"Video export {job.id} complete: {output.name}, {job.bytes} bytes.")
         except (OSError, ValueError, VideoExportError, subprocess.SubprocessError) as exc:
             with self._lock:
                 job.status = "failed"
@@ -367,7 +367,7 @@ class VideoExportManager:
                 job.message = "FFmpeg export failed"
                 job.completed_at = _timestamp()
                 _atomic_json(record_path, job.public())
-            emit_console("error", "animation", f"B5.4 video export {job.id} failed: {exc}")
+            emit_console("error", "animation", f"Video export {job.id} failed: {exc}")
         finally:
             temp.unlink(missing_ok=True)
             with self._lock:
