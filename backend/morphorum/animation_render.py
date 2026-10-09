@@ -1769,7 +1769,7 @@ class AnimationRenderManager:
                     resolved,
                     seed=int(job.seed_plan[frame]),
                     diffusion_mode=diffusion_mode,
-                    motion_applied=True,
+                    motion_applied=not (should_diffuse and hybrid_sample is not None),
                     cumulative_matrix=cumulative_matrix,
                     depth_state=depth_state,
                     cadence_state=cadence_state,
