@@ -1987,6 +1987,213 @@ class GenerationManager:
             )
         return diagnostics
 
+    @staticmethod
+    def _normalize_sdxl_text_encoder_keys(
+        pipe: Any,
+        state_dict: dict[str, Any],
+        network_alphas: Any,
+        metadata: Any,
+    ) -> tuple[dict[str, Any], Any, Any, dict[str, int]]:
+        """Reconcile Diffusers' TE key names with the *loaded* CLIP modules.
+
+        Transformers 5 flattened the CLIPTextModel text_model wrapper; Kohya
+        conversion still emits text_model.encoder.* keys. Diffusers 0.40 builds
+        its PEFT rank table from exact named_modules() matches and raises an
+        IndexError if none match. Only rewrite affected SDXL text encoders.
+        """
+        mappings: dict[str, str] = {}
+        component_counts: dict[str, int] = {}
+        for component_name in ("text_encoder", "text_encoder_2"):
+            prefix = f"{component_name}."
+            source_keys = [
+                key for key in state_dict
+                if str(key).startswith(prefix) and ".lora_" in str(key)
+            ]
+            if not source_keys:
+                continue
+            encoder = getattr(pipe, component_name, None)
+            named_modules = getattr(encoder, "named_modules", None)
+            if not callable(named_modules):
+                raise GenerationError(
+                    f"Cannot inspect {component_name} modules for SDXL LoRA compatibility."
+                )
+            module_names = {name for name, _ in named_modules()}
+            source_modules = {
+                str(key)[len(prefix):].split(".lora_", 1)[0]
+                for key in source_keys
+            }
+            for source_module in source_modules:
+                target_module = source_module
+                if target_module not in module_names:
+                    if (
+                        source_module.startswith("text_model.")
+                        and source_module[len("text_model."):] in module_names
+                    ):
+                        target_module = source_module[len("text_model."):]
+                    elif f"text_model.{source_module}" in module_names:
+                        target_module = f"text_model.{source_module}"
+                    else:
+                        raise GenerationError(
+                            f"SDXL {component_name} LoRA module "
+                            f"'{source_module}' has no match in the loaded CLIP model."
+                        )
+                if target_module != source_module:
+                    mappings[prefix + source_module + "."] = (
+                        prefix + target_module + "."
+                    )
+            # At least one B matrix must target a rank-supported CLIP layer.
+            supported = (".q_proj", ".k_proj", ".v_proj", ".out_proj", ".fc1", ".fc2")
+            rank_keys = [
+                key for key in source_keys
+                if str(key).endswith(".lora_B.weight")
+            ]
+            if not rank_keys or not any(
+                (
+                    str(key)[len(prefix):].split(".lora_", 1)[0]
+                    in module_names
+                    or mappings.get(
+                        prefix + str(key)[len(prefix):].split(".lora_", 1)[0] + ".",
+                        "",
+                    ).removeprefix(prefix).rstrip(".") in module_names
+                ) and str(key).split(".lora_", 1)[0].endswith(supported)
+                for key in rank_keys
+            ):
+                raise GenerationError(
+                    f"SDXL {component_name} has no compatible LoRA rank targets."
+                )
+            component_counts[component_name] = len(source_keys)
+
+        if not mappings:
+            raise GenerationError(
+                "No SDXL text-encoder module namespace mismatch was detected."
+            )
+
+        # Use the same module remapping for PEFT weights, network alphas, and
+        # Diffusers metadata, so rank/alpha scaling stays associated with the
+        # correct modules. Reject collisions instead of silently dropping data.
+        prefixes = sorted(mappings, key=len, reverse=True)
+
+        def remap(values: Any) -> Any:
+            if not isinstance(values, dict):
+                return values
+            result = {}
+            for key, value in values.items():
+                target = str(key)
+                for old in prefixes:
+                    if target.startswith(old):
+                        target = mappings[old] + target[len(old):]
+                        break
+                if target in result:
+                    raise GenerationError(
+                        f"SDXL LoRA key normalization collision: {target}"
+                    )
+                result[target] = value
+            return result
+
+        return (
+            remap(state_dict),
+            remap(network_alphas),
+            remap(metadata),
+            component_counts,
+        )
+
+    @classmethod
+    def _load_sdxl_full_text_encoder_adapter(
+        cls,
+        pipe: Any,
+        path: Path,
+        adapter_name: str,
+    ) -> dict[str, Any]:
+        """Retry a rank-mismatched SDXL LoRA with both CLIP encoders intact."""
+        state_loader = getattr(pipe, "lora_state_dict", None)
+        unet_loader = getattr(pipe, "load_lora_into_unet", None)
+        encoder_loader = getattr(pipe, "load_lora_into_text_encoder", None)
+        unet = getattr(pipe, "unet", None)
+        if (
+            not callable(state_loader)
+            or not callable(unet_loader)
+            or not callable(encoder_loader)
+            or getattr(unet, "config", None) is None
+        ):
+            raise GenerationError("SDXL full LoRA compatibility APIs unavailable.")
+
+        parsed = state_loader(
+            str(path.parent),
+            weight_name=path.name,
+            local_files_only=True,
+            unet_config=unet.config,
+            return_lora_metadata=True,
+        )
+        if not isinstance(parsed, tuple) or len(parsed) < 2:
+            raise GenerationError("Unexpected SDXL LoRA state-dict result.")
+        state_dict, network_alphas = parsed[:2]
+        metadata = parsed[2] if len(parsed) >= 3 else None
+        if not isinstance(state_dict, dict) or not state_dict:
+            raise GenerationError("SDXL LoRA state dict is empty.")
+
+        state_dict, network_alphas, metadata, source_counts = (
+            cls._normalize_sdxl_text_encoder_keys(
+                pipe, state_dict, network_alphas, metadata
+            )
+        )
+        unet_state = {
+            key: value for key, value in state_dict.items()
+            if not str(key).startswith(("text_encoder.", "text_encoder_2."))
+        }
+
+        # The normal loader may have injected the UNet and/or first text
+        # encoder before the rank error. Remove that partial adapter first.
+        cls._delete_pipeline_adapter(pipe, adapter_name)
+        if unet_state:
+            kwargs = {
+                "state_dict": state_dict,
+                "network_alphas": network_alphas,
+                "unet": unet,
+                "adapter_name": adapter_name,
+                "_pipeline": pipe,
+            }
+            if metadata is not None:
+                kwargs["metadata"] = metadata
+            try:
+                unet_loader(**kwargs)
+            except TypeError:
+                kwargs.pop("metadata", None)
+                unet_loader(**kwargs)
+
+        for component_name in source_counts:
+            encoder_loader(
+                state_dict,
+                network_alphas=network_alphas,
+                text_encoder=getattr(pipe, component_name),
+                prefix=component_name,
+                lora_scale=getattr(pipe, "lora_scale", 1.0),
+                adapter_name=adapter_name,
+                metadata=metadata,
+                _pipeline=pipe,
+            )
+
+        diagnostics: dict[str, Any] = {
+            "normalized_text_encoder_tensors": sum(source_counts.values()),
+            "components": {},
+        }
+        expected = (["unet"] if unet_state else []) + list(source_counts)
+        for component_name in expected:
+            observed = cls._adapter_diagnostics(
+                getattr(pipe, component_name, None), adapter_name
+            )
+            if (
+                not observed["available"]
+                or observed["tensors"] <= 0
+                or observed["parameters"] <= 0
+                or observed["abs_sum"] <= 0
+            ):
+                raise GenerationError(
+                    f"SDXL LoRA {adapter_name} loaded no verifiable "
+                    f"{component_name} parameters after normalization."
+                )
+            diagnostics["components"][component_name] = observed
+        return diagnostics
+
     @classmethod
     def _load_sdxl_unet_only_adapter(
         cls,
@@ -2184,42 +2391,60 @@ class GenerationManager:
                         ) from exc
 
                     try:
-                        diagnostics = self._load_sdxl_unet_only_adapter(
-                            pipe,
-                            path,
-                            adapter_name,
+                        diagnostics = self._load_sdxl_full_text_encoder_adapter(
+                            pipe, path, adapter_name
                         )
-                    except Exception as fallback_exc:
-                        raise GenerationError(
-                            f"Could not load sdxl LoRA '{item.get('name') or path.name}'. "
-                            f"Normal loader failed with {type(exc).__name__}: {exc}; "
-                            f"clean UNet-only compatibility reload also failed: "
-                            f"{fallback_exc}"
-                        ) from fallback_exc
-
-                    compatibility = "sdxl-clean-unet-only"
-                    emit_console(
-                        "warning",
-                        "generation",
-                        (
-                            f"SDXL LoRA {path.name} hit the Diffusers/PEFT text-encoder "
-                            "rank compatibility bug. Removed the partial adapter and "
-                            "reloaded converted UNet weights directly."
-                        ),
-                    )
-                    emit_console(
-                        "info",
-                        "generation",
-                        (
-                            f"Verified SDXL LoRA payload {adapter_name}: "
-                            f"{diagnostics['modules']} injected module(s), "
-                            f"{diagnostics['tensors']} parameter tensor(s), "
-                            f"{diagnostics['parameters']:,} parameter(s), "
-                            f"abs-sum {diagnostics['abs_sum']:.4g}; "
-                            f"{diagnostics['skipped_text_encoder_tensors']} "
-                            "text-encoder tensor(s) skipped."
-                        ),
-                    )
+                    except Exception as full_exc:
+                        try:
+                            diagnostics = self._load_sdxl_unet_only_adapter(
+                                pipe, path, adapter_name
+                            )
+                        except Exception as fallback_exc:
+                            raise GenerationError(
+                                f"Could not load sdxl LoRA '{item.get('name') or path.name}'. "
+                                f"Normal loader: {type(exc).__name__}: {exc}; "
+                                f"full text-encoder retry: {type(full_exc).__name__}: {full_exc}; "
+                                f"UNet-only fallback: {fallback_exc}"
+                            ) from fallback_exc
+                        compatibility = "sdxl-clean-unet-only"
+                        emit_console(
+                            "warning",
+                            "generation",
+                            (
+                                f"SDXL LoRA {path.name}: full text-encoder retry failed "
+                                f"({type(full_exc).__name__}: {full_exc}). "
+                                "Using verified UNet-only compatibility mode."
+                            ),
+                        )
+                        emit_console(
+                            "info",
+                            "generation",
+                            (
+                                f"Verified SDXL LoRA UNet payload {adapter_name}: "
+                                f"{diagnostics['modules']} module(s), "
+                                f"{diagnostics['tensors']} parameter tensors, "
+                                f"{diagnostics['parameters']:,} parameters; "
+                                f"{diagnostics['skipped_text_encoder_tensors']} "
+                                "text-encoder tensors skipped."
+                            ),
+                        )
+                    else:
+                        compatibility = "sdxl-text-encoder-normalized"
+                        component_info = diagnostics["components"]
+                        emit_console(
+                            "info",
+                            "generation",
+                            (
+                                f"SDXL LoRA {path.name}: repaired Transformers 5 "
+                                "text-encoder module naming; verified full adapter "
+                                "payload on "
+                                + ", ".join(
+                                    f"{name} ({info['tensors']} tensors)"
+                                    for name, info in component_info.items()
+                                )
+                                + "."
+                            ),
+                        )
                 except Exception as exc:
                     raise GenerationError(
                         f"Could not load {family} LoRA '{item.get('name') or path.name}': "
@@ -2251,7 +2476,7 @@ class GenerationManager:
                     "generation",
                     (
                         f"Loaded {family} LoRA adapter: {path.name}"
-                        + (" (U-Net-only compatibility mode)." if compatibility else ".")
+                        + (" (U-Net-only compatibility mode)." if compatibility == "sdxl-clean-unet-only" else (" (full text-encoder compatibility mode)." if compatibility == "sdxl-text-encoder-normalized" else "."))
                     ),
                 )
 
