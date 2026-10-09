@@ -95,3 +95,17 @@ test('B5.1 projection quality and hole fill are editable and round-trip through 
   assert.match(source, /projection_mode: qs\('#animation-3d-projection-mode'\)/);
   assert.match(source, /hole_fill: qs\('#animation-3d-hole-fill'\)/);
 });
+
+test('B5.2 future-anchor settings are opt-in and survive project editor round-trip', () => {
+  assert.equal((html.match(/id="animation-temporal-mode"/g) || []).length, 1);
+  assert.equal((html.match(/id="animation-temporal-mix"/g) || []).length, 1);
+  assert.equal((html.match(/id="animation-temporal-contrast"/g) || []).length, 1);
+  assert.match(html, /value="forward">Forward-only/);
+  assert.match(html, /value="future-anchor">Future-anchor depth-aligned tween/);
+  assert.match(source, /project\.temporal\?\.mode \|\| 'forward'/);
+  assert.match(source, /project\.temporal\?\.mix \?\? 0\.65/);
+  assert.match(source, /project\.temporal\?\.contrast_threshold \?\? 96/);
+  assert.match(source, /mode: qs\('#animation-temporal-mode'\)\?\.value \|\| 'forward'/);
+  assert.match(source, /mix: Number\(qs\('#animation-temporal-mix'\)/);
+  assert.match(source, /contrast_threshold: Number\(qs\('#animation-temporal-contrast'\)/);
+});
