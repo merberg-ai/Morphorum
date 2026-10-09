@@ -162,6 +162,55 @@ Implement a centralized frontend `MorphorumDialog` service (separate `modal.js` 
 
 **Scope:** Add to the `dev-ui` planning backlog only. No app code changes until the user requests the consolidated implementation pass.
 
+## 5. Responsive top banner, bottom navigation and compact global generation status
+
+**Status:** Planned, not implemented.
+
+**Requested:** On phone, make the header/status banner and bottom main navigation fit the usable screen, avoid cropping/overlap with mobile browser chrome, and display a compact live generation indicator/progress bar accessible from every page.
+
+**Visual evidence:** User screenshot from Android accessing `192.168.1.24:7865` shows topbar telemetry cards pushed/clipped at the right, oversized header area and runtime version/build chip, and the bottom nav only partially visible immediately above the mobile browser's own navigation toolbar. This is responsive layout debt, not evidence of a telemetry backend failure.
+
+**Verified source causes:**
+- `frontend/dist/index.html` header contains brand mark/name, long runtime/version/branch/commit pill, and four CPU/RAM/GPU/VRAM telemetry cards.
+- `frontend/dist/assets/app.css` sets `.telemetry-strip {grid-template-columns:repeat(4,minmax(112px,1fr))}`, with `.telemetry-item {min-width:112px}`. Mobile switches to two `minmax(0,1fr)` columns but telemetry labels and RAM/VRAM values use `white-space:nowrap`; the screenshot confirms these still overflow on narrow devices. Runtime chip is capped at `45vw` and ellipsized, consuming excess vertical space.
+- Mobile `.main-nav` is `position:fixed; bottom:max(8px,env(safe-area-inset-bottom))`, while `.app-shell` has static bottom padding `88px`; this does not fully account for dynamically changing Android browser controls or viewport keyboard height. Six tabs share one narrow dock.
+- `frontend/dist/assets/app.js` already polls CPU/RAM/GPU/VRAM telemetry every 2.5s, and `image.js` already receives `job.progress`, `current_image`, `current_step` and `total_steps`. Animation's `animation.js` polls render `job.progress`, current frame and ETA (~700ms). Reuse this state, **not** additional duplicate backend polling.
+- `index.html` already sets `viewport-fit=cover`; use CSS dynamic viewport and safe-area primitives with tested fallbacks.
+
+### Proposed topbar hierarchy
+
+**Desktop:** Keep a restrained brand/status row, with compact 4-card system telemetry aligned right. Optionally expandable diagnostics for verbose build and GPU facts.
+
+**Phone:** A compact one- or two-row header, not a tall card:
+1. **Primary row:** small Morphorum logo/title + tiny live connection dot / concise server status. Do not show full branch and commit hash as a wide persistent chip; put version/branch/commit under a tap-for-details affordance (or About in header menu, with title tooltip on desktop).
+2. **Secondary row (optional):** condensed system telemetry, e.g. small CPU/GPU and RAM/VRAM badges with values clipped/wrapped safely. Collapse to a **System** details popover or a horizontally scrollable, bounded row at very narrow widths; avoid unbounded horizontal page overflow and oversized RAM numerals.
+3. **Active job strip:** compact semantic progress bar (3–5px) with short label: `Image 2/4 · 61%` or `Animation 32/75 · 43% · ETA 02:34`. Displays relevant loading/queued/finalizing/cancelled/error/completed states without claiming progress not reported by the backend. Tapping the strip jumps to Image progress or Animation → Monitor (UI item #2). Hide when truly idle or show very small latest-status indicator, avoiding wasted vertical space.
+4. For multiple job types, prefer active job identification and clearly labelled selection, not mixing image percentage with animation percentage. Show latest updated only when valid. Do not claim a global job queue or perpetual background monitoring where it does not exist.
+
+### Proposed mobile bottom navigation
+
+- Redesign the six-item navigation as a compact app dock with consistent icon/short label, active state, accessible name and at least a ~44px touch target. For the narrowest screens consider four high-frequency items + **More** popup/secondary list for Models, Settings and Console, but preserve direct discoverability and do not bury essential destinations without an obvious More entry.
+- Use `env(safe-area-inset-bottom)`, `100dvh`, appropriate layout fallbacks and a practical viewport keyboard strategy (including focusing prompt textarea). Ensure the bar sits visibly **above the Android browser toolbar**, not underneath it, and that opening the keyboard does not obscure text inputs or create huge empty gaps.
+- Reserve bottom content padding dynamically based on dock height and safe area so final buttons/fields are not hidden by the dock. Toast positions must remain above the dock.
+- No horizontal overflow, cut-off status pills, clipping, or full-page sideways scrolling at 320px, 360px, 390px, 412px, phone landscape and tablet breakpoints; maintain contrast and readable text at 125–150% zoom.
+- Preserve deep-link navigation, active-state selection, primary app view routing, and all animation subtab behavior proposed in UI item #2.
+
+### Shared progress architecture
+
+- A **single front-end job status channel** (custom event or shared small UI state store) receives the already-available image and animation status updates. Reuse existing `image.js` and `animation.js` polling loops; do not introduce a third independent network poller or duplicate generation jobs.
+- Header mini-bar represents **overall job progress only**. The detailed Animation Monitor retains the two dedicated overall and current-diffusion-step bars from UI item #2.
+- Handle page switching, reconnect/reload, job completion and cancellation without stale `100%` or stuck `Rendering` indicators. Clear or time-limit completed status sensibly.
+- Keep the UI cheap to update, avoid DOM thrashing or repeated image requests, and use accessible status/progress semantics without announcing every frame/step to screen readers.
+
+### Acceptance for implementation
+
+- Verify user's Android browser over LAN visually: entire banner/telemetry and bottom navigation fit inside usable viewport with no clipped RAM/VRAM or overlapping browser controls.
+- Test both Android browser chrome expanded/collapsed, keyboard open, portrait/landscape, 320–430px widths and desktop/tablet layouts.
+- Run an Image generation and an Animation render while navigating across tabs. Header mini-progress should show the correct job and open the matching detail/Monitor, while each source screen retains its own progress handling.
+- Confirm navigation remains easy to tap, content remains scrollable to the last input, and console toasts remain visible above the dock. No backend or render engine changes.
+
+**Scope:** Add to `dev-ui` backlog only. Defer implementation until the consolidated UI pass; preserve B6.2 checkpoint and feature branch.
+
 ## Next entries
 
-Append items #5, #6, etc. as supplied by the user. Collect the list before implementing the UI pass.
+Append items #6, #7, etc. as supplied by the user. Collect the list before implementing the UI pass.
