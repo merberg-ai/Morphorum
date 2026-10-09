@@ -729,6 +729,14 @@ def api_animation_render_preview(project_id: str, render_id: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/renders/{project_id}/{render_id}/performance")
+def api_animation_render_performance(project_id: str, render_id: str) -> dict[str, Any]:
+    try:
+        return animation_render_manager.performance_report(project_id, render_id)
+    except AnimationRenderError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.get("/api/animation/video/availability")
 def api_animation_video_availability() -> dict[str, Any]:
     return video_export_manager.available()
