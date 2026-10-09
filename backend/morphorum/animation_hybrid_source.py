@@ -104,6 +104,52 @@ def probe_managed_video(project_id: str, filename: str) -> dict[str, Any]:
     size = path.stat().st_size
     if size <= 0 or size > MAX_UPLOAD_BYTES:
         raise HybridSourceError("Source video is empty or exceeds the 512 MiB limit.")
+    result = _probe_file(path)
+    result.update({"size_bytes": size, "source": "managed-hybrid-video"})
+    return result
+
+
+async def store_managed_video(project_id: str, filename: str, chunks: Any) -> dict[str, Any]:
+    """Stream to an isolated temp file, validate via ffprobe, atomically publish.
+
+    Never replaces a previously accepted asset if the new upload/probe fails.
+    """
+    import os
+    import tempfile
+
+    destination = managed_video_path(project_id, filename)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".hybrid-upload-", suffix=destination.suffix, dir=destination.parent
+    )
+    temporary = Path(temporary_name)
+    total = 0
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            async for chunk in chunks:
+                if not isinstance(chunk, bytes):
+                    raise HybridSourceError("Video upload contains invalid binary data.")
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise HybridSourceError("Source video exceeds the 512 MiB limit.")
+                handle.write(chunk)
+        if total == 0:
+            raise HybridSourceError("Source video is empty.")
+        # Probe temp file directly before replacing the current accepted source.
+        info = _probe_file(temporary)
+        os.replace(temporary, destination)
+        info.update({
+            "size_bytes": total,
+            "filename": Path(filename).name[:160],
+            "source": "managed-hybrid-video",
+            "storage_name": destination.name,
+        })
+        return info
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _probe_file(path: Path) -> dict[str, Any]:
     ffmpeg = ffmpeg_executable()
     if not ffmpeg:
         raise HybridSourceError("FFmpeg/FFprobe is not installed.")
@@ -114,15 +160,12 @@ def probe_managed_video(project_id: str, filename: str) -> dict[str, Any]:
         raise HybridSourceError("FFprobe executable was not found next to FFmpeg.")
     try:
         completed = subprocess.run(
-            [str(executable), "-v", "error", "-show_entries",
-             "stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,duration,disposition:"
-             "format=duration", "-of", "json", str(path)],
+            [str(executable), "-v", "error", "-show_streams", "-show_format",
+             "-of", "json", str(path)],
             check=False, capture_output=True, text=True, timeout=MAX_PROBE_SECONDS,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise HybridSourceError("FFprobe failed to inspect the video.") from exc
     if completed.returncode:
         raise HybridSourceError("FFprobe rejected the source video.")
-    result = parse_ffprobe_json(completed.stdout)
-    result.update({"size_bytes": size, "source": "managed-hybrid-video"})
-    return result
+    return parse_ffprobe_json(completed.stdout)

@@ -54,6 +54,9 @@ from .animation_render import (
     AnimationRenderError,
     animation_render_manager,
 )
+from .animation_hybrid_source import (
+    HybridSourceError, managed_video_path, probe_managed_video, store_managed_video,
+)
 from .animation_video import (
     VideoExportError,
     video_export_manager,
@@ -471,6 +474,36 @@ def api_set_animation_timeline_interpolation(
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TimelineError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}/hybrid-video", status_code=201)
+async def api_upload_hybrid_video(project_id: str, request: Request) -> dict[str, Any]:
+    """B6.2 managed video upload only; does not change active render semantics."""
+    try:
+        load_animation_project(project_id)
+        filename = str(request.headers.get("x-filename") or "source.mp4")
+        info = await store_managed_video(project_id, filename, request.stream())
+        emit_console("info", "animation",
+                     f"B6.2 managed hybrid source accepted for {project_id}.")
+        return {"status": "uploaded", "video": info, "render_enabled": False}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/hybrid-video")
+def api_hybrid_video_status(project_id: str, filename: str = "source.mp4") -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return {
+            "video": probe_managed_video(project_id, filename),
+            "render_enabled": False,
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

@@ -9,3 +9,7 @@ The Deforum popup now uses one scrollable dialog rather than nested scroll panes
 `animation_hybrid_source.py` contains a separately testable managed source path and FFprobe JSON normalizer. This is groundwork, **not yet a video upload or frame extraction endpoint**. The module rejects path components, uses project-managed storage, bounds sizes and metadata, and never executes imported paths. The next implementation packet adds browser streaming upload, atomic managed asset persistence, deterministic FFmpeg extraction jobs, progress/cancel, per-project metadata, and a source frame preview. Hybrid render/composite is not enabled until B6.3.
 
 Physical gates: first confirm the importer layout fix, then B6.1 short SDXL render; do not checkpoint B6.1 on file import alone.
+
+## B6.2 managed upload backend packet
+
+`PUT /api/animation/projects/{project_id}/hybrid-video` accepts browser-sent raw video bytes with `x-filename`; it streams to a bounded temporary file and only atomically replaces a previously accepted source after FFprobe accepts video metadata. `GET /api/animation/projects/{project_id}/hybrid-video?filename=source.mp4` re-probes the managed file. Both return `render_enabled: false`. Frontend upload selection, source manifest, extraction jobs, previews, cancel/restart, and rendering integration remain upcoming. The on-disk source is isolated under the project’s managed `assets/hybrid/` folder.
