@@ -55,6 +55,7 @@
     jobs: { image: null, animation: null },
     settingsDirty: false,
     settingsTab: 'appearance',
+    foregroundJobType: null,
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -102,9 +103,12 @@
   function updateGlobalJobStatus() {
     const panel = qs('#global-job-status');
     if (!panel) return;
-    const current = Object.values(state.jobs).filter(job => job &&
-      ['queued','loading_model','generating','rendering','finalizing','paused','pause_requested'].includes(job.status))
-      .sort((a,b) => b.updated - a.updated)[0];
+    const active = Object.values(state.jobs).filter(job => job &&
+      ['queued','loading_model','generating','rendering','finalizing','paused','pause_requested'].includes(job.status));
+    if (!active.some(job => job.type === state.foregroundJobType)) {
+      state.foregroundJobType = active[0]?.type || null;
+    }
+    const current = active.find(job => job.type === state.foregroundJobType);
     panel.hidden = !current;
     panel.dataset.jobType = current?.type || '';
     if (!current) return;

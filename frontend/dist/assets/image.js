@@ -111,7 +111,10 @@
     draftTimer = null;
     state.draft = null;
     state.restoredModel = '';
-    try { localStorage.removeItem(IMAGE_DRAFT_KEY); } catch (_) {}
+    try {
+      localStorage.removeItem(IMAGE_DRAFT_KEY);
+      localStorage.removeItem('morphorum.image.modelId');
+    } catch (_) {}
     qs('#image-prompt').value = '';
     qs('#image-negative-prompt').value = '';
     qs('#image-seed').value = '-1';

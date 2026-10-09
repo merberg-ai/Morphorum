@@ -723,3 +723,9 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   body.mobile-keyboard-open .topbar {position:static;}
   body.mobile-keyboard-open .app-shell {padding-bottom:20px;}
 }
+
+/* Remove redundant launch-era milestone headlines on narrow viewports. */
+@media(max-width:640px) {
+  .page-heading > div > .eyebrow {display:none;}
+  .page-heading > div > p.muted {font-size:.78rem;line-height:1.35;}
+}
