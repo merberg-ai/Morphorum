@@ -360,6 +360,74 @@ before saving. Regular manual keyframes remain supported.
    model/LoRAs and record anchor diffusion time, GPU VRAM reserved,
    and number of resident LoRAs. B5.3 does not change this pipeline.
 
+## B5.4: FFmpeg video output (implemented, pending physical Windows test)
+
+**Checkpoint:** B5.3, validated on Windows with the preview GIF,
+is preserved at `checkpoint/b5-3-preview-gpu-verified-20261008`
+(commit `cd280280e3e5df8f3dad2ff2f8c7f4c4a3d1a99d`).
+
+B5.4 adds MP4/WebM outputs from **existing completed animation PNG
+sequences**. It never performs diffusion or reloads any model/LoRA.
+A completed render's immutable `render-manifest.json` supplies the
+original FPS and total-frame count. All frames `frame_000000.png`
+through `frame_N.png` must exist before encoding starts. Interrupted
+or cancelled renders must be resumed to completion first.
+
+Backend:
+
+- `GET /api/animation/video/availability`: host FFmpeg installation.
+- `POST /api/animation/renders/{project_id}/{render_id}/video`:
+  enqueue encoding with optional format/quality/fps; omitted or null FPS
+  uses the original render-manifest FPS.
+- `GET /api/animation/video/jobs/{job_id}`: async export status and progress.
+- `GET /api/animation/renders/{project_id}/{render_id}/videos`:
+  export history from persistent JSON records, including after restart.
+- `GET /api/animation/renders/{project_id}/{render_id}/video/{format}/{quality}/{fps}`:
+  download ready video. `?inline=true` enables HTML5 playback.
+
+Encoders: MP4 H.264 via `libx264`, WebM VP9 via `libvpx-vp9`;
+`high`, `balanced`, and `compact` map to codec-specific CRFs.
+Inputs retain original dimensions; FFmpeg scales to even dimensions for
+`yuv420p` as required. No audio. Constant frame rate 1–120 integer FPS.
+The encoder uses argv with no shell, writes a `.part` file and atomically
+renames on success, logs FFmpeg diagnostics, and rejects missing frames,
+unsupported options, or duplicate concurrent variant jobs. Exports live
+under `outputs/animations/<project>/<render>/exports/`.
+
+The Video Export panel is in Animation Render for both 2D and 3D
+completed renders. It offers format, quality, override FPS, progress,
+HTML5 playback, download, and saved export discovery. A missing FFmpeg
+installation is reported to the user before the export starts.
+
+**Windows installation:** `ffmpeg.exe` must be on the Morphorum host's
+`PATH`, or the `MORPHORUM_FFMPEG` environment variable must point
+to its full executable path. Restart Morphorum after changing either.
+LAN clients and phones do not need FFmpeg installed.
+
+### B5.4 physical Windows acceptance gate
+
+1. Confirm Video Export shows `FFmpeg ready`. If FFmpeg is absent, the
+   panel should show installation guidance instead of affecting renders.
+2. Select an already-completed 75-frame render. Export MP4 at Balanced
+   quality with FPS left blank (uses original project FPS). Verify video
+   plays, downloads, has all frames, and no model loads.
+3. Export the same render as WebM. Both encodings should coexist inside
+   the render's `exports/` directory. PNGs, masks, GIF, and render
+   manifest must be unaffected.
+4. Change renders, return, restart Morphorum, and confirm the MP4/WebM
+   exports remain available without encoding again.
+5. Export at another FPS/quality. Separate variants must not overwrite
+   the earlier files. FPS adjustment changes playback speed, not frame
+   synthesis.
+6. Running/cancelled renders should not be exportable. A missing numbered
+   frame must return a descriptive error rather than silent truncation.
+7. CPU encoding and FFmpeg progress should be observable. No CUDA
+   diffusion model or depth estimator should load for this phase.
+
+The backend/browser suite covers validation, encoder command construction,
+job lifecycle, persisted records, download routes and completion gating.
+Actual Windows codecs and browser playback remain at the physical gate.
+
 ## Proposed B5 work order
 
 1. **B5.1 Depth warp quality**: retain the original Z-buffer/occlusion mask,
