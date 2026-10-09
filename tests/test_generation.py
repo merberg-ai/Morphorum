@@ -1030,8 +1030,9 @@ class FakeVerifiedSDXLComponent:
 class FakeSDXLFullRankRepairPipe(FakeSDXLRankBugPipe):
     """The real Diffusers loader fails; the component loader verifies the fix."""
 
-    def __init__(self, *, second_encoder_has_wrapper=False):
+    def __init__(self, *, second_encoder_has_wrapper=False, key_style="peft"):
         super().__init__(partial_unet=True)
+        self.key_style = key_style
         self.unet = FakeVerifiedSDXLComponent("down_blocks.0.attentions.0.to_q")
         self.text_encoder = FakeVerifiedSDXLComponent(
             "encoder.layers.0.self_attn.q_proj"
@@ -1050,14 +1051,19 @@ class FakeSDXLFullRankRepairPipe(FakeSDXLRankBugPipe):
     def lora_state_dict(self, *_args, **kwargs):
         assert kwargs["unet_config"] is self.unet.config
         target = "text_model.encoder.layers.0.self_attn.q_proj"
+        if self.key_style == "kohya":
+            target = target.replace(".q_proj", ".to_q_lora")
+            down, up = ".down.weight", ".up.weight"
+        else:
+            down, up = ".lora_A.weight", ".lora_B.weight"
         return (
             {
                 "unet.down_blocks.0.attentions.0.to_q.lora_A.weight": torch.ones(2, 2),
                 "unet.down_blocks.0.attentions.0.to_q.lora_B.weight": torch.ones(2, 2),
-                f"text_encoder.{target}.lora_A.weight": torch.ones(2, 2),
-                f"text_encoder.{target}.lora_B.weight": torch.ones(2, 2),
-                f"text_encoder_2.{target}.lora_A.weight": torch.ones(2, 2),
-                f"text_encoder_2.{target}.lora_B.weight": torch.ones(2, 2),
+                f"text_encoder.{target}{down}": torch.ones(2, 2),
+                f"text_encoder.{target}{up}": torch.ones(2, 2),
+                f"text_encoder_2.{target}{down}": torch.ones(2, 2),
+                f"text_encoder_2.{target}{up}": torch.ones(2, 2),
             },
             {
                 f"text_encoder.{target}.alpha": 2.0,
@@ -1074,8 +1080,13 @@ class FakeSDXLFullRankRepairPipe(FakeSDXLRankBugPipe):
         encoder = kwargs["text_encoder"]
         prefix = kwargs["prefix"]
         module = encoder.target
-        assert f"{prefix}.{module}.lora_A.weight" in state_dict
-        assert f"{prefix}.{module}.lora_B.weight" in state_dict
+        if self.key_style == "kohya":
+            module = module.replace(".q_proj", ".to_q_lora")
+            down, up = ".down.weight", ".up.weight"
+        else:
+            down, up = ".lora_A.weight", ".lora_B.weight"
+        assert f"{prefix}.{module}{down}" in state_dict
+        assert f"{prefix}.{module}{up}" in state_dict
         assert f"{prefix}.{module}.alpha" in kwargs["network_alphas"]
         encoder.inject(kwargs["adapter_name"])
         self.encoder_loads.append(prefix)
@@ -1088,14 +1099,16 @@ class FakeSDXLFullRankRepairPipe(FakeSDXLRankBugPipe):
 
 
 @pytest.mark.parametrize("second_encoder_has_wrapper", [False, True])
+@pytest.mark.parametrize("key_style", ["peft", "kohya"])
 def test_sdxl_rank_bug_restores_both_text_encoders_and_alphas(
-    tmp_path, second_encoder_has_wrapper,
+    tmp_path, second_encoder_has_wrapper, key_style,
 ) -> None:
     path = tmp_path / "mixed-sdxl.safetensors"
     _write_mixed_sdxl_lora(path)
     manager = GenerationManager()
     pipe = FakeSDXLFullRankRepairPipe(
-        second_encoder_has_wrapper=second_encoder_has_wrapper
+        second_encoder_has_wrapper=second_encoder_has_wrapper,
+        key_style=key_style,
     )
     model = fake_model(tmp_path / "model.safetensors", "sdxl")
     item = {
@@ -1135,7 +1148,7 @@ def test_sdxl_namespace_normalizer_rejects_unsupported_clip_modules() -> None:
         "text_encoder.text_model.unknown.layers.0.q_proj.lora_B.weight":
             torch.ones(2, 2),
     }
-    with pytest.raises(GenerationError, match="has no match"):
+    with pytest.raises(GenerationError, match="no complete CLIP LoRA rank match"):
         GenerationManager._normalize_sdxl_text_encoder_keys(
             pipe, state, {}, None
         )
