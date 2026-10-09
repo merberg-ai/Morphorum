@@ -188,3 +188,57 @@ def test_b51_legacy_default_is_exact_match_with_explicit_mode() -> None:
     assert implicit.telemetry["warp"] == "depth-forward-zbuffer-nearest-fill"
     assert implicit.telemetry["projection_mode"] == "legacy"
     assert implicit.telemetry["fill_mode"] == "nearest"
+
+
+def test_b52_reverse_camera_chain_inverse_matches_forward_math() -> None:
+    from morphorum.animation_3d import _rotation_matrix, reverse_camera_chain
+
+    steps = [
+        {"translation_x": 0.02, "translation_y": -0.01,
+         "translation_z": 0.005, "rotation_x": 0.3,
+         "rotation_y": -0.5, "rotation_z": 0.8},
+        {"translation_x": -0.03, "translation_y": 0.02,
+         "translation_z": 0.004, "rotation_x": -0.4,
+         "rotation_y": 0.6, "rotation_z": -0.1},
+    ]
+    point = np.array([[0.03, -0.08, 2.4]], dtype=np.float64)
+    changed = point.copy()
+    for step in steps:
+        r = _rotation_matrix(
+            step["rotation_x"], step["rotation_y"], step["rotation_z"],
+        ).astype(np.float64)
+        t = np.array([
+            step["translation_x"], step["translation_y"],
+            step["translation_z"],
+        ])
+        changed = (changed - t) @ r
+
+    matrix, offset = reverse_camera_chain(steps)
+    original = changed @ matrix + offset
+    np.testing.assert_allclose(original, point, atol=1e-6)
+
+
+def test_b52_reprojection_identity_matrix_does_not_shift_frame() -> None:
+    image = Image.new("RGB", (24, 24), "teal")
+    depth = np.full((24, 24), 0.4, dtype=np.float32)
+    from morphorum.animation_3d import reverse_camera_chain
+    matrix, offset = reverse_camera_chain([])
+    warped = render_depth_warp(
+        image, depth, projection_mode="splat",
+        transform_matrix=matrix, transform_offset=offset,
+    )
+    assert np.array_equal(np.asarray(warped.image), np.asarray(image))
+    assert warped.telemetry["projected_coverage"] == pytest.approx(1.0)
+
+
+def test_b52_reprojection_rejects_bad_matrices() -> None:
+    image = Image.new("RGB", (16, 16), "black")
+    depth = np.full((16, 16), 0.5, dtype=np.float32)
+    with pytest.raises(Camera3DError, match="both matrix and offset"):
+        render_depth_warp(image, depth, transform_matrix=np.eye(3))
+    with pytest.raises(Camera3DError, match="finite 3x3"):
+        render_depth_warp(
+            image, depth,
+            transform_matrix=np.full((3, 3), np.nan),
+            transform_offset=np.zeros(3),
+        )
