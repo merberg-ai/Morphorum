@@ -231,7 +231,16 @@
     } catch (error) {
       const list = qs('#managed-model-list');
       if (list) {
-        list.innerHTML = `<div class="model-empty"><strong>Could not load managed catalog</strong><span>${String(error.message)}</span></div>`;
+        {
+          const empty = document.createElement('div');
+          empty.className = 'model-empty';
+          const title = document.createElement('strong');
+          title.textContent = 'Could not load ' + 'managed catalog';
+          const detail = document.createElement('span');
+          detail.textContent = String(error.message);
+          empty.append(title, detail);
+          list.replaceChildren(empty);
+        }
       }
       toast('Managed model catalog unavailable', error.message, 'error', 6500);
     }
@@ -279,17 +288,7 @@
     });
   }
 
-  function copyText(text) {
-    if (navigator.clipboard?.writeText && window.isSecureContext) return navigator.clipboard.writeText(text);
-    const area = document.createElement('textarea');
-    area.value = text;
-    area.style.position = 'fixed';
-    area.style.opacity = '0';
-    document.body.appendChild(area);
-    area.select();
-    try { document.execCommand('copy'); } finally { area.remove(); }
-    return Promise.resolve();
-  }
+  function copyText(text) { return window.MorphorumClipboard.writeText(text); }
 
   function modelRow(model) {
     const row = document.createElement('div');
@@ -436,7 +435,16 @@
       populateImageModelSelect();
       if (announce) toast('Model index loaded', `${state.models.length} file(s) available.`, 'success');
     } catch (error) {
-      if (list) list.innerHTML = `<div class="model-empty"><strong>Could not load model index</strong><span>${String(error.message)}</span></div>`;
+      if (list) {
+          const empty = document.createElement('div');
+          empty.className = 'model-empty';
+          const title = document.createElement('strong');
+          title.textContent = 'Could not load ' + 'model index';
+          const detail = document.createElement('span');
+          detail.textContent = String(error.message);
+          empty.append(title, detail);
+          list.replaceChildren(empty);
+        }
       toast('Model index unavailable', error.message, 'error', 6500);
     }
   }

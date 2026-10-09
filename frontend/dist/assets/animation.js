@@ -3214,7 +3214,10 @@
       'This is an advisory warning, not a VRAM estimate or a hardware limit.' +
       (memory ? '\n\n' + memory : '') +
       '\n\nFor a new resolution, a short single-image/short-animation test is recommended before a long render. Start anyway?';
-    return window.confirm(message);
+    return window.MorphorumDialog.confirm({
+      title: 'High-resolution render warning', message, variant: 'warning',
+      confirmText: 'Start Render', cancelText: 'Cancel',
+    });
   }
 
   async function startAnimationRender() {
@@ -3569,9 +3572,11 @@
     }
     if (
       state.dirty &&
-      !window.confirm(
-        'This opens the imported project and discards unsaved changes in the current browser project. Continue?'
-      )
+      !(await window.MorphorumDialog.confirm({
+        title: 'Discard unsaved animation edits?',
+        message: 'This opens the imported project and discards unsaved changes in the current browser project.',
+        variant: 'danger', confirmText: 'Discard & Import', cancelText: 'Keep Editing',
+      }))
     ) {
       return;
     }
@@ -3645,7 +3650,11 @@
     if (
       confirmDirty &&
       state.dirty &&
-      !window.confirm('Discard unsaved animation project changes?')
+      !(await window.MorphorumDialog.confirm({
+        title: 'Switch animation projects?',
+        message: 'The current project has unsaved edits. Switching projects will discard those edits.',
+        variant: 'danger', confirmText: 'Discard & Switch', cancelText: 'Keep Editing',
+      }))
     ) {
       renderProjectSelect();
       return;
@@ -3675,7 +3684,12 @@
   }
 
   async function createProject() {
-    const requestedName = window.prompt('New animation project name:', 'New Animation');
+    const requestedName = await window.MorphorumDialog.prompt({
+      title: 'New animation project', message: 'Give the new animation project a name.',
+      initialValue: 'New Animation', inputLabel: 'Project name', maxLength: 120,
+      validate: value => value ? '' : 'Enter a project name.',
+      confirmText: 'Create Project',
+    });
     if (requestedName === null) return;
     const name = String(requestedName).trim();
     if (!name) {
