@@ -79,7 +79,14 @@ from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
-from .system_info import doctor_report, git_branch, git_commit, install_manifest, live_telemetry
+from .system_info import (
+    doctor_report,
+    git_branch,
+    git_commit,
+    install_manifest,
+    live_telemetry,
+    windows_gpu_process_memory,
+)
 
 FRONTEND_DIR = ROOT / "frontend" / "dist"
 FRONTEND_INDEX = FRONTEND_DIR / "index.html"
@@ -190,8 +197,10 @@ def system_telemetry() -> dict:
 
 @app.get("/api/system/gpu-memory")
 def system_gpu_memory() -> dict[str, Any]:
-    """Read Morphorum's own CUDA allocator state without changing it."""
-    return generation_manager.memory_profile()
+    """Read Morphorum's own CUDA allocator state plus on-demand WDDM counters."""
+    profile = generation_manager.memory_profile()
+    profile["windows_wddm"] = windows_gpu_process_memory()
+    return profile
 
 
 @app.get("/api/install")

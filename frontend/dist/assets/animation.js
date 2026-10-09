@@ -2762,6 +2762,21 @@
       ' · avg diffusion ' + secs(perf.average_anchor_diffusion_seconds) +
       ' · max GPU allocated ' + gb(perf.maximum_allocated_gib) +
       ' · max reserved ' + gb(perf.maximum_reserved_gib) +
+      (perf.maximum_peak_allocated_gib
+        ? ' · allocator peak ' + gb(perf.maximum_peak_allocated_gib)
+        : '') +
+      (perf.maximum_active_gib
+        ? ' · max active ' + gb(perf.maximum_active_gib)
+        : '') +
+      (perf.allocator_backend
+        ? ' · allocator ' + perf.allocator_backend
+        : '') +
+      (Number(perf.allocation_retries || 0)
+        ? ' · alloc retries ' + perf.allocation_retries
+        : '') +
+      (Number(perf.oom_count || 0)
+        ? ' · OOM count ' + perf.oom_count
+        : '') +
       ' · resident LoRAs ≤ ' + perf.maximum_resident_loras +
       ' · execution ' + (perf.pipeline_device || 'not recorded') +
       ' · ' + (perf.optimization || 'unavailable');

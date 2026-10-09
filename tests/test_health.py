@@ -56,5 +56,7 @@ def test_gpu_memory_profile_endpoint_is_read_only_surface() -> None:
     assert "cuda_available" in payload
     assert "cuda" in payload
     assert "model" in payload
+    assert "windows_wddm" in payload
+    assert "available" in payload["windows_wddm"]
     assert "high-water" in payload["notes"]["peak_scope"]
     assert "Read-only" in payload["notes"]["sampling"]

@@ -108,6 +108,11 @@ test('B5.5 displays bounded render summary and read-only JSON report link', () =
       average_anchor_diffusion_seconds: 5.2,
       maximum_allocated_gib: 14.2,
       maximum_reserved_gib: 15.1,
+      maximum_peak_allocated_gib: 15.36,
+      maximum_active_gib: 14.0,
+      allocator_backend: 'native',
+      allocation_retries: 2,
+      oom_count: 0,
       maximum_resident_loras: 3,
       pipeline_device: 'cuda', optimization: 'native-gpu',
       slow_anchor_frames: [9],
@@ -115,6 +120,10 @@ test('B5.5 displays bounded render summary and read-only JSON report link', () =
   });
   assert.equal(dom['#animation-performance-summary'].hidden, false);
   assert.match(dom['#animation-performance-stats'].textContent, /avg diffusion 5\.20s/);
+  assert.match(dom['#animation-performance-stats'].textContent, /allocator peak 15\.36 GiB/);
+  assert.match(dom['#animation-performance-stats'].textContent, /max active 14\.00 GiB/);
+  assert.match(dom['#animation-performance-stats'].textContent, /allocator native/);
+  assert.match(dom['#animation-performance-stats'].textContent, /alloc retries 2/);
   assert.match(dom['#animation-performance-stats'].textContent, /resident LoRAs ≤ 3/);
   assert.match(dom['#animation-performance-stats'].textContent, /slow anchors 9/);
   assert.equal(dom['#animation-performance-report'].href,

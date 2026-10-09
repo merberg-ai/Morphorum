@@ -145,6 +145,105 @@ def live_telemetry() -> dict:
     return payload
 
 
+def windows_gpu_process_memory(pid: int | None = None) -> dict:
+    """Return low-frequency WDDM GPU memory counters for one Windows process.
+
+    Windows performance counters are intentionally sampled only on demand.
+    They are a corroborating diagnostic signal, not a hot-loop profiler or an
+    authoritative replacement for PyTorch allocator/device memory statistics.
+    """
+    target_pid = int(pid if pid is not None else os.getpid())
+    if platform.system().lower() != "windows":
+        return {
+            "available": False,
+            "pid": target_pid,
+            "source": "windows-performance-counters",
+            "reason": "WDDM process GPU counters are only available on Windows.",
+        }
+
+    shell = (
+        shutil.which("powershell.exe")
+        or shutil.which("powershell")
+        or shutil.which("pwsh.exe")
+        or shutil.which("pwsh")
+    )
+    if not shell:
+        return {
+            "available": False,
+            "pid": target_pid,
+            "source": "windows-performance-counters",
+            "reason": "PowerShell was not found; WDDM GPU process counters were not sampled.",
+        }
+
+    script = (
+        f"$targetPid = {target_pid}; "
+        r"$counterPaths = @("
+        r"'\GPU Process Memory(*)\Dedicated Usage',"
+        r"'\GPU Process Memory(*)\Shared Usage'"
+        r"); "
+        r"try { "
+        r"$samples = (Get-Counter -Counter $counterPaths -ErrorAction Stop).CounterSamples "
+        r"| Where-Object { $_.InstanceName -like ('pid_' + $targetPid + '_*') }; "
+        r"$dedicated = ($samples | Where-Object { $_.Path -like '*\Dedicated Usage' } "
+        r"| Measure-Object -Property CookedValue -Sum).Sum; "
+        r"$shared = ($samples | Where-Object { $_.Path -like '*\Shared Usage' } "
+        r"| Measure-Object -Property CookedValue -Sum).Sum; "
+        r"if ($null -eq $dedicated) { $dedicated = 0 }; "
+        r"if ($null -eq $shared) { $shared = 0 }; "
+        r"[pscustomobject]@{ "
+        r"pid = $targetPid; "
+        r"dedicated_bytes = [int64][math]::Round([double]$dedicated); "
+        r"shared_bytes = [int64][math]::Round([double]$shared); "
+        r"sample_count = @($samples).Count "
+        r"} | ConvertTo-Json -Compress "
+        r"} catch { exit 2 }"
+    )
+    output = _run([shell, "-NoProfile", "-NonInteractive", "-Command", script], timeout=5)
+    if not output:
+        return {
+            "available": False,
+            "pid": target_pid,
+            "source": "windows-performance-counters",
+            "reason": (
+                "Windows GPU Process Memory counters could not be read. "
+                "Counters may be unavailable, localized, or inaccessible."
+            ),
+        }
+
+    try:
+        parsed = json.loads(output)
+        if not isinstance(parsed, dict):
+            raise ValueError("counter output is not an object")
+        dedicated = max(0, int(parsed.get("dedicated_bytes", 0) or 0))
+        shared = max(0, int(parsed.get("shared_bytes", 0) or 0))
+        sample_count = max(0, int(parsed.get("sample_count", 0) or 0))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {
+            "available": False,
+            "pid": target_pid,
+            "source": "windows-performance-counters",
+            "reason": "Windows GPU Process Memory counters returned unreadable data.",
+        }
+
+    return {
+        "available": True,
+        "pid": target_pid,
+        "source": "windows-performance-counters",
+        "dedicated_bytes": dedicated,
+        "shared_bytes": shared,
+        "dedicated_gib": round(dedicated / 1024**3, 4),
+        "shared_gib": round(shared / 1024**3, 4),
+        "sample_count": sample_count,
+        "process_instances_found": sample_count > 0,
+        "diagnostic_only": True,
+        "note": (
+            "Correlate with PyTorch mem_get_info/current allocator values and Task Manager "
+            "GPU Performance data; do not interpret this process counter alone as proof "
+            "of physical residency or paging."
+        ),
+    }
+
+
 def doctor_report() -> dict:
     ensure_runtime_dirs()
     checks: list[Check] = []
