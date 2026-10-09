@@ -160,6 +160,24 @@
     'cadence.diffusion': '#animation-cadence',
   };
 
+  // B5.3: conservative constant per-frame 3D motion schedules.
+  // This does not alter existing presets, FOV, or project model state.
+  const CAMERA_3D_PRESETS = Object.freeze({
+    'still': { translation_x: 0, translation_y: 0, translation_z: 0, rotation_x: 0, rotation_y: 0, rotation_z: 0 },
+    'dolly-in': { translation_z: 0.02 },
+    'dolly-out': { translation_z: -0.02 },
+    'orbit-left': { translation_x: -0.008, rotation_y: 0.18 },
+    'orbit-right': { translation_x: 0.008, rotation_y: -0.18 },
+    'pan-left': { rotation_y: -0.18 },
+    'pan-right': { rotation_y: 0.18 },
+    'tilt-up': { rotation_x: -0.18 },
+    'tilt-down': { rotation_x: 0.18 },
+  });
+  const CAMERA_3D_MOTION_FIELDS = [
+    'translation_x', 'translation_y', 'translation_z',
+    'rotation_x', 'rotation_y', 'rotation_z',
+  ];
+
   const INSPECTOR_INPUT_IDS = new Set([
     'animation-inspector-frame',
     'animation-inspector-slider',
@@ -173,6 +191,8 @@
     'animation-timeline-interpolation',
     'animation-depth-model',
     'animation-depth-device',
+    'animation-3d-preset',
+    'animation-preview-highlight-holes',
   ]);
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -1779,6 +1799,23 @@
     }
   }
 
+  function applyCamera3DPreset() {
+    if (!state.project || animationMode() !== '3d' || state.motionJobId) return;
+    const key = qs('#animation-3d-preset')?.value || '';
+    const values = CAMERA_3D_PRESETS[key];
+    if (!values) return;
+    for (const field of CAMERA_3D_MOTION_FIELDS) {
+      const input = qs('#animation-3d-' + field.replaceAll('_', '-'));
+      if (input) input.value = '0:(' + String(values[field] ?? 0) + ')';
+    }
+    clearMotionPreviewResult();
+    markDirty({ validate: true });
+    refreshInspector();
+    toast('Camera preset applied',
+      'Updated the six 3D camera motion schedules. Save the project to retain them.',
+      'info', 5800);
+  }
+
   function applyCadencePreset() {
     const preset = qs('#animation-cadence-preset');
     const raw = qs('#animation-cadence');
@@ -2285,6 +2322,8 @@
     if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    const overlay = qs('#animation-preview-highlight-holes');
+    if (overlay) overlay.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
@@ -2304,6 +2343,8 @@
     if (image) image.removeAttribute('src');
     const meta = qs('#animation-motion-result-meta');
     if (meta) meta.textContent = '';
+    const coverage = qs('#animation-camera-coverage');
+    if (coverage) { coverage.hidden = true; coverage.textContent = ''; }
     const button = qs('#animation-generate-motion-preview');
     if (button) {
       button.classList.remove('busy');
@@ -2397,7 +2438,25 @@
       const meta = qs('#animation-motion-result-meta');
       if (result) result.hidden = false;
       if (image) image.src = job.url + '?v=' + Date.now();
-      if (meta && job.result) meta.textContent = job.result.preview_width + ' × ' + job.result.preview_height + ' · ' + job.result.captured_frames + ' preview frames from ' + job.result.source_frames + ' project frames · ' + Number(job.result.duration_seconds || 0).toFixed(2) + 's · ' + job.result.border_mode;
+      if (meta && job.result) meta.textContent =
+        job.result.preview_width + ' × ' + job.result.preview_height + ' · ' +
+        job.result.captured_frames + ' preview frames from ' + job.result.source_frames +
+        ' project frames · ' + Number(job.result.duration_seconds || 0).toFixed(2) +
+        's · ' + (job.result.mode === '3d' ? '3D depth on CPU' : job.result.border_mode);
+      const coverage = qs('#animation-camera-coverage');
+      if (coverage) {
+        coverage.hidden = job.result?.mode !== '3d';
+        if (job.result?.mode === '3d') {
+          const pct = value => (100 * Number(value || 0)).toFixed(1) + '%';
+          coverage.textContent = 'Projected coverage: avg ' +
+            pct(job.result.average_coverage) + ' · minimum ' +
+            pct(job.result.minimum_coverage) + ' at frame ' +
+            job.result.worst_coverage_frame + ' · final ' +
+            pct(job.result.last_coverage) + ' · avg exposed ' +
+            pct(1 - Number(job.result.average_coverage || 0)) +
+            (job.result.highlight_holes ? ' · red overlay on' : '');
+        }
+      }
       toast('Motion preview complete', 'No diffusion model was loaded.', 'success');
     } else if (job.status === 'failed') {
       toast('Motion preview failed', job.error || job.message || 'Unknown preview error.', 'error', 8000);
@@ -2432,7 +2491,16 @@
     const fill = qs('#animation-motion-progress-fill');
     if (fill) fill.style.width = '0%';
     try {
-      const job = await api('/api/animation/motion-preview', { method: 'POST', body: JSON.stringify({ project: collectProject() }) });
+      const job = await api('/api/animation/motion-preview', {
+        method: 'POST',
+        body: JSON.stringify({
+          project: collectProject(),
+          options: {
+            highlight_holes: animationMode() === '3d' &&
+              Boolean(qs('#animation-preview-highlight-holes')?.checked),
+          },
+        }),
+      });
       state.motionJobId = job.id;
       updateMotionProgress(job);
       renderSourceState();
@@ -3078,6 +3146,7 @@
     qs('#animation-generate-depth')?.addEventListener('click', () => generateDepthPreview(false));
     qs('#animation-recompute-depth')?.addEventListener('click', () => generateDepthPreview(true));
     qs('#animation-clear-depth')?.addEventListener('click', clearDepthPreview);
+    qs('#animation-3d-apply-preset')?.addEventListener('click', applyCamera3DPreset);
     qs('#animation-cadence-preset')?.addEventListener('change', applyCadencePreset);
     qs('#animation-cadence')?.addEventListener('input', syncCadencePreset);
     qs('#animation-cadence')?.addEventListener('change', syncCadencePreset);
@@ -3095,6 +3164,7 @@
     });
 
     qs('#animation-mode')?.addEventListener('change', () => {
+      clearMotionPreviewResult();
       markDirty({ validate: true });
       syncAnimationModeUi();
       refreshInspector();
