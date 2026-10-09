@@ -18,9 +18,22 @@ Morphorum already has:
 5. `animation_render.py`: 2D/3D camera transforms, cadence, LoRA-aware img2img, temporal future-anchor refinement, resume and frame manifests.
 6. `animation_video.py`: FFmpeg MP4/WebM output assembled from completed PNGs.
 
-Morphorum does **not** yet have a Deforum settings importer or hybrid video-frame source/compositor. Legacy Deforum JSON must translate into the native Morphorum project, not become a new parallel render engine.
+Morphorum now has a B6.1 Deforum settings importer that translates legacy JSON/JSON-serialized TXT into native Morphorum projects. It still does **not** have a hybrid video-frame source/compositor. Legacy Deforum settings remain a translation/compatibility layer, not a parallel render engine.
 
-## B6.0-P: High-resolution GPU memory investigation (priority before full-size B6 rendering)
+## Implementation status — automated checkpoint `d982a32`
+
+As of this checkpoint:
+
+- **B6.1 implemented, automated gate passed:** safe size/depth-bounded JSON parser; explicit rejection of executable/non-JSON TXT; mapping preview; unsupported/unmapped passive metadata; imported checkpoint paths ignored; explicit indexed-model selection; new-project-only persistence; browser-local file selection; golden 2D/3D fixtures; save/reopen and timeline/resolved-frame agreement tests.
+- **B6.0-P diagnostics implemented, automated gate passed:** allocator backend/current/peak/active/inactive statistics, allocation retry/OOM counters, per-frame phase samples without forced synchronization, `GET /api/system/gpu-memory`, on-demand Windows WDDM process dedicated/shared counters, and an advisory confirmation above the physically verified 512×512 pixel count.
+- **First opt-in memory strategy implemented:** `performance.sdxl_vae_tiling`, default **false**. It only changes SDXL when explicitly enabled and records `native-gpu+vae-tiling` when active.
+- **CI at `d982a32`:** 273 Python tests passed, 17 browser tests passed, Morphorum self-test passed.
+- **Not physically accepted yet:** B6.1 Windows UI/short render, WDDM counter readings on the target machine, native 768/1024 SDXL, and SDXL VAE tiling A/B quality/performance.
+- **Not implemented:** B6.2 hybrid video upload/extraction and B6.3 hybrid compositing/masks.
+
+The exact physical procedure is in `docs/B6_PHYSICAL_ACCEPTANCE.md`. Do not create a B6.1 GPU/UI checkpoint until that gate passes.
+
+## B6.0-P: High-resolution GPU memory investigation (code-side prep complete; physical gate pending)
 
 The B5.5 verified run succeeded for 75 SDXL frames at 512x512 with
 cadence 3, three resident LoRAs, CUDA `native-gpu`, 14.41 GiB
@@ -87,7 +100,7 @@ tests; avoid entangling importer correctness with GPU experiments.
 
 ## B6.1: Safe legacy Deforum JSON/TXT import
 
-**First implementation milestone.** Separate parsing, translation/compatibility warnings, and persistence.
+**Implementation is present and automated-test gated at `d982a32`; Windows UI/short-render acceptance is still pending.** Parsing, translation/compatibility warnings, browser preview, explicit model binding and new-project persistence are separate stages.
 
 ### Input and safety
 
@@ -152,4 +165,4 @@ Where Deforum uses units/signs/coordinate conventions that differ from Morphorum
 - Implement a milestone completely with unit/browser/regression CI before each physical GPU/UI gate.
 - Prefer minimal additive modules and explicit compatibility warnings.
 - Keep renderer changes opt-in and preserve the B5.5 checkpoint.
-- The B6 branch is initially a **planning/audit baseline**; no Deforum input is accepted until B6.1 parser, translation, tests and UI are implemented.
+- B6.1 input is now accepted through the safe preview/create importer, but this does not imply full Deforum parity. Unsupported keys remain passive metadata and the Windows visual gate controls checkpoint status.

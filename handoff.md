@@ -7,9 +7,11 @@
 **B5.5 physically verified code SHA:** `e9ea6d0491b8ad57f1bc7539514fe8cb9c7063d3`  
 **B6 opening roadmap SHA:** `6992cdd342b69508030a063dd93026f64945f992`  
 **B6 high-resolution planning SHA:** `855f32d920cb8d0a9cd7d29b8da6244422b4054a`  
-**This file:** a project-state reference and continuation handoff; it is not evidence that B6.1 or larger-resolution rendering has already passed testing.
+**B6 automated code checkpoint:** `d982a323e946fb652cb11fdaf6b50d99a1e8adcb` — 273 Python tests, 17 browser tests, and Morphorum self-test passed  
+**B6 physical acceptance checklist:** `docs/B6_PHYSICAL_ACCEPTANCE.md`  
+**This file:** a project-state reference and continuation handoff. B6.1 and B6.0-P now have test-gated implementation work, but their Windows UI/GPU physical gates are still pending.
 
-> **Immediate handoff:** B5 is **done and GPU-verified**. The native SDXL/Flux/Z-Image image/animation framework, Deforum-style schedules, 2D/3D camera motion, SDXL and Flux LoRAs, cadence, depth, optional future-anchor refinement, 3D preview, MP4/WebM export, performance telemetry, and interruption/resume are implemented. Preserve the B5.5 checkpoint. B6 has a new branch and complete milestone roadmap but its **Deforum import/hybrid video implementations have not begun**. Before pushing toward large frames, investigate the near-full 16 GiB CUDA allocation seen in B5.5 and implement only test-gated, opt-in memory strategies.
+> **Immediate handoff:** B5 is **done and GPU-verified**; preserve the B5.5 checkpoint. On B6, the safe Deforum settings importer and browser preview/create flow are implemented and CI-gated, including golden 2D/3D round trips. B6.0-P also now has allocator-aware CUDA telemetry, phase memory samples, on-demand Windows WDDM process-memory correlation, an advisory high-resolution preflight, and an **opt-in, default-off SDXL VAE tiling mode**. Automated code checkpoint `d982a32` passed 273 Python tests, 17 browser tests, and Morphorum self-test. **None of this is yet a Windows physical acceptance result:** B6.1 still needs UI + short-render validation, and 768/1024 native/tiling GPU tests still need to run on the RTX 4080 SUPER. Hybrid video input/compositing has not begun.
 
 ---
 
@@ -26,9 +28,11 @@
 | `checkpoint/b5-1-depth-quality-gpu-verified-20261008` | See GitHub ref | Working B5.1 baseline |
 | `checkpoint/b4-sdxl-flux-loras-working-20261008` | See GitHub ref | SDXL + Flux single-image LoRA verified |
 | `checkpoint/b5-cadence-lora-gpu-stable-20261008` | See GitHub ref | Cadence plus LoRA stability milestone |
-| `feature/deforum-compatibility-hybrid-b6` | Opened from `e9ea6d0`; first roadmap commits `6992cdd` and `855f32d` | **New active B6 branch. No B6 importer/hybrid runtime code yet.** |
+| `feature/deforum-compatibility-hybrid-b6` | Automated code checkpoint `d982a323e946fb652cb11fdaf6b50d99a1e8adcb` | **Active B6 branch. B6.1 importer + B6.0-P diagnostics/opt-in VAE tiling implemented and CI-gated; Windows physical gates pending. Hybrid video runtime not started.** |
 
-The B5.5 release candidate reached **247 backend tests passed, 14 browser tests passed, built-in self-test passed**, and received physical Windows acceptance. GitHub Actions reported success at the B5.5 commit on both the backend and syntax/browser workflows. These automated results are specific to the B5.5 commit, not an untested future B6 implementation.
+The B5.5 release candidate reached **247 backend tests passed, 14 browser tests passed, built-in self-test passed**, and received physical Windows acceptance. GitHub Actions reported success at the B5.5 commit on both the backend and syntax/browser workflows.
+
+The current B6 automated code checkpoint `d982a32` reached **273 Python tests passed, 17 browser tests passed, and Morphorum self-test passed**. Those results validate parser/UI/contracts and CPU-testable behavior only. They do **not** certify Windows WDDM counters, Deforum visual equivalence, SDXL VAE tiling quality/performance, or 768/1024 GPU headroom.
 
 The user also successfully validated B5.4 MP4 and WebM video output on Windows, B5.3 3D motion preview, B5.2 temporal improvements, B5.1 projection improvements, and cadence/LoRA single-image and animation paths.
 
@@ -69,9 +73,11 @@ Goals:
 - 2D and depth-aware 3D image-space camera transforms with diffusion cadence.
 - Optional temporal anchor refinement and local video export.
 - Responsive, phone-usable UI, LAN operation, no dependency on keeping a browser tab open.
-- Future Deforum import, hybrid video sources, compositing, interpolation, and extensions.
+- Safe legacy Deforum settings import through translation into native Morphorum projects; future hybrid video sources, compositing, interpolation, and extensions.
 
-**Not implemented merely because it appears in a roadmap:** full Deforum JSON import, hybrid video source, optical flow/RAFT, ControlNet, RIFE/FILM, audio-reactive curves, generic extension/plugin SDK, or automated high-resolution GPU memory tuning.
+**Implemented on B6 but not yet physically accepted:** Deforum JSON/JSON-serialized TXT import preview/create, allocator-aware GPU diagnostics, Windows WDDM process-memory correlation, high-resolution advisory preflight, and opt-in SDXL VAE tiling.
+
+**Not implemented merely because it appears in a roadmap:** hybrid video source/compositing, optical flow/RAFT, ControlNet, RIFE/FILM, audio-reactive curves, generic extension/plugin SDK, automatic memory-mode selection, or a physically verified general high-resolution GPU profile.
 
 ## 3. Target environment and installation
 
@@ -128,12 +134,15 @@ If the development dependencies are installed: `uv run --group dev pytest` and `
 | `backend/morphorum/animation_motion.py` | Motion-only CPU previews, presets and coverage diagnostics |
 | `backend/morphorum/animation_performance.py` | JSONL per-frame timings, CUDA samples, LoRA residency, summary/restart handling |
 | `backend/morphorum/animation_video.py` | Independent FFmpeg MP4/WebM background export jobs and stored export history |
+| `backend/morphorum/deforum_import.py` | B6.1 untrusted Deforum JSON parsing, compatibility translation/reporting and new-project import |
+| `backend/morphorum/system_info.py` | System telemetry plus on-demand Windows WDDM per-process dedicated/shared GPU diagnostics |
 | `backend/morphorum/model_index.py`, `managed_models.py` | Model scanning/lookup and managed model download |
 | `frontend/dist/index.html` | Workspaces and controls |
 | `frontend/dist/assets/animation.js` + `animation.css` | Animation UI, cadence/3D scheduling, preview, render monitoring, performance, video export |
 | `docs/B5_3D_CADENCE_PLAN.md` | B5 implementation/physical gate history |
 | `docs/PERFORMANCE_CADENCE.md` | B4 LoRA/Flux performance investigations, tested fixes and caveats |
-| `docs/B6_DEFORUM_HYBRID_PLAN.md` | **Current B6 roadmap**, including prioritized high-resolution investigation |
+| `docs/B6_DEFORUM_HYBRID_PLAN.md` | **Current B6 roadmap**, including implementation status and high-resolution investigation |
+| `docs/B6_PHYSICAL_ACCEPTANCE.md` | **Next gate:** Windows Deforum-import + RTX 4080 SUPER 512/768/1024 native-vs-VAE-tiling acceptance checklist |
 | `docs/TIMELINE_SCHEMA.md` / `ANIMATION_PROJECTS.md` / `SCHEDULES.md` | Project compatibility contract |
 | `tests/` and `.github/workflows/` | Python/JavaScript regression suites, backend/syntax CI |
 | `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` | Product overview, architecture, historical/future scope |
@@ -167,7 +176,8 @@ Native animation schema version **2** contains:
 
 ### Functional API landmarks
 
-- `GET /api/health`; `GET /api/system/telemetry`
+- `GET /api/health`; `GET /api/system/telemetry`; `GET /api/system/gpu-memory` (PyTorch allocator + on-demand Windows WDDM diagnostics)
+- `POST /api/animation/import/deforum/preview`; `POST /api/animation/import/deforum/create`
 - `GET|POST|PUT /api/animation/projects...`; source-image upload and depth preview routes
 - `GET /api/animation/timeline/descriptors` and project timeline/track endpoints
 - `POST /api/animation/resolve-frame`; `POST /api/animation/resolve-timeline`; `POST /api/animation/validate-schedules`
@@ -410,6 +420,8 @@ Longer-term backlog in `docs/ROADMAP.md` includes optical flow (RAFT or equivale
 
 **Baseline verification (B5.5):** 247 Python backend tests, 14 Node/browser tests, Morphorum self-test; successful real SDXL/Flux LoRA and long 3D/cadence tests. The exact B5.5 CI result is the reference, not a permanent count.
 
+**Current B6 automated checkpoint (`d982a32`):** 273 Python tests, 17 Node/browser tests, and Morphorum self-test passed. B6.1 golden 2D/3D fixtures cover safe parsing, mapping, save/reopen, timeline/resolved-frame agreement, unsupported settings, malicious paths/expressions and explicit model binding. B6.0-P tests cover allocator labels, phase samples, WDDM parser behavior, advisory high-resolution confirmation and default-off SDXL VAE tiling. Physical Windows/GPU acceptance remains separate.
+
 **Every B6 work packet:**
 1. Inspect current branch + latest commit and create a small-scoped plan.
 2. Write regression tests *before or alongside* new code. Run backend pytest, JavaScript syntax/browser checks, built-in self-test and validate GitHub Actions on final SHA.
@@ -438,7 +450,7 @@ Potential additional tests for VRAM features:
 | SDXL fallback UNet-only LoRAs | Known Diffusers/PEFT text-encoder compatibility issue; real visual effectiveness works for tested LoRAs | Preserve diagnostics; compare text-encoder effects in targeted tests |
 | Flux FP8 plus LoRA | FP8 PEFT wrappers can fail on CUDA; higher-precision transformer LoRA fallback works physically | Preserve BF16 compatibility and nonstreamed 16GB offload |
 | GPU stress with VAE/3D at 1024+ | No Windows acceptance yet | Phase-specific memory profiling and opt-in tiles |
-| Legacy Deforum format complexity | No actual importer exists on B6 branch yet | Fixture-based parser with warnings and no arbitrary code/path evaluation |
+| Legacy Deforum format complexity | B6.1 importer exists with golden 2D/3D fixtures, preview, passive unknown-field preservation and explicit indexed-model binding | Run Windows UI/short-render gate against golden + real Deforum settings; expand mappings only from observed files |
 | Deforum 3D coordinate semantics | Possible differences in rotation/translation and camera units | Explicit mapping tests; warn on non-equivalent keys |
 | Hybrid video pipeline | Not implemented | B6.2 + B6.3 opt-in and FFmpeg provenance |
 | Historical documentation inconsistencies | Old docs reflect provisional phase status | Use source+verified checkpoints as truth; update docs while implementing |
@@ -459,14 +471,15 @@ Potential additional tests for VRAM features:
 **Start here:**
 
 1. Fetch `feature/deforum-compatibility-hybrid-b6` and read this `handoff.md`, `docs/B6_DEFORUM_HYBRID_PLAN.md`, `docs/PERFORMANCE_CADENCE.md`, `backend/morphorum/generation.py`, `animation_render.py`, `animation_projects.py` and `animation_timeline.py`.
-2. Verify branch HEAD and latest CI independently; B6 only contains opening roadmap and handoff until new features are committed. Do not invent B6.1 implementation status.
-3. **Priority discussion:** B6.0-P. Propose an explicit memory profile API/CLI mode that reports allocator backend and captures peak memory at SDXL load, conditioning, UNet and VAE. Collect Windows dedicated/shared GPU evidence from the user's 4080 SUPER before changing placement/offload.
-4. In parallel, prepare B6.1 input fixture schema and importer mapping tests; implement safe parser/preview first, then UI and new-project persistence. Do not wire a Deforum setting to live inference until compatibility is validated.
-5. Perform the first 768/1024 test in a small separate GPU test gate, while leaving native 512 settings and B5.5 recovery untouched.
-6. Keep user informed of scope, CI counts, commit IDs and any physical test prerequisites. Checkpoint verified milestones, **never** claim an actual GPU rendering result merely from unit tests.
+2. Verify branch HEAD and latest CI independently. The last automated code checkpoint recorded here is `d982a32`; documentation-only commits may be ahead of it.
+3. **Run the physical gate in `docs/B6_PHYSICAL_ACCEPTANCE.md` before adding more GPU strategies.** Validate Deforum import UI/new-project behavior and a short imported SDXL render first.
+4. Run the B6.0-P stepped GPU matrix using the same SDXL checkpoint/LoRAs as B5.5: 512 control, then 768, then 1024 only if the previous level is clean. Capture `/api/system/gpu-memory`, render performance JSON, Windows dedicated/shared memory, device/optimization and visual LoRA influence.
+5. Keep `performance.sdxl_vae_tiling=false` for the native baseline. Then explicitly enable VAE tiling, save settings, unload/reload the model and repeat the **same** seed/prompt/model/LoRA/resolution for A/B comparison. Do not introduce model CPU offload until native-vs-tiling evidence exists.
+6. If the B6.1 Windows UI/short-render gate passes, create a B6.1 checkpoint from the exact verified SHA before starting B6.2 hybrid video input/extraction.
+7. Keep user informed of scope, CI counts, commit IDs and physical results. **Never** call CI a GPU result.
 
-**Current acceptance boundary:** B5.5 complete, B6 planning committed; VRAM optimization, native 1024+ generation and Deforum import/hybrid rendering remain **unverified / not implemented**.
+**Current acceptance boundary:** B5.5 is complete and physically verified. B6.1 is implemented and automated-test gated but **awaiting Windows UI/short-render acceptance**. B6.0-P diagnostic/preflight/VAE-tiling code is implemented and test gated but **awaiting 512/768/1024 RTX 4080 SUPER measurements**. B6.2 hybrid video input/compositing has not begun.
 
 ---
 
-*Prepared from current GitHub source at B6 opening, the repository's architecture/installation/timeline/LoRA/B5 docs, and the physically tested B5.5 frame telemetry. External PyTorch, Diffusers and Microsoft documentation inform the VRAM interpretation and options. The larger-resolution recommendations are engineering proposals, not claims of tested success.*
+*Updated from current B6 source through automated code checkpoint `d982a32`, the repository's architecture/installation/timeline/LoRA/B5 docs, and the physically tested B5.5 frame telemetry. External PyTorch, Diffusers and Microsoft documentation inform the VRAM interpretation and options. B6.1 visual fidelity and larger-resolution recommendations remain pending physical Windows/GPU acceptance.*
