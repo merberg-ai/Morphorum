@@ -2,7 +2,7 @@ name: Installer checks
 
 on:
   push:
-    branches: [main, feature/deforum-compatibility-hybrid-b6]
+    branches: [main, feature/deforum-compatibility-hybrid-b6, dev-ui]
     paths:
       - 'scripts/**'
       - '*.sh'
