@@ -1837,6 +1837,9 @@
       qs('#animation-steps').value = project.generation?.steps || '0:(20)';
       qs('#animation-guidance').value = project.generation?.guidance || '0:(0)';
       qs('#animation-cadence').value = project.cadence?.diffusion || '0:(1)';
+      qs('#animation-temporal-mode').value = project.temporal?.mode || 'forward';
+      qs('#animation-temporal-mix').value = project.temporal?.mix ?? 0.65;
+      qs('#animation-temporal-contrast').value = project.temporal?.contrast_threshold ?? 96;
       syncCadencePreset();
       qs('#animation-seed').value = project.generation?.seed ?? -1;
       qs('#animation-seed-behavior').value = project.generation?.seed_behavior || 'fixed';
@@ -1952,6 +1955,11 @@
       cadence: {
         ...(state.project.cadence || {}),
         diffusion: qs('#animation-cadence')?.value || '0:(1)',
+      },
+      temporal: {
+        mode: qs('#animation-temporal-mode')?.value || 'forward',
+        mix: Number(qs('#animation-temporal-mix')?.value ?? 0.65),
+        contrast_threshold: Number(qs('#animation-temporal-contrast')?.value ?? 96),
       },
       notes: qs('#animation-notes')?.value || '',
     };
