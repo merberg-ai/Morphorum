@@ -1471,3 +1471,79 @@ def test_animation_img2img_frame_requests_resolve_loras_before_shared_generation
         weights.append(adapter["weight"])
 
     assert weights == pytest.approx([0.4, 0.6, 0.8])
+
+
+def test_hybrid_video_anchors_use_time_aligned_frozen_pngs_and_resume(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import morphorum.animation_hybrid_render as hybrid_render
+
+    class RecordingHybridInputs(RecordingSDXLGenerationManager):
+        def __init__(self):
+            super().__init__()
+            self.input_pixels = []
+
+        def build_img2img_call_args(self, request, model, *, image, strength, generator, on_step_end):
+            self.input_pixels.append(image.getpixel((0, 0)))
+            return super().build_img2img_call_args(
+                request, model, image=image, strength=strength,
+                generator=generator, on_step_end=on_step_end,
+            )
+
+    project_dir = tmp_path / "project"
+    sequence = project_dir / "assets" / "hybrid" / "frames"
+    sequence.mkdir(parents=True)
+    names = []
+    for index in range(1, 7):
+        name = f"frame_{index:06d}.png"
+        names.append(name)
+        Image.new("RGB", (64, 64), (index * 20, 0, 0)).save(sequence / name)
+    (sequence / "manifest.json").write_text(json.dumps({
+        "source": "source.mp4", "start": 0, "end": 0.5, "fps": 12,
+        "frames": 6, "filenames": names,
+    }))
+    monkeypatch.setattr(hybrid_render, "animation_project_directory", lambda _pid: project_dir)
+    fake = RecordingHybridInputs()
+    monkeypatch.setattr(animation_render, "generation_manager", fake)
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _mid: fake_model())
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    project = sample_project(max_frames=6)
+    project["animation"]["start_mode"] = "prompt"
+    project["animation"]["source_image"] = ""
+    project["hybrid"] = {"enabled": True, "offset_frames": 0, "end_policy": "hold-last"}
+    project["generation"]["strength"] = "0:(0.5)"
+    project["generation"]["noise"] = "0:(0)"
+    project["motion"]["translation_x"] = "0:(0)"
+    project["cadence"]["diffusion"] = "0:(3)"
+    manager = AnimationRenderManager()
+    job = manager.submit(project=project, source_path=tmp_path / "not-uploaded.png")
+    done = wait_for(manager, job["id"])
+    assert done["status"] == "completed", done
+    assert done["hybrid_source"]["enabled"]
+    assert fake.input_pixels == [(80, 0, 0), (120, 0, 0)]
+    assert done["results"][1]["hybrid_source"]["applied"] is False
+    assert done["results"][3]["hybrid_source"]["applied"] is True
+    folder = tmp_path / "outputs" / "animations" / "render-test" / job["id"]
+    with Image.open(folder / "frames" / "frame_000000.png") as im:
+        assert im.getpixel((0, 0)) == (20, 0, 0)
+        metadata = json.loads(im.text["Morphorum"])
+        assert metadata["hybrid_source"]["source_frame"] == 1
+
+    # Re-extract and replace source frames after the first run. The render
+    # snapshot must not silently switch to the newer video during resume.
+    Image.new("RGB", (64, 64), "green").save(sequence / names[-1])
+    previous = json.loads((folder / "render-manifest.json").read_text())
+    previous["status"] = "interrupted"
+    previous["results"] = previous["results"][:-1]
+    previous["preview"] = None
+    (folder / "render-manifest.json").write_text(json.dumps(previous))
+    (folder / "frames" / "frame_000005.png").unlink()
+    (folder / "preview.gif").unlink()
+    new_manager = AnimationRenderManager()
+    resumed = new_manager.resume("render-test", job["id"])
+    finished = wait_for(new_manager, resumed["id"])
+    assert finished["status"] == "completed", finished
+    assert fake.input_pixels[-1] == (120, 0, 0)
