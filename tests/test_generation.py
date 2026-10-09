@@ -717,6 +717,44 @@ def test_lora_adapter_loads_once_reweights_and_disables(tmp_path) -> None:
     assert manager._active_lora_signature == ()
 
 
+def test_b55_multiple_prompt_windows_reuse_loaded_lora_adapters_without_reload(
+    tmp_path: Path,
+) -> None:
+    manager = GenerationManager()
+    pipe = FakeLoRAPipe()
+    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    adapters = []
+    for label in ("forest", "monster", "fog"):
+        path = tmp_path / f"{label}.safetensors"
+        path.write_bytes(b"fake")
+        adapters.append({
+            "id": label, "family": "sdxl", "name": label, "path": str(path),
+            "adapter_name": f"morphorum_{label}",
+        })
+
+    # Simulates three prompt windows and the repeated use of a previously
+    # loaded adapter. Only the weights should change after first injection.
+    windows = [
+        [(adapters[0], 0.3)],
+        [(adapters[0], 0.7), (adapters[1], 0.4)],
+        [(adapters[1], 0.9), (adapters[2], 0.6)],
+        [(adapters[0], 0.5), (adapters[2], 1.0)],
+    ]
+    for items in windows:
+        manager.configure_loras(
+            pipe, model, [{**adapter, "weight": weight} for adapter, weight in items],
+        )
+    assert len(pipe.loads) == 3, "Only the three distinct adapters should load"
+    assert len(manager._pipeline_loras) == 3, "Resident LoRA registry is bounded by unique adapters"
+    assert len(pipe.adapter_calls) == 4
+    assert manager._active_lora_signature == (
+        ("morphorum_forest", 0.5), ("morphorum_fog", 1.0),
+    )
+    manager.configure_loras(pipe, model, [])
+    assert manager._active_lora_signature == ()
+    assert pipe.disabled == 1
+
+
 def test_lora_adapter_rejects_family_mismatch(tmp_path) -> None:
     path = tmp_path / "flux-style.safetensors"
     path.write_bytes(b"fake-lora")
