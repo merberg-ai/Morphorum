@@ -1072,6 +1072,7 @@ class AnimationRenderManager:
             load_detail=payload.get("load_detail"),
             current_prompt_state=deepcopy(payload.get("current_prompt_state") or {}),
             current_frame_state=deepcopy(payload.get("current_frame_state") or {}),
+            performance=deepcopy(payload.get("performance") or {}),
             resumed=True,
         )
         with self._lock:
