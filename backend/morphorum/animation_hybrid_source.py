@@ -1,7 +1,7 @@
 """B6.2 opt-in video source probing, without allowing arbitrary host paths.
 
-This module only probes a managed uploaded asset. It does not alter B5
-animation generation, extract frames, or enable hybrid render paths.
+This module validates managed assets. Extraction is handled separately;
+B5 rendering and hybrid synthesis remain untouched.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ MAX_PROBE_SECONDS = 15
 
 def managed_video_path(project_id: str, filename: str) -> Path:
     if (not isinstance(filename, str) or not filename or "/" in filename
-            or "\\\\" in filename or ":" in filename or filename in {".", ".."}):
+            or "\\" in filename or ":" in filename or filename in {".", ".."}):
         raise HybridSourceError("Video filename must not contain path components.")
     suffix = Path(filename).suffix.lower()
     if suffix not in VIDEO_SUFFIXES:

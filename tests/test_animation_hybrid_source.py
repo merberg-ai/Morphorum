@@ -68,7 +68,7 @@ async def test_video_upload_atomic_and_bounded(tmp_path, monkeypatch):
     assert (tmp_path / "assets" / "hybrid" / "source.mp4").read_bytes() == b"video-contents"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_invalid_probe_keeps_previous_video(tmp_path, monkeypatch):
     import morphorum.animation_hybrid_source as source
     monkeypatch.setattr(source, "animation_project_directory", lambda _id: tmp_path)

@@ -54,6 +54,7 @@ from .animation_render import (
     AnimationRenderError,
     animation_render_manager,
 )
+from .animation_hybrid_extract import hybrid_extraction_manager
 from .animation_hybrid_source import (
     HybridSourceError, managed_video_path, probe_managed_video, store_managed_video,
 )
@@ -505,6 +506,68 @@ def api_hybrid_video_status(project_id: str, filename: str = "source.mp4") -> di
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except HybridSourceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/hybrid-extraction", status_code=202)
+def api_start_hybrid_extraction(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return hybrid_extraction_manager.start(
+            project_id, str(payload.get("filename", "source.mp4")),
+            payload.get("start"), payload.get("end"), payload.get("fps"))
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/hybrid-extraction/{job_id}")
+def api_hybrid_extraction_status(project_id: str, job_id: str) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return hybrid_extraction_manager.status(project_id, job_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/hybrid-extraction/{job_id}/cancel")
+def api_cancel_hybrid_extraction(project_id: str, job_id: str) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return hybrid_extraction_manager.cancel(project_id, job_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/hybrid-frames")
+def api_hybrid_frames(project_id: str) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return hybrid_extraction_manager.manifest(project_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/hybrid-frames/{frame_number}")
+def api_hybrid_frame_file(project_id: str, frame_number: int):
+    try:
+        load_animation_project(project_id)
+        manifest = hybrid_extraction_manager.manifest(project_id)
+        if frame_number < 1 or frame_number > manifest["frames"]:
+            raise HybridSourceError("Frame number out of bounds.")
+        filename = manifest["filenames"][frame_number - 1]
+        path = animation_project_directory(project_id) / "assets" / "hybrid" / "frames" / filename
+        return FileResponse(path, media_type="image/png")
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/animation/projects/{project_id}/source-image", status_code=201)

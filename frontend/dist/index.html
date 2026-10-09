@@ -614,6 +614,27 @@
               <div class="animation-performance-stats" id="animation-performance-stats" aria-live="off"></div>
               <p class="muted">Observed values, not an automatic CPU fallback. GPU memory includes live models and resident LoRAs; peak allocation is process-wide.</p>
             </section>
+            <section class="animation-video-export animation-hybrid-source" id="animation-hybrid-source">
+              <div class="animation-video-export-heading">
+                <div><h3>B6.2 Hybrid Source Lab</h3><p class="muted">Import a video from this browser, inspect its metadata, and extract source frames. Does not affect rendering yet.</p></div>
+                <span class="animation-video-status" id="animation-hybrid-status">Select a project</span>
+              </div>
+              <div class="animation-hybrid-controls">
+                <label><span>Video (MP4, MOV, MKV, WebM; max 512 MiB)</span><input type="file" accept=".mp4,.mov,.mkv,.webm,video/*" id="animation-hybrid-file"></label>
+                <button type="button" class="secondary-button" id="animation-hybrid-upload">Upload &amp; inspect</button>
+                <label><span>From second</span><input type="number" id="animation-hybrid-start" min="0" step="0.1" value="0"></label>
+                <label><span>To second</span><input type="number" id="animation-hybrid-end" min="0.1" step="0.1" placeholder="Video duration"></label>
+                <label><span>Output FPS</span><input type="number" id="animation-hybrid-fps" min="1" max="120" step="1" value="12"></label>
+                <button type="button" class="primary-button" id="animation-hybrid-extract" disabled>Extract frames</button>
+                <button type="button" class="secondary-button" id="animation-hybrid-cancel" disabled>Cancel extraction</button>
+              </div>
+              <p class="muted animation-video-job-status" id="animation-hybrid-meta" role="status">Upload a local video to begin.</p>
+              <div class="animation-hybrid-preview" id="animation-hybrid-preview" hidden>
+                <img id="animation-hybrid-frame" alt="Extracted hybrid source frame preview">
+                <input id="animation-hybrid-frame-slider" type="range" min="1" value="1" max="1" aria-label="Extracted frame">
+                <span id="animation-hybrid-frame-caption" class="muted"></span>
+              </div>
+            </section>
             <section class="animation-video-export" id="animation-video-export">
               <div class="animation-video-export-heading">
                 <div>

@@ -3749,7 +3749,110 @@
     }
   }
 
+
+  // B6.2: independent managed-source lab. Never modifies animation project settings.
+  const hybrid = { filename: '', info: null, jobId: '', timer: null, frames: null };
+  function hybridProjectId() { return state.project?.id || ''; }
+  function hybridBase() {
+    return '/api/animation/projects/' + encodeURIComponent(hybridProjectId());
+  }
+  function hybridMessage(message) {
+    const el = qs('#animation-hybrid-meta');
+    if (el) el.textContent = message;
+  }
+  function hybridButtons() {
+    const ready = Boolean(hybridProjectId() && hybrid.info);
+    const active = Boolean(hybrid.jobId);
+    qs('#animation-hybrid-extract').disabled = !ready || active;
+    qs('#animation-hybrid-cancel').disabled = !active;
+    qs('#animation-hybrid-upload').disabled = !hybridProjectId() || active;
+  }
+  async function hybridLoadFrames() {
+    const manifest = await api(hybridBase() + '/hybrid-frames');
+    hybrid.frames = manifest;
+    const slider = qs('#animation-hybrid-frame-slider');
+    slider.max = String(manifest.frames);
+    slider.value = '1';
+    qs('#animation-hybrid-preview').hidden = false;
+    hybridDisplayFrame();
+  }
+  function hybridDisplayFrame() {
+    if (!hybrid.frames || !hybridProjectId()) return;
+    const index = Math.max(1, Math.min(hybrid.frames.frames, Number(qs('#animation-hybrid-frame-slider').value) || 1));
+    qs('#animation-hybrid-frame').src = hybridBase() + '/hybrid-frames/' + index;
+    qs('#animation-hybrid-frame-caption').textContent = 'Frame ' + index + ' of ' + hybrid.frames.frames;
+  }
+  async function hybridUpload() {
+    const file = qs('#animation-hybrid-file')?.files?.[0];
+    if (!hybridProjectId()) return hybridMessage('Save or select a project first.');
+    if (!file) return hybridMessage('Select a video file.');
+    if (file.size > 512 * 1024 * 1024) return hybridMessage('Video exceeds 512 MiB limit.');
+    hybridMessage('Uploading and inspecting ' + file.name + '…');
+    try {
+      const reply = await api(hybridBase() + '/hybrid-video', {
+        method: 'PUT', headers: { 'Content-Type': 'application/octet-stream', 'x-filename': file.name }, body: file,
+      });
+      hybrid.filename = reply.video.storage_name;
+      hybrid.info = reply.video;
+      qs('#animation-hybrid-end').value = String(Math.min(10, hybrid.info.duration_seconds));
+      hybridMessage('Accepted ' + reply.video.width + '×' + reply.video.height + ', ' +
+        reply.video.duration_seconds + 's, ' + reply.video.fps + ' FPS, codec ' + reply.video.codec + '.');
+    } catch (error) { hybridMessage('Upload failed: ' + error.message); }
+    hybridButtons();
+  }
+  async function hybridPoll() {
+    if (!hybrid.jobId) return;
+    try {
+      const data = await api(hybridBase() + '/hybrid-extraction/' + hybrid.jobId);
+      hybridMessage('Extraction: ' + data.status + (data.error ? ' | ' + data.error : '') +
+        (data.frames ? ' | ' + data.frames + ' frames' : ''));
+      if (['completed', 'failed', 'canceled'].includes(data.status)) {
+        hybrid.jobId = '';
+        clearInterval(hybrid.timer);
+        hybrid.timer = null;
+        hybridButtons();
+        if (data.status === 'completed') await hybridLoadFrames();
+      }
+    } catch (error) {
+      clearInterval(hybrid.timer);
+      hybrid.timer = null;
+      hybrid.jobId = '';
+      hybridMessage(error.message);
+      hybridButtons();
+    }
+  }
+  async function hybridExtract() {
+    if (!hybrid.info || !hybridProjectId()) return;
+    try {
+      const job = await api(hybridBase() + '/hybrid-extraction', {
+        method: 'POST',
+        body: JSON.stringify({ filename: hybrid.filename,
+          start: Number(qs('#animation-hybrid-start').value),
+          end: Number(qs('#animation-hybrid-end').value),
+          fps: Number(qs('#animation-hybrid-fps').value) }),
+      });
+      hybrid.jobId = job.id;
+      hybridMessage('Queued ' + job.estimated_frames + ' source frames…');
+      hybridButtons();
+      hybrid.timer = window.setInterval(hybridPoll, 900);
+      hybridPoll();
+    } catch (error) { hybridMessage('Extraction failed: ' + error.message); }
+  }
+  async function hybridCancel() {
+    if (!hybrid.jobId) return;
+    try { await api(hybridBase() + '/hybrid-extraction/' + hybrid.jobId + '/cancel', {method: 'POST'}); }
+    catch (error) { hybridMessage('Cancel failed: ' + error.message); }
+  }
+  function bindHybrid() {
+    qs('#animation-hybrid-upload')?.addEventListener('click', hybridUpload);
+    qs('#animation-hybrid-extract')?.addEventListener('click', hybridExtract);
+    qs('#animation-hybrid-cancel')?.addEventListener('click', hybridCancel);
+    qs('#animation-hybrid-frame-slider')?.addEventListener('input', hybridDisplayFrame);
+    hybridButtons();
+  }
+
   function bind() {
+    bindHybrid();
     qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
     qs('#animation-expand-all')?.addEventListener('click', () => setAllAnimationCards(false));
     qs('#animation-import-deforum')?.addEventListener('click', () => {

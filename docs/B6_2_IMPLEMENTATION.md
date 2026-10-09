@@ -13,3 +13,9 @@ Physical gates: first confirm the importer layout fix, then B6.1 short SDXL rend
 ## B6.2 managed upload backend packet
 
 `PUT /api/animation/projects/{project_id}/hybrid-video` accepts browser-sent raw video bytes with `x-filename`; it streams to a bounded temporary file and only atomically replaces a previously accepted source after FFprobe accepts video metadata. `GET /api/animation/projects/{project_id}/hybrid-video?filename=source.mp4` re-probes the managed file. Both return `render_enabled: false`. Frontend upload selection, source manifest, extraction jobs, previews, cancel/restart, and rendering integration remain upcoming. The on-disk source is isolated under the project’s managed `assets/hybrid/` folder.
+
+## B6.2 extraction implementation (physical test pending)
+
+New dedicated Animation **Hybrid Source Lab** provides browser file selection, managed upload, time range and FPS extraction, cancellation, per-project FFmpeg PNG sequence staging, atomic publication, and a frame slider preview. Backend routes: `POST .../hybrid-extraction`, `GET .../hybrid-extraction/{job_id}`, `POST .../hybrid-extraction/{job_id}/cancel`, `GET .../hybrid-frames`, and `GET .../hybrid-frames/{frame_number}`. Frame extraction is bounded to 1200 frames; one extraction per project. No hybrid synthesis is wired into the B5 renderer.
+
+Windows acceptance: select saved project; upload short MP4; inspect metadata; extract 0–3 sec at 12 FPS; scrub preview; try cancel; test upload through LAN laptop browser; confirm normal animation renders remain unchanged. This is not GPU-verified.
