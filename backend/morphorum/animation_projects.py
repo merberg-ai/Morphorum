@@ -148,6 +148,11 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
         "cadence": {
             "diffusion": "0:(1)",
         },
+        "temporal": {
+            "mode": "forward",
+            "mix": 0.65,
+            "contrast_threshold": 96,
+        },
         "notes": "",
     }
     project["tracks"] = build_tracks_from_legacy(project)
@@ -434,6 +439,20 @@ def normalize_animation_project(
         payload.get("cadence", project.get("cadence")),
         {"diffusion": "0:(1)"},
     )
+
+    temporal_payload = payload.get("temporal", project.get("temporal"))
+    temporal_payload = temporal_payload if isinstance(temporal_payload, dict) else {}
+    temporal_mode = str(temporal_payload.get("mode") or "forward").strip().lower()
+    temporal_mode = temporal_mode if temporal_mode in {"forward", "future-anchor"} else "forward"
+    temporal_mix = _safe_float(temporal_payload.get("mix"), 0.65, 0.0, 1.0)
+    contrast_threshold = _safe_float(
+        temporal_payload.get("contrast_threshold"), 96.0, 1.0, 255.0,
+    )
+    project["temporal"] = {
+        "mode": temporal_mode,
+        "mix": temporal_mix,
+        "contrast_threshold": contrast_threshold,
+    }
 
     project["notes"] = str(payload.get("notes", project.get("notes", "")) or "")
 
