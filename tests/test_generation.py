@@ -1670,7 +1670,9 @@ def test_flux_out_of_memory_during_offload_never_retries_partially_hooked_model(
 
 
 def test_sdxl_transition_profile_stages_and_sharing(tmp_path, monkeypatch) -> None:
-    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    checkpoint = tmp_path / "model.safetensors"
+    checkpoint.write_bytes(b"fake")
+    model = fake_model(checkpoint, "sdxl")
     original = FakeTrackedLoRAPipe([])
     converted = FakeTrackedLoRAPipe([])
     shared_unet = object()
