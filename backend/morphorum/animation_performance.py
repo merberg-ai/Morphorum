@@ -5,6 +5,7 @@ completed frame, including recorded adapter counts and memory snapshots.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import math
 from dataclasses import dataclass, field
@@ -199,6 +200,11 @@ def performance_record(
         "pipeline_device": model_status.get("device"),
         "optimization": model_status.get("optimization"),
         "pipeline_task": model_status.get("task"),
+        "sdxl_transition_profile": (
+            deepcopy(model_status.get("sdxl_transition_profile"))
+            if diffused and model_status.get("sdxl_transition_profile")
+            else None
+        ),
         "resident_loras": len(model_status.get("loras") or []),
         "active_loras": [
             {"adapter_name": item.get("adapter_name"),
