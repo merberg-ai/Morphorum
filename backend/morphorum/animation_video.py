@@ -335,6 +335,7 @@ class VideoExportManager:
                 assert process.stdout is not None
                 for line in process.stdout:
                     key, _, value = line.strip().partition("=")
+                    value = value.strip()
                     if key == "frame" and value.isdecimal():
                         completed = min(job.total_frames, int(value))
                         with self._lock:
