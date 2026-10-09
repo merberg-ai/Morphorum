@@ -1667,3 +1667,57 @@ def test_flux_out_of_memory_during_offload_never_retries_partially_hooked_model(
         manager._load_flux_pipeline(job, tmp_path)
     assert len(calls) == 1, "Never retry after an offload CUDA OOM"
     assert calls[0]["use_stream"] is False
+
+
+def test_sdxl_transition_profile_stages_and_sharing(tmp_path, monkeypatch) -> None:
+    model = fake_model(tmp_path / "model.safetensors", "sdxl")
+    original = FakeTrackedLoRAPipe([])
+    converted = FakeTrackedLoRAPipe([])
+    shared_unet = object()
+    shared_vae = object()
+    original.unet, converted.unet = shared_unet, shared_unet
+    original.vae, converted.vae = shared_vae, shared_vae
+    manager = GenerationManager()
+    manager._pipeline = original
+    manager._pipeline_model_id = model["id"]
+    manager._pipeline_task = "txt2img"
+    manager._pipeline_device = "cuda"
+
+    snapshots = iter([6.89, 13.76, 13.76, 13.76, 13.76])
+    def fake_memory():
+        v = next(snapshots)
+        return {
+            "allocated_gib": v, "reserved_gib": v + 0.1,
+            "free_gib": 15.99 - v, "allocation_retries": 0, "oom_count": 0,
+        }
+
+    monkeypatch.setattr(manager, "cuda_memory_status", fake_memory)
+    monkeypatch.setattr(manager, "_convert_pipeline_task", lambda *_: converted)
+    monkeypatch.setattr(manager, "release_inference_memory", lambda **_: None)
+    monkeypatch.setattr(manager, "_configure_sampler", lambda *_: None)
+    monkeypatch.setattr(manager, "configure_loras", lambda *_: [])
+    monkeypatch.setattr(generation, "get_model", lambda _: model)
+
+    request = GenerationRequest(
+        model_id=model["id"], prompt="test", width=64, height=64,
+        steps=5, sampler="euler",
+    )
+    result, _, _ = manager.prepare_img2img(request)
+    assert result is converted
+    profile = manager.model_status()["sdxl_transition_profile"]
+    assert profile["complete"] is True
+    assert [p["stage"] for p in profile["stages"]] == [
+        "before_conversion", "after_from_pipe", "after_release",
+        "after_sampler", "after_lora_setup",
+    ]
+    assert profile["stages"][0]["allocated_gib"] == 6.89
+    assert profile["stages"][1]["allocated_gib"] == 13.76
+    assert profile["shared_components"] == {"unet": True, "vae": True}
+    manager.prepare_img2img(request)
+    assert manager.model_status()["sdxl_transition_profile"] == profile
+
+
+def test_sdxl_component_identity_inspection_skips_missing_components() -> None:
+    assert GenerationManager._shared_pipeline_components(
+        SimpleNamespace(unet=object()), SimpleNamespace()
+    ) == {}
