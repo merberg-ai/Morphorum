@@ -3593,6 +3593,7 @@
       clearMotionPreviewResult();
       resetRenderUi();
       state.project = payload.project;
+      resetHybridForProject();
       state.path = payload.path || '';
       state.timeline = null;
       state.timelineSelection = null;
@@ -3842,6 +3843,18 @@
     if (!hybrid.jobId) return;
     try { await api(hybridBase() + '/hybrid-extraction/' + hybrid.jobId + '/cancel', {method: 'POST'}); }
     catch (error) { hybridMessage('Cancel failed: ' + error.message); }
+  }
+  function resetHybridForProject() {
+    if (hybrid.timer) window.clearInterval(hybrid.timer);
+    hybrid.filename = '';
+    hybrid.info = null;
+    hybrid.jobId = '';
+    hybrid.timer = null;
+    hybrid.frames = null;
+    const preview = qs('#animation-hybrid-preview');
+    if (preview) preview.hidden = true;
+    hybridMessage('Upload a local video to begin.');
+    hybridButtons();
   }
   function bindHybrid() {
     qs('#animation-hybrid-upload')?.addEventListener('click', hybridUpload);
