@@ -44,7 +44,11 @@ test('B6.1 importer requires an indexed model and creates a distinct project', (
 
   const populate = script.slice(populateStart, previewStart);
   const create = script.slice(createStart, projectListStart);
-  assert.ok(populate.includes("model.kind === 'checkpoints'"));
+  const modelFilter = script.slice(
+    script.indexOf('  function deforumCheckpointModels() {'),
+    populateStart
+  );
+  assert.ok(modelFilter.includes("model.kind === 'checkpoints'"));
   assert.ok(populate.includes("none.value = ''"));
   assert.ok(create.includes("method: 'POST'"));
   assert.ok(create.includes('state.project = payload.project'));
