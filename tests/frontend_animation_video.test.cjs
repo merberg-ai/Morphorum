@@ -160,9 +160,12 @@ test('B6.0-P high-resolution render guard is advisory and uses live memory snaps
       };
     },
     window: {
-      confirm(message) {
-        messages.push(message);
-        return false;
+      MorphorumDialog: {
+        async confirm(options) {
+          messages.push(options.message);
+          assert.equal(options.confirmText, 'Start Render');
+          return false;
+        },
       },
     },
   };
