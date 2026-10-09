@@ -110,3 +110,33 @@ def test_b55_profile_does_not_store_tensor_or_prompts(tmp_path) -> None:
     location = tmp_path / "perf.jsonl"
     append_performance_record(location, record)
     assert load_performance_records(location)[0]["frame"] == 9
+
+
+def test_b55_performance_api_is_read_only_and_reports_missing_render(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+    from morphorum.app import app
+    from morphorum.animation_render import (
+        AnimationRenderError, animation_render_manager,
+    )
+
+    seen = []
+
+    def fake_report(project_id, render_id):
+        seen.append((project_id, render_id))
+        if render_id == "missing":
+            raise AnimationRenderError("Animation render manifest not found.")
+        return {
+            "project_id": project_id, "render_id": render_id,
+            "status": "completed", "summary": {"frames_observed": 4},
+            "frames": [{"frame": 1}, {"frame": 2}, {"frame": 3}, {"frame": 4}],
+        }
+
+    monkeypatch.setattr(animation_render_manager, "performance_report", fake_report)
+    with TestClient(app) as client:
+        response = client.get("/api/animation/renders/test-project/test-run/performance")
+        assert response.status_code == 200
+        assert response.json()["summary"]["frames_observed"] == 4
+        assert len(response.json()["frames"]) == 4
+        missing = client.get("/api/animation/renders/test-project/missing/performance")
+        assert missing.status_code == 404
+    assert seen == [("test-project", "test-run"), ("test-project", "missing")]
