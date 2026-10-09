@@ -73,7 +73,7 @@
               <span class="badge" id="image-model-family-badge">No model</span>
             </div>
 
-            <label class="field-label" for="image-prompt">Prompt</label>
+            <div class="image-prompt-heading"><label class="field-label" for="image-prompt">Prompt</label><button class="secondary-button compact" type="button" id="image-reset-draft" title="Clear browser-saved Image form values">Reset Image Form</button></div>
             <textarea id="image-prompt" class="text-area" rows="5" placeholder="Describe the image you want to make…"></textarea>
             <div class="lora-picker-row" id="image-lora-picker">
               <select id="image-lora-select" disabled aria-label="LoRA"><option value="">Select a model to browse LoRAs</option></select>
@@ -112,7 +112,8 @@
           </article>
 
           <article class="card glass preview-card image-preview-card">
-            <div class="card-header"><div><h2>Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
+            <div class="card-header"><div><h2 id="image-results-heading">Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
+            <div class="image-history-controls"><label for="image-job-history">Recent jobs</label><select id="image-job-history" aria-label="Recent Image Generation jobs"><option value="">No recent jobs</option></select><button class="secondary-button compact" id="image-history-refresh" type="button">Refresh</button></div>
             <div class="preview-placeholder" id="image-empty-preview">
               <div class="preview-glyph">◇</div>
               <strong>No image yet</strong>
@@ -123,6 +124,11 @@
               </div>
             </div>
             <div class="image-gallery" id="image-gallery" hidden></div>
+            <dialog id="image-result-lightbox" class="image-result-lightbox" aria-label="Generated image preview">
+              <div class="image-result-lightbox-toolbar"><span id="image-lightbox-details"></span><button class="secondary-button compact" id="image-lightbox-close" type="button">Close</button></div>
+              <img id="image-lightbox-full" alt="Full generated image">
+              <a id="image-lightbox-download" class="secondary-button compact" href="#" download>Download image</a>
+            </dialog>
           </article>
         </div>
       </section>
