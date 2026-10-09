@@ -1031,9 +1031,11 @@ def test_resize_depth_map_restores_render_resolution() -> None:
     assert np.isfinite(resized).all()
 
 
+@pytest.mark.parametrize("projection_mode", ["legacy", "splat"])
 def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
     tmp_path: Path,
     monkeypatch,
+    projection_mode: str,
 ) -> None:
     """B5 cadence baseline: 3D transform frames still perform depth projection,
     but only frame 3 and the forced last frame 5 perform GPU diffusion.
@@ -1078,6 +1080,8 @@ def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
         "rotation_z": "0:(0)",
         "fov": "0:(40)",
     }
+    project["camera_3d"]["projection_mode"] = projection_mode
+    project["camera_3d"]["hole_fill"] = "background"
     project["generation"]["strength"] = "0:(0.5)"
     project["generation"]["noise"] = "0:(0.02)"
     project["cadence"]["diffusion"] = "0:(3)"
@@ -1109,7 +1113,24 @@ def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
             "diffusion": 3, "anchor": anchor, "phase": phase,
         }
         assert state["depth_3d"]["projected_coverage"] > 0.0
-        assert state["depth_3d"]["warp"] == "depth-forward-zbuffer-nearest-fill"
+        expected = (
+            "depth-forward-zbuffer-nearest-fill" if projection_mode == "legacy"
+            else "depth-bilinear-zbuffer-background-fill"
+        )
+        assert state["depth_3d"]["warp"] == expected
+        assert state["camera_3d"]["projection_mode"] == projection_mode
+        assert state["depth_3d"]["projection_mode"] == projection_mode
+        assert state["depth_3d"]["visible_pixels"] + state["depth_3d"]["disoccluded_pixels"] == 64 * 64
+        mask_relative = state["depth_3d"]["disocclusion_mask"]
+        assert mask_relative == f"masks/frame_{frame:06d}.png"
+        mask_path = frames.parent / mask_relative
+        assert mask_path.is_file()
+        with Image.open(mask_path) as mask:
+            pixels = np.asarray(mask)
+            assert mask.mode == "L"
+            assert pixels.shape == (64, 64)
+            assert set(np.unique(pixels)).issubset({0, 255})
+            assert np.count_nonzero(pixels) == state["depth_3d"]["disoccluded_pixels"]
 
 
 def test_diffusion_cadence_skips_intermediate_diffusion_but_keeps_motion(
