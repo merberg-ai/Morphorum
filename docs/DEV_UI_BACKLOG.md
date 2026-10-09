@@ -1,5 +1,24 @@
 # dev-ui: Morphorum UI and usability backlog
 
+> **Implementation note (2026-10-08):** Items #1–#10 now have an initial implementation on `dev-ui`. This document retains the earlier design/acceptance requirements as a test plan; wording such as "planned" or "backlog only" below refers to the original proposals, not the current state. See [DEV_UI_PHYSICAL_ACCEPTANCE.md](DEV_UI_PHYSICAL_ACCEPTANCE.md). Neither B6.2 checkpoint nor the B6 feature branch was modified.
+
+## Implementation summary
+
+| Item | Status | Initial implementation |
+|---|---|---|
+| 1 Image Generation autosave | Coded, testing required | Versioned localStorage draft, model-specific restore and Reset button |
+| 2 Animation workspace | Coded, testing required | Editor/Monitor/Media/Outputs tabs; step-level progress based on `current_step_total`; reused render poller |
+| 3 LoRA Manager | Coded, testing required | Quick Use controls, copy snippet with recorded triggers, corrected checkbox, advanced details |
+| 4 Shared dialog | Coded, testing required | Shared alert/confirm/prompt, safe cancellation, modal migration and console clear guard |
+| 5 Mobile header/nav | Coded, testing required | Compact telemetry, dynamic viewport clearance, More menu, cross-tab mini-progress |
+| 6 Models page | Coded, testing required | Compact indexed model cards, path expander, clear filters, collapsible managed catalog |
+| 7 Settings | Coded, testing required | Grouped tabs, dirty state, guarded reload, accessible path validation on phone |
+| 8 Image results | Coded, testing required | Lightbox, history browsing, running job reconnect, jump to results |
+| 9 Console | Coded, testing required | Search, compact filters, presets, jump to latest, guarded server-buffer deletion |
+| 10 Shared hardening | Coded, testing required | Text-only API error messages in Models, shared clipboard helper, regression tests |
+
+
+
 This is a planning backlog only. Do not implement entries until the list has been collected and the user requests the implementation pass.
 
 Base branch: `dev-ui`, originally branched from B6.2 validated checkpoint `5826d2d96eedbc6fcaa0243dc6dab6eaeb8366a0`.
@@ -7,7 +26,7 @@ Keep `feature/deforum-compatibility-hybrid-b6` and `checkpoint/b6-2-hybrid-sourc
 
 ## 1. Persist Image Generation form fields in browser local storage
 
-**Status:** Planned, not yet implemented.
+**Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Requested:** Preserve the prompt and other Image Generation tab inputs so they survive browser refresh, tab navigation, and reopening Morphorum.
 
@@ -32,7 +51,7 @@ Keep `feature/deforum-compatibility-hybrid-b6` and `checkpoint/b6-2-hybrid-sourc
 
 ## 2. Redesign the Animation workspace with dedicated Monitor, Media, and Outputs views
 
-**Status:** Planned, not implemented.
+**Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Problem:** The current Animation tab is one tall collection of cards. The render progress and live preview are below many project, camera, timeline, and motion settings. Hybrid Source Lab and Video Export also sit inside the already oversized render card. A user must scroll significantly during active generation just to see progress and the latest frame.
 
@@ -79,7 +98,7 @@ Use **secondary tabs inside Animation**, not additional items in the main site n
 
 ## 3. LoRA Manager cleanup and Copy Prompt Tag with trigger words
 
-**Status:** Planned, not implemented.
+**Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Requested:** Make the LoRA Manager much more intuitive and compact, fix the oversized bottom `Include recorded trigger words` checkbox, and offer a **Copy Prompt Tag** button that includes available trigger words.
 
@@ -121,7 +140,7 @@ Retain a responsive **Library + Details** layout on desktop and a single-column/
 
 ## 4. Shared Morphorum modal dialogs for alerts, warnings, confirmations and input
 
-**Status:** Planned, not implemented.
+**Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Requested:** Replace default browser-native alert/confirm/prompt boxes with one reusable, consistently styled, accessible Morphorum modal system. It must support safety warnings, confirmations, informative messages and text entry, without breaking existing flows.
 
@@ -164,7 +183,7 @@ Implement a centralized frontend `MorphorumDialog` service (separate `modal.js` 
 
 ## 5. Responsive top banner, bottom navigation and compact global generation status
 
-**Status:** Planned, not implemented.
+**Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Requested:** On phone, make the header/status banner and bottom main navigation fit the usable screen, avoid cropping/overlap with mobile browser chrome, and display a compact live generation indicator/progress bar accessible from every page.
 
@@ -213,7 +232,7 @@ Implement a centralized frontend `MorphorumDialog` service (separate `modal.js` 
 
 ## 6. Models page: compact browser, consistent filters, and sane metadata
 
-**Priority:** P1 usability. **Status:** Planned, not implemented.
+**Priority:** P1 usability. **Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Source findings:** `frontend/dist/index.html` puts large managed-download rows above indexed-model stats and search. `frontend/dist/assets/models.css` uses a six-column `.model-row` grid with fixed/minimum widths of 180/90/95/260/90 pixels plus action and gaps. At <=900px it reshuffles those fields into multiple rows, with full-length paths ellipsized by default. The Models page currently offers an independent LoRA `Copy Tag` action in `models.js` as well as the separate LoRA Manager, which will soon have a canonical trigger-aware formatter (item #3).
 
@@ -228,7 +247,7 @@ Implement a centralized frontend `MorphorumDialog` service (separate `modal.js` 
 
 ## 7. Settings: grouped configuration, dirty indicator, and safer path editing
 
-**Priority:** P1 usability/data loss. **Status:** Planned, not implemented.
+**Priority:** P1 usability/data loss. **Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Source findings:** `frontend/dist/assets/app.js` dynamically builds Theme & Appearance, Generation Behavior, Managed Models and multiple family checkpoint/LoRA directory cards in one `settings-grid`. Changes mutate `state.settings`; `loadSettings()` replaces it from the server and rebuilds the form, without a dirty marker or unsaved-changes confirmation. `applyAppearance()` also writes browser preferences immediately, while the other settings require Save Settings. On mobile `app.css` hides the explicit path `Check` buttons entirely, leaving blur validation.
 
@@ -243,7 +262,7 @@ Implement a centralized frontend `MorphorumDialog` service (separate `modal.js` 
 
 ## 8. Image results: visible output, lightbox, and generation-job reconnect
 
-**Priority:** P1 usability/reliability. **Status:** Planned, not implemented.
+**Priority:** P1 usability/reliability. **Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Source findings:** Image Generation is one two-column view that becomes vertically stacked on mobile: entire long form comes before Results. `frontend/dist/assets/image.js` shows previews limited by `ui.image_preview_limit` (default five), adds Reuse Seed and Save actions, but does not provide a full-image viewer or clear access to earlier jobs in the Image tab. On DOMContentLoaded it loads capabilities/model status only, although backend already exposes `GET /api/generation/jobs` and individual job status. A browser reload during a long job therefore loses visible job tracking even if the server continues processing.
 
@@ -258,7 +277,7 @@ Implement a centralized frontend `MorphorumDialog` service (separate `modal.js` 
 
 ## 9. Console: compact filters, clear operation safety, and mobile log readability
 
-**Priority:** P2 usability plus P1 confirmation safety. **Status:** Planned, not implemented.
+**Priority:** P2 usability plus P1 confirmation safety. **Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Source findings:** Console toolbar currently contains four level choices, eight source choices, auto-scroll and four actions in one wrapping band. Mobile CSS moves every action into a two-column grid and gives `.console-window` a minimum 390px height; the resulting toolbar can dominate a phone viewport. `clearServerConsole()` calls `DELETE /api/console` immediately, without a confirmation, whereas **Clear View** is a local non-destructive operation. Console stream deduplication and filters already exist and should be preserved.
 
@@ -273,7 +292,7 @@ Implement a centralized frontend `MorphorumDialog` service (separate `modal.js` 
 
 ## 10. Shared frontend hardening, clipboard service, and accessible states
 
-**Priority:** **P0 for unsafe error output**, P1 for shared clipboard and focus behavior. **Status:** Planned, not implemented.
+**Priority:** **P0 for unsafe error output**, P1 for shared clipboard and focus behavior. **Status:** Initial implementation committed on `dev-ui`; pending physical acceptance.
 
 **Concrete code issues:**
 - `frontend/dist/assets/models.js` inserts `String(error.message)` directly into `list.innerHTML` in both managed catalog error and model-index error handlers. Unlike `app.js`'s escaped Console rows, these are not HTML-escaped. Replace with programmatically created nodes and `textContent`; avoid constructing error HTML from responses.
