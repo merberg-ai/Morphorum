@@ -652,7 +652,7 @@
             </section>
             <section class="animation-video-export animation-hybrid-source" id="animation-hybrid-source">
               <div class="animation-video-export-heading">
-                <div><h3>Source Video</h3><p class="muted">Upload a video, inspect its details, and extract frames for preview. The extracted frames can be previewed here; rendering still uses your project's selected starting frame and prompts.</p></div>
+                <div><h3>Source Video</h3><p class="muted">Upload, inspect and extract frames. Optionally use extracted frames as time-aligned img2img inputs for animation diffusion anchors.</p></div>
                 <span class="animation-video-status" id="animation-hybrid-status">Select a project</span>
               </div>
               <div class="animation-hybrid-controls">
@@ -663,6 +663,11 @@
                 <label><span>Output FPS</span><input type="number" id="animation-hybrid-fps" min="1" max="120" step="1" value="12"></label>
                 <button type="button" class="primary-button" id="animation-hybrid-extract" disabled>Extract frames</button>
                 <button type="button" class="secondary-button" id="animation-hybrid-cancel" disabled>Cancel extraction</button>
+              </div>
+              <div class="animation-hybrid-render-settings">
+                <label class="animation-hybrid-enable"><input id="animation-hybrid-render-enabled" type="checkbox"> Use extracted video frames for animation diffusion anchors</label>
+                <label class="animation-hybrid-offset"><span>Start at extracted frame offset (0 = first frame)</span><input id="animation-hybrid-offset" type="number" min="0" max="1200" step="1" value="0"></label>
+                <p class="muted">Opt-in B6.3.1: source video frame 0 becomes the animation start; each diffusion anchor uses the source frame at its timeline time. Cadence-skipped frames use existing motion/depth warps. The last source frame is held when the clip ends. A frozen copy is stored with each render for reliable resume. Blending and masks are coming in B6.3.2/3.</p>
               </div>
               <p class="muted animation-video-job-status" id="animation-hybrid-meta" role="status">Upload a local video to begin.</p>
               <div class="animation-hybrid-preview" id="animation-hybrid-preview" hidden>
