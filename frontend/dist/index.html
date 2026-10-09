@@ -69,7 +69,7 @@
       <section class="view active" id="view-image">
         <div class="page-heading">
           <div>
-            <p class="eyebrow">FIRST IMAGE MILESTONE</p>
+            <p class="eyebrow">IMAGE STUDIO</p>
             <h1>Image Generation</h1>
             <p class="muted">Generate locally with SDXL, Flux, and managed Z-Image Turbo models.</p>
           </div>
@@ -89,7 +89,7 @@
               <input id="image-lora-weight" type="number" value="1" step="0.05" min="-4" max="4" disabled aria-label="LoRA weight">
               <button id="image-insert-lora" class="secondary-button compact" type="button" disabled>Insert LoRA</button>
             </div>
-            <div class="field-help" id="image-lora-help">Morphorum inserts Deforum-style &lt;lora:name:weight&gt; directives into the positive prompt.</div>
+            <div class="field-help" id="image-lora-help">Choose a LoRA and insert its prompt tag. Adjust the weight to control its influence.</div>
             <label class="field-label" for="image-negative-prompt">Negative prompt</label>
             <textarea id="image-negative-prompt" class="text-area" rows="3" placeholder="Things you don't want in the image"></textarea>
 
@@ -125,8 +125,8 @@
             <div class="image-history-controls"><label for="image-job-history">Recent jobs</label><select id="image-job-history" aria-label="Recent Image Generation jobs"><option value="">No recent jobs</option></select><button class="secondary-button compact" id="image-history-refresh" type="button">Refresh</button></div>
             <div class="preview-placeholder" id="image-empty-preview">
               <div class="preview-glyph">◇</div>
-              <strong>No image yet</strong>
-              <span>Configure model folders, scan, select a checkpoint, and generate.</span>
+              <strong>No images yet</strong>
+              <span>Add model folders in Settings, scan Models, and choose one to get started.</span>
               <div class="button-row">
                 <button class="secondary-button" data-jump="settings">Settings</button>
                 <button class="secondary-button" data-jump="models">Models</button>
@@ -145,7 +145,7 @@
       <section class="view" id="view-animation">
         <div class="page-heading animation-heading">
           <div>
-            <p class="eyebrow">DEFORUM-STYLE SCHEDULE ENGINE</p>
+            <p class="eyebrow">ANIMATION STUDIO</p>
             <h1>Animation</h1>
             <p class="muted">Build projects, resolve keyframed schedules, inspect exact frame state, and preview motion curves before rendering.</p>
           </div>
@@ -169,9 +169,9 @@
           <form method="dialog" class="animation-import-shell" id="animation-deforum-form">
             <div class="animation-import-heading">
               <div>
-                <p class="eyebrow">B6.1 LEGACY SETTINGS TRANSLATOR</p>
+                <p class="eyebrow">IMPORT ANIMATION SETTINGS</p>
                 <h2 id="animation-deforum-title">Import Deforum Settings</h2>
-                <p class="muted">Preview legacy settings before Morphorum creates a new native project. Imported checkpoint paths are never trusted.</p>
+                <p class="muted">Review your Deforum settings before creating a new project. Choose a model from your Morphorum library for the imported animation.</p>
               </div>
               <button class="icon-button animation-import-close" id="animation-deforum-close" type="button" aria-label="Close Deforum importer">×</button>
             </div>
@@ -190,7 +190,7 @@
             </div>
 
             <div class="notice subtle animation-import-safety">
-              <span>JSON only. A <code>.txt</code> file is accepted only when it contains JSON-serialized settings. Morphorum never executes Python from an import and never opens host paths embedded in the source.</span>
+              <span>Choose a Deforum settings file in JSON format (<code>.json</code> or <code>.txt</code>). The importer reads settings only; it does not run scripts or open model paths from the file.</span>
             </div>
 
             <div class="animation-import-summary" id="animation-deforum-summary" hidden></div>
@@ -226,8 +226,8 @@
         <div class="grid animation-layout">
           <article class="card glass animation-project-card">
             <div class="card-header">
-              <div><h2>Project</h2><p class="muted">Core timeline and output dimensions.</p></div>
-              <span class="badge" id="animation-schema-badge">Schema 1</span>
+              <div><h2>Project</h2><p class="muted">Name your project and choose its animation settings.</p></div>
+              <span class="badge" id="animation-schema-badge">Project format</span>
             </div>
             <div class="field-grid">
               <label class="animation-span-2"><span>Project</span><select id="animation-project-select"><option value="">No projects yet</option></select></label>
@@ -268,11 +268,11 @@
               </label>
             </div>
             <div class="animation-cadence-controls" data-animation-mode="3d">
-              <label><span>3D temporal continuity (B5.2)</span><select id="animation-temporal-mode" disabled><option value="forward">Forward-only (original cadence)</option><option value="future-anchor">Future-anchor depth-aligned tween (experimental)</option></select></label>
-              <label><span>Future-anchor blend strength</span><input id="animation-temporal-mix" type="number" min="0" max="1" step="0.05" value="0.65" disabled></label>
+              <label><span>3D frame blending</span><select id="animation-temporal-mode" disabled><option value="forward">Forward only</option><option value="future-anchor">Depth-aligned blending</option></select></label>
+              <label><span>Blend strength</span><input id="animation-temporal-mix" type="number" min="0" max="1" step="0.05" value="0.65" disabled></label>
               <label><span>Appearance guard (RGB difference)</span><input id="animation-temporal-contrast" type="number" min="1" max="255" step="1" value="96" disabled></label>
             </div>
-            <p class="animation-cadence-explainer muted" data-animation-mode="3d">Future-anchor mode refines skipped 3D frames after the next diffusion anchor is generated. It uses camera geometry and confidence-gated blending, not optical flow or an extra diffusion pass; only supported regions are blended.</p>
+            <p class="animation-cadence-explainer muted" data-animation-mode="3d">Depth-aligned blending smooths movement between generated 3D frames where reliable scene depth is available. Higher blend strength keeps more detail from neighboring frames.</p>
             <p class="animation-cadence-explainer muted" id="animation-cadence-help" aria-live="polite">Cadence 1 runs diffusion for every eligible frame.</p>
             <p class="muted animation-cadence-explainer">For changing cadence, enter a schedule such as <code>0:(1), 24:(3)</code>, or edit the Diffusion Cadence track in Visual Timeline. The last frame is always a diffusion anchor if denoising is enabled.</p>
           </article>
@@ -281,7 +281,7 @@
             <div class="card-header">
               <div>
                 <h2>Start Frame</h2>
-                <p class="muted">Choose how frame 0 is created. This is the actual first frame of the diffusion animation.</p>
+                <p class="muted">Choose how frame 0 is created. This sets the opening frame of your animation.</p>
               </div>
               <span class="badge" id="animation-start-mode-badge">Prompt</span>
             </div>
@@ -309,7 +309,7 @@
               </div>
               <div class="animation-source-preview-wrap">
                 <img id="animation-source-preview" class="animation-source-preview" alt="Uploaded animation start or preview reference" hidden>
-                <div id="animation-source-empty" class="animation-empty">No image uploaded. Prompt mode can render without one.</div>
+                <div id="animation-source-empty" class="animation-empty">No starting image selected. You can generate the first frame from a prompt.</div>
               </div>
             </div>
           </article>
@@ -353,7 +353,7 @@
             <div class="card-header">
               <div>
                 <h2>Visual Timeline</h2>
-                <p class="muted">Drag keyframes across tracks, edit values at the playhead, and keep Deforum schedules synchronized automatically.</p>
+                <p class="muted">Move keyframes, edit motion values, and preview how your animation changes over time.</p>
               </div>
               <div class="animation-timeline-header-actions">
                 <span class="badge" id="animation-timeline-status">No project</span>
@@ -393,13 +393,13 @@
 
             <div class="notice subtle animation-timeline-note">
               <strong>Timeline edits save immediately</strong>
-              <span>Raw schedule fields remain available below as an advanced compatibility editor. Save unsaved form changes before dragging timeline keyframes.</span>
+              <span>Edit animation values on the timeline or adjust the detailed schedules below. Save your changes before dragging keyframes.</span>
             </div>
           </article>
 
           <article class="card glass animation-prompts-card">
             <div class="card-header">
-              <div><h2>Prompt Keyframes</h2><p class="muted">Positive and negative prompts resolve into per-frame transition weights.</p></div>
+              <div><h2>Prompt Keyframes</h2><p class="muted">Set prompts at different frames to change the scene over time.</p></div>
               <button class="secondary-button compact" id="animation-add-prompt" type="button" disabled>+ Keyframe</button>
             </div>
             <div class="animation-prompt-list" id="animation-prompt-list">
@@ -409,7 +409,7 @@
 
           <article class="card glass" id="animation-2d-motion-card" data-animation-mode="2d">
             <div class="card-header">
-              <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style affine motion. Zoom is a multiplicative factor per frame, so small changes compound quickly.</p></div>
+              <div><h2>2D Motion Schedules</h2><p class="muted">Pan, rotate, and zoom the scene over time. Even small zoom changes add up across frames.</p></div>
             </div>
             <div class="animation-schedule-grid">
               <label><span>Border mode</span><select id="animation-border-mode" disabled><option value="replicate">Replicate edges</option><option value="wrap">Wrap opposite edge</option></select></label>
@@ -426,7 +426,7 @@
               <span class="badge">3D</span>
             </div>
             <div class="animation-camera-preset-bar">
-              <label><span>B5.3 Camera preset</span><select id="animation-3d-preset" disabled>
+              <label><span>Camera movement preset</span><select id="animation-3d-preset" disabled>
                 <option value="">Choose a gentle camera motion…</option>
                 <option value="dolly-in">Slow dolly in</option>
                 <option value="dolly-out">Slow dolly out</option>
@@ -450,11 +450,11 @@
               <label><span>Rotation Z</span><input id="animation-3d-rotation-z" class="animation-schedule" type="text" value="0:(0)" disabled></label>
               <label><span>Field of view <small class="muted">(degrees)</small></span><input id="animation-3d-fov" class="animation-schedule" type="text" value="0:(40)" disabled></label>
               <label><span>Depth resolution</span><select id="animation-3d-depth-resolution" disabled><option value="auto">Auto</option><option value="384">384 px</option><option value="512">512 px</option><option value="768">768 px</option><option value="full">Full render size</option></select></label>
-              <label><span>3D projection quality</span><select id="animation-3d-projection-mode" disabled><option value="legacy">Legacy: nearest-pixel Z-buffer</option><option value="splat">B5.1: subpixel depth-tested splat</option></select></label>
-              <label><span>Exposed-pixel fill</span><select id="animation-3d-hole-fill" disabled><option value="nearest">Nearest visible pixel</option><option value="background">Prefer background layer (experimental)</option></select></label>
+              <label><span>3D projection quality</span><select id="animation-3d-projection-mode" disabled><option value="legacy">Classic projection</option><option value="splat">Smooth subpixel projection</option></select></label>
+              <label><span>Exposed-pixel fill</span><select id="animation-3d-hole-fill" disabled><option value="nearest">Nearest visible pixel</option><option value="background">Background-aware fill</option></select></label>
             </div>
             <div class="notice subtle">
-              <strong>Renderer status</strong>
+              <strong>Projection details</strong>
               <span>B5.1 preserves the legacy projection for direct comparisons. Select subpixel projection to improve edges; background-priority fill is experimental. For every 3D frame, Morphorum also saves a black/white disocclusion mask alongside frames for future repair. Start gently: Translation Z around ±0.02 to ±0.08 scene units and rotations around ±0.25° to ±1° per frame. Larger values compound quickly because each rendered frame becomes the next camera source.</span>
             </div>
           </article>
@@ -484,7 +484,7 @@
               <button class="primary-button compact busy-button" id="animation-generate-motion-preview" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Camera Motion</span></button>
             </div>
 
-            <label class="animation-preview-hole-toggle" data-animation-mode="3d"><input id="animation-preview-highlight-holes" type="checkbox" disabled> Highlight exposed pixels in red (B5.3)</label>
+            <label class="animation-preview-hole-toggle" data-animation-mode="3d"><input id="animation-preview-highlight-holes" type="checkbox" disabled> Highlight exposed pixels in red</label>
             <div class="notice subtle animation-motion-preview-note">
               <strong>Geometry only</strong>
               <span>3D mode simulates sequential depth warps and reports projected coverage and newly exposed pixels. The red overlay is only a preview aid. The uploaded reference does not change your real starting-frame mode or model.</span>
@@ -509,7 +509,7 @@
             <div class="card-header">
               <div>
                 <h2>Animation Render</h2>
-                <p class="muted">Render the real diffusion sequence. Frame 0 comes from the selected Start Mode; each later frame transforms the previous rendered frame before img2img diffusion.</p>
+                <p class="muted">Render the real diffusion sequence. Choose a starting frame, render your animation, and follow progress here.</p>
               </div>
               <div class="button-row animation-render-actions">
                 <button class="secondary-button compact" id="animation-resume-render" type="button" disabled>Resume</button>
@@ -520,7 +520,7 @@
 
             <div class="notice subtle animation-render-notice">
               <strong>Real diffusion render</strong>
-              <span>This can take a while. Morphorum freezes the current browser project state into a render manifest, saves every completed frame, and can resume interrupted renders.</span>
+              <span>Rendering may take some time. Completed frames are saved as the animation runs, and interrupted renders can be resumed.</span>
             </div>
 
             <div class="animation-render-history-row">
@@ -627,7 +627,7 @@
 
             <section class="animation-performance-summary" id="animation-performance-summary" hidden>
               <div class="animation-performance-heading">
-                <strong>B5.5 Performance Diagnostics</strong>
+                <strong>Performance & Memory</strong>
                 <a id="animation-performance-report" href="#" target="_blank" rel="noopener">View frame-by-frame JSON</a>
               </div>
               <div class="animation-performance-stats" id="animation-performance-stats" aria-live="off"></div>
@@ -635,7 +635,7 @@
             </section>
             <section class="animation-video-export animation-hybrid-source" id="animation-hybrid-source">
               <div class="animation-video-export-heading">
-                <div><h3>B6.2 Hybrid Source Lab</h3><p class="muted">Import a video from this browser, inspect its metadata, and extract source frames. Does not affect rendering yet.</p></div>
+                <div><h3>Source Video</h3><p class="muted">Upload a video, inspect its details, and extract frames for preview. Extracted frames are not yet used to guide animation renders.</p></div>
                 <span class="animation-video-status" id="animation-hybrid-status">Select a project</span>
               </div>
               <div class="animation-hybrid-controls">
@@ -657,8 +657,8 @@
             <section class="animation-video-export" id="animation-video-export">
               <div class="animation-video-export-heading">
                 <div>
-                  <h3>B5.4 Video Export</h3>
-                  <p class="muted">Encode existing PNG frames into MP4 or WebM. No image generation, LoRA changes, or GPU work.</p>
+                  <h3>Video Export</h3>
+                  <p class="muted">Turn completed animation frames into a downloadable MP4 or WebM video.</p>
                 </div>
                 <span class="animation-video-status" id="animation-video-availability">Checking FFmpeg…</span>
               </div>
@@ -691,7 +691,7 @@
             <div class="card-header">
               <div>
                 <h2>Resolved Frame Inspector</h2>
-                <p class="muted">See the exact state Morphorum will hand to the future frame renderer.</p>
+                <p class="muted">Review the prompts, motion, and generation settings calculated for any frame.</p>
               </div>
               <button class="secondary-button compact busy-button" id="animation-validate-schedules" type="button" disabled><span class="spinner"></span><span class="button-label">Validate</span></button>
             </div>
@@ -775,23 +775,7 @@
             <textarea id="animation-notes" class="text-area" rows="5" placeholder="Notes about this animation…" disabled></textarea>
           </article>
 
-          <article class="card glass animation-foundation-card">
-            <div class="card-header"><div><h2>Animation Pipeline</h2><p class="muted">One project flows from start-frame choice through schedules, previews, resumable diffusion frames, and final assembly.</p></div></div>
-            <div class="animation-foundation-grid">
-              <div><strong>Timeline</strong><span>Frames, FPS, dimensions</span></div>
-              <div><strong>Prompts</strong><span>Positive + negative keyframes</span></div>
-              <div><strong>Motion</strong><span>Raw 2D schedule strings</span></div>
-              <div><strong>Generation</strong><span>Strength, noise, steps, guidance, seeds</span></div>
-              <div><strong>Model</strong><span>Stable indexed model reference</span></div>
-              <div><strong>Persistence</strong><span>Atomic human-readable project.json</span></div>
-              <div><strong>Expressions</strong><span>Safe t/max_f math evaluation</span></div>
-              <div><strong>Inspector</strong><span>Resolved frame values + curve preview</span></div>
-              <div><strong>2D Transform</strong><span>Cumulative angle, zoom, translation</span></div>
-              <div><strong>Motion Preview</strong><span>CPU-only animated source-image preview</span></div>
-              <div><strong>Img2Img Loop</strong><span>Previous frame → transform → diffusion → next frame</span></div>
-              <div><strong>Resume</strong><span>Per-frame manifest + interrupted render recovery</span></div>
-            </div>
-          </article>
+  
         </div>
       </section>
 
@@ -806,7 +790,7 @@
           <div class="card-header">
             <div>
               <h2>Managed Downloads</h2>
-              <p class="muted">Official model packages downloaded and maintained by Morphorum.</p>
+              <p class="muted">Download and manage supported models from the built-in catalog.</p>
             </div>
             <span class="badge">Morphorum managed</span>
           </div>
@@ -846,7 +830,7 @@
 
       <section class="view" id="view-loras">
         <div class="page-heading">
-          <div><p class="eyebrow">LORA LABORATORY</p><h1>LoRA Manager</h1><p class="muted">Inspect indexed LoRA metadata and tensor layout without loading models onto the GPU.</p></div>
+          <div><p class="eyebrow">LORA LABORATORY</p><h1>LoRA Manager</h1><p class="muted">Browse LoRAs, copy prompt tags, and inspect their details.</p></div>
           <button class="primary-button busy-button" id="lora-manager-scan" type="button"><span class="spinner"></span><span class="button-label">Scan Directories</span></button>
         </div>
         <div class="lora-manager-grid">
@@ -862,7 +846,7 @@
             <p class="muted lora-manager-footnote">Uses the directories in Settings. Scanning refreshes the shared Models index.</p>
           </article>
           <article class="card glass lora-manager-details">
-            <div class="card-header"><div><h2 id="lora-manager-title">Choose a LoRA</h2><p class="muted" id="lora-manager-subtitle">Metadata and architecture diagnostics appear here.</p></div></div>
+            <div class="card-header"><div><h2 id="lora-manager-title">Choose a LoRA</h2><p class="muted" id="lora-manager-subtitle">Choose a LoRA to see its details and prompt tag.</p></div></div>
             <div class="lora-manager-insert lora-manager-quick-use">
               <div class="lora-manager-quick-title"><h3>Quick Use</h3><p class="muted">Copy a LoRA prompt snippet or add it to Image Generation.</p></div>
               <div class="lora-manager-insert-controls">
@@ -873,7 +857,7 @@
               <div class="lora-manager-snippet" id="lora-manager-snippet" tabindex="0" aria-label="Prompt snippet">Select a LoRA to preview its prompt tag.</div>
               <div class="lora-manager-quick-actions"><button class="secondary-button" id="lora-manager-copy" type="button" disabled>Copy Prompt Tag</button>
               <button class="primary-button" id="lora-manager-insert" type="button" disabled>Add to Image Prompt</button></div>
-              <p class="muted lora-manager-footnote">A prompt directive selects the LoRA. Trigger words only come from explicit file or sidecar metadata, never guessed training tags. Image model family must match.</p>
+              <p class="muted lora-manager-footnote">The prompt tag uses your chosen strength. Include trigger words when available, and use a compatible image model.</p>
             </div>
 
             <details class="lora-manager-expert">
@@ -891,12 +875,12 @@
               <div id="lora-manager-detail-advanced" class="lora-manager-detail-body"></div>
             </details>
             <details class="lora-manager-expert">
-              <summary>Runtime adapter audit</summary>
+              <summary>Loaded LoRA details</summary>
             <div class="lora-manager-runtime">
-              <div class="card-header"><div><h3>Runtime adapter state</h3><p class="muted">Registered weights are not proof of visible LoRA influence.</p></div>
+              <div class="card-header"><div><h3>Active LoRA adapters</h3><p class="muted">See which LoRAs are loaded and how they are applied. Compare generated images to check their effect.</p></div>
                 <button class="secondary-button compact" type="button" id="lora-manager-refresh-runtime">Refresh</button>
               </div>
-              <div id="lora-manager-runtime-details" class="lora-manager-fields"><span class="muted">No runtime sample yet.</span></div>
+              <div id="lora-manager-runtime-details" class="lora-manager-fields"><span class="muted">Load a model to view active LoRAs.</span></div>
             </div>
             </details>
           </article>
@@ -905,7 +889,7 @@
 
       <section class="view" id="view-settings">
         <div class="page-heading settings-heading">
-          <div><p class="eyebrow">CONFIGURATION</p><h1>Settings</h1><p class="muted">External libraries stay where you keep them; managed models use Morphorum-controlled storage.</p></div>
+          <div><p class="eyebrow">PREFERENCES & LIBRARIES</p><h1>Settings</h1><p class="muted">External libraries stay where you keep them; managed models use Morphorum-controlled storage.</p></div>
           <div class="button-row">
             <span class="settings-dirty-badge" id="settings-dirty-state" aria-live="polite">All changes saved</span>
             <button class="secondary-button busy-button" id="load-settings"><span class="spinner"></span><span class="button-label">Reload</span></button>
