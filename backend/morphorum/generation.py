@@ -2452,11 +2452,17 @@ class GenerationManager:
                     ) from exc
                 component_name = "unet" if family == "sdxl" else "transformer"
                 if family == "sdxl":
-                    diagnostics = self._verify_adapter_weights(
+                    unet_diagnostics = self._verify_adapter_weights(
                         pipe,
                         adapter_name,
                         component_name=component_name,
                     )
+                    if compatibility == "sdxl-text-encoder-normalized":
+                        # Preserve independently verified CLIP text-encoder
+                        # counts and normalization provenance in job diagnostics.
+                        diagnostics["components"]["unet"] = unet_diagnostics
+                    else:
+                        diagnostics = unet_diagnostics
                 else:
                     diagnostics = self._adapter_diagnostics(
                         getattr(pipe, component_name, None),
