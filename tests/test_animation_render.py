@@ -1151,6 +1151,29 @@ def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
             assert np.count_nonzero(pixels) == state["depth_3d"]["disoccluded_pixels"]
 
 
+def test_b52_resume_recovers_last_diffusion_anchor_from_existing_frame_metadata(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path)
+    for frame, mode in [(0, "source"), (1, "cadence-transform"),
+                        (2, "cadence-transform"), (3, "img2img"),
+                        (4, "cadence-transform")]:
+        path = animation_render._frame_path("resume-test", "test-run", frame)
+        animation_render._save_frame(
+            Image.new("RGB", (8, 8), "gray"), path,
+            metadata={"render_state": {"generation": {"diffusion_mode": mode}}},
+        )
+    assert animation_render._last_diffused_anchor(
+        "resume-test", "test-run", before_frame=5,
+    ) == 3
+    assert animation_render._last_diffused_anchor(
+        "resume-test", "test-run", before_frame=3,
+    ) == 0
+    assert animation_render._last_diffused_anchor(
+        "resume-test", "test-run", before_frame=1,
+    ) == 0
+
+
 def test_diffusion_cadence_skips_intermediate_diffusion_but_keeps_motion(
     tmp_path: Path,
     monkeypatch,
