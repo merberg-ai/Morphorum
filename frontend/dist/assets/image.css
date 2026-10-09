@@ -142,3 +142,7 @@
 .image-result-lightbox img {display:block;max-height:calc(100dvh - 150px);max-width:100%;object-fit:contain;margin:auto;}
 .image-result-lightbox > a {margin-top:10px;display:inline-block;text-decoration:none;}
 @media(max-width:640px) { .image-history-controls { grid-template-columns:minmax(0,1fr) auto; } .image-history-controls label { grid-column:1/-1; } }
+
+.image-prompt-tools {display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end;}
+.image-prompt-tools button {min-height:32px;}
+@media(max-width:460px) {.image-prompt-heading {flex-wrap:wrap;}.image-prompt-tools {width:100%;justify-content:flex-start;}}

@@ -551,7 +551,7 @@
     qsa(
       '#view-animation input, #view-animation select, #view-animation textarea'
     ).forEach(input => {
-      if (input.id.startsWith('animation-deforum-') || input.id.startsWith('animation-hybrid-')) {
+      if (input.id.startsWith('animation-deforum-') || input.id.startsWith('animation-hybrid-') || input.id.startsWith('animation-video-')) {
         return;
       }
       if (input.id === 'animation-project-select') {
@@ -3049,10 +3049,11 @@
       stepMeter.setAttribute('aria-valuenow', String(stepPercent));
       stepMeter.setAttribute('aria-valuetext', stepTotal ? currentStep + ' of ' + stepTotal + ' steps' : 'No active diffusion');
     }
-    if (job) window.dispatchEvent(new CustomEvent('morphorum:job-status', {detail: {
-      type: 'animation', id: job.id, status: job.status, progress: Number(job.progress || 0),
-      current: Number(job.current_frame || 0) + 1, total: Number(job.total_frames || 0),
-      eta_seconds: job.eta_seconds
+    window.dispatchEvent(new CustomEvent('morphorum:job-status', {detail: {
+      
+      type: 'animation', id: job?.id || null, status: job?.status || 'idle', progress: Number(job?.progress || 0),
+      current: job ? Number(job.current_frame || 0) + 1 : 0, total: Number(job?.total_frames || 0),
+      eta_seconds: job?.eta_seconds ?? null
     }}));
 
     const frameTime = qs('#animation-render-frame-time');
@@ -4133,6 +4134,7 @@
         input.id === 'animation-project-select' ||
         input.id.startsWith('animation-deforum-') ||
         input.id.startsWith('animation-hybrid-') ||
+        input.id.startsWith('animation-video-') ||
         input.id === 'animation-model' ||
         input.id === 'animation-source-file' ||
         input.id === 'animation-start-mode' ||

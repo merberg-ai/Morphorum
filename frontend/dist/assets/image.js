@@ -800,6 +800,7 @@
     qs('#cancel-generation')?.addEventListener('click', cancel);
     qs('#unload-model')?.addEventListener('click', unloadModel);
     qs('#image-reset-draft')?.addEventListener('click', resetImageDraft);
+    qs('#image-jump-results')?.addEventListener('click', () => qs('#image-results-heading')?.scrollIntoView({behavior:'smooth',block:'start'}));
     qs('#image-job-history')?.addEventListener('change', event => showImageJob(event.target.value));
     qs('#image-history-refresh')?.addEventListener('click', () => loadImageJobHistory());
     qs('#image-lightbox-close')?.addEventListener('click', () => qs('#image-result-lightbox')?.close());

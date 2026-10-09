@@ -82,7 +82,7 @@
               <span class="badge" id="image-model-family-badge">No model</span>
             </div>
 
-            <div class="image-prompt-heading"><label class="field-label" for="image-prompt">Prompt</label><button class="secondary-button compact" type="button" id="image-reset-draft" title="Clear browser-saved Image form values">Reset Image Form</button></div>
+            <div class="image-prompt-heading"><label class="field-label" for="image-prompt">Prompt</label><div class="image-prompt-tools"><button class="secondary-button compact" type="button" id="image-jump-results">View Results ↓</button><button class="secondary-button compact" type="button" id="image-reset-draft" title="Clear browser-saved Image form values">Reset Image Form</button></div></div>
             <textarea id="image-prompt" class="text-area" rows="5" placeholder="Describe the image you want to make…"></textarea>
             <div class="lora-picker-row" id="image-lora-picker">
               <select id="image-lora-select" disabled aria-label="LoRA"><option value="">Select a model to browse LoRAs</option></select>
@@ -801,7 +801,8 @@
           <button class="primary-button busy-button" id="scan-models"><span class="spinner"></span><span class="button-label">Scan Models</span></button>
         </div>
 
-        <article class="card glass managed-models-card">
+        <details class="card glass managed-models-card" id="managed-models-catalog">
+          <summary>Managed Downloads <span class="muted">Optional model catalog</span></summary>
           <div class="card-header">
             <div>
               <h2>Managed Downloads</h2>
@@ -812,7 +813,7 @@
           <div id="managed-model-list" class="managed-model-list">
             <div class="model-empty"><span class="large-spinner"></span><span>Checking managed models…</span></div>
           </div>
-        </article>
+        </details>
 
         <div class="model-summary-row" id="model-summary-row">
           <div class="mini-stat glass"><span class="mini-stat-value" id="model-total">0</span><span class="mini-stat-label">Indexed files</span></div>

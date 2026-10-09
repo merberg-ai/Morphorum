@@ -35,4 +35,4 @@ jobs:
           node --check frontend/dist/assets/animation.js
 
       - name: Regression-test browser LoRA prompt insertion
-        run: node --test tests/frontend_lora_insertion.test.cjs tests/frontend_animation_cadence.test.cjs tests/frontend_animation_video.test.cjs tests/frontend_deforum_import.test.cjs tests/frontend_deforum_layout.test.cjs tests/frontend_shared_ui.test.cjs
+        run: node --test tests/frontend_lora_insertion.test.cjs tests/frontend_animation_cadence.test.cjs tests/frontend_animation_video.test.cjs tests/frontend_deforum_import.test.cjs tests/frontend_deforum_layout.test.cjs tests/frontend_shared_ui.test.cjs tests/frontend_dev_ui.test.cjs

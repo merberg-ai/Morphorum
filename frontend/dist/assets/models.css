@@ -186,3 +186,10 @@
   .model-size {grid-column:1/-1;}
   .use-model-button {grid-column:1/-1;grid-row:auto;width:100%;}
 }
+
+.managed-models-card {padding:0!important;}
+.managed-models-card > summary {cursor:pointer;padding:12px 15px;font-size:.95rem;font-weight:650;display:flex;gap:12px;align-items:center;justify-content:space-between;}
+.managed-models-card > summary::marker {color:var(--accent);}
+.managed-models-card > summary .muted {font-size:.73rem;font-weight:400;}
+.managed-models-card[open] > summary {border-bottom:1px solid var(--border);}
+.managed-models-card > .card-header {margin:10px 15px;}
