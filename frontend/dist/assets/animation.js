@@ -551,7 +551,7 @@
     qsa(
       '#view-animation input, #view-animation select, #view-animation textarea'
     ).forEach(input => {
-      if (input.id.startsWith('animation-deforum-')) {
+      if (input.id.startsWith('animation-deforum-') || input.id.startsWith('animation-hybrid-')) {
         return;
       }
       if (input.id === 'animation-project-select') {
@@ -3658,6 +3658,7 @@
       clearMotionPreviewResult();
       resetRenderUi();
       state.project = payload.project;
+      resetHybridForProject();
       state.path = payload.path || '';
       state.timeline = null;
       state.timelineSelection = null;
@@ -3763,10 +3764,12 @@
   }
   function hybridButtons() {
     const ready = Boolean(hybridProjectId() && hybrid.info);
+    const status = qs('#animation-hybrid-status');
+    if (status) status.textContent = hybridProjectId() ? 'Ready' : 'Select a project';
     const active = Boolean(hybrid.jobId);
     qs('#animation-hybrid-extract').disabled = !ready || active;
     qs('#animation-hybrid-cancel').disabled = !active;
-    qs('#animation-hybrid-upload').disabled = !hybridProjectId() || active;
+    qs('#animation-hybrid-upload').disabled = !hybridProjectId() || active || !qs('#animation-hybrid-file')?.files?.length;
   }
   async function hybridLoadFrames() {
     const manifest = await api(hybridBase() + '/hybrid-frames');
@@ -3853,11 +3856,14 @@
     hybrid.frames = null;
     const preview = qs('#animation-hybrid-preview');
     if (preview) preview.hidden = true;
+    const fileInput = qs('#animation-hybrid-file');
+    if (fileInput) fileInput.value = '';
     hybridMessage('Upload a local video to begin.');
     hybridButtons();
   }
   function bindHybrid() {
     qs('#animation-hybrid-upload')?.addEventListener('click', hybridUpload);
+    qs('#animation-hybrid-file')?.addEventListener('change', hybridButtons);
     qs('#animation-hybrid-extract')?.addEventListener('click', hybridExtract);
     qs('#animation-hybrid-cancel')?.addEventListener('click', hybridCancel);
     qs('#animation-hybrid-frame-slider')?.addEventListener('input', hybridDisplayFrame);

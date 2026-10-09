@@ -14,3 +14,11 @@ test('import popup uses a single scroll container and static action footer', () 
   assert.match(patch, /\.animation-import-mapping code \{[\s\S]*?word-break: break-word/);
   assert.ok(html.includes('aria-labelledby="animation-deforum-title"'));
 });
+
+test('hybrid upload state is refreshed after project load and file selection', () => {
+  const js = fs.readFileSync(path.join(base, 'assets', 'animation.js'), 'utf8');
+  const load = js.slice(js.indexOf('async function loadProject(projectId'), js.indexOf('async function createProject'));
+  assert.match(load, /state\.project = payload\.project;\s*resetHybridForProject\(\)/);
+  assert.match(js, /animation-hybrid-file'\)\?\.addEventListener\('change', hybridButtons\)/);
+  assert.match(js, /input\.id\.startsWith\('animation-hybrid-'\)/);
+});
