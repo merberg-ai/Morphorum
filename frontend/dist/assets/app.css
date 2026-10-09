@@ -172,6 +172,48 @@ code { color: var(--accent); font-family: var(--font-mono); }
 }
 .telemetry-fill.free { background: linear-gradient(90deg, var(--accent-2), var(--ok)); }
 
+/* Visible build identity, with touch-accessible full Git details. */
+.runtime-build {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(320px, 32vw);
+}
+.runtime-build > summary { list-style: none; cursor: pointer; }
+.runtime-build > summary::-webkit-details-marker { display: none; }
+.runtime-build > .runtime-pill { max-width: 100%; min-width: 0; text-align: left; }
+.runtime-build[open] > .runtime-pill { border-color: var(--border-strong); }
+.runtime-build .status-dot { flex: 0 0 9px; }
+.runtime-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.runtime-meta > span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runtime-version { font-size: .76rem; font-weight: 720; color: var(--text); }
+.runtime-branch { font-family: var(--font-mono); font-size: .65rem; }
+.runtime-branch-short { display: none !important; }
+.runtime-build-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: max-content;
+  min-width: 225px;
+  max-width: min(88vw, 380px);
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+.runtime-build-popover > div { display: grid; gap: 4px; padding: 5px 0; }
+.runtime-build-popover > div + div { border-top: 1px solid var(--border); }
+.runtime-build-popover strong { color: var(--muted); font-size: .64rem; text-transform: uppercase; letter-spacing: .06em; }
+.runtime-build-popover code { color: var(--text); overflow-wrap: anywhere; white-space: normal; font-size: .75rem; }
+
 .main-nav {
   display: flex;
   gap: 8px;
@@ -657,8 +699,13 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .brand-block {grid-column:1;grid-row:1;min-width:0;}
   .brand-block > div:last-child {min-width:0;}
   .brand {font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .topbar-right .runtime-pill {grid-column:2;grid-row:1;min-width:0;max-width:130px;margin:0;display:inline-flex;justify-self:end;font-size:.68rem;padding:6px 7px;overflow:hidden;}
-  #runtime-text {display:block;max-width:105px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .topbar-right .runtime-build {grid-column:2;grid-row:1;justify-self:end;width:100%;max-width:min(42vw,164px);}
+  .topbar-right .runtime-pill {width:100%;max-width:100%;min-width:0;margin:0;display:flex;gap:6px;padding:6px 8px;overflow:hidden;}
+  .runtime-branch-long {display:none !important;}
+  .runtime-branch-short {display:block !important;}
+  .runtime-version {font-size:.7rem;}
+  .runtime-branch {font-size:.6rem;}
+  .runtime-build-popover {max-width:min(88vw,350px);min-width:0;}
   .telemetry-strip {grid-column:1/-1;grid-row:2;order:initial;width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;}
   .telemetry-item {min-width:0;padding:5px 3px;}
   .telemetry-head {display:flex;flex-direction:column;align-items:center;gap:4px;margin:0;white-space:normal;line-height:1.1;font-size:.55rem;text-align:center;}
@@ -674,7 +721,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .nav-more-menu button {min-height:43px;border:0;border-radius:7px;background:transparent;color:var(--text);text-align:left;padding:8px 12px;cursor:pointer;}
   .nav-more-menu button:hover {background:rgba(255,255,255,.08);}
 }
-@media(max-width:360px){.topbar-right .runtime-pill {max-width:90px;}.telemetry-head strong {font-size:.65rem;}.main-nav .nav-button,.nav-more-toggle {font-size:.6rem;}}
+@media(max-width:360px){.topbar-right .runtime-build {max-width:42vw;}.telemetry-head strong {font-size:.65rem;}.main-nav .nav-button,.nav-more-toggle {font-size:.6rem;}}
 
 /* dev-ui grouped Settings and compact Console filters */
 .settings-dirty-badge {font-size:.76rem;color:var(--ok);align-self:center;white-space:nowrap;}
