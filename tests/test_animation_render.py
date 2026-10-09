@@ -1238,6 +1238,21 @@ def test_diffusion_cadence_skips_intermediate_diffusion_but_keeps_motion(
     assert finished["current_frame_state"]["cadence"]["anchor"] is True
     assert finished["current_frame_state"]["timings"]["diffusion"] >= 0.0
 
+    # B5.5 must not alter the actual diffusion/cadence output, and the
+    # low-overhead profiler must preserve every completed frame.
+    assert finished["performance"]["frames_observed"] == 4
+    assert finished["performance"]["diffusion_anchors"] == 2
+    assert finished["performance"]["latest_frame"] == 4
+    report = manager.performance_report("render-test", started["id"])
+    assert report["summary"]["frames_observed"] == 4
+    assert [item["frame"] for item in report["frames"]] == [1, 2, 3, 4]
+    assert [item["diffused"] for item in report["frames"]] == [False, True, False, True]
+    assert all(item["conditioning_cache_entries"] <= 8 for item in report["frames"])
+    assert all(item["timings"]["total"] >= 0 for item in report["frames"])
+    with pytest.raises(animation_render.AnimationRenderError, match="Invalid"):
+        manager.performance_report("../escape", started["id"])
+
+
 
 
 def test_animation_sdxl_blended_conditioning_never_retains_autograd_graphs() -> None:
