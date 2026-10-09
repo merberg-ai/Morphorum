@@ -797,3 +797,83 @@ def test_b53_3d_preview_api_forwards_red_overlay_to_manager(
         assert seen[0][0]["animation"]["mode"] == "3d"
         assert seen[0][2] is True
         assert seen[0][1].is_file()
+
+
+def test_deforum_import_preview_and_create_routes(tmp_path, monkeypatch) -> None:
+    import morphorum.app as app_module
+    import morphorum.deforum_import as importer
+
+    model = {
+        "id": "model-1",
+        "kind": "checkpoints",
+        "family": "sdxl",
+        "variant": "sdxl",
+        "name": "Test SDXL",
+        "filename": "test.safetensors",
+        "path": str(tmp_path / "test.safetensors"),
+    }
+    monkeypatch.setattr(importer, "get_model", lambda _model_id: model)
+    monkeypatch.setattr(
+        importer,
+        "validate_project_schedules",
+        lambda project: {"valid": True, "issues": [], "fields": {}},
+    )
+
+    created = {}
+
+    def fake_create(content, *, filename="", model_id=None, project_name=None):
+        report = importer.preview_deforum_import(
+            content,
+            filename=filename,
+            model_id=model_id,
+            project_name=project_name,
+        )
+        project = dict(report["project"])
+        project["id"] = "imported-project-1234"
+        project["name"] = project_name or project["name"]
+        created["project"] = project
+        return project, report
+
+    monkeypatch.setattr(app_module, "create_deforum_import", fake_create)
+
+    source = json.dumps({
+        "max_frames": 12,
+        "animation_prompts": {"0": "legacy prompt"},
+        "sampler": "Euler",
+    })
+    with TestClient(app) as client:
+        preview = client.post(
+            "/api/animation/import/deforum/preview",
+            json={"content": source, "filename": "legacy.json", "model_id": "model-1"},
+        )
+        assert preview.status_code == 200
+        assert preview.json()["project"]["animation"]["max_frames"] == 12
+        assert preview.json()["project"]["generation"]["sampler"] == "euler"
+
+        response = client.post(
+            "/api/animation/import/deforum/create",
+            json={
+                "content": source,
+                "filename": "legacy.json",
+                "model_id": "model-1",
+                "name": "Imported Legacy",
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["project"]["id"] == "imported-project-1234"
+        assert response.json()["project"]["name"] == "Imported Legacy"
+        assert response.json()["import"]["source_filename"] == "legacy.json"
+        assert created["project"]["prompts"]["0"] == "legacy prompt"
+
+
+def test_deforum_import_route_rejects_python_text() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/animation/import/deforum/preview",
+            json={
+                "content": "max_frames = 120",
+                "filename": "legacy.txt",
+            },
+        )
+    assert response.status_code == 400
+    assert "not JSON-serialized" in response.json()["detail"]

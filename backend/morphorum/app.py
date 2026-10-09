@@ -67,6 +67,11 @@ from .console import (
     sse_events,
 )
 from .generation import GenerationError, generation_manager
+from .deforum_import import (
+    DeforumImportError,
+    create_deforum_import,
+    preview_deforum_import,
+)
 from .loras import LoRAError
 from .lora_inspector import LoRAInspectionError, inspect_lora
 from .civitai import CivitaiLookupError, lookup_civitai
@@ -207,6 +212,45 @@ def get_settings() -> dict[str, Any]:
 @app.get("/api/animation/projects")
 def api_animation_projects() -> dict[str, Any]:
     return {"projects": list_animation_projects()}
+
+
+@app.post("/api/animation/import/deforum/preview")
+def api_preview_deforum_import(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return preview_deforum_import(
+            payload.get("content"),
+            filename=str(payload.get("filename") or ""),
+            model_id=payload.get("model_id"),
+            project_name=payload.get("name"),
+        )
+    except DeforumImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/import/deforum/create", status_code=201)
+def api_create_deforum_import(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        project, report = create_deforum_import(
+            payload.get("content"),
+            filename=str(payload.get("filename") or ""),
+            model_id=payload.get("model_id"),
+            project_name=payload.get("name"),
+        )
+        return {
+            "status": "created",
+            "project": project,
+            "path": animation_project_path(project["id"]),
+            "import": {
+                "importer_version": report["importer_version"],
+                "source_filename": report["source_filename"],
+                "source_sha256": report["source_sha256"],
+                "warnings": report["warnings"],
+                "unsupported_keys": report["unsupported_keys"],
+                "unmapped_keys": report["unmapped_keys"],
+            },
+        }
+    except DeforumImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/animation/projects", status_code=201)
