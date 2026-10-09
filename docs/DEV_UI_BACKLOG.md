@@ -77,6 +77,48 @@ Use **secondary tabs inside Animation**, not additional items in the main site n
 
 **Scope:** UI/telemetry polish on `dev-ui` only. No B6.3 hybrid synthesis, no changes to stable render behavior. Capture the rest of the backlog before coding.
 
+## 3. LoRA Manager cleanup and Copy Prompt Tag with trigger words
+
+**Status:** Planned, not implemented.
+
+**Requested:** Make the LoRA Manager much more intuitive and compact, fix the oversized bottom `Include recorded trigger words` checkbox, and offer a **Copy Prompt Tag** button that includes available trigger words.
+
+**Verified source findings (dev-ui baseline):**
+- `frontend/dist/index.html` currently has a Library list/search/family selector at left and an ever-growing Details panel with metadata, raw diagnostics, optional Civitai lookup, runtime adapter audit and an insertion area at the very bottom.
+- `frontend/dist/assets/app.css` applies `input {width:100%;min-height:43px;padding:9px 11px}` globally, while `.lora-manager-checkbox` only styles the surrounding flex label. The checkbox itself inherits the enormous dimensions. Fix locally with `.lora-manager-checkbox input[type="checkbox"] { width: 16px; height:16px; min-height:16px; padding:0; margin:0; flex:0 0 16px; accent-color:var(--accent); }` or equivalent; do not harm normal touch targets.
+- `frontend/dist/assets/loras.js` currently uses local inspection `detail.trigger_words`, with optional `state.civitai?.trained_words` fallback, for the **Add to Image Prompt** action. `frontend/dist/assets/image.js` builds `<lora:name:weight>` and prepends comma-separated trigger words. The latter validates LoRA family and index before inserting into the selected Image model.
+- LoRA training frequency tags (top_training_tags) are explicitly *not* guaranteed trigger words and must **never** be silently copied as triggers.
+
+### Proposed layout
+
+Retain a responsive **Library + Details** layout on desktop and a single-column/two-pane layout on mobile:
+
+1. **Library:** compact model-family filter + search at top, scrollable selectable results, clear selected state; optional source/family pill per row and brief selection summary. Scanning status and action should stay visible without a huge vertical toolbar.
+2. **Quick Use** directly below selected LoRA name at the top of Details, not below all metadata. Compact strength input, normal-sized **Include trigger words** checkbox, read-only live preview of the full prompt snippet, **Copy Prompt Tag** button and existing **Add to Image Prompt** button. The preview updates when strength/trigger checkbox changes.
+3. **At-a-glance Details:** model family/base model compatibility, file size, format, LoRA rank and trigger provenance. Recorded triggers shown as easy-to-read chips, with a meaningful `Not recorded` state.
+4. **Advanced details** behind expandable sections: training tags (labelled *not verified triggers*), tensor diagnostics, training metadata, raw metadata/tensor samples, and runtime adapter audit. Keep Civitai lookup in an optional **Online metadata** section, not the primary workflow.
+5. At narrow screen widths, place the compact Quick Use area above collapsible metadata. Preserve readable wrapping, reasonable max heights, consistent card spacing, and full-size touch-friendly *button/label* surfaces while keeping checkbox glyph approximately 16–18px.
+
+### Copy Prompt Tag semantics
+
+- Reuse one **pure prompt snippet formatter** between clipboard copying and image-prompt insertion, with shared LoRA name sanitization, finite strength bounds (-4..4), canonical numeric formatting, trigger normalization/deduplication and safe comma separators. Avoid diverging tag behavior between actions.
+- Example when triggers exist and checkbox is on: `trigger one, trigger two, <lora:LoRAName:1>`.
+- Example with triggers unavailable/off: `<lora:LoRAName:1>`.
+- Prefer explicitly recorded trigger words from local safetensors/sidecars. If the user explicitly fetched Civitai metadata and the local record has none, allow verified-response `trained_words` as fallback and clearly label the provenance; do not infer from frequent training tags.
+- The **Copy Prompt Tag** action should function even if the Image tab has no model selected; it is a clipboard action, *not* activation/loading of a LoRA. Existing **Add to Image Prompt** must retain its model-family/index validation.
+- When clipboard APIs are unavailable because Morphorum is served over HTTP on a LAN IP, use a safe fallback (temporary input/selection and legacy copy where supported, otherwise visibly selectable text + clear manual-copy feedback); never claim success before copying works. Show concise Copy/ Copied/ failure feedback and retain accessible keyboard behavior.
+- Do not copy absolute local file paths, Civitai descriptions, unverified training tags or raw metadata into prompts.
+
+### Acceptance for implementation
+
+- Standard 16–18px checkbox and compact Quick Use controls at desktop, phone and 125–150% zoom.
+- Select a LoRA and change strength or trigger checkbox: preview and copied content match actual **Add to Image Prompt** insertion.
+- Test: no trigger words; recorded local triggers; fetched Civitai triggers; malformed names and weights; duplicate triggers; LoRA family mismatch; clipboard API available, unavailable, and restricted on HTTP LAN.
+- Existing scan/index, Civitai lookup, runtime diagnostics and raw metadata remain functional, but no longer dominate the everyday workflow.
+- No model loading, tensor inspector, runtime LoRA application or API behavior changes are needed for this UI-only item.
+
+**Scope:** Backlog only, implement during the consolidated `dev-ui` pass after collecting the full list. Leave B6 branches and renderer untouched.
+
 ## Next entries
 
-Append items #3, #4, etc. as supplied by the user. Collect the list before implementing the UI pass.
+Append items #4, #5, etc. as supplied by the user. Collect the list before implementing the UI pass.
