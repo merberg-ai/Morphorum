@@ -2,7 +2,7 @@ name: Syntax checks
 
 on:
   push:
-    branches: [main, feature/3d-depth-quality-b5, feature/deforum-compatibility-hybrid-b6, dev-ui]
+    branches: [main, dev-ui]
   pull_request:
 
 jobs:

@@ -2,7 +2,7 @@
 
 Standalone, modern Deforum-style AI image and animation studio with legacy project compatibility, multi-model support for SDXL, Flux, and Z-Image, LoRAs, keyframed motion, live previews, and a mobile-friendly web UI.
 
-> **Status:** early alpha. Installation, CUDA-backed SDXL/Flux/Z-Image generation, model indexing, settings, telemetry, the responsive browser UI, animation project persistence, Deforum-style schedules, CPU motion previews, and the Phase 4 resumable img2img animation frame loop are implemented. Final video encoding, 3D/depth motion, cadence/coherence features, and LoRA application remain active development milestones.
+> **Status (2026-10-09):** early alpha with CUDA SDXL/Flux/Z-Image image generation, working SDXL/Flux LoRAs, responsive Image/Animation/LoRA UI, native 2D/3D depth-aware animation, cadence and temporal refinement, resumable renders, and MP4/WebM export. B6.1 legacy Deforum settings import is implemented. **B6.2 hybrid-video import, FFprobe examination and frame extraction is Windows-validated; hybrid frame compositing and mask-driven synthesis are next (B6.3), not yet implemented.** See [current milestone status](docs/CURRENT_STATUS.md).
 
 ## Goals
 

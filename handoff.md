@@ -1,4 +1,7 @@
-# Morphorum: full development handoff
+# Morphorum: historical development handoff (2026-10-08)
+
+> **2026-10-09 update:** This is a preserved engineering snapshot, **not the current checkout/acceptance guide**. The working branches are now `main` and `dev-ui`; [PR #14](https://github.com/merberg-ai/Morphorum/pull/14) promoted the tested baseline. B6.2 hybrid-video upload/FFprobe/extraction/preview reached validated checkpoint `5826d2d`, and PR #13's SDXL LoRA repair passed a 300-frame real-GPU stress test and was merged. B6.3 hybrid compositor/masks are next. **Read [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) for the authoritative current state.** Statements further below such as “hybrid video has not begun,” “B6 active branch,” and “not yet Windows accepted” refer to the older snapshot only.
+
 
 **Prepared:** 2026-10-08 (Pacific time)  
 **Repository:** https://github.com/merberg-ai/Morphorum  

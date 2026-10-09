@@ -1,5 +1,8 @@
 # dev-ui: Morphorum UI and usability backlog
 
+> **Post-promotion note (2026-10-09):** The ten UI backlog items below already received initial implementations in `dev-ui` and were promoted to `main` by PR #14. Their original proposal/current-finding language is retained as historical acceptance design, not present-day code status. New development should proceed from `dev-ui`. For current B6 state, see [CURRENT_STATUS.md](CURRENT_STATUS.md).
+
+
 > **Implementation note (2026-10-08):** Items #1–#10 now have an initial implementation on `dev-ui`. This document retains the earlier design/acceptance requirements as a test plan; wording such as "planned" or "backlog only" below refers to the original proposals, not the current state. See [DEV_UI_PHYSICAL_ACCEPTANCE.md](DEV_UI_PHYSICAL_ACCEPTANCE.md). Neither B6.2 checkpoint nor the B6 feature branch was modified.
 
 ## Implementation summary
