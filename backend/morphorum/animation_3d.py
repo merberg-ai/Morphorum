@@ -194,6 +194,8 @@ def render_depth_warp(
     far_depth: float = 4.0,
     projection_mode: str = "legacy",
     fill_mode: str = "nearest",
+    transform_matrix: np.ndarray | None = None,
+    transform_offset: np.ndarray | None = None,
 ) -> Camera3DWarpResult:
     if projection_mode not in {"legacy", "splat"}:
         raise Camera3DError(f"Unsupported 3D projection mode: {projection_mode}.")
@@ -238,9 +240,21 @@ def render_depth_warp(
         dtype=np.float32,
     )
 
-    # Camera motion is the inverse transform of the scene in camera coordinates.
-    rotation = _rotation_matrix(rotation_x, rotation_y, rotation_z)
-    transformed = (points - camera_translation) @ rotation
+    # B5.2 supplies a composed inverse camera transform to align a future
+    # diffusion anchor with an earlier cadence frame, without re-estimating
+    # depth at each intermediate frame. Default forward motion stays unchanged.
+    if transform_matrix is None and transform_offset is None:
+        rotation = _rotation_matrix(rotation_x, rotation_y, rotation_z)
+        transformed = (points - camera_translation) @ rotation
+    else:
+        if transform_matrix is None or transform_offset is None:
+            raise Camera3DError("3D camera reprojection needs both matrix and offset.")
+        matrix = np.asarray(transform_matrix, dtype=np.float32)
+        offset = np.asarray(transform_offset, dtype=np.float32)
+        if (matrix.shape != (3, 3) or offset.shape != (3,)
+                or not np.isfinite(matrix).all() or not np.isfinite(offset).all()):
+            raise Camera3DError("3D camera reprojection transform must be finite 3x3/3.")
+        transformed = points @ matrix + offset
 
     z2 = transformed[:, 2]
     visible = z2 > 1e-4
@@ -333,3 +347,34 @@ def render_depth_warp(
         telemetry=telemetry,
         hole_mask=mask,
     )
+
+
+def reverse_camera_chain(
+    steps: list[dict[str, Any]],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Map points in a future anchor's camera frame back into a past frame.
+
+    Each recorded forward step is `(p - translation) @ rotation`.
+    Its reverse is `p @ rotation.T + translation`; row-vector transforms
+    accumulate in reverse frame order. Source/target focal lengths are handled
+    separately by render_depth_warp rather than folded into this transform.
+    """
+    orientation = np.eye(3, dtype=np.float64)
+    offset = np.zeros(3, dtype=np.float64)
+    for camera in reversed(steps):
+        rotation = _rotation_matrix(
+            float(camera.get("rotation_x", 0.0)),
+            float(camera.get("rotation_y", 0.0)),
+            float(camera.get("rotation_z", 0.0)),
+        ).astype(np.float64)
+        reverse_rotation = rotation.T
+        translation = np.asarray([
+            float(camera.get("translation_x", 0.0)),
+            float(camera.get("translation_y", 0.0)),
+            float(camera.get("translation_z", 0.0)),
+        ], dtype=np.float64)
+        if not np.isfinite(translation).all():
+            raise Camera3DError("3D camera reverse transform contains non-finite motion.")
+        offset = offset @ reverse_rotation + translation
+        orientation = orientation @ reverse_rotation
+    return orientation.astype(np.float32), offset.astype(np.float32)
