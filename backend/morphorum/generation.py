@@ -295,6 +295,7 @@ class GenerationManager:
         self._pipeline_loras: dict[str, dict[str, Any]] = {}
         self._active_lora_signature: tuple[tuple[str, float], ...] = ()
         self._verified_lora_adapters: tuple[str, ...] = ()
+        self._sdxl_transition_profile: dict[str, Any] | None = None
         self._inference_lock = threading.Lock()
 
     def capabilities(self) -> dict[str, dict[str, Any]]:
@@ -335,6 +336,7 @@ class GenerationManager:
                 {"adapter_name": name, "weight": weight}
                 for name, weight in self._active_lora_signature
             ],
+            "sdxl_transition_profile": deepcopy(self._sdxl_transition_profile),
             "busy": active,
         }
 
@@ -1429,6 +1431,57 @@ class GenerationManager:
                 f"Could not switch {family} pipeline to {task}: {exc}"
             ) from exc
 
+    def _record_sdxl_transition_stage(self, name: str) -> None:
+        """Read-only CUDA snapshots only during the first task conversion."""
+        profile = self._sdxl_transition_profile
+        if not profile or profile.get("complete"):
+            return
+        try:
+            memory = self.cuda_memory_status()
+            if not isinstance(memory, dict):
+                return
+            profile["stages"].append({
+                "stage": name,
+                "allocated_gib": round(float(memory.get("allocated_gib", 0)), 4),
+                "reserved_gib": round(float(memory.get("reserved_gib", 0)), 4),
+                "free_gib": round(float(memory.get("free_gib", 0)), 4),
+                "allocation_retries": int(memory.get("allocation_retries", 0) or 0),
+                "oom_count": int(memory.get("oom_count", 0) or 0),
+            })
+        except Exception:
+            pass
+
+    @staticmethod
+    def _shared_pipeline_components(previous: Any, converted: Any) -> dict[str, bool]:
+        """Check object identity without touching parameter storage."""
+        return {
+            key: getattr(previous, key) is getattr(converted, key)
+            for key in ("unet", "vae", "text_encoder", "text_encoder_2")
+            if getattr(previous, key, None) is not None
+            and getattr(converted, key, None) is not None
+        }
+
+    def _complete_sdxl_transition_profile(self) -> None:
+        profile = self._sdxl_transition_profile
+        if not profile or profile.get("complete"):
+            return
+        profile["complete"] = True
+        if not profile["stages"]:
+            return
+        sequence = " -> ".join(
+            f"{stage['stage']} {stage['allocated_gib']:.2f} GiB"
+            for stage in profile["stages"]
+        )
+        shared = profile.get("shared_components") or {}
+        sharing = (
+            ", ".join(f"{name}={'shared' if value else 'separate'}"
+                      for name, value in shared.items())
+            if shared else "component identity unavailable"
+        )
+        emit_console("info", "generation",
+                     f"SDXL task transition CUDA allocations: {sequence}; {sharing}. "
+                     "PyTorch allocations only, not physical Windows VRAM residency.")
+
     def _switch_loaded_pipeline_task(
         self,
         model: dict[str, Any],
@@ -1454,9 +1507,24 @@ class GenerationManager:
             "generation",
             f"Switching loaded {model['name']} pipeline from {previous} to {task}.",
         )
+        audit_switch = family == "sdxl" and previous == "txt2img" and task == "img2img"
+        if audit_switch:
+            self._sdxl_transition_profile = {
+                "from_task": previous, "to_task": task,
+                "stages": [], "shared_components": {}, "complete": False,
+            }
+            self._record_sdxl_transition_stage("before_conversion")
         old_pipe = self._pipeline
         self._pipeline = self._convert_pipeline_task(old_pipe, family, task)
         self._pipeline_task = task
+        if audit_switch:
+            try:
+                self._sdxl_transition_profile["shared_components"] = (
+                    self._shared_pipeline_components(old_pipe, self._pipeline)
+                )
+            except Exception:
+                pass
+            self._record_sdxl_transition_stage("after_from_pipe")
 
         # The new wrapper can share UNet/transformer PEFT layers with the old
         # pipeline. Resetting the signature alone is unsafe: a LoRA used on
@@ -1511,6 +1579,8 @@ class GenerationManager:
 
         del old_pipe
         self.release_inference_memory()
+        if audit_switch:
+            self._record_sdxl_transition_stage("after_release")
         self._notify_load_progress(
             load_progress_callback,
             1.0,
@@ -1607,7 +1677,12 @@ class GenerationManager:
             load_progress_callback,
         )
         self._configure_sampler(pipe, model["family"], request.sampler)
+        if model["family"] == "sdxl":
+            self._record_sdxl_transition_stage("after_sampler")
         self.configure_loras(pipe, model, request.loras)
+        if model["family"] == "sdxl":
+            self._record_sdxl_transition_stage("after_lora_setup")
+            self._complete_sdxl_transition_profile()
         return pipe, generator_device, model
 
     def build_img2img_call_args(
@@ -2318,6 +2393,7 @@ class GenerationManager:
         self._pipeline_loras = {}
         self._active_lora_signature = ()
         self._verified_lora_adapters = ()
+        self._sdxl_transition_profile = None
 
         # Always collect here, even if model loading failed before the pipeline
         # could be registered on the manager.
