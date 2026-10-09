@@ -428,6 +428,104 @@ The backend/browser suite covers validation, encoder command construction,
 job lifecycle, persisted records, download routes and completion gating.
 Actual Windows codecs and browser playback remain at the physical gate.
 
+## B5.5: Performance and stability validation (physical GPU gate)
+
+**B5.4 accepted and protected:** user verified MP4/WebM video export;
+checkpoint `checkpoint/b5-4-video-export-windows-verified-20261008`
+at `f5db57cab8173c5a8038762a20bb5cc5650f2bd7`. Development
+continues on `feature/3d-depth-quality-b5`. **Do not start B6 until
+B5.5 is accepted on the Windows GPU.**
+
+### Scope and deliberately safe changes
+
+The pipeline was physically verified for SDXL/Flux LoRA influence,
+and the memory regression caused by autograd graphs in prompt
+conditioning was already fixed. B5.5 therefore does **not** change
+model placement, scheduler, steps, LoRA adapter weights, cadence,
+CUDA allocator cache policy, or depth renderer. A speculative switch
+to CPU offload on an RTX 4080 SUPER would harm throughput. It is more
+useful to observe the real cause of slow diffusion anchors.
+
+New `backend/morphorum/animation_performance.py` adds:
+- A compact append-only `performance.jsonl` beside the existing render
+  manifest, with **one record per completed frame** after source frame
+  0. Each record includes total/prepare/conditioning/diffusion/warp/
+  depth/temporal/save/manifest/memory stage seconds, CUDA free/
+  allocated/reserved and *process-high-water* peaks, device/optimization,
+  task, active LoRA adapter names/weights, loaded (resident) LoRA count,
+  and bounded conditioning-cache occupancy. The log contains no prompts,
+  images, model tensors, or filesystem paths.
+- No CUDA synchronization, `empty_cache`, forced garbage collection
+  or parameter transfers are added for diagnostics. Peak numbers are
+  **process-wide since the last PyTorch reset**, not per-frame peaks.
+  `cuda_before` and `cuda_after` capture allocator state and do not
+  pretend to measure driver-side shared RAM or page faults directly.
+- A small persisted `performance` summary in render status/manifests:
+  observed frames, diffusion anchors, average diffusion time, cumulative
+  stage time, maximum observed allocated/reserved VRAM, maximum resident
+  adapters, current device/optimization, and last 24 slow anchor indices
+  (an informational 30+ second threshold, **not an error or offload**).
+- Crash/restart support: rehydrates diagnostic history from the
+  frame-number-keyed JSONL file, ignores truncated records, and repairs
+  an unterminated record before appending. A resumed run does not count
+  already-completed frames twice.
+- A read-only endpoint at
+  `GET /api/animation/renders/{project_id}/{render_id}/performance`
+  returns summary plus frame records; it rejects traversal and render-ID
+  mismatches. The Animation Render UI shows a compact diagnostic summary
+  and a direct link to the JSON report.
+
+The LoRA residency audit confirms adapters are intentionally reused
+across task switches and changing prompt windows. B5.5 records both
+active and cached-resident counts to determine whether the number of
+adapters correlates with VRAM growth **before** imposing an eviction
+policy. Existing LoRA cache and live weighting remain unchanged.
+The SDXL `native-gpu` log and earlier measured 14 GiB allocations
+do **not** constitute CPU generation. Depth Anything on CPU is
+separate and expected. Any remaining 75-second anchors need real
+per-frame correlation with VRAM/driver memory pressure.
+
+### Physical Windows acceptance procedure
+
+1. Pull B5 branch and restart. Keep the B5.4 checkpoint unchanged.
+2. Use the **same 512×512 SDXL scene** with fixed seed, unchanged sampler,
+   steps and denoise. First run **26 frames, cadence 3, one scheduled
+   LoRA**, including any changing LoRA weights.
+3. From the Animation Render summary and frame-by-frame JSON, confirm
+   `pipeline_device: cuda` and `optimization: native-gpu`. Observe
+   anchor diffusion seconds versus `cuda_before/cuda_after` allocated
+   and reserved VRAM. Intermediate frames should show
+   `diffused: false` with zero diffusion time.
+4. Repeat with your known-working **75-frame / three-prompt** project
+   and multiple LoRAs. Verify adapter activation changes exactly with
+   prompt windows; `resident_loras` may grow as new adapters are first
+   loaded but should not grow for repeated selection of the same adapters.
+   Observe trends in cumulative and maximum VRAM and diffusion times,
+   especially around LoRA transitions.
+5. Run the same project with no LoRA or a single constant LoRA as a
+   controlled comparison, if latency is still unexpectedly high.
+   This distinguishes LoRA residence cost from image size, diffusion
+   steps, model loading and Windows WDDM oversubscription.
+6. Test cancel/resume in a short scene, including a 3D project with
+   future-anchor refinement. Ensure completed PNGs, disocclusion
+   masks, temporal metadata and video exports remain correct.
+   `performance.jsonl` and the persisted summary must preserve earlier
+   frames without duplicate counts.
+7. Restart Morphorum, select the completed render and use **View
+   frame-by-frame JSON** to confirm performance history remains
+   accessible. Both 2D and 3D exports should work from existing
+   PNGs, independently of model loading.
+8. Compare output frames and LoRA/prompt influence with the B5.4
+   checkpoint. **No visual output changes are expected** in B5.5.
+   If stable and performance is acceptable, checkpoint B5.5 and close
+   B5; begin **B6** on a new development branch only afterward.
+
+Do not claim a measurable speed improvement until the physical
+tests provide comparable timings. If actual VRAM exhaustion/Windows
+shared-memory spill is confirmed, scope a targeted optimizer (e.g.,
+adapter residency cap) under a separate physical-test gate without
+risking the verified checkpoint.
+
 ## Proposed B5 work order
 
 1. **B5.1 Depth warp quality**: retain the original Z-buffer/occlusion mask,
