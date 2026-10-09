@@ -675,3 +675,41 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .nav-more-menu button:hover {background:rgba(255,255,255,.08);}
 }
 @media(max-width:360px){.topbar-right .runtime-pill {max-width:90px;}.telemetry-head strong {font-size:.65rem;}.main-nav .nav-button,.nav-more-toggle {font-size:.6rem;}}
+
+/* dev-ui grouped Settings and compact Console filters */
+.settings-dirty-badge {font-size:.76rem;color:var(--ok);align-self:center;white-space:nowrap;}
+.settings-dirty-badge.dirty {color:var(--warn);}
+.settings-grid {display:grid;grid-template-columns:minmax(0,1fr);gap:14px;}
+.settings-internal-tabs {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;border:1px solid var(--border);border-radius:13px;background:var(--panel-strong);padding:6px;}
+.settings-internal-tabs button {border:0;border-radius:8px;background:transparent;color:var(--muted);min-height:43px;padding:8px 6px;cursor:pointer;}
+.settings-internal-tabs button.active {background:rgba(65,217,255,.18);color:var(--text);}
+.settings-pane {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;min-width:0;}
+.settings-pane[hidden] {display:none!important;}
+.settings-pane > .card {grid-column:1/-1;}
+.console-presets {display:flex;gap:5px;flex-wrap:wrap;}
+.console-category-details {max-width:100%;font-size:.78rem;}
+.console-category-details > summary {cursor:pointer;color:var(--muted);padding:8px 10px;border:1px solid var(--border);border-radius:8px;}
+.console-category-details .filter-group {margin-top:8px;max-width:700px;}
+#console-search {min-width:130px;max-width:260px;}
+.console-count {padding:5px 13px;border-bottom:1px solid var(--border);color:var(--muted);font-size:.7rem;}
+#console-jump-latest {min-height:33px;}
+@media(max-width:640px){
+  .settings-internal-tabs {gap:3px;padding:4px;}
+  .settings-internal-tabs button {font-size:.74rem;padding:7px 3px;}
+  .settings-pane {grid-template-columns:minmax(0,1fr);}
+  .settings-heading .button-row {gap:7px;flex-wrap:wrap;}
+  .settings-dirty-badge {flex:0 0 100%;}
+  .path-row .validate-path {display:inline-flex;grid-column:2;}
+  .path-row .icon-button {grid-column:2;justify-self:end;}
+  .console-toolbar {gap:8px;}
+  .console-presets {width:100%;}
+  .console-presets button {flex:1;min-width:0;}
+  #console-search {width:100%;max-width:none;}
+  .console-category-details {width:100%;}
+  .console-window {height:min(63dvh,650px);min-height:245px;font-size:.75rem;}
+  .console-line {grid-template-columns:57px 45px minmax(0,1fr);gap:5px;padding:4px 0;}
+  .console-time {font-size:.64rem;}
+  .console-category {display:none;}
+  .console-actions {grid-template-columns:repeat(3,minmax(0,1fr));}
+  .console-actions .chip {grid-column:1/-1;}
+}

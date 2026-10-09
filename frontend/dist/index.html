@@ -906,6 +906,7 @@
         <div class="page-heading settings-heading">
           <div><p class="eyebrow">CONFIGURATION</p><h1>Settings</h1><p class="muted">External libraries stay where you keep them; managed models use Morphorum-controlled storage.</p></div>
           <div class="button-row">
+            <span class="settings-dirty-badge" id="settings-dirty-state" aria-live="polite">All changes saved</span>
             <button class="secondary-button busy-button" id="load-settings"><span class="spinner"></span><span class="button-label">Reload</span></button>
             <button class="primary-button busy-button" id="save-settings"><span class="spinner"></span><span class="button-label">Save Settings</span></button>
           </div>
@@ -935,6 +936,13 @@
               <label class="chip"><input type="checkbox" value="warning" checked><span>Warn</span></label>
               <label class="chip"><input type="checkbox" value="error" checked><span>Error</span></label>
             </div>
+            <div class="console-presets" aria-label="Log filters">
+              <button type="button" class="secondary-button compact" data-console-preset="all">All</button>
+              <button type="button" class="secondary-button compact" data-console-preset="errors">Errors</button>
+              <button type="button" class="secondary-button compact" data-console-preset="warnings">Warnings+</button>
+            </div>
+            <input type="search" id="console-search" aria-label="Search console messages" placeholder="Search logs…" />
+            <details class="console-category-details"><summary>Source filters</summary>
             <div class="filter-group" id="category-filters">
               <span class="filter-label">Source</span>
               <label class="chip"><input type="checkbox" value="api"><span>API</span></label>
@@ -946,14 +954,17 @@
               <label class="chip"><input type="checkbox" value="animation" checked><span>Animation</span></label>
               <label class="chip"><input type="checkbox" value="system" checked><span>System</span></label>
             </div>
+            </details>
             <div class="console-actions">
               <label class="chip"><input type="checkbox" id="auto-scroll" checked><span>Auto-scroll</span></label>
+              <button class="secondary-button compact" id="console-jump-latest" type="button">Latest</button>
               <button class="secondary-button compact" id="copy-console-view" type="button" title="Copy the currently filtered console view">Copy View</button>
               <button class="secondary-button compact" id="copy-console-buffer" type="button" title="Copy the full server console buffer">Copy Buffer</button>
               <button class="secondary-button compact" id="clear-console-view" type="button">Clear View</button>
               <button class="secondary-button compact danger" id="clear-console-server" type="button">Clear Buffer</button>
             </div>
           </div>
+          <div class="console-count" id="console-count" aria-live="off">0 messages</div>
           <div class="console-window" id="console-window" role="log" aria-live="polite"></div>
         </article>
       </section>

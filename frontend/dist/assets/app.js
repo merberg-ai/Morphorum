@@ -53,6 +53,8 @@
     eventSource: null,
     telemetryTimer: null,
     jobs: { image: null, animation: null },
+    settingsDirty: false,
+    settingsTab: 'appearance',
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -247,6 +249,35 @@
     state.settings.managed_models.locations ||= {};
     state.settings.managed_models.locations.zimage ||= '.\\ckpts\\z-image';
     return state.settings.managed_models;
+  }
+
+  function markSettingsDirty() {
+    state.settingsDirty = true;
+    renderSettingsDirtyState();
+  }
+  function setSettingsClean() {
+    state.settingsDirty = false;
+    renderSettingsDirtyState();
+  }
+  function renderSettingsDirtyState() {
+    const badge = qs('#settings-dirty-state');
+    if (badge) {
+      badge.textContent = state.settingsDirty ? 'Unsaved changes' : 'All changes saved';
+      badge.classList.toggle('dirty', state.settingsDirty);
+    }
+  }
+  function selectSettingsTab(tab, { persist = true } = {}) {
+    if (!['appearance','generation','paths','storage'].includes(tab)) return;
+    state.settingsTab = tab;
+    qsa('#settings-internal-tabs button[data-settings-tab]').forEach(button => {
+      const selected = button.dataset.settingsTab === tab;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-selected', String(selected));
+    });
+    qsa('#model-path-cards .settings-pane').forEach(pane => {
+      pane.hidden = pane.dataset.settingsPane !== tab;
+    });
+    if (persist) try { localStorage.setItem('morphorum.settings.tab.v1', tab); } catch (_) {}
   }
 
   function createSelectField(id, labelText, options, value, onChange) {
@@ -576,6 +607,7 @@
     remove.addEventListener('click', () => {
       ensureFamily(family)[kind].splice(index, 1);
       renderSettings();
+      markSettingsDirty();
     });
 
     row.append(inputWrap, validate, remove, message);
@@ -595,6 +627,7 @@
     add.addEventListener('click', () => {
       ensureFamily(family)[kind].push('');
       renderSettings();
+      markSettingsDirty();
       const inputs = qsa(`.family-card[data-family="${family}"] .path-input`);
       inputs.at(-1)?.focus();
     });
@@ -622,9 +655,28 @@
     if (!container || !state.settings) return;
 
     container.replaceChildren();
-    container.appendChild(createAppearanceCard());
-    container.appendChild(createPreferencesCard());
-    container.appendChild(createManagedModelsCard());
+    const tabs = document.createElement('nav');
+    tabs.id = 'settings-internal-tabs';
+    tabs.className = 'settings-internal-tabs';
+    tabs.setAttribute('aria-label', 'Settings groups');
+    const panes = {};
+    for (const [name,label] of [['appearance','Appearance'],['generation','Generation'],['paths','Model Paths'],['storage','Storage']]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.settingsTab = name;
+      button.textContent = label;
+      button.addEventListener('click', () => selectSettingsTab(name));
+      tabs.appendChild(button);
+      const pane = document.createElement('section');
+      pane.className = 'settings-pane';
+      pane.dataset.settingsPane = name;
+      panes[name] = pane;
+    }
+    container.appendChild(tabs);
+    for (const pane of Object.values(panes)) container.appendChild(pane);
+    panes.appearance.appendChild(createAppearanceCard());
+    panes.generation.appendChild(createPreferencesCard());
+    panes.storage.appendChild(createManagedModelsCard());
     for (const [family, fallbackLabel, source, loraSource, supportsLoras] of FAMILY_DEFS) {
       if (source === 'managed' && !(supportsLoras && loraSource === 'external')) continue;
       const familyData = ensureFamily(family);
@@ -655,14 +707,24 @@
       if (supportsLoras && loraSource === 'external') {
         card.appendChild(createPathSection(family, 'loras', 'LoRA directories'));
       }
-      container.appendChild(card);
+      panes.paths.appendChild(card);
     }
 
+    selectSettingsTab(state.settingsTab, { persist: false });
+    renderSettingsDirtyState();
     loader.hidden = true;
     container.hidden = false;
   }
 
   async function loadSettings({ announce = false } = {}) {
+    if (announce && state.settingsDirty) {
+      const allowed = await window.MorphorumDialog.confirm({
+        title:'Discard unsaved settings?',
+        message:'Reloading from the server will discard edits to model paths and preferences that you have not saved.',
+        variant:'danger', confirmText:'Discard & Reload', cancelText:'Keep Editing'
+      });
+      if (!allowed) return;
+    }
     const button = qs('#load-settings');
     setBusy(button, true);
     try {
@@ -681,6 +743,7 @@
       ensurePreferences();
       applyAppearance(state.settings.ui);
       renderSettings();
+      setSettingsClean();
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       if (announce) toast('Settings loaded', 'Configuration reloaded from the Morphorum server.', 'success');
     } catch (error) {
@@ -740,6 +803,7 @@
       ensurePreferences();
       applyAppearance(state.settings.ui);
       renderSettings();
+      setSettingsClean();
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       const warnings = (payload.validation || []).filter(item => !(item.exists && item.is_directory && item.readable));
       if (warnings.length) {
@@ -767,7 +831,9 @@
   function filteredConsoleEvents(events = state.events) {
     const levels = checkedValues('#level-filters');
     const categories = checkedValues('#category-filters');
-    return (events || []).filter(event => levels.has(event.level) && categories.has(event.category));
+    const search = (qs('#console-search')?.value || '').trim().toLowerCase();
+    return (events || []).filter(event => levels.has(event.level) && categories.has(event.category) &&
+      (!search || [event.message,event.category,event.level].some(value => String(value || '').toLowerCase().includes(search))));
   }
 
   function consoleEventTime(event) {
@@ -834,6 +900,8 @@
     const windowEl = qs('#console-window');
     if (!windowEl) return;
     const filtered = filteredConsoleEvents();
+    const count = qs('#console-count');
+    if (count) count.textContent = filtered.length + ' matching messages';
 
     if (!filtered.length) {
       windowEl.innerHTML = '<div class="console-empty">No messages match the current filters.</div>';
@@ -1020,8 +1088,33 @@
     });
     qsa('[data-jump]').forEach(button => button.addEventListener('click', () => switchView(button.dataset.jump)));
     qs('#load-settings')?.addEventListener('click', () => loadSettings({ announce: true }));
+    const settingsArea = qs('#model-path-cards');
+    settingsArea?.addEventListener('input', markSettingsDirty);
+    settingsArea?.addEventListener('change', markSettingsDirty);
+    try { state.settingsTab = localStorage.getItem('morphorum.settings.tab.v1') || 'appearance'; } catch (_) {}
     qs('#save-settings')?.addEventListener('click', saveSettings);
     qsa('#level-filters input, #category-filters input').forEach(input => input.addEventListener('change', renderConsole));
+    qs('#console-search')?.addEventListener('input', renderConsole);
+    qsa('[data-console-preset]').forEach(button => button.addEventListener('click', () => {
+      const type = button.dataset.consolePreset;
+      qsa('#level-filters input').forEach(input => {
+        input.checked = type === 'all' || (type === 'errors' ? input.value === 'error' :
+          ['warning','error'].includes(input.value));
+      });
+      qsa('#category-filters input').forEach(input => { input.checked = true; });
+      renderConsole();
+    }));
+    qs('#console-jump-latest')?.addEventListener('click', () => {
+      const element = qs('#console-window');
+      if (element) element.scrollTop = element.scrollHeight;
+      const auto = qs('#auto-scroll');
+      if (auto) auto.checked = true;
+    });
+    qs('#console-window')?.addEventListener('scroll', event => {
+      const el = event.currentTarget;
+      const auto = qs('#auto-scroll');
+      if (auto?.checked && el.scrollHeight - el.scrollTop - el.clientHeight > 100) auto.checked = false;
+    });
     qs('#auto-scroll')?.addEventListener('change', renderConsole);
     qs('#copy-console-view')?.addEventListener('click', copyConsoleView);
     qs('#copy-console-buffer')?.addEventListener('click', copyConsoleBuffer);
