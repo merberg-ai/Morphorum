@@ -54,6 +54,6 @@ test('B6.1 importer requires an indexed model and creates a distinct project', (
   assert.ok(create.includes('state.project = payload.project'));
   assert.ok(create.includes('await loadProjectList()'));
   assert.ok(create.includes('state.dirty'));
-  assert.ok(create.includes('window.confirm'));
+  assert.ok(create.includes('window.MorphorumDialog.confirm'));
   assert.ok(!create.includes('model_path'));
 });
