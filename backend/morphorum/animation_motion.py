@@ -508,6 +508,14 @@ class MotionPreviewManager:
             raise MotionPreviewError("Animation project id is required.")
         if not source_path.is_file():
             raise MotionPreviewError("Upload a source image before creating a motion preview.")
+        if (
+            str(project.get("animation", {}).get("mode") or "2d").strip().lower() == "3d"
+            and int(project.get("animation", {}).get("max_frames", 120)) > 180
+        ):
+            raise MotionPreviewError(
+                "3D camera previews support up to 180 frames. "
+                "Shorten the project for this diagnostic preview."
+            )
 
         job = MotionPreviewJob(
             id=f"motion-{uuid.uuid4().hex[:12]}",
