@@ -550,6 +550,7 @@
       'animation-reload',
       'animation-validate-schedules',
       'animation-generate-motion-preview',
+      'animation-3d-apply-preset',
       'animation-clear-source',
     ]) {
       const control = qs(`#${id}`);
