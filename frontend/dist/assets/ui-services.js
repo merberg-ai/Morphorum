@@ -164,7 +164,7 @@
     confirm: options => ask('confirm', options),
     prompt: options => ask('prompt', options),
   };
-}  function makeLoraSnippet({ name, weight = 1, triggers = [] } = {}) {
+  function makeLoraSnippet({ name, weight = 1, triggers = [] } = {}) {
     const identifier = String(name || '').trim();
     if (!identifier || /[:<>\r\n]/.test(identifier)) throw new Error('This LoRA name cannot be used in a prompt tag.');
     const value = Number(weight);
