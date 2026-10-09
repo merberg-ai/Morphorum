@@ -546,6 +546,36 @@
               </div>
             </div>
 
+            <section class="animation-video-export" id="animation-video-export">
+              <div class="animation-video-export-heading">
+                <div>
+                  <h3>B5.4 Video Export</h3>
+                  <p class="muted">Encode existing PNG frames into MP4 or WebM. No image generation, LoRA changes, or GPU work.</p>
+                </div>
+                <span class="animation-video-status" id="animation-video-availability">Checking FFmpeg…</span>
+              </div>
+              <div class="animation-video-export-controls">
+                <label><span>Format</span><select id="animation-video-format">
+                  <option value="mp4">MP4 (H.264, broadly compatible)</option>
+                  <option value="webm">WebM (VP9)</option>
+                </select></label>
+                <label><span>Quality</span><select id="animation-video-quality">
+                  <option value="balanced">Balanced</option>
+                  <option value="high">High quality</option>
+                  <option value="compact">Smaller file</option>
+                </select></label>
+                <label><span>FPS (optional)</span><input id="animation-video-fps" type="number" min="1" max="120" step="1" placeholder="Original render FPS"></label>
+                <button class="primary-button compact busy-button" id="animation-export-video" type="button" disabled><span class="spinner"></span><span class="button-label">Export Video</span></button>
+              </div>
+              <div class="animation-video-job-status" id="animation-video-job-status" role="status">Select a completed render to export its PNG sequence.</div>
+              <div class="animation-video-result" id="animation-video-result" hidden>
+                <video id="animation-video-playback" controls preload="metadata" playsinline></video>
+                <div class="animation-video-result-links">
+                  <a id="animation-video-download" class="secondary-button compact" href="#" download>Download video</a>
+                  <span id="animation-video-result-meta" class="muted"></span>
+                </div>
+              </div>
+            </section>
             <div class="animation-render-error" id="animation-render-error" hidden></div>
           </article>
 
