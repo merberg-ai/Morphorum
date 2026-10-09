@@ -192,6 +192,12 @@
                 <input id="animation-cadence" class="animation-schedule" type="text" value="0:(1)" placeholder="0:(1), 24:(3)" disabled>
               </label>
             </div>
+            <div class="animation-cadence-controls" data-animation-mode="3d">
+              <label><span>3D temporal continuity (B5.2)</span><select id="animation-temporal-mode" disabled><option value="forward">Forward-only (original cadence)</option><option value="future-anchor">Future-anchor depth-aligned tween (experimental)</option></select></label>
+              <label><span>Future-anchor blend strength</span><input id="animation-temporal-mix" type="number" min="0" max="1" step="0.05" value="0.65" disabled></label>
+              <label><span>Appearance guard (RGB difference)</span><input id="animation-temporal-contrast" type="number" min="1" max="255" step="1" value="96" disabled></label>
+            </div>
+            <p class="animation-cadence-explainer muted" data-animation-mode="3d">Future-anchor mode refines skipped 3D frames after the next diffusion anchor is generated. It uses camera geometry and confidence-gated blending, not optical flow or an extra diffusion pass; only supported regions are blended.</p>
             <p class="animation-cadence-explainer muted" id="animation-cadence-help" aria-live="polite">Cadence 1 runs diffusion for every eligible frame.</p>
             <p class="muted animation-cadence-explainer">For changing cadence, enter a schedule such as <code>0:(1), 24:(3)</code>, or edit the Diffusion Cadence track in Visual Timeline. The last frame is always a diffusion anchor if denoising is enabled.</p>
           </article>
