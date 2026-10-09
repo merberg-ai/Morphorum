@@ -52,6 +52,7 @@
     lastEventId: 0,
     eventSource: null,
     telemetryTimer: null,
+    jobs: { image: null, animation: null },
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -96,9 +97,51 @@
     return item;
   }
 
+  function updateGlobalJobStatus() {
+    const panel = qs('#global-job-status');
+    if (!panel) return;
+    const current = Object.values(state.jobs).filter(job => job &&
+      ['queued','loading_model','generating','rendering','finalizing','paused','pause_requested'].includes(job.status))
+      .sort((a,b) => b.updated - a.updated)[0];
+    panel.hidden = !current;
+    panel.dataset.jobType = current?.type || '';
+    if (!current) return;
+    const percent = Math.max(0, Math.min(100, Math.round(Number(current.progress || 0) * 100)));
+    const kind = current.type === 'image' ? 'Image' : 'Animation';
+    const phase = String(current.status || '').replaceAll('_',' ');
+    const count = current.total ? ' · ' + Math.min(current.current, current.total) + '/' + current.total : '';
+    const eta = current.eta_seconds == null || !Number.isFinite(Number(current.eta_seconds))
+      ? '' : ' · ETA ' + Math.round(Number(current.eta_seconds)) + 's';
+    qs('#global-job-label').textContent = kind + count + ' · ' + phase + eta;
+    qs('#global-job-percent').textContent = percent + '%';
+    qs('#global-job-progress-fill').style.width = percent + '%';
+    qs('.global-job-progress', panel)?.setAttribute('aria-valuenow', String(percent));
+  }
+  function openActiveJob() {
+    const kind = qs('#global-job-status')?.dataset.jobType;
+    if (!kind) return;
+    switchView(kind === 'image' ? 'image' : 'animation');
+    if (kind === 'animation') {
+      qs('#animation-tab-monitor')?.click();
+    } else {
+      qs('#generation-progress')?.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  }
+  function closeNavMore() {
+    const menu = qs('#nav-more-menu'), toggle = qs('#nav-more-toggle');
+    if (menu) menu.hidden = true;
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
+  function refreshNavMore(name) {
+    const more = qs('#nav-more-toggle');
+    if (more) more.classList.toggle('active', name === 'settings' || name === 'console');
+    closeNavMore();
+  }
+
   function switchView(name) {
     qsa('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === name));
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
+    refreshNavMore(name);
     if (name === 'console') renderConsole();
     if (name === 'loras') window.MorphorumLoras?.refreshRuntime?.();
     try { history.replaceState(null, '', `#${name}`); } catch (_) {}
@@ -890,11 +933,16 @@
       setTelemetryGauge('#telemetry-cpu-fill', '#telemetry-cpu-value', data.cpu_percent, `${Math.round(clampPercent(data.cpu_percent))}%`);
 
       const ram = data.ram || {};
+      const compact = window.matchMedia('(max-width: 640px)').matches;
+      const compactMemory = bytes => {
+        const n = Number(bytes) / (1024 ** 3);
+        return Number.isFinite(n) ? (n >= 10 ? Math.round(n) : n.toFixed(1)) + ' GB' : '--';
+      };
       setTelemetryGauge(
         '#telemetry-ram-fill',
         '#telemetry-ram-value',
         ram.free_percent,
-        `${formatGiB(ram.available_bytes)} / ${formatGiB(ram.total_bytes)} GiB`
+        compact ? compactMemory(ram.available_bytes) : `${formatGiB(ram.available_bytes)} / ${formatGiB(ram.total_bytes)} GiB`
       );
 
       const gpuItems = qsa('.gpu-telemetry');
@@ -913,7 +961,7 @@
           '#telemetry-vram-fill',
           '#telemetry-vram-value',
           gpu.memory_free_percent,
-          `${formatGiB(freeBytes)} / ${formatGiB(totalBytes)} GiB`
+          compact ? compactMemory(freeBytes) : `${formatGiB(freeBytes)} / ${formatGiB(totalBytes)} GiB`
         );
         const strip = qs('#telemetry-strip');
         if (strip) strip.title = `${gpu.name} · ${gpu.temperature_c}°C`;
@@ -952,6 +1000,24 @@
 
   function bindUi() {
     qsa('.nav-button').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
+    const moreToggle = qs('#nav-more-toggle');
+    moreToggle?.addEventListener('click', () => {
+      const menu = qs('#nav-more-menu');
+      if (!menu) return;
+      menu.hidden = !menu.hidden;
+      moreToggle.setAttribute('aria-expanded', String(!menu.hidden));
+    });
+    qsa('#nav-more-menu [data-more-view]').forEach(button => button.addEventListener('click', () => switchView(button.dataset.moreView)));
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.main-nav')) closeNavMore();
+    });
+    qs('#global-job-status')?.addEventListener('click', openActiveJob);
+    window.addEventListener('morphorum:job-status', event => {
+      const job = event.detail || {};
+      if (!['image','animation'].includes(job.type)) return;
+      state.jobs[job.type] = job.id ? { ...job, updated: Date.now() } : null;
+      updateGlobalJobStatus();
+    });
     qsa('[data-jump]').forEach(button => button.addEventListener('click', () => switchView(button.dataset.jump)));
     qs('#load-settings')?.addEventListener('click', () => loadSettings({ announce: true }));
     qs('#save-settings')?.addEventListener('click', saveSettings);

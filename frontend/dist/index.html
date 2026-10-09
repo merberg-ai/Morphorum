@@ -43,8 +43,12 @@
             <div class="telemetry-track"><div class="telemetry-fill free" id="telemetry-vram-fill"></div></div>
           </div>
         </div>
-        <div class="runtime-pill"><span class="status-dot" id="runtime-dot"></span><span id="runtime-text">Connecting…</span></div>
+        <div class="runtime-pill" title="Server version and build details"><span class="status-dot" id="runtime-dot"></span><span id="runtime-text">Connecting…</span></div>
       </div>
+      <button id="global-job-status" class="global-job-status" type="button" aria-label="Open active generation progress" hidden>
+        <span class="global-job-line"><span id="global-job-label">Rendering…</span><strong id="global-job-percent">0%</strong></span>
+        <span class="global-job-progress" role="progressbar" aria-label="Active generation overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="global-job-progress-fill"></span></span>
+      </button>
     </header>
 
     <nav class="main-nav glass" aria-label="Primary">
@@ -54,6 +58,11 @@
       <button class="nav-button" data-view="loras"><span class="nav-icon">◇</span><span>LoRAs</span></button>
       <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
       <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
+      <button class="nav-more-toggle" type="button" id="nav-more-toggle" aria-expanded="false" aria-controls="nav-more-menu"><span class="nav-icon">⋯</span><span>More</span></button>
+      <div class="nav-more-menu" id="nav-more-menu" hidden>
+        <button type="button" data-more-view="settings">⚙ Settings</button>
+        <button type="button" data-more-view="console">›_ Console</button>
+      </div>
     </nav>
 
     <main class="workspace">

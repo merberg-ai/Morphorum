@@ -515,6 +515,11 @@
       qs('#generation-step').textContent = job.message || '';
     }
     qs('#generation-eta').textContent = formatEta(job.eta_seconds);
+    window.dispatchEvent(new CustomEvent('morphorum:job-status', {detail: {
+      type:'image', id:job.id, status:job.status, progress:Number(job.progress || 0),
+      current:Number(job.current_image || 0), total:Number(job.request?.images || 0),
+      eta_seconds:job.eta_seconds
+    }}));
   }
 
   function openImageLightbox(result) {
