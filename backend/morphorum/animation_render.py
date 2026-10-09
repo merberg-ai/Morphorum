@@ -1739,6 +1739,11 @@ class AnimationRenderManager:
                 "anchor": bool(cadence_anchor),
                 "phase": int(frame % cadence_value),
             }
+            hybrid_sample = frozen_hybrid_frame(hybrid_snapshot, render_dir, frame)
+            hybrid_state = (
+                {**hybrid_sample[1], "applied": bool(should_diffuse)}
+                if hybrid_sample is not None else None
+            )
             if should_diffuse:
                 diffusion_mode = "img2img"
                 prompt_reason = None
@@ -1770,6 +1775,8 @@ class AnimationRenderManager:
                     cadence_state=cadence_state,
                     timings=timings,
                 )
+                if hybrid_state is not None:
+                    job.current_frame_state["hybrid_source"] = hybrid_state
 
             positive = resolved["prompts"]["positive"]
             negative = resolved["prompts"]["negative"]
@@ -1779,6 +1786,12 @@ class AnimationRenderManager:
             sampler = str(generation["sampler"])
             noise_amount = float(generation["noise"])
             noise_started = time.monotonic()
+            if should_diffuse and hybrid_sample is not None:
+                # B6.3.1: the extracted video supplies img2img anchors.
+                # Non-anchor cadence frames still use the normal camera warp;
+                # B6.3.2 will introduce blend/composite controls.
+                with Image.open(hybrid_sample[0]) as opened:
+                    transformed = _prepare_source(opened, width, height)
             if should_diffuse:
                 transformed = _add_uniform_noise(
                     transformed,
@@ -1955,6 +1968,7 @@ class AnimationRenderManager:
                     "variant": generation_manager._model_variant(model),
                     "resolved": resolved,
                     "render_state": deepcopy(job.current_frame_state),
+                    **({"hybrid_source": hybrid_state} if hybrid_state else {}),
                 },
             )
             timings["save"] = max(0.0, time.monotonic() - save_started)
@@ -1972,6 +1986,7 @@ class AnimationRenderManager:
                     "seed": seed,
                     "filename": path.name,
                     "path": str(path),
+                    **({"hybrid_source": hybrid_state} if hybrid_state else {}),
                 }
             )
             job.results.sort(key=lambda item: int(item["frame"]))
