@@ -224,8 +224,8 @@ def _render_3d_motion_preview(
     max_frames = max(1, int(animation.get("max_frames", 120)))
     if max_frames > 180:
         raise MotionPreviewError(
-            "B5.3 3D camera preview currently supports up to 180 frames. "
-            "Reduce the frame count for this geometry-only diagnostic preview."
+            "3D camera preview supports up to 180 frames. "
+            "Reduce the frame count to preview the camera movement."
         )
     fps = max(1.0, float(animation.get("fps", 24.0)))
     base = prepare_preview_source(

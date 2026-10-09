@@ -1061,7 +1061,7 @@
         const branch = String(health.git_branch || 'detached');
         const commit = String(health.git_commit || '').slice(0, 12);
         text.textContent = 'Connected';
-        text.title = `Morphorum ${health.version} · ${branch}${commit ? ` · ${commit}` : ''} · Server connected`;
+        text.title = `Morphorum ${health.version} · Server connected`;
       }
     } catch (error) {
       dot?.classList.add('bad');

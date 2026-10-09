@@ -1900,7 +1900,7 @@
       qs('#animation-seed-behavior').value = project.generation?.seed_behavior || 'fixed';
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
       qs('#animation-notes').value = project.notes || '';
-      qs('#animation-schema-badge').textContent = `Project file v${project.schema_version || 1}`;
+      qs('#animation-schema-badge').textContent = 'Project loaded';
 
       const projectFile = qs('#animation-project-path');
       if (projectFile) {

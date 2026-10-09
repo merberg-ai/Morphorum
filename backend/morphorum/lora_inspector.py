@@ -239,7 +239,7 @@ def inspect_lora(model_id: str) -> dict[str, Any]:
     if not triggers:
         warnings.append("No explicit trigger words found; frequent training tags below are not verified triggers.")
     if family == "sdxl" and counts["text_encoder"] + counts["text_encoder_2"]:
-        warnings.append("This LoRA includes text-encoder weights. Morphorum's B4 SDXL compatibility fallback may skip them.")
+        warnings.append("This LoRA includes text-encoder weights. Some SDXL loading modes may not apply those weights.")
     if file_format != "safetensors":
         warnings.append("Use safetensors for safe header-only metadata inspection.")
     rank = [{"rank": key, "modules": value} for key, value in sorted(rank_counts.items())]
