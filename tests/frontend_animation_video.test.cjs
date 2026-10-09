@@ -78,3 +78,48 @@ test('B5.4 video export refuses unfinished renders and uses saved PNG export API
   await context.startExport();
   assert.equal(requests.length, 1, 'invalid FPS must never reach the server');
 });
+
+
+test('B5.5 displays bounded render summary and read-only JSON report link', () => {
+  assert.equal((html.match(/id="animation-performance-summary"/g) || []).length, 1);
+  assert.equal((html.match(/id="animation-performance-stats"/g) || []).length, 1);
+  assert.equal((html.match(/id="animation-performance-report"/g) || []).length, 1);
+  const begin = script.indexOf('  function renderPerformanceSummary(job) {');
+  const end = script.indexOf('  function renderVideoExportState() {', begin);
+  assert.ok(begin > 0 && end > begin);
+  const attrs = {};
+  const dom = {
+    '#animation-performance-summary': { hidden: true },
+    '#animation-performance-stats': { textContent: '' },
+    '#animation-performance-report': {
+      href: '',
+      removeAttribute(attribute) { attrs[attribute] = true; },
+    },
+  };
+  const context = { qs: key => dom[key] || null };
+  vm.runInNewContext(
+    script.slice(begin, end) + '\nthis.paint = renderPerformanceSummary;',
+    context,
+  );
+  context.paint({
+    id: 'run-4', project_id: 'scene-1',
+    performance: {
+      frames_observed: 15, diffusion_anchors: 5,
+      average_anchor_diffusion_seconds: 5.2,
+      maximum_allocated_gib: 14.2,
+      maximum_reserved_gib: 15.1,
+      maximum_resident_loras: 3,
+      pipeline_device: 'cuda', optimization: 'native-gpu',
+      slow_anchor_frames: [9],
+    },
+  });
+  assert.equal(dom['#animation-performance-summary'].hidden, false);
+  assert.match(dom['#animation-performance-stats'].textContent, /avg diffusion 5\.20s/);
+  assert.match(dom['#animation-performance-stats'].textContent, /resident LoRAs ≤ 3/);
+  assert.match(dom['#animation-performance-stats'].textContent, /slow anchors 9/);
+  assert.equal(dom['#animation-performance-report'].href,
+    '/api/animation/renders/scene-1/run-4/performance');
+  context.paint({ id: 'run-2', project_id: 'scene-1', performance: {} });
+  assert.equal(dom['#animation-performance-summary'].hidden, true);
+  assert.equal(attrs.href, true);
+});
