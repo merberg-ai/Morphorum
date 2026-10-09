@@ -1661,7 +1661,7 @@
     const hint = document.createElement('span');
     hint.className = 'animation-lora-hint';
     hint.textContent = loras.length
-      ? 'Deforum syntax · weight can animate between prompt keyframes'
+      ? 'LoRA strength can change between prompt keyframes'
       : 'Add a LoRA directory for the selected model family, then scan Models.';
 
     tools.append(select, weight, insert, hint);
@@ -1813,7 +1813,7 @@
           ? 'Cadence 1: diffusion on every eligible frame.'
           : 'Cadence ' + count + ': run diffusion on every ' + count +
             ' frames; between anchors, only camera transforms run.')
-        : 'Custom keyframe schedule: the renderer resolves cadence at each frame.';
+        : 'Custom cadence schedule: diffusion frequency follows the keyframes you set.';
     }
   }
 
@@ -1900,7 +1900,7 @@
       qs('#animation-seed-behavior').value = project.generation?.seed_behavior || 'fixed';
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
       qs('#animation-notes').value = project.notes || '';
-      qs('#animation-schema-badge').textContent = `Schema ${project.schema_version || 1}`;
+      qs('#animation-schema-badge').textContent = `Project file v${project.schema_version || 1}`;
 
       const projectFile = qs('#animation-project-path');
       if (projectFile) {
@@ -3239,10 +3239,10 @@
     const ratio = risk.pixel_ratio.toFixed(2);
     const message =
       'This render is ' + risk.width + ' × ' + risk.height +
-      ' (' + ratio + '× the pixel count of Morphorum’s physically verified 512 × 512 B5.5 baseline).\n\n' +
-      'This is an advisory warning, not a VRAM estimate or a hardware limit.' +
+      ' (' + ratio + '× the pixel count of a 512 × 512 image).\n\n' +
+      'This is a caution, not a VRAM prediction or a hardware limit.' +
       (memory ? '\n\n' + memory : '') +
-      '\n\nFor a new resolution, a short single-image/short-animation test is recommended before a long render. Start anyway?';
+      '\n\nTry a short render first if you have not used this resolution before. Continue?';
     return window.MorphorumDialog.confirm({
       title: 'High-resolution render warning', message, variant: 'warning',
       confirmText: 'Start Render', cancelText: 'Cancel',
@@ -3401,7 +3401,7 @@
       warnings.replaceChildren();
       const empty = document.createElement('p');
       empty.className = 'muted';
-      empty.textContent = 'Choose a settings file to inspect compatibility warnings.';
+      empty.textContent = 'Choose a file to review any settings that need attention.';
       warnings.appendChild(empty);
     }
     if (mappings) {
@@ -3468,7 +3468,7 @@
       if (!warningItems.length) {
         const clean = document.createElement('p');
         clean.className = 'animation-import-ok';
-        clean.textContent = 'No compatibility warnings for the currently selected model.';
+        clean.textContent = 'No compatibility issues found for the selected model.';
         warnings.appendChild(clean);
       } else {
         for (const message of warningItems) {
@@ -3507,7 +3507,7 @@
         const mappedValue = document.createElement('code');
         mappedValue.textContent =
           item.mapped_value === undefined
-            ? (item.message || 'Passive compatibility metadata')
+            ? (item.message || 'Setting kept for reference')
             : compactImportValue(item.mapped_value);
         target.append(targetKey, mappedValue);
 
@@ -3569,7 +3569,7 @@
     if (file.size > 1048576) {
       toast(
         'Deforum settings file is too large',
-        'B6.1 accepts settings files up to 1 MiB.',
+        'Choose a settings file smaller than 1 MiB.',
         'warning',
         6500
       );
@@ -4010,7 +4010,7 @@
     const expert = document.createElement('details');
     expert.className = 'animation-monitor-diagnostics';
     const expertTitle = document.createElement('summary');
-    expertTitle.textContent = 'Advanced diagnostics: prompts, camera state and performance';
+    expertTitle.textContent = 'Render details: prompts, motion and performance';
     expert.appendChild(expertTitle);
     for (const item of [prompt,motion,perf]) if (item) expert.appendChild(item);
     inner.appendChild(expert);

@@ -227,7 +227,7 @@
           <article class="card glass animation-project-card">
             <div class="card-header">
               <div><h2>Project</h2><p class="muted">Name your project and choose its animation settings.</p></div>
-              <span class="badge" id="animation-schema-badge">Project format</span>
+              <span class="badge" id="animation-schema-badge" title="Animation project file format version">Project format</span>
             </div>
             <div class="field-grid">
               <label class="animation-span-2"><span>Project</span><select id="animation-project-select"><option value="">No projects yet</option></select></label>
@@ -455,7 +455,7 @@
             </div>
             <div class="notice subtle">
               <strong>Projection details</strong>
-              <span>B5.1 preserves the legacy projection for direct comparisons. Select subpixel projection to improve edges; background-priority fill is experimental. For every 3D frame, Morphorum also saves a black/white disocclusion mask alongside frames for future repair. Start gently: Translation Z around ±0.02 to ±0.08 scene units and rotations around ±0.25° to ±1° per frame. Larger values compound quickly because each rendered frame becomes the next camera source.</span>
+              <span>Smooth subpixel projection improves edges during movement. Background-aware fill can help reduce exposed gaps. For subtle motion, start with Translation Z between ±0.02 and ±0.08 scene units and rotation between ±0.25° and ±1° per frame. Larger changes can quickly amplify across frames.</span>
             </div>
           </article>
 
