@@ -1723,3 +1723,43 @@ def test_sdxl_component_identity_inspection_skips_missing_components() -> None:
     assert GenerationManager._shared_pipeline_components(
         SimpleNamespace(unet=object()), SimpleNamespace()
     ) == {}
+
+
+@pytest.mark.parametrize("precision", [torch.float16, torch.float32])
+def test_sdxl_task_conversion_preserves_loaded_unet_precision(monkeypatch, precision) -> None:
+    """Regression for Diffusers 0.40.0 from_pipe() implicit float32 upcast."""
+    import diffusers
+
+    kwargs_seen = []
+
+    class FakeConverted:
+        @classmethod
+        def from_pipe(cls, original, **kwargs):
+            kwargs_seen.append((original, kwargs))
+            return cls()
+
+        def set_progress_bar_config(self, **kwargs):
+            self.progress = kwargs
+
+    monkeypatch.setattr(diffusers, "StableDiffusionXLImg2ImgPipeline", FakeConverted)
+    pipe = SimpleNamespace(unet=SimpleNamespace(dtype=precision))
+    converted = GenerationManager()._convert_pipeline_task(pipe, "sdxl", "img2img")
+    assert isinstance(converted, FakeConverted)
+    assert kwargs_seen == [(pipe, {"dtype": precision})]
+    assert converted.progress == {"disable": True}
+
+
+def test_sdxl_task_conversion_requires_explicit_source_precision(monkeypatch) -> None:
+    """Missing dtype must never silently convert a live FP16 model to FP32."""
+    import diffusers
+
+    class UnexpectedConversion:
+        @classmethod
+        def from_pipe(cls, *_args, **_kwargs):
+            raise AssertionError("from_pipe must not be invoked without SDXL dtype")
+
+    monkeypatch.setattr(diffusers, "StableDiffusionXLImg2ImgPipeline", UnexpectedConversion)
+    with pytest.raises(GenerationError, match="Cannot determine.*SDXL UNet precision"):
+        GenerationManager()._convert_pipeline_task(
+            SimpleNamespace(unet=SimpleNamespace()), "sdxl", "img2img"
+        )
