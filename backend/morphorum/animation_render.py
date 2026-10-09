@@ -1569,6 +1569,9 @@ class AnimationRenderManager:
             # Read-only allocator snapshot; never synchronize or clear CUDA
             # caches in the hot frame loop just to collect diagnostics.
             cuda_before = generation_manager.cuda_memory_status()
+            phase_memory: dict[str, dict[str, Any] | None] = {
+                "frame_start": cuda_before,
+            }
             if job.cancel_requested:
                 self._cancel(job)
                 return
@@ -1769,6 +1772,7 @@ class AnimationRenderManager:
                     0.0,
                     time.monotonic() - prepare_started,
                 )
+                phase_memory["post_prepare"] = generation_manager.cuda_memory_status()
                 if job.model_load_seconds is None:
                     job.model_load_seconds = max(
                         0.0,
@@ -1850,6 +1854,7 @@ class AnimationRenderManager:
                     0.0,
                     time.monotonic() - conditioning_started,
                 )
+                phase_memory["post_conditioning"] = generation_manager.cuda_memory_status()
                 call_args.update(conditioning)
 
                 diffusion_started = time.monotonic()
@@ -1858,6 +1863,12 @@ class AnimationRenderManager:
                 timings["diffusion"] = max(
                     0.0,
                     time.monotonic() - diffusion_started,
+                )
+                # This sample includes denoising plus the pipeline's VAE encode/decode
+                # work. Deeper UNet/VAE separation will require family-specific hooks;
+                # do not add per-step synchronization just for profiling.
+                phase_memory["post_diffusion_decode"] = (
+                    generation_manager.cuda_memory_status()
                 )
                 if job.cancel_requested:
                     self._cancel(job)
@@ -1963,6 +1974,7 @@ class AnimationRenderManager:
                 time.monotonic() - memory_started,
             )
             timings["memory_trimmed"] = 1.0 if memory_maintenance.get("trimmed") else 0.0
+            phase_memory["post_maintenance"] = generation_manager.cuda_memory_status()
 
             frame_seconds = max(0.0, time.monotonic() - frame_started)
             timings["total"] = frame_seconds
@@ -1989,6 +2001,7 @@ class AnimationRenderManager:
                 cuda_after=memory,
                 model_status=pipeline_status,
                 conditioning_cache_entries=len(conditioning_cache),
+                phase_memory=phase_memory,
             )
             performance_tracker.observe(record)
             job.performance = performance_tracker.public()

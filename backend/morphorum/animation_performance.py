@@ -20,18 +20,30 @@ def _finite_seconds(value: Any) -> float:
     return max(0.0, number) if math.isfinite(number) else 0.0
 
 
-def _memory_fields(sample: dict[str, Any] | None) -> dict[str, float] | None:
+def _memory_fields(sample: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(sample, dict):
         return None
-    result: dict[str, float] = {}
-    for key in ("free_gib", "total_gib", "allocated_gib", "reserved_gib",
-                "peak_allocated_gib", "peak_reserved_gib"):
+    result: dict[str, Any] = {}
+    for key in (
+        "free_gib", "total_gib", "allocated_gib", "reserved_gib",
+        "peak_allocated_gib", "peak_reserved_gib", "active_gib",
+        "inactive_split_gib",
+    ):
         try:
             value = float(sample[key])
         except (KeyError, TypeError, ValueError, OverflowError):
             continue
         if math.isfinite(value):
             result[key] = round(value, 4)
+    for key in ("device_index", "allocation_retries", "oom_count"):
+        try:
+            result[key] = int(sample[key])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+    for key in ("device_name", "allocator_backend"):
+        value = sample.get(key)
+        if value is not None and str(value).strip():
+            result[key] = str(value)
     return result or None
 
 
@@ -46,9 +58,15 @@ class AnimationPerformance:
     maximum_frame_seconds: float = 0.0
     maximum_allocated_gib: float = 0.0
     maximum_reserved_gib: float = 0.0
+    maximum_peak_allocated_gib: float = 0.0
+    maximum_peak_reserved_gib: float = 0.0
+    maximum_active_gib: float = 0.0
     maximum_resident_loras: int = 0
-    first_memory: dict[str, float] | None = None
-    last_memory: dict[str, float] | None = None
+    allocator_backend: str | None = None
+    allocation_retries: int = 0
+    oom_count: int = 0
+    first_memory: dict[str, Any] | None = None
+    last_memory: dict[str, Any] | None = None
     latest_frame: int | None = None
     latest_diffusion_seconds: float = 0.0
     last_device: str | None = None
@@ -85,6 +103,26 @@ class AnimationPerformance:
             self.maximum_reserved_gib = max(
                 self.maximum_reserved_gib, memory.get("reserved_gib", 0.0),
             )
+            self.maximum_peak_allocated_gib = max(
+                self.maximum_peak_allocated_gib,
+                memory.get("peak_allocated_gib", 0.0),
+            )
+            self.maximum_peak_reserved_gib = max(
+                self.maximum_peak_reserved_gib,
+                memory.get("peak_reserved_gib", 0.0),
+            )
+            self.maximum_active_gib = max(
+                self.maximum_active_gib, memory.get("active_gib", 0.0),
+            )
+            self.allocation_retries = max(
+                self.allocation_retries, int(memory.get("allocation_retries", 0) or 0),
+            )
+            self.oom_count = max(
+                self.oom_count, int(memory.get("oom_count", 0) or 0),
+            )
+            backend = memory.get("allocator_backend")
+            if backend:
+                self.allocator_backend = str(backend)
 
         # Local, observational warning only; not a hard-coded baseline speed.
         # Keep bounded data and report it instead of silently changing devices.
@@ -110,6 +148,12 @@ class AnimationPerformance:
             "maximum_frame_seconds": round(self.maximum_frame_seconds, 3),
             "maximum_allocated_gib": round(self.maximum_allocated_gib, 3),
             "maximum_reserved_gib": round(self.maximum_reserved_gib, 3),
+            "maximum_peak_allocated_gib": round(self.maximum_peak_allocated_gib, 3),
+            "maximum_peak_reserved_gib": round(self.maximum_peak_reserved_gib, 3),
+            "maximum_active_gib": round(self.maximum_active_gib, 3),
+            "allocator_backend": self.allocator_backend,
+            "allocation_retries": self.allocation_retries,
+            "oom_count": self.oom_count,
             "maximum_resident_loras": self.maximum_resident_loras,
             "first_memory": self.first_memory,
             "last_memory": self.last_memory,
@@ -130,8 +174,14 @@ def performance_record(
     cuda_after: dict[str, Any] | None,
     model_status: dict[str, Any] | None,
     conditioning_cache_entries: int,
+    phase_memory: dict[str, dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
     model_status = model_status if isinstance(model_status, dict) else {}
+    normalized_phases: dict[str, dict[str, Any]] = {}
+    for name, sample in (phase_memory or {}).items():
+        normalized = _memory_fields(sample)
+        if normalized is not None:
+            normalized_phases[str(name)] = normalized
     return {
         "schema_version": 1,
         "frame": int(frame),
@@ -145,6 +195,7 @@ def performance_record(
         },
         "cuda_before": _memory_fields(cuda_before),
         "cuda_after": _memory_fields(cuda_after),
+        "phase_memory": normalized_phases,
         "pipeline_device": model_status.get("device"),
         "optimization": model_status.get("optimization"),
         "pipeline_task": model_status.get("task"),

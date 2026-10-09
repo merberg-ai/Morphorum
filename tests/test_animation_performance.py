@@ -29,6 +29,14 @@ def _record(frame: int, *, diffused: bool = True, seconds: float = 5.0,
             "allocated_gib": allocation,
             "reserved_gib": allocation + 0.25,
             "peak_allocated_gib": allocation + 0.5,
+            "peak_reserved_gib": allocation + 0.75,
+            "active_gib": allocation - 0.2,
+            "inactive_split_gib": 0.1,
+            "allocator_backend": "native",
+            "device_index": 0,
+            "device_name": "Test GPU",
+            "allocation_retries": 2,
+            "oom_count": 0,
         },
         model_status={
             "device": "cuda", "optimization": "native-gpu", "task": "img2img",
@@ -38,6 +46,17 @@ def _record(frame: int, *, diffused: bool = True, seconds: float = 5.0,
             ] if loras else [],
         },
         conditioning_cache_entries=min(frame, 8),
+        phase_memory={
+            "frame_start": {
+                "allocated_gib": allocation - 0.1,
+                "allocator_backend": "native",
+            },
+            "post_diffusion_decode": {
+                "allocated_gib": allocation,
+                "peak_allocated_gib": allocation + 0.5,
+                "allocator_backend": "native",
+            },
+        },
     )
 
 
@@ -52,6 +71,12 @@ def test_b55_performance_observes_gpu_and_adapter_lifecycle() -> None:
     assert result["average_anchor_diffusion_seconds"] == 4.5
     assert result["maximum_allocated_gib"] == 11
     assert result["maximum_reserved_gib"] == 11.25
+    assert result["maximum_peak_allocated_gib"] == 11.5
+    assert result["maximum_peak_reserved_gib"] == 11.75
+    assert result["maximum_active_gib"] == 10.8
+    assert result["allocator_backend"] == "native"
+    assert result["allocation_retries"] == 2
+    assert result["oom_count"] == 0
     assert result["maximum_resident_loras"] == 3
     assert result["pipeline_device"] == "cuda"
     assert result["optimization"] == "native-gpu"
@@ -95,6 +120,7 @@ def test_b55_profile_capture_is_read_only_and_handles_no_cuda() -> None:
     assert record["cuda_after"] is None
     assert record["pipeline_device"] is None
     assert record["resident_loras"] == 0
+    assert record["phase_memory"] == {}
     assert record["timings"]["diffusion"] == 0
     tracker = summarize_records([record])
     assert tracker["maximum_allocated_gib"] == 0
@@ -140,3 +166,11 @@ def test_b55_performance_api_is_read_only_and_reports_missing_render(monkeypatch
         missing = client.get("/api/animation/renders/test-project/missing/performance")
         assert missing.status_code == 404
     assert seen == [("test-project", "test-run"), ("test-project", "missing")]
+
+
+def test_b60p_phase_memory_preserves_allocator_context() -> None:
+    record = _record(12, allocation=12.5, loras=3)
+    phases = record["phase_memory"]
+    assert phases["frame_start"]["allocator_backend"] == "native"
+    assert phases["post_diffusion_decode"]["peak_allocated_gib"] == 13.0
+    assert "prompt" not in json.dumps(phases)

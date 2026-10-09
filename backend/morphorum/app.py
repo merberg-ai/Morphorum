@@ -183,6 +183,12 @@ def system_telemetry() -> dict:
     return live_telemetry()
 
 
+@app.get("/api/system/gpu-memory")
+def system_gpu_memory() -> dict[str, Any]:
+    """Read Morphorum's own CUDA allocator state without changing it."""
+    return generation_manager.memory_profile()
+
+
 @app.get("/api/install")
 def installed() -> dict:
     return install_manifest()

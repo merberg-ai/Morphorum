@@ -1013,23 +1013,82 @@ class GenerationManager:
     def pipeline_optimization(self) -> str | None:
         return self._pipeline_optimization
 
-    def cuda_memory_status(self) -> dict[str, float] | None:
+    def cuda_memory_status(self) -> dict[str, Any] | None:
+        """Return a read-only CUDA allocator snapshot from this server process.
+
+        The snapshot deliberately avoids synchronize(), empty_cache(), and the
+        heavyweight memory_snapshot() API so it is safe to sample around hot
+        animation phases. Peak values are process-lifetime allocator high-water
+        marks unless explicitly reset elsewhere; they are not physical-residency
+        measurements.
+        """
         try:
             import torch
 
             if not torch.cuda.is_available():
                 return None
-            free_bytes, total_bytes = torch.cuda.mem_get_info()
-            return {
+
+            device_index = int(torch.cuda.current_device())
+            free_bytes, total_bytes = torch.cuda.mem_get_info(device_index)
+            try:
+                stats = torch.cuda.memory_stats(device_index)
+            except Exception:
+                stats = {}
+
+            allocator_backend: str | None = None
+            get_allocator_backend = getattr(torch.cuda, "get_allocator_backend", None)
+            if callable(get_allocator_backend):
+                try:
+                    allocator_backend = str(get_allocator_backend())
+                except Exception:
+                    allocator_backend = None
+
+            def stat_gib(key: str) -> float | None:
+                value = stats.get(key)
+                if not isinstance(value, (int, float)):
+                    return None
+                return float(value) / 1024**3
+
+            result: dict[str, Any] = {
+                "device_index": device_index,
+                "device_name": str(torch.cuda.get_device_name(device_index)),
+                "allocator_backend": allocator_backend,
                 "free_gib": free_bytes / 1024**3,
                 "total_gib": total_bytes / 1024**3,
-                "allocated_gib": torch.cuda.memory_allocated() / 1024**3,
-                "reserved_gib": torch.cuda.memory_reserved() / 1024**3,
-                "peak_allocated_gib": torch.cuda.max_memory_allocated() / 1024**3,
-                "peak_reserved_gib": torch.cuda.max_memory_reserved() / 1024**3,
+                "allocated_gib": torch.cuda.memory_allocated(device_index) / 1024**3,
+                "reserved_gib": torch.cuda.memory_reserved(device_index) / 1024**3,
+                "peak_allocated_gib": torch.cuda.max_memory_allocated(device_index) / 1024**3,
+                "peak_reserved_gib": torch.cuda.max_memory_reserved(device_index) / 1024**3,
+                "allocation_retries": int(stats.get("num_alloc_retries", 0) or 0),
+                "oom_count": int(stats.get("num_ooms", 0) or 0),
             }
+            for output_key, stat_key in (
+                ("active_gib", "active_bytes.all.current"),
+                ("inactive_split_gib", "inactive_split_bytes.all.current"),
+            ):
+                value = stat_gib(stat_key)
+                if value is not None:
+                    result[output_key] = value
+            return result
         except Exception:
             return None
+
+    def memory_profile(self) -> dict[str, Any]:
+        """Expose current in-process GPU diagnostics without mutating allocator state."""
+        memory = self.cuda_memory_status()
+        return {
+            "schema_version": 1,
+            "cuda_available": memory is not None,
+            "cuda": memory,
+            "model": self.model_status(),
+            "notes": {
+                "peak_scope": (
+                    "PyTorch process allocator high-water marks; not guaranteed "
+                    "simultaneous physical VRAM residency."
+                ),
+                "sampling": "Read-only; no synchronize or cache flush is performed.",
+            },
+        }
 
     def _load_zimage_pipeline(
         self,

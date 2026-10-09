@@ -161,6 +161,68 @@ def test_flux_fp8_lora_error_is_rewritten_with_compatibility_guidance() -> None:
     assert "updated B4 branch" in str(error)
 
 
+def test_cuda_memory_status_reports_allocator_context_without_mutation(monkeypatch) -> None:
+    manager = GenerationManager()
+    gib = 1024**3
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: 0)
+    monkeypatch.setattr(torch.cuda, "mem_get_info", lambda *_args: (2 * gib, 16 * gib))
+    monkeypatch.setattr(torch.cuda, "memory_allocated", lambda *_args: 10 * gib)
+    monkeypatch.setattr(torch.cuda, "memory_reserved", lambda *_args: 12 * gib)
+    monkeypatch.setattr(torch.cuda, "max_memory_allocated", lambda *_args: 13 * gib)
+    monkeypatch.setattr(torch.cuda, "max_memory_reserved", lambda *_args: 14 * gib)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda *_args: "Test GPU")
+    monkeypatch.setattr(
+        torch.cuda,
+        "get_allocator_backend",
+        lambda: "native",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        torch.cuda,
+        "memory_stats",
+        lambda *_args: {
+            "active_bytes.all.current": 9 * gib,
+            "inactive_split_bytes.all.current": gib // 2,
+            "num_alloc_retries": 3,
+            "num_ooms": 1,
+        },
+    )
+
+    status = manager.cuda_memory_status()
+    assert status is not None
+    assert status["allocator_backend"] == "native"
+    assert status["device_name"] == "Test GPU"
+    assert status["free_gib"] == pytest.approx(2.0)
+    assert status["allocated_gib"] == pytest.approx(10.0)
+    assert status["active_gib"] == pytest.approx(9.0)
+    assert status["inactive_split_gib"] == pytest.approx(0.5)
+    assert status["allocation_retries"] == 3
+    assert status["oom_count"] == 1
+
+
+def test_memory_profile_explains_peak_scope(monkeypatch) -> None:
+    manager = GenerationManager()
+    monkeypatch.setattr(
+        manager,
+        "cuda_memory_status",
+        lambda: {"allocator_backend": "cudaMallocAsync", "allocated_gib": 11.0},
+    )
+    monkeypatch.setattr(
+        manager,
+        "model_status",
+        lambda: {"loaded": True, "device": "cuda", "optimization": "native-gpu"},
+    )
+
+    profile = manager.memory_profile()
+    assert profile["cuda_available"] is True
+    assert profile["cuda"]["allocator_backend"] == "cudaMallocAsync"
+    assert profile["model"]["optimization"] == "native-gpu"
+    assert "high-water" in profile["notes"]["peak_scope"]
+    assert "Read-only" in profile["notes"]["sampling"]
+
+
 def test_cuda_oom_is_rewritten_as_actionable_error() -> None:
     manager = GenerationManager()
     error = manager._friendly_error(
