@@ -198,6 +198,13 @@ def test_interrupted_manifest_can_resume_from_last_completed_frame(
     assert finished["current_frame_state"]["cumulative_2d"]["zoom"] == pytest.approx(1.0)
     assert finished["current_frame_state"]["cumulative_2d"]["center_offset_x"] == pytest.approx(3.0)
     assert finished["current_frame_state"]["cumulative_2d"]["center_offset_y"] == pytest.approx(0.0)
+    # Per-frame B5.5 records from the interrupted process must remain
+    # available while regenerated/resumed frame IDs appear only once.
+    report = second_manager.performance_report("render-test", started["id"])
+    assert report["summary"]["frames_observed"] == 3
+    assert [frame["frame"] for frame in report["frames"]] == [1, 2, 3]
+    assert finished["performance"]["frames_observed"] == 3
+
 
 
 class FakeSDXLPipe:
