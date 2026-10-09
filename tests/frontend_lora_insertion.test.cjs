@@ -43,7 +43,10 @@ function setup(modelFamily = 'sdxl') {
       return Promise.resolve({});
     },
     console,
+    window: {},
   };
+  const shared = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'dist', 'assets', 'ui-services.js'), 'utf8');
+  vm.runInNewContext(shared, context);
   vm.runInNewContext(realFunctions + '\nthis.insertFromManager = insertFromManager;', context);
   return { insert: context.insertFromManager, record, prompt, messages, events };
 }
