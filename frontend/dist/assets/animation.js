@@ -2725,6 +2725,43 @@
     }
   }
 
+  function renderPerformanceSummary(job) {
+    const panel = qs('#animation-performance-summary');
+    const stats = qs('#animation-performance-stats');
+    const link = qs('#animation-performance-report');
+    const perf = job?.performance;
+    const visible = Boolean(perf && Number(perf.frames_observed || 0) > 0);
+    if (panel) panel.hidden = !visible;
+    if (link) {
+      if (visible && job.id && job.project_id) {
+        link.href = '/api/animation/renders/' +
+          encodeURIComponent(job.project_id) + '/' +
+          encodeURIComponent(job.id) + '/performance';
+      } else {
+        link.removeAttribute('href');
+      }
+    }
+    if (!stats) return;
+    if (!visible) { stats.textContent = ''; return; }
+    const gb = value => Number.isFinite(Number(value))
+      ? Number(value).toFixed(2) + ' GiB' : '—';
+    const secs = value => Number.isFinite(Number(value))
+      ? Number(value).toFixed(2) + 's' : '—';
+    stats.textContent =
+      'Frames ' + perf.frames_observed +
+      ' · diffusion anchors ' + perf.diffusion_anchors +
+      ' · avg diffusion ' + secs(perf.average_anchor_diffusion_seconds) +
+      ' · max GPU allocated ' + gb(perf.maximum_allocated_gib) +
+      ' · max reserved ' + gb(perf.maximum_reserved_gib) +
+      ' · resident LoRAs ≤ ' + perf.maximum_resident_loras +
+      ' · execution ' + (perf.pipeline_device || 'not recorded') +
+      ' · ' + (perf.optimization || 'unavailable');
+    if ((perf.slow_anchor_frames || []).length) {
+      stats.textContent += ' · slow anchors ' +
+        perf.slow_anchor_frames.join(', ');
+    }
+  }
+
   function renderVideoExportState() {
     const job = state.renderJob;
     const isCompleted = job?.status === 'completed';
@@ -2996,6 +3033,7 @@
 
     renderAnimationPromptTelemetry(job);
     renderAnimationFrameTelemetry(job);
+    renderPerformanceSummary(job);
 
     const error = qs('#animation-render-error');
     if (error) {
