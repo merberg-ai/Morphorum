@@ -109,3 +109,53 @@ test('B5.2 future-anchor settings are opt-in and survive project editor round-tr
   assert.match(source, /mix: Number\(qs\('#animation-temporal-mix'\)/);
   assert.match(source, /contrast_threshold: Number\(qs\('#animation-temporal-contrast'\)/);
 });
+
+
+test('B5.3 camera-motion preset populates only six 3D schedules', () => {
+  for (const id of ['animation-3d-preset', 'animation-3d-apply-preset',
+                     'animation-preview-highlight-holes', 'animation-camera-coverage']) {
+    assert.ok(html.includes('id="' + id + '"'), id);
+  }
+  assert.ok(!html.includes('animation-motion-preview-card" data-animation-mode="2d"'));
+  const presetBegin = source.indexOf('  const CAMERA_3D_PRESETS = ');
+  const presetEnd = source.indexOf('  const INSPECTOR_INPUT_IDS =', presetBegin);
+  const applyBegin = source.indexOf('  function applyCamera3DPreset() {');
+  const applyEnd = source.indexOf('  function applyCadencePreset() {', applyBegin);
+  assert.ok(presetBegin > 0 && presetEnd > presetBegin);
+  assert.ok(applyBegin > 0 && applyEnd > applyBegin);
+  const inputs = {};
+  for (const field of ['translation-x', 'translation-y', 'translation-z',
+                       'rotation-x', 'rotation-y', 'rotation-z']) {
+    inputs['#animation-3d-' + field] = { value: 'original' };
+  }
+  inputs['#animation-3d-fov'] = { value: '0:(40)' };
+  inputs['#animation-3d-preset'] = { value: 'orbit-left' };
+  const calls = [];
+  const context = {
+    state: { project: { id: 'project' }, motionJobId: null },
+    qs: selector => inputs[selector] || null,
+    animationMode: () => '3d',
+    clearMotionPreviewResult: () => calls.push('cleared'),
+    markDirty: () => calls.push('dirty'),
+    refreshInspector: () => calls.push('inspected'),
+    toast: () => calls.push('toast'),
+  };
+  vm.runInNewContext(
+    source.slice(presetBegin, presetEnd) + '\n' +
+    source.slice(applyBegin, applyEnd) + '\nthis.apply3d = applyCamera3DPreset;',
+    context,
+  );
+  context.apply3d();
+  assert.equal(inputs['#animation-3d-translation-x'].value, '0:(-0.008)');
+  assert.equal(inputs['#animation-3d-rotation-y'].value, '0:(0.18)');
+  assert.equal(inputs['#animation-3d-translation-z'].value, '0:(0)');
+  assert.equal(inputs['#animation-3d-fov'].value, '0:(40)');
+  assert.deepEqual(calls, ['cleared', 'dirty', 'inspected', 'toast']);
+  inputs['#animation-3d-preset'].value = 'still';
+  context.apply3d();
+  for (const key of Object.keys(inputs).filter(key =>
+    key.startsWith('#animation-3d-') && key !== '#animation-3d-preset' &&
+    key !== '#animation-3d-fov')) {
+    assert.equal(inputs[key].value, '0:(0)');
+  }
+});
