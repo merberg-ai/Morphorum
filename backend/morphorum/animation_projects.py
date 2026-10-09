@@ -132,6 +132,8 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "rotation_z": "0:(0)",
             "fov": "0:(40)",
             "depth_resolution": "auto",
+            "projection_mode": "legacy",
+            "hole_fill": "nearest",
         },
         "generation": {
             "strength": "0:(0.65)",
@@ -382,6 +384,8 @@ def normalize_animation_project(
             "rotation_z": "0:(0)",
             "fov": "0:(40)",
             "depth_resolution": "auto",
+            "projection_mode": "legacy",
+            "hole_fill": "nearest",
         },
     )
     depth_resolution = str(
@@ -391,6 +395,21 @@ def normalize_animation_project(
         depth_resolution
         if depth_resolution in {"auto", "384", "512", "768", "full"}
         else "auto"
+    )
+
+    # Explicit modes keep pre-B5 renders pixel-identical while allowing B5.1
+    # improvements to be selected per project.
+    projection_mode = str(
+        project["camera_3d"].get("projection_mode") or "legacy"
+    ).strip().lower()
+    project["camera_3d"]["projection_mode"] = (
+        projection_mode if projection_mode in {"legacy", "splat"} else "legacy"
+    )
+    hole_fill = str(
+        project["camera_3d"].get("hole_fill") or "nearest"
+    ).strip().lower()
+    project["camera_3d"]["hole_fill"] = (
+        hole_fill if hole_fill in {"nearest", "background"} else "nearest"
     )
 
     generation_source = payload.get("generation", project.get("generation", {}))
