@@ -25,7 +25,7 @@ MAX_PROBE_SECONDS = 15
 
 
 def managed_video_path(project_id: str, filename: str) -> Path:
-    if not isinstance(filename, str) or filename != Path(filename).name:
+    if (not isinstance(filename, str) or not filename or "/" in filename\n            or "\\\\" in filename or ":" in filename or filename in {".", ".."}):
         raise HybridSourceError("Video filename must not contain path components.")
     suffix = Path(filename).suffix.lower()
     if suffix not in VIDEO_SUFFIXES:
@@ -65,7 +65,7 @@ def parse_ffprobe_json(content: str) -> dict[str, Any]:
     stream = next(
         (item for item in streams
          if isinstance(item, dict) and item.get("codec_type") == "video"
-         and item.get("disposition", {}).get("attached_pic", 0) != 1),
+         and (item.get("disposition") or {}).get("attached_pic", 0) != 1),
         None,
     )
     if stream is None:
