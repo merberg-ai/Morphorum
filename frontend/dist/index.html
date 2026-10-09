@@ -353,10 +353,12 @@
               <label><span>Rotation Z</span><input id="animation-3d-rotation-z" class="animation-schedule" type="text" value="0:(0)" disabled></label>
               <label><span>Field of view <small class="muted">(degrees)</small></span><input id="animation-3d-fov" class="animation-schedule" type="text" value="0:(40)" disabled></label>
               <label><span>Depth resolution</span><select id="animation-3d-depth-resolution" disabled><option value="auto">Auto</option><option value="384">384 px</option><option value="512">512 px</option><option value="768">768 px</option><option value="full">Full render size</option></select></label>
+              <label><span>3D projection quality</span><select id="animation-3d-projection-mode" disabled><option value="legacy">Legacy: nearest-pixel Z-buffer</option><option value="splat">B5.1: subpixel depth-tested splat</option></select></label>
+              <label><span>Exposed-pixel fill</span><select id="animation-3d-hole-fill" disabled><option value="nearest">Nearest visible pixel</option><option value="background">Prefer background layer (experimental)</option></select></label>
             </div>
             <div class="notice subtle">
               <strong>Renderer status</strong>
-              <span>Depth-aware rendering is active in A3. Start gently: Translation Z around ±0.02 to ±0.08 scene units and rotations around ±0.25° to ±1° per frame. Larger values compound quickly because each rendered frame becomes the next camera source.</span>
+              <span>B5.1 preserves the legacy projection for direct comparisons. Select subpixel projection to improve edges; background-priority fill is experimental. For every 3D frame, Morphorum also saves a black/white disocclusion mask alongside frames for future repair. Start gently: Translation Z around ±0.02 to ±0.08 scene units and rotations around ±0.25° to ±1° per frame. Larger values compound quickly because each rendered frame becomes the next camera source.</span>
             </div>
           </article>
 
