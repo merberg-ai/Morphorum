@@ -1937,3 +1937,5 @@ dialog#animation-deforum-dialog {
   #animation-panel-monitor .animation-render-card {padding:12px;}
   #animation-panel-monitor .animation-render-visuals {max-width:100%;}
 }
+
+@media(max-width:640px) { .animation-workspace-nav {position:static;} }

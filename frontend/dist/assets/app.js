@@ -1066,6 +1066,21 @@
     }
   }
 
+  function syncMobileViewport() {
+    const mobile = window.matchMedia('(max-width: 640px)').matches;
+    const viewport = window.visualViewport;
+    if (!mobile || !viewport) {
+      document.documentElement.style.setProperty('--mobile-viewport-inset', '0px');
+      document.body.classList.remove('mobile-keyboard-open');
+      return;
+    }
+    const obstructed = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+    const keyboard = obstructed > 170 && document.activeElement?.matches?.('input,textarea,[contenteditable="true"]');
+    document.body.classList.toggle('mobile-keyboard-open', Boolean(keyboard));
+    document.documentElement.style.setProperty('--mobile-viewport-inset',
+      (keyboard ? 0 : Math.min(110, Math.round(obstructed))) + 'px');
+  }
+
   function bindUi() {
     qsa('.nav-button').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
     const moreToggle = qs('#nav-more-toggle');
@@ -1125,6 +1140,12 @@
     });
     qs('#clear-console-server')?.addEventListener('click', clearServerConsole);
 
+    window.visualViewport?.addEventListener('resize', syncMobileViewport);
+    window.visualViewport?.addEventListener('scroll', syncMobileViewport);
+    window.addEventListener('resize', syncMobileViewport);
+    document.addEventListener('focusin', syncMobileViewport);
+    document.addEventListener('focusout', () => window.setTimeout(syncMobileViewport, 120));
+    syncMobileViewport();
     const requested = location.hash.replace('#', '');
     if (['image', 'animation', 'models', 'loras', 'settings', 'console'].includes(requested)) switchView(requested);
   }

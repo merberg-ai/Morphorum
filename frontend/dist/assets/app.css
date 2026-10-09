@@ -713,3 +713,13 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .console-actions {grid-template-columns:repeat(3,minmax(0,1fr));}
   .console-actions .chip {grid-column:1/-1;}
 }
+
+/* Android dynamic toolbar / virtual keyboard clearance. */
+@media(max-width:640px) {
+  .main-nav {bottom:calc(max(8px, env(safe-area-inset-bottom, 0px)) + var(--mobile-viewport-inset, 0px));}
+  .toast-stack {bottom:calc(86px + env(safe-area-inset-bottom, 0px) + var(--mobile-viewport-inset, 0px));}
+  .app-shell {padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px) + var(--mobile-viewport-inset, 0px));}
+  body.mobile-keyboard-open .main-nav {display:none;}
+  body.mobile-keyboard-open .topbar {position:static;}
+  body.mobile-keyboard-open .app-shell {padding-bottom:20px;}
+}
