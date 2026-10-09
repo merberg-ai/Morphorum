@@ -72,7 +72,7 @@ test('cadence 3 and manual keyframed schedule survive synchronization', () => {
   a.sync();
   assert.equal(a.preset.value, 'custom');
   assert.equal(a.field.value, '0:(1), 24:(3)');
-  assert.match(a.help.textContent, /Custom keyframe schedule/);
+  assert.match(a.help.textContent, /Custom cadence schedule/);
 });
 
 test('selecting Custom preserves the raw schedule and focuses its editor', () => {
@@ -87,9 +87,9 @@ test('selecting Custom preserves the raw schedule and focuses its editor', () =>
 test('B5.1 projection quality and hole fill are editable and round-trip through Animation', () => {
   assert.equal((html.match(/id="animation-3d-projection-mode"/g) || []).length, 1);
   assert.equal((html.match(/id="animation-3d-hole-fill"/g) || []).length, 1);
-  assert.match(html, /value="legacy".*Legacy: nearest-pixel Z-buffer/);
-  assert.match(html, /value="splat".*subpixel depth-tested splat/);
-  assert.match(html, /value="background".*Prefer background layer/);
+  assert.match(html, /value="legacy".*Classic projection/);
+  assert.match(html, /value="splat".*Smooth subpixel projection/);
+  assert.match(html, /value="background".*Background-aware fill/);
   assert.match(source, /project\.camera_3d\?\.projection_mode \|\| 'legacy'/);
   assert.match(source, /project\.camera_3d\?\.hole_fill \|\| 'nearest'/);
   assert.match(source, /projection_mode: qs\('#animation-3d-projection-mode'\)/);
@@ -100,8 +100,8 @@ test('B5.2 future-anchor settings are opt-in and survive project editor round-tr
   assert.equal((html.match(/id="animation-temporal-mode"/g) || []).length, 1);
   assert.equal((html.match(/id="animation-temporal-mix"/g) || []).length, 1);
   assert.equal((html.match(/id="animation-temporal-contrast"/g) || []).length, 1);
-  assert.match(html, /value="forward">Forward-only/);
-  assert.match(html, /value="future-anchor">Future-anchor depth-aligned tween/);
+  assert.match(html, /value="forward">Forward only/);
+  assert.match(html, /value="future-anchor">Depth-aligned blending/);
   assert.match(source, /project\.temporal\?\.mode \|\| 'forward'/);
   assert.match(source, /project\.temporal\?\.mix \?\? 0\.65/);
   assert.match(source, /project\.temporal\?\.contrast_threshold \?\? 96/);

@@ -27,7 +27,7 @@ test('B6.1 Deforum importer is browser-file based and preview-first', () => {
 
   assert.match(html, /id="animation-deforum-file"[^>]+type="file"/);
   assert.match(html, /accept="\.json,\.txt,application\/json,text\/plain"/);
-  assert.ok(html.includes('Imported checkpoint paths are never trusted.'));
+  assert.ok(html.includes('Choose a model from your Morphorum library'));
   assert.ok(script.includes('await file.text()'));
   assert.ok(script.includes("'/api/animation/import/deforum/preview'"));
   assert.ok(script.includes("'/api/animation/import/deforum/create'"));

@@ -113,7 +113,7 @@ def test_frontend_and_health() -> None:
         assert app_js.status_code == 200
         assert "health.git_branch" in app_js.text
         assert "health.git_commit" in app_js.text
-        assert "API ready" in app_js.text
+        assert "Connected" in app_js.text
 
         animation_js = client.get("/assets/animation.js")
         assert animation_js.status_code == 200

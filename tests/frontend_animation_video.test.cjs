@@ -192,7 +192,7 @@ test('B6.0-P high-resolution render guard is advisory and uses live memory snaps
   );
   assert.equal(requests, 1);
   assert.match(messages[0], /4\.00× the pixel count/);
-  assert.match(messages[0], /advisory warning, not a VRAM estimate/);
+  assert.match(messages[0], /caution, not a VRAM prediction or a hardware limit/);
   assert.match(messages[0], /3\.25 GiB free/);
   assert.match(messages[0], /12\.25 GiB dedicated/);
   assert.match(messages[0], /0\.50 GiB shared/);

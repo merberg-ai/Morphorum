@@ -158,7 +158,7 @@ def test_flux_fp8_lora_error_is_rewritten_with_compatibility_guidance() -> None:
     )
     assert "FP8 CUDA matrix multiplication" in str(error)
     assert "BF16" in str(error)
-    assert "updated B4 branch" in str(error)
+    assert "restart the app and retry" in str(error)
 
 
 def test_sdxl_vae_tiling_is_opt_in_and_updates_optimization(monkeypatch) -> None:
