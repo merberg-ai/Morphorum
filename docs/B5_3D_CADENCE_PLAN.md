@@ -169,6 +169,93 @@ RGB. No diffusion mask-conditioned inpainting is performed yet; the masks
 enable a future inpainting step without losing true occlusion geometry.
 Spline/optical-flow temporal interpolation is reserved for B5.2.
 
+## B5.2: Temporal continuity with future-anchor depth reprojection
+
+**Status:** Implemented on the B5 development branch. CPU/mocked integration
+and syntax validation required before physical GPU/image acceptance. B5.1's
+user-verified checkpoint remains at
+`checkpoint/b5-1-depth-quality-gpu-verified-20261008` (`7bd68e7`).
+
+### Behavior
+
+- The original sequential cadence and all diffusion model/LoRA code stay
+  unchanged. The default new project setting is
+  `temporal.mode: forward` (exact B5.1 behavior).
+- Opt-in `future-anchor` mode is available for **3D projects** in the
+  Diffusion Cadence section. It does not enable extra diffusion passes.
+- At each *diffused* anchor, Morphorum takes the future anchor's RGB image
+  and estimates its depth on CPU. The depth cache is reused by the next
+  normal 3D warp, avoiding a redundant depth estimate at that boundary.
+- Each skipped 3D cadence frame since the preceding diffused anchor is
+  reprojected from that **future anchor** into the intermediate camera pose,
+  using composition of inverse camera rotations/translations and independent
+  source/target FOV. Projection uses B5.1 subpixel Z-buffer splatting.
+- A confidence-gated blend merges this future-aligned view with the
+  already-rendered forward frame, protecting unrelated content from
+  obvious double-exposure ghosts. B5.1 forward disocclusion masks receive
+  a prioritized future-content repair **only where the future reprojection
+  has valid geometry**.
+- Updated intermediary PNGs retain their existing metadata and include
+  `render_state.temporal`: mode, adjacent anchor indices, mix, contrast
+  threshold, blended/repaired fractions, average weight, and projected
+  coverage. The original B5.1 disocclusion masks remain untouched because
+  they record the original forward projection.
+- The **forward-only** baseline remains available in the UI, so A/B tests
+  can compare identical models, LoRAs, prompts, seed, cadence, and camera
+  movement.
+- The feature supports intervals up to 32 frames; longer anchor gaps fall
+  back to forward-only with a warning instead of using excessive CPU
+  resources. No GPU memory is allocated by geometric blending.
+- If a reverse projection or depth estimation fails, the corresponding
+  segment remains forward-only, with a warning. Resume uses saved frame
+  metadata to find the last diffusion anchor.
+
+### Project fields
+
+```json
+"temporal": {
+  "mode": "forward",
+  "mix": 0.65,
+  "contrast_threshold": 96
+}
+```
+
+`mode` can be `forward` or `future-anchor`. `mix` ranges from 0 to
+1. `contrast_threshold` ranges from 1 to 255 and suppresses blending
+where two corresponding pixels disagree strongly.
+
+### Physical Windows GPU test gate
+
+1. Pull the latest B5 and **restart Morphorum**. Keep the B5.1 checkpoint.
+2. Using the same known-good 26-frame 512×512 SDXL+LoRA 3D scene, set
+   **cadence 3**, B5.1 **subpixel splat**, and start with
+   **Forward-only (original cadence)**. Keep that output as the baseline.
+3. Switch only **3D temporal continuity** to
+   **Future-anchor depth-aligned tween**, with mix 0.65 and appearance
+   guard 96. Use the same seed, settings, and prompts for a second render.
+4. Compare intermediate frames 1–2, 4–5, 7–8 and corresponding anchors
+   3, 6, 9. Anchors must not change; intermediates should show smoother
+   transitions or better repair of exposed background pixels.
+5. Confirm intermediate PNG embedded metadata reports
+   `render_state.temporal.mode: future-anchor` with the correct
+   `previous_anchor` and `future_anchor`. The independent forward
+   disocclusion masks should still exist.
+6. Inspect logs for `B5.2 future-anchor refinement updated...` and
+   check SDXL diffusion times/VRAM remain comparable to the baseline.
+   The refinement runs on CPU and may add processing time after each
+   diffusion anchor.
+7. Check a cancelled 3D render and Resume: completion should preserve
+   all frame files with valid metadata. If there is a large prompt/LoRA
+   subject change, inspect for residual ghosting and reduce mix.
+
+**Limitations:** This is geometry-based two-anchor RGB reprojection and
+confidence-gated blending. It is **not optical flow**, latent interpolation,
+or neural video frame synthesis. It cannot invent unseen geometry, and
+reprojection using a monocular depth estimate can be imperfect. This first
+implementation prioritizes preserving the already-proven 3D, LoRA, and CUDA
+pipeline. Further temporal filtering/optical flow can be scoped separately
+after actual image comparisons.
+
 ## Proposed B5 work order
 
 1. **B5.1 Depth warp quality**: retain the original Z-buffer/occlusion mask,
