@@ -222,6 +222,14 @@ def resolve_project_frame(
         },
     )
 
+    camera_3d_settings = project.get("camera_3d", {})
+    camera_3d["projection_mode"] = str(
+        camera_3d_settings.get("projection_mode") or "legacy"
+    )
+    camera_3d["hole_fill"] = str(
+        camera_3d_settings.get("hole_fill") or "nearest"
+    )
+
     generation = {
         key.split(".", 1)[1]: _resolve_field(project, key, frame)
         for key in SCHEDULE_FIELDS
