@@ -1,5 +1,8 @@
 # B6: Deforum compatibility and hybrid animation workflows
 
+> **Current status (2026-10-09):** B6.1 safe Deforum settings import is implemented. **B6.2 Hybrid Source Lab is implemented and physically validated** at `checkpoint/b6-2-hybrid-source-lab-validated-20261008` (`5826d2d`): browser-local video upload, FFprobe metadata, FFmpeg range/FPS frame extraction, cancel/restart, frame previews. **B6.3 hybrid source-frame compositing and mask tracks is the next implementation milestone; no hybrid diffusion/compositing is wired yet.** PR #13's SDXL LoRA text-encoder repair passed the user's 300-frame stress test and was promoted in PR #14. Continue from `dev-ui`, not the older B6 feature branch. Earlier “not implemented/pending” statements below are retained as *historical checkpoint observations*. See [CURRENT_STATUS.md](CURRENT_STATUS.md).
+
+
 ## Branching and acceptance baseline
 
 - **B6 branch:** `feature/deforum-compatibility-hybrid-b6`.
