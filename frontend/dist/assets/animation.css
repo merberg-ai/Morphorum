@@ -1783,3 +1783,113 @@
   .animation-import-actions #animation-deforum-create { grid-column: 1; }
   .animation-import-actions button { min-height: 44px; }
 }
+
+
+/* B6.1.1: Isolated import layout; one scrollbar, no sticky overlapping footer. */
+dialog#animation-deforum-dialog {
+  box-sizing: border-box;
+  inset: 0;
+  margin: auto;
+  width: min(920px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+#animation-deforum-dialog *,
+#animation-deforum-dialog *::before,
+#animation-deforum-dialog *::after { box-sizing: border-box; }
+#animation-deforum-dialog .animation-import-shell {
+  display: block;
+  width: 100%;
+  max-height: none;
+  min-height: 0;
+  overflow: visible;
+  padding: 20px;
+}
+#animation-deforum-dialog .animation-import-shell > * + * { margin-top: 16px; }
+#animation-deforum-dialog .animation-import-heading {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 42px;
+  align-items: start;
+}
+#animation-deforum-dialog .animation-import-heading > div,
+#animation-deforum-dialog .animation-import-source > div { min-width: 0; }
+#animation-deforum-dialog .animation-import-heading p,
+#animation-deforum-dialog .animation-import-safety,
+#animation-deforum-dialog .animation-import-summary,
+#animation-deforum-dialog .animation-import-warning,
+#animation-deforum-dialog .animation-import-mapping {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+#animation-deforum-dialog .animation-import-source { flex-wrap: wrap; }
+#animation-deforum-dialog .animation-import-fields {
+  display: grid;
+  grid-template-columns: minmax(0,1fr);
+  gap: 12px;
+}
+#animation-deforum-dialog .animation-import-fields > label {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  gap: 6px;
+  align-content: start;
+}
+#animation-deforum-dialog .animation-import-fields input,
+#animation-deforum-dialog .animation-import-fields select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+#animation-deforum-dialog .animation-import-section {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+}
+#animation-deforum-dialog .animation-import-list,
+#animation-deforum-dialog .animation-import-mappings {
+  max-height: none;
+  overflow: visible;
+}
+#animation-deforum-dialog .animation-import-mapping {
+  grid-template-columns: minmax(0,1fr) 18px minmax(0,1fr);
+  align-items: start;
+}
+#animation-deforum-dialog .animation-import-mapping code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+#animation-deforum-dialog .animation-import-actions {
+  position: static;
+  inset: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  background: transparent;
+  margin: 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 680px) {
+  dialog#animation-deforum-dialog {
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+  #animation-deforum-dialog .animation-import-shell { padding: 14px; }
+  #animation-deforum-dialog .animation-import-mapping { grid-template-columns: minmax(0,1fr); }
+  #animation-deforum-dialog .animation-import-map-arrow { transform: none; }
+  #animation-deforum-dialog .animation-import-actions {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  #animation-deforum-dialog #animation-deforum-create { grid-column: 1 / -1; }
+}
+@media (max-width: 420px) {
+  #animation-deforum-dialog .animation-import-actions { grid-template-columns: minmax(0,1fr); }
+  #animation-deforum-dialog #animation-deforum-create { grid-column: auto; }
+}
