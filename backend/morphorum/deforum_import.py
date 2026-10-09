@@ -124,7 +124,7 @@ def parse_deforum_source(content: Any, *, filename: str = "") -> dict[str, Any]:
         if suffix.endswith(".txt"):
             raise DeforumImportError(
                 "This TXT file is not JSON-serialized Deforum settings. "
-                "B6.1 accepts JSON objects (including JSON saved with a .txt extension); "
+                "Use JSON-formatted settings in a .json or .txt file; "
                 "Python assignments or notebook text are intentionally not executed."
             ) from exc
         raise DeforumImportError(
@@ -870,7 +870,7 @@ def translate_deforum_settings(
                     None,
                     "unsupported",
                     source[key],
-                    message="Preserved as passive compatibility metadata; no B6.1 runtime effect.",
+                    message="This setting is kept for reference but does not affect rendering.",
                 )
             )
         else:

@@ -420,7 +420,7 @@ class GenerationManager:
         emit_console(
             "info",
             "generation",
-            "SDXL VAE tiling enabled (experimental B6.0-P memory mode).",
+            "SDXL VAE tiling enabled for memory-conscious rendering.",
         )
         return True
 
@@ -703,7 +703,7 @@ class GenerationManager:
                 "layerwise-cast weight was used by PEFT LoRA without being converted "
                 "to BF16/FP16 first. Morphorum should reload Flux in LoRA-safe "
                 "BF16 streamed-offload mode before generation; restart the app "
-                "and retry on the updated B4 branch. Original error: "
+                "and retry. Error details: "
                 + str(exc)[:250]
             )
         return GenerationError(str(exc) or exc.__class__.__name__)

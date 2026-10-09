@@ -1958,14 +1958,14 @@ class AnimationRenderManager:
                     if refined:
                         emit_console(
                             "info", "animation",
-                            f"{job.id}: B5.2 future-anchor refinement updated "
+                            f"{job.id}: depth-aligned frame blending updated "
                             f"{refined} intermediate frame(s) between anchors "
                             f"{previous_diffusion_anchor} and {frame}.",
                         )
                 except (Camera3DError, DepthError, ValueError, OSError) as exc:
                     emit_console(
                         "warning", "animation",
-                        f"{job.id}: B5.2 temporal refinement skipped for "
+                        f"{job.id}: depth-aligned blending skipped for "
                         f"anchor {frame}: {exc}. Original cadence frames retained.",
                     )
                 timings["temporal"] = max(0.0, time.monotonic() - tween_started)
@@ -2016,7 +2016,7 @@ class AnimationRenderManager:
             except OSError as exc:
                 emit_console(
                     "warning", "animation",
-                    f"{job.id}: cannot write B5.5 performance diagnostics for frame {frame}: {exc}",
+                    f"{job.id}: could not save performance details for frame {frame}: {exc}",
                 )
             if should_diffuse and timings["diffusion"] >= 30.0:
                 emit_console(
