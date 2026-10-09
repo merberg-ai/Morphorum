@@ -667,7 +667,7 @@
               <div class="animation-hybrid-render-settings">
                 <label class="animation-hybrid-enable"><input id="animation-hybrid-render-enabled" type="checkbox"> Use extracted video frames for animation diffusion anchors</label>
                 <label class="animation-hybrid-offset"><span>Start at extracted frame offset (0 = first frame)</span><input id="animation-hybrid-offset" type="number" min="0" max="1200" step="1" value="0"></label>
-                <p class="muted">Opt-in B6.3.1: source video frame 0 becomes the animation start; each diffusion anchor uses the source frame at its timeline time. Cadence-skipped frames use existing motion/depth warps. The last source frame is held when the clip ends. A frozen copy is stored with each render for reliable resume. Blending and masks are coming in B6.3.2/3.</p>
+                <p class="muted">Opt-in mode: source video frame 0 becomes the animation start; each diffusion anchor uses the source frame at its timeline time. Cadence-skipped frames use existing motion/depth warps. The last source frame is held when the clip ends. A frozen copy is stored with each render for reliable resume. Blending and masks are planned for a future update.</p>
               </div>
               <p class="muted animation-video-job-status" id="animation-hybrid-meta" role="status">Upload a local video to begin.</p>
               <div class="animation-hybrid-preview" id="animation-hybrid-preview" hidden>
