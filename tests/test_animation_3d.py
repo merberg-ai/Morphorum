@@ -96,3 +96,95 @@ def test_fov_change_uses_previous_frame_intrinsics() -> None:
     assert not np.array_equal(np.asarray(result.image), np.asarray(image))
     assert result.telemetry["source_fov"] == pytest.approx(40.0)
     assert result.telemetry["fov"] == pytest.approx(60.0)
+
+
+def test_b51_splat_identity_and_binary_mask_preserve_source() -> None:
+    image = Image.new("RGB", (32, 24), "black")
+    for y in range(6, 18):
+        for x in range(8, 24):
+            image.putpixel((x, y), (220, 80, 20))
+    depth = np.full((24, 32), 0.5, dtype=np.float32)
+
+    legacy = render_depth_warp(image, depth, projection_mode="legacy")
+    improved = render_depth_warp(
+        image, depth, projection_mode="splat", fill_mode="background",
+    )
+    assert np.array_equal(np.asarray(legacy.image), np.asarray(image))
+    assert np.array_equal(np.asarray(improved.image), np.asarray(image))
+    assert improved.hole_mask is not None
+    assert improved.hole_mask.mode == "L"
+    assert improved.hole_mask.size == image.size
+    assert not np.asarray(improved.hole_mask).any()
+    assert improved.telemetry["disoccluded_pixels"] == 0
+    assert improved.telemetry["projected_coverage"] == pytest.approx(1.0)
+    assert improved.telemetry["warp"] == "depth-bilinear-zbuffer-background-fill"
+
+
+def test_b51_splat_mask_matches_coverage_and_tracks_motion() -> None:
+    image = Image.new("RGB", (48, 32), (75, 100, 125))
+    depth = np.full((32, 48), 0.15, dtype=np.float32)
+    depth[8:24, 16:32] = 0.95
+    for y in range(8, 24):
+        for x in range(16, 32):
+            image.putpixel((x, y), (250, 0, 0))
+
+    warped = render_depth_warp(
+        image, depth, translation_x=0.20,
+        projection_mode="splat", fill_mode="background",
+    )
+    mask = np.asarray(warped.hole_mask)
+    assert mask.dtype == np.uint8
+    assert set(np.unique(mask)).issubset({0, 255})
+    assert np.any(mask == 255)
+    count = int(np.count_nonzero(mask))
+    assert warped.telemetry["disoccluded_pixels"] == count
+    assert warped.telemetry["visible_pixels"] + count == 48 * 32
+    assert warped.telemetry["filled_fraction"] == pytest.approx(count / (48 * 32))
+    assert warped.telemetry["projected_coverage"] == pytest.approx(1 - count / (48 * 32))
+    assert warped.telemetry["fill_mode"] == "background"
+    assert np.asarray(warped.image).shape == (32, 48, 3)
+
+
+def test_b51_splat_depth_test_prevents_background_bleed() -> None:
+    # A nearer red plane occludes a farther blue plane where they overlap.
+    rgb = np.zeros((2, 2, 3), dtype=np.uint8)
+    rgb[0, 0] = [255, 0, 0]  # nearest
+    rgb[0, 1] = [0, 0, 255]  # farthest
+    from morphorum.animation_3d import _render_splat
+
+    px = np.array([0.25, 0.25, 100.0, 100.0], dtype=np.float32)
+    py = np.array([0.25, 0.25, 100.0, 100.0], dtype=np.float32)
+    z = np.array([1.0, 3.0, 3.0, 3.0], dtype=np.float32)
+    visible = np.array([True, True, False, False])
+    output, valid, zbuffer = _render_splat(rgb, px, py, z, visible)
+    assert valid[0, 0]
+    assert output[0, 0].tolist() == [255, 0, 0]
+    assert zbuffer[0, 0] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+    ("projection_mode", "fill_mode"),
+    [("unknown", "nearest"), ("splat", "bad-fill")],
+)
+def test_b51_rejects_unknown_projection_config(projection_mode, fill_mode) -> None:
+    with pytest.raises(Camera3DError, match="Unsupported 3D"):
+        render_depth_warp(
+            Image.new("RGB", (16, 16)),
+            np.ones((16, 16), dtype=np.float32),
+            projection_mode=projection_mode,
+            fill_mode=fill_mode,
+        )
+
+
+def test_b51_legacy_default_is_exact_match_with_explicit_mode() -> None:
+    image = Image.new("RGB", (36, 27), (10, 20, 30))
+    depth = np.tile(np.linspace(0, 1, 36, dtype=np.float32), (27, 1))
+    opts = dict(translation_x=0.07, rotation_y=0.5, source_fov=45, fov=50)
+    implicit = render_depth_warp(image, depth, **opts)
+    explicit = render_depth_warp(
+        image, depth, projection_mode="legacy", fill_mode="nearest", **opts,
+    )
+    assert np.array_equal(np.asarray(implicit.image), np.asarray(explicit.image))
+    assert implicit.telemetry["warp"] == "depth-forward-zbuffer-nearest-fill"
+    assert implicit.telemetry["projection_mode"] == "legacy"
+    assert implicit.telemetry["fill_mode"] == "nearest"
