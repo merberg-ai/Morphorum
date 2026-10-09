@@ -28,6 +28,11 @@
     depthPreview: null,
     depthBusy: false,
     depthPollTimer: null,
+    videoAvailability: null,
+    videoExports: [],
+    videoJob: null,
+    videoRenderId: '',
+    videoPollTimer: null,
   };
 
   const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
@@ -191,6 +196,9 @@
     'animation-timeline-interpolation',
     'animation-depth-model',
     'animation-depth-device',
+    'animation-video-format',
+    'animation-video-quality',
+    'animation-video-fps',
     'animation-3d-preset',
     'animation-preview-highlight-holes',
   ]);
@@ -2717,6 +2725,155 @@
     }
   }
 
+  function renderVideoExportState() {
+    const job = state.renderJob;
+    const isCompleted = job?.status === 'completed';
+    const sameRender = Boolean(job?.id && job.id === state.videoRenderId);
+    const activeExport = sameRender &&
+      ['queued', 'encoding'].includes(state.videoJob?.status);
+    const available = Boolean(state.videoAvailability?.available);
+    const button = qs('#animation-export-video');
+    if (button) {
+      button.disabled = !isCompleted || !available || activeExport;
+      button.classList.toggle('busy', Boolean(activeExport));
+      const label = qs('.button-label', button);
+      if (label) label.textContent = activeExport ? 'Encoding…' : 'Export Video';
+    }
+    const availability = qs('#animation-video-availability');
+    if (availability) availability.textContent = !state.videoAvailability
+      ? 'Checking FFmpeg…'
+      : (available ? 'FFmpeg ready' : 'FFmpeg missing on host');
+    const matching = sameRender ? state.videoExports : [];
+    const latest = matching.find(item => item.status === 'completed' && item.url);
+    const status = qs('#animation-video-job-status');
+    if (status) {
+      status.textContent = !available && state.videoAvailability
+        ? state.videoAvailability.message
+        : activeExport
+          ? (state.videoJob.message || 'Encoding video…') + ' · ' +
+            Math.round(100 * Number(state.videoJob.progress || 0)) + '%'
+          : sameRender && state.videoJob?.status === 'failed'
+            ? 'Video export failed: ' + (state.videoJob.error || 'Unknown FFmpeg error')
+            : !isCompleted
+              ? 'Select a completed render to encode its existing PNG sequence.'
+              : latest
+                ? 'Video available. The original PNG frames are unchanged.'
+                : 'Ready to export the selected completed render.';
+    }
+    const result = qs('#animation-video-result');
+    if (result) result.hidden = !latest;
+    const video = qs('#animation-video-playback');
+    const link = qs('#animation-video-download');
+    const meta = qs('#animation-video-result-meta');
+    if (latest) {
+      const url = latest.url;
+      if (video && video.dataset.videoUrl !== url) {
+        video.dataset.videoUrl = url;
+        video.src = url + '?inline=true';
+        video.load();
+      }
+      if (link) { link.href = url; link.download = ''; }
+      if (meta) meta.textContent =
+        latest.format.toUpperCase() + ' · ' + latest.fps + ' fps · ' +
+        latest.quality + ' · ' +
+        (Number(latest.bytes || 0) / 1024 / 1024).toFixed(1) + ' MiB';
+    } else if (video?.dataset.videoUrl) {
+      video.pause();
+      video.removeAttribute('src');
+      delete video.dataset.videoUrl;
+      video.load();
+      if (link) link.removeAttribute('href');
+    }
+  }
+
+  async function loadVideoExportHistory() {
+    const job = state.renderJob;
+    if (!job?.id || !state.project?.id) {
+      state.videoExports = [];
+      state.videoRenderId = '';
+      renderVideoExportState();
+      return;
+    }
+    const requestedRender = job.id;
+    try {
+      const response = await api(
+        '/api/animation/renders/' + encodeURIComponent(state.project.id) +
+        '/' + encodeURIComponent(requestedRender) + '/videos'
+      );
+      if (state.renderJob?.id !== requestedRender) return;
+      state.videoRenderId = requestedRender;
+      state.videoExports = Array.isArray(response.exports) ? response.exports : [];
+    } catch (error) {
+      if (state.renderJob?.id !== requestedRender) return;
+      state.videoExports = [];
+      state.videoRenderId = requestedRender;
+      toast('Video export history unavailable', error.message, 'warning', 5500);
+    }
+    renderVideoExportState();
+  }
+
+  async function pollVideoExport(jobId) {
+    if (state.videoJob?.id !== jobId) return;
+    try {
+      const job = await api('/api/animation/video/jobs/' + encodeURIComponent(jobId));
+      if (state.videoJob?.id !== jobId) return;
+      state.videoJob = job;
+      renderVideoExportState();
+      if (['queued', 'encoding'].includes(job.status)) {
+        state.videoPollTimer = window.setTimeout(() => pollVideoExport(jobId), 700);
+      } else {
+        await loadVideoExportHistory();
+        if (job.status === 'completed') {
+          toast('Video export complete', 'Download your ' + job.format.toUpperCase() + ' video.', 'success');
+        } else {
+          toast('Video export failed', job.error || job.message, 'error', 8500);
+        }
+      }
+    } catch (error) {
+      if (state.videoJob?.id === jobId) {
+        state.videoPollTimer = window.setTimeout(() => pollVideoExport(jobId), 1200);
+      }
+    }
+  }
+
+  async function startVideoExport() {
+    const job = state.renderJob;
+    if (!job?.id || !state.project?.id || job.status !== 'completed' ||
+        !state.videoAvailability?.available) return;
+    const fpsRaw = String(qs('#animation-video-fps')?.value || '').trim();
+    const fps = fpsRaw ? Number(fpsRaw) : null;
+    if (fps !== null && (!Number.isInteger(fps) || fps < 1 || fps > 120)) {
+      toast('Invalid video FPS', 'Choose a whole number between 1 and 120.', 'warning');
+      return;
+    }
+    const requestedRender = job.id;
+    const button = qs('#animation-export-video');
+    if (button) button.disabled = true;
+    try {
+      const exportJob = await api(
+        '/api/animation/renders/' + encodeURIComponent(state.project.id) +
+        '/' + encodeURIComponent(requestedRender) + '/video',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            format: qs('#animation-video-format')?.value || 'mp4',
+            quality: qs('#animation-video-quality')?.value || 'balanced',
+            fps,
+          }),
+        },
+      );
+      state.videoJob = exportJob;
+      state.videoRenderId = requestedRender;
+      renderVideoExportState();
+      window.clearTimeout(state.videoPollTimer);
+      pollVideoExport(exportJob.id);
+      toast('Video export queued', 'FFmpeg is encoding saved PNGs. No diffusion is involved.', 'info');
+    } catch (error) {
+      toast('Cannot export video', error.message, 'error', 7000);
+      renderVideoExportState();
+    }
+  }
+
   function resetRenderUi() {
     window.clearTimeout(state.renderPollTimer);
     state.renderPollTimer = null;
@@ -2724,6 +2881,11 @@
     state.renderJob = null;
     state.renderHistory = [];
     state.lastRenderFrameUrl = '';
+    window.clearTimeout(state.videoPollTimer);
+    state.videoPollTimer = null;
+    state.videoJob = null;
+    state.videoExports = [];
+    state.videoRenderId = '';
     const loadProgress = qs('#animation-model-load-progress');
     if (loadProgress) loadProgress.hidden = true;
     const progress = qs('#animation-render-progress');
@@ -2751,6 +2913,7 @@
     const start = qs('#animation-start-render');
     if (start) { start.classList.remove('busy'); const label = qs('.button-label', start); if (label) label.textContent = 'Render Animation'; }
     renderSourceState();
+    renderVideoExportState();
   }
 
   function renderAnimationJob(job) {
@@ -2854,6 +3017,7 @@
       }
     }
     renderSourceState();
+    renderVideoExportState();
   }
 
   function populateRenderHistory(renders) {
@@ -2881,8 +3045,13 @@
       const payload = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) + '/renders');
       const renders = Array.isArray(payload.renders) ? payload.renders : [];
       populateRenderHistory(renders);
-      if (!state.renderJobId && renders.length) renderAnimationJob(renders[0]);
-      else if (!renders.length && !state.renderJobId) renderAnimationJob(null);
+      if (!state.renderJobId && renders.length) {
+        renderAnimationJob(renders[0]);
+        await loadVideoExportHistory();
+      } else if (!renders.length && !state.renderJobId) {
+        renderAnimationJob(null);
+        await loadVideoExportHistory();
+      }
     } catch (error) {
       toast('Could not load animation render history', error.message, 'warning', 6000);
     }
@@ -2893,6 +3062,7 @@
     try {
       const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
       renderAnimationJob(job);
+      await loadVideoExportHistory();
       if (renderIsActive(job)) pollAnimationRender(job.id);
     } catch (error) {
       toast('Could not load animation render', error.message, 'error', 6500);
@@ -3152,6 +3322,7 @@
     qs('#animation-cadence')?.addEventListener('input', syncCadencePreset);
     qs('#animation-cadence')?.addEventListener('change', syncCadencePreset);
     qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
+    qs('#animation-export-video')?.addEventListener('click', startVideoExport);
 
     qs('#animation-start-render')?.addEventListener('click', startAnimationRender);
     qs('#animation-cancel-render')?.addEventListener('click', cancelAnimationRender);
@@ -3237,6 +3408,13 @@
         loadCapabilities(),
         loadModels(),
         loadDepthModels(),
+        api('/api/animation/video/availability').then(info => {
+          state.videoAvailability = info;
+          renderVideoExportState();
+        }).catch(() => {
+          state.videoAvailability = { available: false, message: 'Cannot check host FFmpeg installation.' };
+          renderVideoExportState();
+        }),
       ]);
       await loadProjectList({ loadFirst: true });
       populateSamplerSelect(state.project?.generation?.sampler || '');
