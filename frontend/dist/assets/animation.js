@@ -24,6 +24,21 @@
     timelineScale: 6,
     timelineBusy: false,
     timelineResizeTimer: null,
+    depthModels: [],
+    depthPreview: null,
+    depthBusy: false,
+    depthPollTimer: null,
+    videoAvailability: null,
+    videoExports: [],
+    videoJob: null,
+    videoRenderId: '',
+    videoPollTimer: null,
+    deforumImport: {
+      content: '',
+      filename: '',
+      report: null,
+      busy: false,
+    },
   };
 
   const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
@@ -87,7 +102,9 @@
     const mobile = window.matchMedia('(max-width: 720px)').matches;
     const mobileOpenByDefault = new Set([
       'project',
+      'diffusion-cadence',
       'start-frame',
+      '3d-depth',
       'visual-timeline',
       'animation-render',
     ]);
@@ -140,11 +157,37 @@
     'motion.zoom': '#animation-zoom',
     'motion.translation_x': '#animation-translation-x',
     'motion.translation_y': '#animation-translation-y',
+    'camera_3d.translation_x': '#animation-3d-translation-x',
+    'camera_3d.translation_y': '#animation-3d-translation-y',
+    'camera_3d.translation_z': '#animation-3d-translation-z',
+    'camera_3d.rotation_x': '#animation-3d-rotation-x',
+    'camera_3d.rotation_y': '#animation-3d-rotation-y',
+    'camera_3d.rotation_z': '#animation-3d-rotation-z',
+    'camera_3d.fov': '#animation-3d-fov',
     'generation.strength': '#animation-strength',
     'generation.noise': '#animation-noise',
     'generation.steps': '#animation-steps',
     'generation.guidance': '#animation-guidance',
+    'cadence.diffusion': '#animation-cadence',
   };
+
+  // B5.3: conservative constant per-frame 3D motion schedules.
+  // This does not alter existing presets, FOV, or project model state.
+  const CAMERA_3D_PRESETS = Object.freeze({
+    'still': { translation_x: 0, translation_y: 0, translation_z: 0, rotation_x: 0, rotation_y: 0, rotation_z: 0 },
+    'dolly-in': { translation_z: 0.02 },
+    'dolly-out': { translation_z: -0.02 },
+    'orbit-left': { translation_x: -0.008, rotation_y: 0.18 },
+    'orbit-right': { translation_x: 0.008, rotation_y: -0.18 },
+    'pan-left': { rotation_y: -0.18 },
+    'pan-right': { rotation_y: 0.18 },
+    'tilt-up': { rotation_x: -0.18 },
+    'tilt-down': { rotation_x: 0.18 },
+  });
+  const CAMERA_3D_MOTION_FIELDS = [
+    'translation_x', 'translation_y', 'translation_z',
+    'rotation_x', 'rotation_y', 'rotation_z',
+  ];
 
   const INSPECTOR_INPUT_IDS = new Set([
     'animation-inspector-frame',
@@ -157,6 +200,13 @@
     'animation-timeline-keyframe-frame',
     'animation-timeline-keyframe-value',
     'animation-timeline-interpolation',
+    'animation-depth-model',
+    'animation-depth-device',
+    'animation-video-format',
+    'animation-video-quality',
+    'animation-video-fps',
+    'animation-3d-preset',
+    'animation-preview-highlight-holes',
   ]);
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -184,6 +234,268 @@
 
   function isMobileTimeline() {
     return window.matchMedia('(max-width: 720px)').matches;
+  }
+
+  function renderDepthModels() {
+    const select = qs('#animation-depth-model');
+    if (!select) return;
+    const current = select.value;
+    select.replaceChildren();
+    if (!state.depthModels.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No depth estimators available';
+      select.appendChild(option);
+      return;
+    }
+    for (const model of state.depthModels) {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = model.label || model.id;
+      select.appendChild(option);
+    }
+    if (state.depthModels.some(model => model.id === current)) {
+      select.value = current;
+    }
+  }
+
+  function depthPreviewUrl(preview = state.depthPreview) {
+    if (!state.project?.id || !preview?.cache_key) return '';
+    return (
+      '/api/animation/projects/' +
+      encodeURIComponent(state.project.id) +
+      '/depth-preview/image?v=' +
+      encodeURIComponent(String(preview.cache_key).slice(0, 12))
+    );
+  }
+
+  function renderDepthState() {
+    const hasProject = Boolean(state.project);
+    const hasSource = Boolean(state.project?.animation?.source_image);
+    const renderActive = renderIsActive();
+    const preview = state.depthPreview;
+    const model = qs('#animation-depth-model');
+    const device = qs('#animation-depth-device');
+    const generate = qs('#animation-generate-depth');
+    const recompute = qs('#animation-recompute-depth');
+    const clear = qs('#animation-clear-depth');
+    const badge = qs('#animation-depth-status');
+    const image = qs('#animation-depth-preview');
+    const empty = qs('#animation-depth-empty');
+    const meta = qs('#animation-depth-meta');
+
+    if (model) model.disabled = !hasProject || state.depthBusy || renderActive || !state.depthModels.length;
+    if (device) device.disabled = !hasProject || state.depthBusy || renderActive;
+    if (generate) generate.disabled = !hasProject || !hasSource || state.depthBusy || renderActive || !state.depthModels.length;
+    if (recompute) recompute.disabled = !hasProject || !hasSource || state.depthBusy || renderActive || !state.depthModels.length;
+    if (clear) clear.disabled = !hasProject || !preview || state.depthBusy || renderActive;
+
+    if (badge) {
+      badge.textContent = state.depthBusy
+        ? 'Estimating…'
+        : preview
+          ? (preview.cache_hit ? 'Cached' : 'Ready')
+          : hasSource
+            ? 'Ready to estimate'
+            : 'Need source image';
+    }
+
+    if (image) {
+      const url = depthPreviewUrl(preview);
+      image.hidden = !url;
+      if (url) image.src = url;
+      else image.removeAttribute('src');
+    }
+    if (empty) empty.hidden = Boolean(preview);
+
+    if (meta) {
+      if (state.depthBusy) {
+        meta.textContent = 'Loading estimator / calculating relative depth…';
+      } else if (preview) {
+        const modelLabel = preview.model_label || preview.model_id || 'Depth model';
+        const cache = preview.cache_hit ? 'cache hit' : 'new estimate';
+        meta.textContent =
+          modelLabel +
+          ' · ' + String(preview.device || 'unknown device') +
+          ' · ' + String(preview.width || '?') + ' × ' + String(preview.height || '?') +
+          ' · raw ' + formatNumber(preview.raw_min, 4) + '…' + formatNumber(preview.raw_max, 4) +
+          ' · ' + cache +
+          ' · white=near / black=far';
+      } else {
+        meta.textContent = hasSource
+          ? 'Depth preview has not been generated for this source image.'
+          : 'Upload an image in Start Frame to generate a depth map.';
+      }
+    }
+  }
+
+  async function loadDepthModels() {
+    try {
+      const payload = await api('/api/animation/depth/models');
+      state.depthModels = Array.isArray(payload.models) ? payload.models : [];
+      renderDepthModels();
+      renderDepthState();
+    } catch (error) {
+      state.depthModels = [];
+      renderDepthModels();
+      renderDepthState();
+      throw error;
+    }
+  }
+
+  async function loadDepthPreviewStatus() {
+    state.depthPreview = null;
+    if (!state.project?.id) {
+      renderDepthState();
+      return;
+    }
+    try {
+      const payload = await api(
+        '/api/animation/projects/' +
+        encodeURIComponent(state.project.id) +
+        '/depth-preview/status'
+      );
+      state.depthPreview = payload.available ? payload.preview : null;
+    } catch (_) {
+      state.depthPreview = null;
+    }
+    renderDepthState();
+  }
+
+  async function pollDepthManagerStatus() {
+    if (!state.depthBusy) return;
+    try {
+      const payload = await api('/api/animation/depth/models');
+      const status = payload.status || {};
+      const badge = qs('#animation-depth-status');
+      const meta = qs('#animation-depth-meta');
+      if (badge && status.phase) {
+        const labels = {
+          loading: 'Loading model…',
+          ready: 'Model ready',
+          estimating: 'Estimating…',
+          idle: 'Working…',
+          error: 'Depth error',
+        };
+        badge.textContent = labels[status.phase] || status.phase;
+      }
+      if (meta && status.message) meta.textContent = status.message;
+    } catch (_) {
+      // The primary preview request will surface any real error.
+    }
+    window.clearTimeout(state.depthPollTimer);
+    if (state.depthBusy) {
+      state.depthPollTimer = window.setTimeout(pollDepthManagerStatus, 450);
+    }
+  }
+
+  async function generateDepthPreview(force = false) {
+    if (!state.project?.id || !state.project?.animation?.source_image || state.depthBusy) return;
+    const button = qs(force ? '#animation-recompute-depth' : '#animation-generate-depth');
+    state.depthBusy = true;
+    setBusy(button, true);
+    renderDepthState();
+    renderSourceState();
+    pollDepthManagerStatus();
+    try {
+      const payload = await api(
+        '/api/animation/projects/' +
+        encodeURIComponent(state.project.id) +
+        '/depth-preview',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            model_id: qs('#animation-depth-model')?.value || undefined,
+            device: qs('#animation-depth-device')?.value || 'auto',
+            force: Boolean(force),
+          }),
+        }
+      );
+      state.depthPreview = payload.preview || null;
+      const cacheLabel = state.depthPreview?.cache_hit ? 'Cache hit' : 'New depth estimate';
+      toast(
+        'Depth preview ready',
+        cacheLabel + ' · depth estimator unloaded after inference.',
+        'success',
+        5200
+      );
+    } catch (error) {
+      toast('Depth preview failed', error.message, 'error', 8000);
+    } finally {
+      state.depthBusy = false;
+      window.clearTimeout(state.depthPollTimer);
+      state.depthPollTimer = null;
+      setBusy(button, false);
+      renderDepthState();
+      renderSourceState();
+    }
+  }
+
+  async function clearDepthPreview() {
+    if (!state.project?.id || state.depthBusy) return;
+    try {
+      await api(
+        '/api/animation/projects/' +
+        encodeURIComponent(state.project.id) +
+        '/depth-preview',
+        { method: 'DELETE' }
+      );
+      state.depthPreview = null;
+      renderDepthState();
+      toast('Depth preview cleared', 'Cached depth data remains available for reuse.', 'info');
+    } catch (error) {
+      toast('Could not clear depth preview', error.message, 'error', 6500);
+    }
+  }
+
+  function animationMode() {
+    const value = String(
+      qs('#animation-mode')?.value ||
+      state.project?.animation?.mode ||
+      '2d'
+    ).trim().toLowerCase();
+    return value === '3d' ? '3d' : '2d';
+  }
+
+  function syncAnimationModeUi() {
+    const mode = animationMode();
+    qsa('[data-animation-mode]').forEach(element => {
+      element.hidden = element.dataset.animationMode !== mode;
+    });
+
+    const curve = qs('#animation-curve-field');
+    if (curve) {
+      for (const option of curve.options) {
+        const value = String(option.value || '');
+        const is2d = value.startsWith('motion.');
+        const is3d = value.startsWith('camera_3d.');
+        option.hidden = (mode === '2d' && is3d) || (mode === '3d' && is2d);
+        option.disabled = option.hidden;
+      }
+      const selected = curve.options[curve.selectedIndex];
+      if (!selected || selected.hidden) {
+        curve.value = mode === '3d' ? 'camera_3d.translation_z' : 'motion.zoom';
+      }
+    }
+
+    if (
+      state.timelineSelection &&
+      ((mode === '2d' && state.timelineSelection.group === 'camera_3d') ||
+       (mode === '3d' && state.timelineSelection.group === 'camera_2d'))
+    ) {
+      state.timelineSelection = null;
+    }
+
+    const renderButton = qs('#animation-start-render');
+    if (renderButton) {
+      renderButton.title = mode === '3d'
+        ? 'Render with depth-aware 3D camera warping.'
+        : 'Render with the 2D affine motion engine.';
+    }
+
+    renderTimeline();
+    renderDepthState();
+    renderSourceState();
   }
 
   function timelineStatus(text, kind = '') {
@@ -239,6 +551,9 @@
     qsa(
       '#view-animation input, #view-animation select, #view-animation textarea'
     ).forEach(input => {
+      if (input.id.startsWith('animation-deforum-') || input.id.startsWith('animation-hybrid-') || input.id.startsWith('animation-video-')) {
+        return;
+      }
       if (input.id === 'animation-project-select') {
         input.disabled = state.projects.length === 0;
       } else {
@@ -252,6 +567,7 @@
       'animation-reload',
       'animation-validate-schedules',
       'animation-generate-motion-preview',
+      'animation-3d-apply-preset',
       'animation-clear-source',
     ]) {
       const control = qs(`#${id}`);
@@ -305,6 +621,28 @@
     }
     merged.variant = variant;
     return merged;
+  }
+
+  function populateResolutionPresets() {
+    const model=modelById(qs('#animation-model')?.value||'');
+    const capability=model?effectiveCapability(model):{};
+    const width=qs('#animation-width'),height=qs('#animation-height');
+    window.MorphorumResolution.populate(qs('#animation-resolution-preset'),
+      capability,model?.family||'',width?.value,height?.value);
+    const divisor=window.MorphorumResolution.divisorForFamily(model?.family);
+    if(width)width.step=divisor;
+    if(height)height.step=divisor;
+    updateAnimationResolutionHelp();
+  }
+  function updateAnimationResolutionHelp() {
+    const model=modelById(qs('#animation-model')?.value||'');
+    window.MorphorumResolution.guidance(qs('#animation-resolution-help'),
+      model?.family,qs('#animation-width')?.value,qs('#animation-height')?.value);
+  }
+  function syncAnimationResolutionPreset() {
+    window.MorphorumResolution.sync(qs('#animation-resolution-preset'),
+      qs('#animation-width')?.value,qs('#animation-height')?.value);
+    updateAnimationResolutionHelp();
   }
 
   function populateSamplerSelect(preferredSampler = '') {
@@ -361,6 +699,45 @@
       : 'Compatible samplers';
   }
 
+  function repairConstantGuidanceForSelectedModel({ announce = false } = {}) {
+    const input = qs('#animation-guidance');
+    const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
+    const model = modelById(modelId);
+    if (!input || !model) return false;
+
+    const capability = effectiveCapability(model);
+    const guidance = capability.guidance || {};
+    const minimum = Number(guidance.min ?? 0);
+    const maximum = Number(guidance.max ?? 30);
+    const fallback = Number(guidance.default ?? Math.max(minimum, 0));
+    const compact = String(input.value || '').replace(/\s+/g, '');
+    const match = /^0:\(([+-]?(?:\d+(?:\.\d*)?|\.\d+))\)$/.exec(compact);
+    if (!match) return false;
+
+    const current = Number(match[1]);
+    if (Number.isFinite(current) && current >= minimum && current <= maximum) {
+      return false;
+    }
+
+    const replacement = `0:(${Number.isFinite(fallback) ? fallback : minimum})`;
+    input.value = replacement;
+    if (state.project) {
+      state.project.generation = {
+        ...(state.project.generation || {}),
+        guidance: replacement,
+      };
+    }
+    if (announce) {
+      toast(
+        'Guidance adjusted for selected model',
+        `${capability.label || model.family}: ${replacement} (allowed ${minimum}…${maximum}).`,
+        'info',
+        5200
+      );
+    }
+    return true;
+  }
+
   function populateModelSelect() {
     const select = qs('#animation-model');
     if (!select) return;
@@ -389,6 +766,7 @@
     }
     select.value = selected;
     populateSamplerSelect(state.project?.generation?.sampler || '');
+    populateResolutionPresets();
   }
 
   function renderProjectSelect() {
@@ -432,9 +810,14 @@
 
   function timelineTrackDescriptors() {
     const tracks = state.timeline?.descriptors?.tracks;
-    return Array.isArray(tracks)
-      ? tracks.filter(item => item?.editable && item?.keyframe_editable)
-      : [];
+    if (!Array.isArray(tracks)) return [];
+    const mode = animationMode();
+    return tracks.filter(item => {
+      if (!item?.editable || !item?.keyframe_editable) return false;
+      if (mode === '2d' && item.group === 'camera_3d') return false;
+      if (mode === '3d' && item.group === 'camera_2d') return false;
+      return true;
+    });
   }
 
   function timelineDescriptor(group, name) {
@@ -1301,7 +1684,7 @@
     const hint = document.createElement('span');
     hint.className = 'animation-lora-hint';
     hint.textContent = loras.length
-      ? 'Deforum syntax · weight can animate between prompt keyframes'
+      ? 'LoRA strength can change between prompt keyframes'
       : 'Add a LoRA directory for the selected model family, then scan Models.';
 
     tools.append(select, weight, insert, hint);
@@ -1438,6 +1821,55 @@
     refreshInspector();
   }
 
+  function syncCadencePreset() {
+    const raw = qs('#animation-cadence');
+    const preset = qs('#animation-cadence-preset');
+    const help = qs('#animation-cadence-help');
+    if (!raw || !preset) return;
+    const match = /^\s*0:\(\s*(\d+)\s*\)\s*$/.exec(raw.value);
+    const count = match ? Number(match[1]) : NaN;
+    const fixed = match && [...preset.options].some(option => option.value === String(count));
+    preset.value = fixed ? String(count) : 'custom';
+    if (help) {
+      help.textContent = fixed
+        ? (count === 1
+          ? 'Cadence 1: diffusion on every eligible frame.'
+          : 'Cadence ' + count + ': run diffusion on every ' + count +
+            ' frames; between anchors, only camera transforms run.')
+        : 'Custom cadence schedule: diffusion frequency follows the keyframes you set.';
+    }
+  }
+
+  function applyCamera3DPreset() {
+    if (!state.project || animationMode() !== '3d' || state.motionJobId) return;
+    const key = qs('#animation-3d-preset')?.value || '';
+    const values = CAMERA_3D_PRESETS[key];
+    if (!values) return;
+    for (const field of CAMERA_3D_MOTION_FIELDS) {
+      const input = qs('#animation-3d-' + field.replaceAll('_', '-'));
+      if (input) input.value = '0:(' + String(values[field] ?? 0) + ')';
+    }
+    clearMotionPreviewResult();
+    markDirty({ validate: true });
+    refreshInspector();
+    toast('Camera preset applied',
+      'Updated the six 3D camera motion schedules. Save the project to retain them.',
+      'info', 5800);
+  }
+
+  function applyCadencePreset() {
+    const preset = qs('#animation-cadence-preset');
+    const raw = qs('#animation-cadence');
+    if (!preset || !raw || !state.project) return;
+    if (preset.value === 'custom') {
+      raw.focus();
+      return;
+    }
+    raw.value = '0:(' + preset.value + ')';
+    syncCadencePreset();
+    markDirty({ validate: true });
+  }
+
   function fillForm() {
     const project = state.project;
     state.loading = true;
@@ -1447,8 +1879,10 @@
       if (!project) {
         renderPromptRows();
         renderTimeline();
+        renderDepthState();
         qs('#animation-project-path').textContent = 'Create or select an animation project.';
-        qs('#animation-schema-badge').textContent = 'Schema 2';
+        qs('#animation-schema-badge').textContent = 'Choose a project';
+        populateResolutionPresets();
         clearInspector();
         clearDirty();
         return;
@@ -1459,6 +1893,8 @@
       qs('#animation-fps').value = project.animation?.fps ?? 24;
       qs('#animation-width').value = project.animation?.width ?? 1024;
       qs('#animation-height').value = project.animation?.height ?? 1024;
+      syncAnimationResolutionPreset();
+      qs('#animation-mode').value = project.animation?.mode || '2d';
       qs('#animation-prompt-transition').value = project.animation?.prompt_transition || 'blend';
       qs('#animation-start-mode').value = project.animation?.start_mode || (project.animation?.source_image ? 'source' : 'prompt');
       qs('#animation-angle').value = project.motion?.angle || '0:(0)';
@@ -1466,15 +1902,30 @@
       qs('#animation-translation-x').value = project.motion?.translation_x || '0:(0)';
       qs('#animation-translation-y').value = project.motion?.translation_y || '0:(0)';
       qs('#animation-border-mode').value = project.motion?.border_mode || 'replicate';
+      qs('#animation-3d-translation-x').value = project.camera_3d?.translation_x || '0:(0)';
+      qs('#animation-3d-translation-y').value = project.camera_3d?.translation_y || '0:(0)';
+      qs('#animation-3d-translation-z').value = project.camera_3d?.translation_z || '0:(0)';
+      qs('#animation-3d-rotation-x').value = project.camera_3d?.rotation_x || '0:(0)';
+      qs('#animation-3d-rotation-y').value = project.camera_3d?.rotation_y || '0:(0)';
+      qs('#animation-3d-rotation-z').value = project.camera_3d?.rotation_z || '0:(0)';
+      qs('#animation-3d-fov').value = project.camera_3d?.fov || '0:(40)';
+      qs('#animation-3d-depth-resolution').value = project.camera_3d?.depth_resolution || 'auto';
+      qs('#animation-3d-projection-mode').value = project.camera_3d?.projection_mode || 'legacy';
+      qs('#animation-3d-hole-fill').value = project.camera_3d?.hole_fill || 'nearest';
       qs('#animation-strength').value = project.generation?.strength || '0:(0.65)';
       qs('#animation-noise').value = project.generation?.noise || '0:(0.02)';
       qs('#animation-steps').value = project.generation?.steps || '0:(20)';
       qs('#animation-guidance').value = project.generation?.guidance || '0:(0)';
+      qs('#animation-cadence').value = project.cadence?.diffusion || '0:(1)';
+      qs('#animation-temporal-mode').value = project.temporal?.mode || 'forward';
+      qs('#animation-temporal-mix').value = project.temporal?.mix ?? 0.65;
+      qs('#animation-temporal-contrast').value = project.temporal?.contrast_threshold ?? 96;
+      syncCadencePreset();
       qs('#animation-seed').value = project.generation?.seed ?? -1;
       qs('#animation-seed-behavior').value = project.generation?.seed_behavior || 'fixed';
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
       qs('#animation-notes').value = project.notes || '';
-      qs('#animation-schema-badge').textContent = `Schema ${project.schema_version || 1}`;
+      qs('#animation-schema-badge').textContent = 'Project loaded';
 
       const projectFile = qs('#animation-project-path');
       if (projectFile) {
@@ -1484,11 +1935,18 @@
 
       populateModelSelect();
       populateSamplerSelect(project.generation?.sampler || '');
+      const repairedGuidance = repairConstantGuidanceForSelectedModel();
       renderPromptRows();
+      syncAnimationModeUi();
       renderSourceState();
+      renderDepthState();
       syncInspectorBounds();
       renderTimeline();
       clearDirty();
+      if (repairedGuidance) {
+        state.dirty = true;
+        setStatus('Guidance adjusted · save project', 'dirty');
+      }
     } finally {
       state.loading = false;
     }
@@ -1531,6 +1989,7 @@
         fps: Number(qs('#animation-fps')?.value || 24),
         width: Number(qs('#animation-width')?.value || 1024),
         height: Number(qs('#animation-height')?.value || 1024),
+        mode: animationMode(),
         prompt_transition: qs('#animation-prompt-transition')?.value || 'blend',
         start_mode: qs('#animation-start-mode')?.value || 'prompt',
       },
@@ -1549,6 +2008,19 @@
         translation_y: qs('#animation-translation-y')?.value || '0:(0)',
         border_mode: qs('#animation-border-mode')?.value || 'replicate',
       },
+      camera_3d: {
+        ...(state.project.camera_3d || {}),
+        translation_x: qs('#animation-3d-translation-x')?.value || '0:(0)',
+        translation_y: qs('#animation-3d-translation-y')?.value || '0:(0)',
+        translation_z: qs('#animation-3d-translation-z')?.value || '0:(0)',
+        rotation_x: qs('#animation-3d-rotation-x')?.value || '0:(0)',
+        rotation_y: qs('#animation-3d-rotation-y')?.value || '0:(0)',
+        rotation_z: qs('#animation-3d-rotation-z')?.value || '0:(0)',
+        fov: qs('#animation-3d-fov')?.value || '0:(40)',
+        depth_resolution: qs('#animation-3d-depth-resolution')?.value || 'auto',
+        projection_mode: qs('#animation-3d-projection-mode')?.value || 'legacy',
+        hole_fill: qs('#animation-3d-hole-fill')?.value || 'nearest',
+      },
       generation: {
         ...(state.project.generation || {}),
         strength: qs('#animation-strength')?.value || '0:(0.65)',
@@ -1559,6 +2031,15 @@
         seed: Number(qs('#animation-seed')?.value ?? -1),
         seed_behavior: qs('#animation-seed-behavior')?.value || 'fixed',
         seed_increment: Number(qs('#animation-seed-increment')?.value || 1),
+      },
+      cadence: {
+        ...(state.project.cadence || {}),
+        diffusion: qs('#animation-cadence')?.value || '0:(1)',
+      },
+      temporal: {
+        mode: qs('#animation-temporal-mode')?.value || 'forward',
+        mix: Number(qs('#animation-temporal-mix')?.value ?? 0.65),
+        contrast_threshold: Number(qs('#animation-temporal-contrast')?.value ?? 96),
       },
       notes: qs('#animation-notes')?.value || '',
     };
@@ -1597,10 +2078,18 @@
     set('#resolved-angle', `${formatNumber(resolved.motion?.angle)}°`);
     set('#resolved-translation-x', `${formatNumber(resolved.motion?.translation_x)} px`);
     set('#resolved-translation-y', `${formatNumber(resolved.motion?.translation_y)} px`);
+    set('#resolved-3d-x', formatNumber(resolved.camera_3d?.translation_x));
+    set('#resolved-3d-y', formatNumber(resolved.camera_3d?.translation_y));
+    set('#resolved-3d-z', formatNumber(resolved.camera_3d?.translation_z));
+    set('#resolved-3d-rx', `${formatNumber(resolved.camera_3d?.rotation_x)}°`);
+    set('#resolved-3d-ry', `${formatNumber(resolved.camera_3d?.rotation_y)}°`);
+    set('#resolved-3d-rz', `${formatNumber(resolved.camera_3d?.rotation_z)}°`);
+    set('#resolved-3d-fov', `${formatNumber(resolved.camera_3d?.fov)}°`);
     set('#resolved-strength', formatNumber(resolved.generation?.strength));
     set('#resolved-noise', formatNumber(resolved.generation?.noise));
     set('#resolved-steps', formatNumber(resolved.generation?.steps));
     set('#resolved-guidance', formatNumber(resolved.generation?.guidance));
+    set('#resolved-cadence', formatNumber(resolved.cadence?.diffusion));
     const loraText = Array.isArray(resolved.loras) && resolved.loras.length
       ? resolved.loras
           .map(lora => `${lora.name || lora.requested_name || 'LoRA'} ${formatNumber(lora.weight, 3)}`)
@@ -1627,10 +2116,18 @@
       '#resolved-angle',
       '#resolved-translation-x',
       '#resolved-translation-y',
+      '#resolved-3d-x',
+      '#resolved-3d-y',
+      '#resolved-3d-z',
+      '#resolved-3d-rx',
+      '#resolved-3d-ry',
+      '#resolved-3d-rz',
+      '#resolved-3d-fov',
       '#resolved-strength',
       '#resolved-noise',
       '#resolved-steps',
       '#resolved-guidance',
+      '#resolved-cadence',
       '#resolved-seed',
       '#resolved-loras',
       '#resolved-positive-prompt',
@@ -1865,13 +2362,15 @@
     if (meta) meta.textContent = hasSource
       ? ((requiresSource ? 'Starting frame · ' : 'Optional preview reference · ') + (state.project.animation.source_image_name || 'uploaded image'))
       : (requiresSource ? 'No starting image uploaded.' : 'No image uploaded. Prompt mode does not require one.');
-    if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive;
-    if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive;
-    if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive;
+    if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    const overlay = qs('#animation-preview-highlight-holes');
+    if (overlay) overlay.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
-      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive;
+      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive || state.depthBusy;
     }
   }
 
@@ -1887,6 +2386,8 @@
     if (image) image.removeAttribute('src');
     const meta = qs('#animation-motion-result-meta');
     if (meta) meta.textContent = '';
+    const coverage = qs('#animation-camera-coverage');
+    if (coverage) { coverage.hidden = true; coverage.textContent = ''; }
     const button = qs('#animation-generate-motion-preview');
     if (button) {
       button.classList.remove('busy');
@@ -1917,8 +2418,10 @@
           source_image_name: payload.project?.animation?.source_image_name || file.name,
         },
       };
+      state.depthPreview = null;
       clearMotionPreviewResult();
       renderSourceState();
+      renderDepthState();
       toast('Source image uploaded', payload.source.width + ' × ' + payload.source.height + ' · ' + file.name, 'success');
     } catch (error) {
       toast('Source image upload failed', error.message, 'error', 7000);
@@ -1938,8 +2441,10 @@
         updated_at: payload.project?.updated_at || state.project.updated_at,
         animation: { ...(state.project.animation || {}), source_image: '', source_image_name: '' },
       };
+      state.depthPreview = null;
       clearMotionPreviewResult();
       renderSourceState();
+      renderDepthState();
       toast('Source image cleared', 'The project source image was removed.', 'success');
     } catch (error) {
       toast('Could not clear source image', error.message, 'error', 6500);
@@ -1976,7 +2481,25 @@
       const meta = qs('#animation-motion-result-meta');
       if (result) result.hidden = false;
       if (image) image.src = job.url + '?v=' + Date.now();
-      if (meta && job.result) meta.textContent = job.result.preview_width + ' × ' + job.result.preview_height + ' · ' + job.result.captured_frames + ' preview frames from ' + job.result.source_frames + ' project frames · ' + Number(job.result.duration_seconds || 0).toFixed(2) + 's · ' + job.result.border_mode;
+      if (meta && job.result) meta.textContent =
+        job.result.preview_width + ' × ' + job.result.preview_height + ' · ' +
+        job.result.captured_frames + ' preview frames from ' + job.result.source_frames +
+        ' project frames · ' + Number(job.result.duration_seconds || 0).toFixed(2) +
+        's · ' + (job.result.mode === '3d' ? '3D depth on CPU' : job.result.border_mode);
+      const coverage = qs('#animation-camera-coverage');
+      if (coverage) {
+        coverage.hidden = job.result?.mode !== '3d';
+        if (job.result?.mode === '3d') {
+          const pct = value => (100 * Number(value || 0)).toFixed(1) + '%';
+          coverage.textContent = 'Projected coverage: avg ' +
+            pct(job.result.average_coverage) + ' · minimum ' +
+            pct(job.result.minimum_coverage) + ' at frame ' +
+            job.result.worst_coverage_frame + ' · final ' +
+            pct(job.result.last_coverage) + ' · avg exposed ' +
+            pct(1 - Number(job.result.average_coverage || 0)) +
+            (job.result.highlight_holes ? ' · red overlay on' : '');
+        }
+      }
       toast('Motion preview complete', 'No diffusion model was loaded.', 'success');
     } else if (job.status === 'failed') {
       toast('Motion preview failed', job.error || job.message || 'Unknown preview error.', 'error', 8000);
@@ -2011,7 +2534,16 @@
     const fill = qs('#animation-motion-progress-fill');
     if (fill) fill.style.width = '0%';
     try {
-      const job = await api('/api/animation/motion-preview', { method: 'POST', body: JSON.stringify({ project: collectProject() }) });
+      const job = await api('/api/animation/motion-preview', {
+        method: 'POST',
+        body: JSON.stringify({
+          project: collectProject(),
+          options: {
+            highlight_holes: animationMode() === '3d' &&
+              Boolean(qs('#animation-preview-highlight-holes')?.checked),
+          },
+        }),
+      });
       state.motionJobId = job.id;
       updateMotionProgress(job);
       renderSourceState();
@@ -2123,7 +2655,21 @@
     panel.hidden = false;
     const motion = frameState.motion || {};
     const cumulative = frameState.cumulative_2d || {};
+    const camera3d = frameState.camera_3d || {};
+    const depth3d = frameState.depth_3d || {};
     const generation = frameState.generation || {};
+    const renderMode = String(frameState.animation_mode || '2d').toLowerCase() === '3d' ? '3d' : '2d';
+
+    qsa('[data-render-motion]').forEach(element => {
+      element.hidden = element.dataset.renderMotion !== renderMode;
+    });
+    const label = qs('#animation-render-frame-state-label');
+    if (label) {
+      label.textContent = renderMode === '3d'
+        ? 'Resolved 3D / generation state'
+        : 'Resolved 2D / generation state';
+    }
+
     const set = (selector, value) => {
       const element = qs(selector);
       if (element) element.textContent = value;
@@ -2141,6 +2687,31 @@
       formatNumber(cumulative.center_offset_y, 3) + ' px'
     );
     set('#animation-render-state-border', String(motion.border_mode || '--'));
+    set('#animation-render-state-3d-x', formatNumber(camera3d.translation_x, 5));
+    set('#animation-render-state-3d-y', formatNumber(camera3d.translation_y, 5));
+    set('#animation-render-state-3d-z', formatNumber(camera3d.translation_z, 5));
+    set('#animation-render-state-3d-rx', formatNumber(camera3d.rotation_x, 4) + '°');
+    set('#animation-render-state-3d-ry', formatNumber(camera3d.rotation_y, 4) + '°');
+    set('#animation-render-state-3d-rz', formatNumber(camera3d.rotation_z, 4) + '°');
+    set('#animation-render-state-3d-fov', formatNumber(camera3d.fov, 3) + '°');
+    set(
+      '#animation-render-state-depth',
+      depth3d.cache_key
+        ? (
+            (depth3d.cache_hit ? 'cache' : 'CPU') +
+            ' · ' + formatNumber(depth3d.seconds, 2) + 's' +
+            (depth3d.internal_width && depth3d.internal_height
+              ? ' · ' + depth3d.internal_width + '×' + depth3d.internal_height
+              : '')
+          )
+        : '--'
+    );
+    set(
+      '#animation-render-state-coverage',
+      depth3d.projected_coverage === undefined
+        ? '--'
+        : Math.round(Number(depth3d.projected_coverage) * 1000) / 10 + '%'
+    );
     set('#animation-render-state-strength', formatNumber(generation.strength, 4));
     set(
       '#animation-render-state-denoise',
@@ -2160,6 +2731,24 @@
         ? ' +' + String(generation.seed_increment ?? 0)
         : '')
     );
+    set(
+      '#animation-render-state-cadence',
+      String(frameState.cadence?.diffusion ?? '--') +
+      (frameState.cadence?.anchor === false ? ' · transform frame' : ' · anchor')
+    );
+    const timings = frameState.timings || {};
+    const timingParts = [
+      ['depth', timings.depth],
+      ['warp', timings.warp],
+      ['cond', timings.conditioning],
+      ['diff', timings.diffusion],
+      ['save', timings.save],
+      ['manifest', timings.manifest],
+      ['mem', timings.memory],
+    ]
+      .filter(([, value]) => Number.isFinite(Number(value)))
+      .map(([name, value]) => name + ' ' + formatNumber(value, 2) + 's');
+    set('#animation-render-state-timing', timingParts.length ? timingParts.join(' · ') : '--');
 
     const mode = qs('#animation-render-diffusion-mode');
     if (mode) {
@@ -2170,6 +2759,207 @@
     }
   }
 
+  function renderPerformanceSummary(job) {
+    const panel = qs('#animation-performance-summary');
+    const stats = qs('#animation-performance-stats');
+    const link = qs('#animation-performance-report');
+    const perf = job?.performance;
+    const visible = Boolean(perf && Number(perf.frames_observed || 0) > 0);
+    if (panel) panel.hidden = !visible;
+    if (link) {
+      if (visible && job.id && job.project_id) {
+        link.href = '/api/animation/renders/' +
+          encodeURIComponent(job.project_id) + '/' +
+          encodeURIComponent(job.id) + '/performance';
+      } else {
+        link.removeAttribute('href');
+      }
+    }
+    if (!stats) return;
+    if (!visible) { stats.textContent = ''; return; }
+    const gb = value => Number.isFinite(Number(value))
+      ? Number(value).toFixed(2) + ' GiB' : '—';
+    const secs = value => Number.isFinite(Number(value))
+      ? Number(value).toFixed(2) + 's' : '—';
+    stats.textContent =
+      'Frames ' + perf.frames_observed +
+      ' · diffusion anchors ' + perf.diffusion_anchors +
+      ' · avg diffusion ' + secs(perf.average_anchor_diffusion_seconds) +
+      ' · max GPU allocated ' + gb(perf.maximum_allocated_gib) +
+      ' · max reserved ' + gb(perf.maximum_reserved_gib) +
+      (perf.maximum_peak_allocated_gib
+        ? ' · allocator peak ' + gb(perf.maximum_peak_allocated_gib)
+        : '') +
+      (perf.maximum_active_gib
+        ? ' · max active ' + gb(perf.maximum_active_gib)
+        : '') +
+      (perf.allocator_backend
+        ? ' · allocator ' + perf.allocator_backend
+        : '') +
+      (Number(perf.allocation_retries || 0)
+        ? ' · alloc retries ' + perf.allocation_retries
+        : '') +
+      (Number(perf.oom_count || 0)
+        ? ' · OOM count ' + perf.oom_count
+        : '') +
+      ' · resident LoRAs ≤ ' + perf.maximum_resident_loras +
+      ' · execution ' + (perf.pipeline_device || 'not recorded') +
+      ' · ' + (perf.optimization || 'unavailable');
+    if ((perf.slow_anchor_frames || []).length) {
+      stats.textContent += ' · slow anchors ' +
+        perf.slow_anchor_frames.join(', ');
+    }
+  }
+
+  function renderVideoExportState() {
+    const job = state.renderJob;
+    const isCompleted = job?.status === 'completed';
+    const sameRender = Boolean(job?.id && job.id === state.videoRenderId);
+    const activeExport = sameRender &&
+      ['queued', 'encoding'].includes(state.videoJob?.status);
+    const available = Boolean(state.videoAvailability?.available);
+    const button = qs('#animation-export-video');
+    if (button) {
+      button.disabled = !isCompleted || !available || activeExport;
+      button.classList.toggle('busy', Boolean(activeExport));
+      const label = qs('.button-label', button);
+      if (label) label.textContent = activeExport ? 'Encoding…' : 'Export Video';
+    }
+    const availability = qs('#animation-video-availability');
+    if (availability) availability.textContent = !state.videoAvailability
+      ? 'Checking FFmpeg…'
+      : (available ? 'FFmpeg ready' : 'FFmpeg missing on host');
+    const matching = sameRender ? state.videoExports : [];
+    const latest = matching.find(item => item.status === 'completed' && item.url);
+    const status = qs('#animation-video-job-status');
+    if (status) {
+      status.textContent = !available && state.videoAvailability
+        ? state.videoAvailability.message
+        : activeExport
+          ? (state.videoJob.message || 'Encoding video…') + ' · ' +
+            Math.round(100 * Number(state.videoJob.progress || 0)) + '%'
+          : sameRender && state.videoJob?.status === 'failed'
+            ? 'Video export failed: ' + (state.videoJob.error || 'Unknown FFmpeg error')
+            : !isCompleted
+              ? 'Select a completed render to encode its existing PNG sequence.'
+              : latest
+                ? 'Video available. The original PNG frames are unchanged.'
+                : 'Ready to export the selected completed render.';
+    }
+    const result = qs('#animation-video-result');
+    if (result) result.hidden = !latest;
+    const video = qs('#animation-video-playback');
+    const link = qs('#animation-video-download');
+    const meta = qs('#animation-video-result-meta');
+    if (latest) {
+      const url = latest.url;
+      if (video && video.dataset.videoUrl !== url) {
+        video.dataset.videoUrl = url;
+        video.src = url + '?inline=true';
+        video.load();
+      }
+      if (link) { link.href = url; link.download = ''; }
+      if (meta) meta.textContent =
+        latest.format.toUpperCase() + ' · ' + latest.fps + ' fps · ' +
+        latest.quality + ' · ' +
+        (Number(latest.bytes || 0) / 1024 / 1024).toFixed(1) + ' MiB';
+    } else if (video?.dataset.videoUrl) {
+      video.pause();
+      video.removeAttribute('src');
+      delete video.dataset.videoUrl;
+      video.load();
+      if (link) link.removeAttribute('href');
+    }
+  }
+
+  async function loadVideoExportHistory() {
+    const job = state.renderJob;
+    if (!job?.id || !state.project?.id) {
+      state.videoExports = [];
+      state.videoRenderId = '';
+      renderVideoExportState();
+      return;
+    }
+    const requestedRender = job.id;
+    try {
+      const response = await api(
+        '/api/animation/renders/' + encodeURIComponent(state.project.id) +
+        '/' + encodeURIComponent(requestedRender) + '/videos'
+      );
+      if (state.renderJob?.id !== requestedRender) return;
+      state.videoRenderId = requestedRender;
+      state.videoExports = Array.isArray(response.exports) ? response.exports : [];
+    } catch (error) {
+      if (state.renderJob?.id !== requestedRender) return;
+      state.videoExports = [];
+      state.videoRenderId = requestedRender;
+      toast('Video export history unavailable', error.message, 'warning', 5500);
+    }
+    renderVideoExportState();
+  }
+
+  async function pollVideoExport(jobId) {
+    if (state.videoJob?.id !== jobId) return;
+    try {
+      const job = await api('/api/animation/video/jobs/' + encodeURIComponent(jobId));
+      if (state.videoJob?.id !== jobId) return;
+      state.videoJob = job;
+      renderVideoExportState();
+      if (['queued', 'encoding'].includes(job.status)) {
+        state.videoPollTimer = window.setTimeout(() => pollVideoExport(jobId), 700);
+      } else {
+        await loadVideoExportHistory();
+        if (job.status === 'completed') {
+          toast('Video export complete', 'Download your ' + job.format.toUpperCase() + ' video.', 'success');
+        } else {
+          toast('Video export failed', job.error || job.message, 'error', 8500);
+        }
+      }
+    } catch (error) {
+      if (state.videoJob?.id === jobId) {
+        state.videoPollTimer = window.setTimeout(() => pollVideoExport(jobId), 1200);
+      }
+    }
+  }
+
+  async function startVideoExport() {
+    const job = state.renderJob;
+    if (!job?.id || !state.project?.id || job.status !== 'completed' ||
+        !state.videoAvailability?.available) return;
+    const fpsRaw = String(qs('#animation-video-fps')?.value || '').trim();
+    const fps = fpsRaw ? Number(fpsRaw) : null;
+    if (fps !== null && (!Number.isInteger(fps) || fps < 1 || fps > 120)) {
+      toast('Invalid video FPS', 'Choose a whole number between 1 and 120.', 'warning');
+      return;
+    }
+    const requestedRender = job.id;
+    const button = qs('#animation-export-video');
+    if (button) button.disabled = true;
+    try {
+      const exportJob = await api(
+        '/api/animation/renders/' + encodeURIComponent(state.project.id) +
+        '/' + encodeURIComponent(requestedRender) + '/video',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            format: qs('#animation-video-format')?.value || 'mp4',
+            quality: qs('#animation-video-quality')?.value || 'balanced',
+            fps,
+          }),
+        },
+      );
+      state.videoJob = exportJob;
+      state.videoRenderId = requestedRender;
+      renderVideoExportState();
+      window.clearTimeout(state.videoPollTimer);
+      pollVideoExport(exportJob.id);
+      toast('Video export queued', 'FFmpeg is encoding saved PNGs. No diffusion is involved.', 'info');
+    } catch (error) {
+      toast('Cannot export video', error.message, 'error', 7000);
+      renderVideoExportState();
+    }
+  }
+
   function resetRenderUi() {
     window.clearTimeout(state.renderPollTimer);
     state.renderPollTimer = null;
@@ -2177,6 +2967,11 @@
     state.renderJob = null;
     state.renderHistory = [];
     state.lastRenderFrameUrl = '';
+    window.clearTimeout(state.videoPollTimer);
+    state.videoPollTimer = null;
+    state.videoJob = null;
+    state.videoExports = [];
+    state.videoRenderId = '';
     const loadProgress = qs('#animation-model-load-progress');
     if (loadProgress) loadProgress.hidden = true;
     const progress = qs('#animation-render-progress');
@@ -2204,6 +2999,7 @@
     const start = qs('#animation-start-render');
     if (start) { start.classList.remove('busy'); const label = qs('.button-label', start); if (label) label.textContent = 'Render Animation'; }
     renderSourceState();
+    renderVideoExportState();
   }
 
   function renderAnimationJob(job) {
@@ -2252,10 +3048,39 @@
     if (percentEl) percentEl.textContent = percent + '%';
     const fill = qs('#animation-render-progress-fill');
     if (fill) fill.style.width = percent + '%';
+    const overall = qs('#animation-overall-progress-track');
+    if (overall) overall.setAttribute('aria-valuenow', String(percent));
     const frameStat = qs('#animation-render-frame');
     if (frameStat) frameStat.textContent = job ? ((Number(job.current_frame || 0) + 1) + ' / ' + Number(job.total_frames || 0)) : '--';
     const stepStat = qs('#animation-render-step');
     if (stepStat) stepStat.textContent = job ? String(job.current_step ?? 0) : '--';
+    const stepPanel = qs('#animation-step-progress');
+    if (stepPanel) stepPanel.hidden = !job;
+    const stepTotal = Number(job?.current_step_total || 0);
+    const currentStep = Math.max(0, Math.min(stepTotal, Number(job?.current_step || 0)));
+    const stepPercent = stepTotal ? Math.min(100, Math.round(currentStep / stepTotal * 100)) : 0;
+    const stepLabel = qs('#animation-step-progress-label');
+    if (stepLabel) stepLabel.textContent = job?.status === 'loading_model' ? 'Loading model…' :
+      job?.status === 'queued' ? 'Waiting for worker…' :
+      job?.status === 'finalizing' ? 'Finalizing frames…' :
+      stepTotal ? 'Diffusion step ' + currentStep + ' / ' + stepTotal :
+      job?.status === 'rendering' ? 'No diffusion this frame' : 'No active diffusion';
+    const stepValue = qs('#animation-step-progress-value');
+    if (stepValue) stepValue.textContent = stepTotal ? stepPercent + '%' : '';
+    const stepFill = qs('#animation-step-progress-fill');
+    if (stepFill) stepFill.style.width = stepPercent + '%';
+    const stepMeter = qs('#animation-step-progress-track');
+    if (stepMeter) {
+      stepMeter.setAttribute('aria-valuenow', String(stepPercent));
+      stepMeter.setAttribute('aria-valuetext', stepTotal ? currentStep + ' of ' + stepTotal + ' steps' : 'No active diffusion');
+    }
+    window.dispatchEvent(new CustomEvent('morphorum:job-status', {detail: {
+      
+      type: 'animation', id: job?.id || null, status: job?.status || 'idle', progress: Number(job?.progress || 0),
+      current: job ? Number(job.current_frame || 0) + 1 : 0, total: Number(job?.total_frames || 0),
+      eta_seconds: job?.eta_seconds ?? null
+    }}));
+
     const frameTime = qs('#animation-render-frame-time');
     if (frameTime) frameTime.textContent = formatSeconds(job?.frame_seconds);
     const eta = qs('#animation-render-eta');
@@ -2286,6 +3111,7 @@
 
     renderAnimationPromptTelemetry(job);
     renderAnimationFrameTelemetry(job);
+    renderPerformanceSummary(job);
 
     const error = qs('#animation-render-error');
     if (error) {
@@ -2307,6 +3133,7 @@
       }
     }
     renderSourceState();
+    renderVideoExportState();
   }
 
   function populateRenderHistory(renders) {
@@ -2334,8 +3161,13 @@
       const payload = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) + '/renders');
       const renders = Array.isArray(payload.renders) ? payload.renders : [];
       populateRenderHistory(renders);
-      if (!state.renderJobId && renders.length) renderAnimationJob(renders[0]);
-      else if (!renders.length && !state.renderJobId) renderAnimationJob(null);
+      if (!state.renderJobId && renders.length) {
+        renderAnimationJob(renders[0]);
+        await loadVideoExportHistory();
+      } else if (!renders.length && !state.renderJobId) {
+        renderAnimationJob(null);
+        await loadVideoExportHistory();
+      }
     } catch (error) {
       toast('Could not load animation render history', error.message, 'warning', 6000);
     }
@@ -2346,6 +3178,7 @@
     try {
       const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
       renderAnimationJob(job);
+      await loadVideoExportHistory();
       if (renderIsActive(job)) pollAnimationRender(job.id);
     } catch (error) {
       toast('Could not load animation render', error.message, 'error', 6500);
@@ -2373,12 +3206,14 @@
 
   async function startAnimationRender() {
     if (!state.project || renderIsActive()) return;
+    const project = collectProject();
     const button = qs('#animation-start-render');
     if (button) { button.classList.add('busy'); button.disabled = true; }
     try {
-      const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project: collectProject() }) });
+      const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project }) });
       state.renderJobId = job.id;
       renderAnimationJob(job);
+      showAnimationTab('monitor');
       await loadRenderHistory();
       pollAnimationRender(job.id);
       toast('Animation render queued', 'Current browser project state was frozen into the render manifest.', 'success');
@@ -2416,6 +3251,7 @@
       const payload = await api('/api/generation/capabilities');
       state.capabilities = payload.families || {};
       populateSamplerSelect(state.project?.generation?.sampler || '');
+      populateResolutionPresets();
     } catch (error) {
       state.capabilities = {};
       toast('Animation generation capabilities unavailable', error.message, 'warning', 6500);
@@ -2427,9 +3263,359 @@
       const payload = await api('/api/models?limit=2000');
       state.models = Array.isArray(payload.models) ? payload.models : [];
       populateModelSelect();
+      populateDeforumModelSelect();
       populateSamplerSelect(state.project?.generation?.sampler || '');
     } catch (error) {
       toast('Animation model list unavailable', error.message, 'warning', 6000);
+    }
+  }
+
+
+  function deforumCheckpointModels() {
+    return state.models.filter(model => model.kind === 'checkpoints');
+  }
+
+  function populateDeforumModelSelect() {
+    const select = qs('#animation-deforum-model');
+    if (!select) return;
+    const selected = select.value || '';
+    const models = deforumCheckpointModels();
+    select.replaceChildren();
+
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = models.length
+      ? 'Choose an indexed checkpoint…'
+      : 'No indexed checkpoints available';
+    select.appendChild(none);
+
+    for (const model of models) {
+      const option = document.createElement('option');
+      option.value = model.id;
+      const variant = model.variant ? ' · ' + model.variant : '';
+      option.textContent =
+        String(model.name || model.id) +
+        ' · ' + String(model.family || '').toUpperCase() +
+        variant;
+      select.appendChild(option);
+    }
+    select.value = models.some(model => model.id === selected) ? selected : '';
+  }
+
+  function setDeforumImportBusy(busy, message = '') {
+    state.deforumImport.busy = Boolean(busy);
+    const refresh = qs('#animation-deforum-refresh');
+    const create = qs('#animation-deforum-create');
+    const status = qs('#animation-deforum-status');
+    if (refresh) {
+      setBusy(refresh, busy);
+      refresh.disabled = busy || !state.deforumImport.content;
+    }
+    if (create) {
+      setBusy(create, busy);
+      create.disabled =
+        busy ||
+        !state.deforumImport.report?.can_create ||
+        !state.deforumImport.content;
+    }
+    if (status && message) status.textContent = message;
+  }
+
+  function closeDeforumImport() {
+    const dialog = qs('#animation-deforum-dialog');
+    if (!dialog) return;
+    if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+    else dialog.removeAttribute('open');
+  }
+
+  function resetDeforumImport() {
+    state.deforumImport = {
+      content: '',
+      filename: '',
+      report: null,
+      busy: false,
+    };
+    const file = qs('#animation-deforum-file');
+    const name = qs('#animation-deforum-name');
+    const filename = qs('#animation-deforum-filename');
+    const status = qs('#animation-deforum-status');
+    const summary = qs('#animation-deforum-summary');
+    const warnings = qs('#animation-deforum-warnings');
+    const mappings = qs('#animation-deforum-mappings');
+    const warningCount = qs('#animation-deforum-warning-count');
+    const mappingCount = qs('#animation-deforum-mapping-count');
+    if (file) file.value = '';
+    if (name) name.value = '';
+    if (filename) filename.textContent = 'No file selected';
+    if (status) status.textContent = 'Waiting';
+    if (summary) {
+      summary.hidden = true;
+      summary.textContent = '';
+    }
+    if (warnings) {
+      warnings.replaceChildren();
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Choose a file to review any settings that need attention.';
+      warnings.appendChild(empty);
+    }
+    if (mappings) {
+      mappings.replaceChildren();
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Mapped, unsupported, and preserved fields will appear here.';
+      mappings.appendChild(empty);
+    }
+    if (warningCount) warningCount.textContent = '0';
+    if (mappingCount) mappingCount.textContent = '0';
+    populateDeforumModelSelect();
+    setDeforumImportBusy(false);
+  }
+
+  function compactImportValue(value) {
+    let text;
+    try {
+      text = typeof value === 'string' ? value : JSON.stringify(value);
+    } catch (_) {
+      text = String(value ?? '');
+    }
+    text = String(text ?? '').replace(/\s+/g, ' ').trim();
+    return text.length > 180 ? text.slice(0, 177) + '…' : text;
+  }
+
+  function renderDeforumImportReport(report) {
+    state.deforumImport.report = report || null;
+    const summary = qs('#animation-deforum-summary');
+    const warnings = qs('#animation-deforum-warnings');
+    const mappings = qs('#animation-deforum-mappings');
+    const warningCount = qs('#animation-deforum-warning-count');
+    const mappingCount = qs('#animation-deforum-mapping-count');
+    const status = qs('#animation-deforum-status');
+    const create = qs('#animation-deforum-create');
+    const project = report?.project || {};
+    const animation = project.animation || {};
+
+    if (summary) {
+      if (report) {
+        const mapped = (report.mappings || []).filter(item =>
+          String(item.status || '').startsWith('mapped')
+        ).length;
+        const model = report.selected_model;
+        summary.textContent = [
+          (animation.mode || '2d').toUpperCase(),
+          String(animation.width || '?') + ' × ' + String(animation.height || '?'),
+          String(animation.max_frames || '?') + ' frames',
+          String(animation.fps || '?') + ' fps',
+          mapped + ' mapped fields',
+          model ? String(model.name || model.id) : 'model not selected',
+        ].join(' · ');
+        summary.hidden = false;
+      } else {
+        summary.hidden = true;
+        summary.textContent = '';
+      }
+    }
+
+    const warningItems = Array.isArray(report?.warnings) ? report.warnings : [];
+    if (warningCount) warningCount.textContent = String(warningItems.length);
+    if (warnings) {
+      warnings.replaceChildren();
+      if (!warningItems.length) {
+        const clean = document.createElement('p');
+        clean.className = 'animation-import-ok';
+        clean.textContent = 'No compatibility issues found for the selected model.';
+        warnings.appendChild(clean);
+      } else {
+        for (const message of warningItems) {
+          const item = document.createElement('div');
+          item.className = 'animation-import-warning';
+          item.textContent = String(message);
+          warnings.appendChild(item);
+        }
+      }
+    }
+
+    const mappingItems = Array.isArray(report?.mappings) ? report.mappings : [];
+    if (mappingCount) mappingCount.textContent = String(mappingItems.length);
+    if (mappings) {
+      mappings.replaceChildren();
+      for (const item of mappingItems) {
+        const row = document.createElement('div');
+        row.className =
+          'animation-import-mapping status-' +
+          String(item.status || 'unknown').replace(/[^a-z0-9_-]/gi, '-');
+
+        const source = document.createElement('div');
+        const sourceKey = document.createElement('strong');
+        sourceKey.textContent = String(item.source_key || 'unknown');
+        const sourceValue = document.createElement('code');
+        sourceValue.textContent = compactImportValue(item.source_value);
+        source.append(sourceKey, sourceValue);
+
+        const arrow = document.createElement('span');
+        arrow.className = 'animation-import-map-arrow';
+        arrow.textContent = '→';
+
+        const target = document.createElement('div');
+        const targetKey = document.createElement('strong');
+        targetKey.textContent = item.target ? String(item.target) : String(item.status || 'preserved');
+        const mappedValue = document.createElement('code');
+        mappedValue.textContent =
+          item.mapped_value === undefined
+            ? (item.message || 'Setting kept for reference')
+            : compactImportValue(item.mapped_value);
+        target.append(targetKey, mappedValue);
+
+        row.append(source, arrow, target);
+        mappings.appendChild(row);
+      }
+      if (!mappingItems.length) {
+        const empty = document.createElement('p');
+        empty.className = 'muted';
+        empty.textContent = 'No recognized settings were found in this file.';
+        mappings.appendChild(empty);
+      }
+    }
+
+    if (status) {
+      if (!report) status.textContent = 'Waiting';
+      else if (report.can_create) status.textContent = 'Ready to create';
+      else if (report.model_required) status.textContent = 'Choose a model';
+      else if (report.validation && !report.validation.valid) status.textContent = 'Validation errors';
+      else status.textContent = 'Review required';
+    }
+    if (create) create.disabled = state.deforumImport.busy || !report?.can_create;
+  }
+
+  async function previewDeforumImport({ preserveName = true } = {}) {
+    if (!state.deforumImport.content || state.deforumImport.busy) return;
+    const model = qs('#animation-deforum-model');
+    const name = qs('#animation-deforum-name');
+    const priorName = preserveName ? String(name?.value || '').trim() : '';
+    setDeforumImportBusy(true, 'Inspecting…');
+    try {
+      const report = await api('/api/animation/import/deforum/preview', {
+        method: 'POST',
+        body: JSON.stringify({
+          content: state.deforumImport.content,
+          filename: state.deforumImport.filename,
+          model_id: model?.value || null,
+          name: priorName || null,
+        }),
+      });
+      renderDeforumImportReport(report);
+      if (name && !priorName && report?.project?.name) {
+        name.value = String(report.project.name);
+      }
+    } catch (error) {
+      state.deforumImport.report = null;
+      renderDeforumImportReport(null);
+      const status = qs('#animation-deforum-status');
+      if (status) status.textContent = 'Import error';
+      toast('Deforum import preview failed', error.message, 'error', 8000);
+    } finally {
+      setDeforumImportBusy(false);
+    }
+  }
+
+  async function chooseDeforumFile(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    if (file.size > 1048576) {
+      toast(
+        'Deforum settings file is too large',
+        'Choose a settings file smaller than 1 MiB.',
+        'warning',
+        6500
+      );
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      const content = await file.text();
+      resetDeforumImport();
+      state.deforumImport.content = content;
+      state.deforumImport.filename = file.name || 'deforum-settings.json';
+      const filename = qs('#animation-deforum-filename');
+      if (filename) filename.textContent = state.deforumImport.filename;
+      const dialog = qs('#animation-deforum-dialog');
+      if (dialog) {
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', '');
+      }
+      await previewDeforumImport({ preserveName: false });
+    } catch (error) {
+      toast('Could not read Deforum settings', error.message, 'error', 7000);
+    }
+  }
+
+  async function createDeforumProject() {
+    const report = state.deforumImport.report;
+    if (!report?.can_create || !state.deforumImport.content || state.deforumImport.busy) {
+      return;
+    }
+    if (
+      state.dirty &&
+      !(await window.MorphorumDialog.confirm({
+        title: 'Discard unsaved animation edits?',
+        message: 'This opens the imported project and discards unsaved changes in the current browser project.',
+        variant: 'danger', confirmText: 'Discard & Import', cancelText: 'Keep Editing',
+      }))
+    ) {
+      return;
+    }
+
+    const model = qs('#animation-deforum-model');
+    const name = qs('#animation-deforum-name');
+    setDeforumImportBusy(true, 'Creating…');
+    try {
+      const payload = await api('/api/animation/import/deforum/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          content: state.deforumImport.content,
+          filename: state.deforumImport.filename,
+          model_id: model?.value || null,
+          name: String(name?.value || '').trim() || null,
+        }),
+      });
+
+      clearMotionPreviewResult();
+      resetRenderUi();
+      state.project = payload.project;
+      resetHybridForProject();
+      state.path = payload.path || '';
+      state.timeline = null;
+      state.timelineSelection = null;
+      state.depthPreview = null;
+      state.dirty = false;
+      closeDeforumImport();
+
+      await loadProjectList();
+      fillForm();
+      await loadTimeline();
+      await loadDepthPreviewStatus();
+      await loadRenderHistory();
+
+      const count = Array.isArray(payload.import?.warnings)
+        ? payload.import.warnings.length
+        : 0;
+      toast(
+        'Deforum project imported',
+        state.project.name +
+          ' created as a new Morphorum project' +
+          (count ? ' · ' + count + ' warning' + (count === 1 ? '' : 's') : '') +
+          '.',
+        count ? 'warning' : 'success',
+        6500
+      );
+      resetDeforumImport();
+    } catch (error) {
+      const status = qs('#animation-deforum-status');
+      if (status) status.textContent = 'Create failed';
+      toast('Deforum import failed', error.message, 'error', 8000);
+    } finally {
+      setDeforumImportBusy(false);
     }
   }
 
@@ -2449,7 +3635,11 @@
     if (
       confirmDirty &&
       state.dirty &&
-      !window.confirm('Discard unsaved animation project changes?')
+      !(await window.MorphorumDialog.confirm({
+        title: 'Switch animation projects?',
+        message: 'The current project has unsaved edits. Switching projects will discard those edits.',
+        variant: 'danger', confirmText: 'Discard & Switch', cancelText: 'Keep Editing',
+      }))
     ) {
       renderProjectSelect();
       return;
@@ -2462,11 +3652,14 @@
       clearMotionPreviewResult();
       resetRenderUi();
       state.project = payload.project;
+      resetHybridForProject();
       state.path = payload.path || '';
       state.timeline = null;
       state.timelineSelection = null;
+      state.depthPreview = null;
       fillForm();
       await loadTimeline();
+      await loadDepthPreviewStatus();
       await loadRenderHistory();
     } catch (error) {
       toast('Could not load animation project', error.message, 'error', 6500);
@@ -2476,7 +3669,12 @@
   }
 
   async function createProject() {
-    const requestedName = window.prompt('New animation project name:', 'New Animation');
+    const requestedName = await window.MorphorumDialog.prompt({
+      title: 'New animation project', message: 'Give the new animation project a name.',
+      initialValue: 'New Animation', inputLabel: 'Project name', maxLength: 120,
+      validate: value => value ? '' : 'Enter a project name.',
+      confirmText: 'Create Project',
+    });
     if (requestedName === null) return;
     const name = String(requestedName).trim();
     if (!name) {
@@ -2497,9 +3695,11 @@
       state.path = payload.path || '';
       state.timeline = null;
       state.timelineSelection = null;
+      state.depthPreview = null;
       await loadProjectList();
       fillForm();
       await loadTimeline();
+      await loadDepthPreviewStatus();
       await loadRenderHistory();
       toast('Animation project created', `${state.project.name} is ready for editing.`, 'success');
     } catch (error) {
@@ -2550,9 +3750,249 @@
     }
   }
 
+
+  // B6.2: independent managed-source lab. Never modifies animation project settings.
+  const hybrid = { filename: '', info: null, jobId: '', timer: null, frames: null };
+  function hybridProjectId() { return state.project?.id || ''; }
+  function hybridBase() {
+    return '/api/animation/projects/' + encodeURIComponent(hybridProjectId());
+  }
+  function hybridMessage(message) {
+    const el = qs('#animation-hybrid-meta');
+    if (el) el.textContent = message;
+  }
+  function hybridButtons() {
+    const ready = Boolean(hybridProjectId() && hybrid.info);
+    const status = qs('#animation-hybrid-status');
+    if (status) status.textContent = hybridProjectId() ? 'Ready' : 'Select a project';
+    const active = Boolean(hybrid.jobId);
+    qs('#animation-hybrid-extract').disabled = !ready || active;
+    qs('#animation-hybrid-cancel').disabled = !active;
+    qs('#animation-hybrid-upload').disabled = !hybridProjectId() || active || !qs('#animation-hybrid-file')?.files?.length;
+  }
+  async function hybridLoadFrames() {
+    const manifest = await api(hybridBase() + '/hybrid-frames');
+    hybrid.frames = manifest;
+    const slider = qs('#animation-hybrid-frame-slider');
+    slider.max = String(manifest.frames);
+    slider.value = '1';
+    qs('#animation-hybrid-preview').hidden = false;
+    hybridDisplayFrame();
+  }
+  function hybridDisplayFrame() {
+    if (!hybrid.frames || !hybridProjectId()) return;
+    const index = Math.max(1, Math.min(hybrid.frames.frames, Number(qs('#animation-hybrid-frame-slider').value) || 1));
+    qs('#animation-hybrid-frame').src = hybridBase() + '/hybrid-frames/' + index;
+    qs('#animation-hybrid-frame-caption').textContent = 'Frame ' + index + ' of ' + hybrid.frames.frames;
+  }
+  async function hybridUpload() {
+    const file = qs('#animation-hybrid-file')?.files?.[0];
+    if (!hybridProjectId()) return hybridMessage('Save or select a project first.');
+    if (!file) return hybridMessage('Select a video file.');
+    if (file.size > 512 * 1024 * 1024) return hybridMessage('Video exceeds 512 MiB limit.');
+    hybridMessage('Uploading and inspecting ' + file.name + '…');
+    try {
+      const reply = await api(hybridBase() + '/hybrid-video', {
+        method: 'PUT', headers: { 'Content-Type': 'application/octet-stream', 'x-filename': file.name }, body: file,
+      });
+      hybrid.filename = reply.video.storage_name;
+      hybrid.info = reply.video;
+      qs('#animation-hybrid-end').value = String(Math.min(10, hybrid.info.duration_seconds));
+      hybridMessage('Accepted ' + reply.video.width + '×' + reply.video.height + ', ' +
+        reply.video.duration_seconds + 's, ' + reply.video.fps + ' FPS, codec ' + reply.video.codec + '.');
+    } catch (error) { hybridMessage('Upload failed: ' + error.message); }
+    hybridButtons();
+  }
+  async function hybridPoll() {
+    if (!hybrid.jobId) return;
+    try {
+      const data = await api(hybridBase() + '/hybrid-extraction/' + hybrid.jobId);
+      hybridMessage('Extraction: ' + data.status + (data.error ? ' | ' + data.error : '') +
+        (data.frames ? ' | ' + data.frames + ' frames' : ''));
+      if (['completed', 'failed', 'canceled'].includes(data.status)) {
+        hybrid.jobId = '';
+        clearInterval(hybrid.timer);
+        hybrid.timer = null;
+        hybridButtons();
+        if (data.status === 'completed') await hybridLoadFrames();
+      }
+    } catch (error) {
+      clearInterval(hybrid.timer);
+      hybrid.timer = null;
+      hybrid.jobId = '';
+      hybridMessage(error.message);
+      hybridButtons();
+    }
+  }
+  async function hybridExtract() {
+    if (!hybrid.info || !hybridProjectId()) return;
+    try {
+      const job = await api(hybridBase() + '/hybrid-extraction', {
+        method: 'POST',
+        body: JSON.stringify({ filename: hybrid.filename,
+          start: Number(qs('#animation-hybrid-start').value),
+          end: Number(qs('#animation-hybrid-end').value),
+          fps: Number(qs('#animation-hybrid-fps').value) }),
+      });
+      hybrid.jobId = job.id;
+      hybridMessage('Queued ' + job.estimated_frames + ' source frames…');
+      hybridButtons();
+      hybrid.timer = window.setInterval(hybridPoll, 900);
+      hybridPoll();
+    } catch (error) { hybridMessage('Extraction failed: ' + error.message); }
+  }
+  async function hybridCancel() {
+    if (!hybrid.jobId) return;
+    try { await api(hybridBase() + '/hybrid-extraction/' + hybrid.jobId + '/cancel', {method: 'POST'}); }
+    catch (error) { hybridMessage('Cancel failed: ' + error.message); }
+  }
+  function resetHybridForProject() {
+    if (hybrid.timer) window.clearInterval(hybrid.timer);
+    hybrid.filename = '';
+    hybrid.info = null;
+    hybrid.jobId = '';
+    hybrid.timer = null;
+    hybrid.frames = null;
+    const preview = qs('#animation-hybrid-preview');
+    if (preview) preview.hidden = true;
+    const fileInput = qs('#animation-hybrid-file');
+    if (fileInput) fileInput.value = '';
+    hybridMessage('Upload a local video to begin.');
+    hybridButtons();
+  }
+  function bindHybrid() {
+    qs('#animation-hybrid-upload')?.addEventListener('click', hybridUpload);
+    qs('#animation-hybrid-file')?.addEventListener('change', hybridButtons);
+    qs('#animation-hybrid-extract')?.addEventListener('click', hybridExtract);
+    qs('#animation-hybrid-cancel')?.addEventListener('click', hybridCancel);
+    qs('#animation-hybrid-frame-slider')?.addEventListener('input', hybridDisplayFrame);
+    hybridButtons();
+  }
+
+  // Four views share the original render controls and poller, never duplicate them.
+  const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
+  let animationTab = 'editor';
+  function showAnimationTab(name, { persist = true } = {}) {
+    if (!['editor','monitor','media','outputs'].includes(name)) return;
+    animationTab = name;
+    qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
+      const selected = button.dataset.animationTab === name;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-selected', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    });
+    qsa('#view-animation .animation-workspace-panel').forEach(panel => {
+      const selected = panel.dataset.animationPanel === name;
+      panel.hidden = !selected;
+      panel.classList.toggle('active', selected);
+    });
+    if (persist) try { localStorage.setItem(ANIMATION_TAB_KEY, name); } catch (_) {}
+  }
+  function setupAnimationWorkspaceTabs() {
+    const layout = qs('#view-animation .animation-layout');
+    const root = qs('#view-animation');
+    const card = qs('#view-animation .animation-render-card');
+    if (!layout || !root || !card) return;
+    const nav = document.createElement('nav');
+    nav.id = 'animation-workspace-nav';
+    nav.className = 'animation-workspace-nav';
+    nav.setAttribute('aria-label', 'Animation workspace');
+    nav.setAttribute('role', 'tablist');
+    const panels = {};
+    const names = { editor: 'Editor', monitor: 'Monitor', media: 'Media', outputs: 'Outputs' };
+    for (const [name, label] of Object.entries(names)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.animationTab = name;
+      button.id = 'animation-tab-' + name;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-controls', 'animation-panel-' + name);
+      button.textContent = label;
+      button.addEventListener('click', () => showAnimationTab(name));
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const keys = Object.keys(names);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? keys.length - 1 :
+          (keys.indexOf(name) + (event.key === 'ArrowRight' ? 1 : keys.length - 1)) % keys.length;
+        qs('#animation-tab-' + keys[next])?.focus();
+        showAnimationTab(keys[next]);
+      });
+      nav.appendChild(button);
+      const panel = document.createElement('section');
+      panel.className = 'animation-workspace-panel';
+      panel.id = 'animation-panel-' + name;
+      panel.dataset.animationPanel = name;
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('aria-labelledby', button.id);
+      panel.hidden = name !== 'editor';
+      panels[name] = panel;
+    }
+    layout.parentNode.insertBefore(nav, layout);
+    layout.parentNode.insertBefore(panels.editor, layout);
+    panels.editor.appendChild(layout);
+    let last = panels.editor;
+    for (const name of ['monitor','media','outputs']) {
+      last.after(panels[name]);
+      last = panels[name];
+    }
+
+    // The old accordion was initialized while Render was a direct child.
+    setAnimationCardCollapsed(card, false);
+    panels.monitor.appendChild(card);
+    const inner = qs('.animation-card-content', card) || card;
+    const hybrid = qs('#animation-hybrid-source');
+    const video = qs('#animation-video-export');
+    if (hybrid) {
+      const wrapper = document.createElement('article');
+      wrapper.className = 'card glass animation-media-card';
+      wrapper.appendChild(hybrid);
+      panels.media.appendChild(wrapper);
+    }
+    if (video) {
+      const wrapper = document.createElement('article');
+      wrapper.className = 'card glass animation-output-card';
+      wrapper.appendChild(video);
+      panels.outputs.appendChild(wrapper);
+    }
+    const history = qs('.animation-render-history-row');
+    if (history) panels.outputs.prepend(history);
+    const completedPreview = qs('.animation-render-preview-wrap');
+    if (completedPreview) panels.outputs.appendChild(completedPreview);
+    const prompt = qs('#animation-render-prompt-telemetry');
+    const motion = qs('#animation-render-frame-telemetry');
+    const perf = qs('#animation-performance-summary');
+    const expert = document.createElement('details');
+    expert.className = 'animation-monitor-diagnostics';
+    const expertTitle = document.createElement('summary');
+    expertTitle.textContent = 'Render details: prompts, motion and performance';
+    expert.appendChild(expertTitle);
+    for (const item of [prompt,motion,perf]) if (item) expert.appendChild(item);
+    inner.appendChild(expert);
+    qs('#animation-collapse-all')?.setAttribute('title', 'Collapse Editor cards');
+    qs('#animation-expand-all')?.setAttribute('title', 'Expand Editor cards');
+    let previous = 'editor';
+    try { previous = localStorage.getItem(ANIMATION_TAB_KEY) || 'editor'; } catch (_) {}
+    showAnimationTab(previous, { persist: false });
+  }
+
   function bind() {
+    bindHybrid();
     qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
     qs('#animation-expand-all')?.addEventListener('click', () => setAllAnimationCards(false));
+    qs('#animation-import-deforum')?.addEventListener('click', () => {
+      const input = qs('#animation-deforum-file');
+      if (input) {
+        input.value = '';
+        input.click();
+      }
+    });
+    qs('#animation-deforum-file')?.addEventListener('change', chooseDeforumFile);
+    qs('#animation-deforum-close')?.addEventListener('click', closeDeforumImport);
+    qs('#animation-deforum-cancel')?.addEventListener('click', closeDeforumImport);
+    qs('#animation-deforum-refresh')?.addEventListener('click', () => previewDeforumImport());
+    qs('#animation-deforum-create')?.addEventListener('click', createDeforumProject);
+    qs('#animation-deforum-model')?.addEventListener('change', () => previewDeforumImport());
     qs('#animation-new')?.addEventListener('click', createProject);
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
@@ -2593,7 +4033,15 @@
       if (file) uploadSourceImage(file);
     });
     qs('#animation-clear-source')?.addEventListener('click', clearSourceImage);
+    qs('#animation-generate-depth')?.addEventListener('click', () => generateDepthPreview(false));
+    qs('#animation-recompute-depth')?.addEventListener('click', () => generateDepthPreview(true));
+    qs('#animation-clear-depth')?.addEventListener('click', clearDepthPreview);
+    qs('#animation-3d-apply-preset')?.addEventListener('click', applyCamera3DPreset);
+    qs('#animation-cadence-preset')?.addEventListener('change', applyCadencePreset);
+    qs('#animation-cadence')?.addEventListener('input', syncCadencePreset);
+    qs('#animation-cadence')?.addEventListener('change', syncCadencePreset);
     qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
+    qs('#animation-export-video')?.addEventListener('click', startVideoExport);
 
     qs('#animation-start-render')?.addEventListener('click', startAnimationRender);
     qs('#animation-cancel-render')?.addEventListener('click', cancelAnimationRender);
@@ -2606,12 +4054,29 @@
       loadProject(event.target.value);
     });
 
+    qs('#animation-mode')?.addEventListener('change', () => {
+      clearMotionPreviewResult();
+      markDirty({ validate: true });
+      syncAnimationModeUi();
+      refreshInspector();
+    });
+
     qs('#animation-model')?.addEventListener('change', () => {
       populateSamplerSelect('');
+      populateResolutionPresets();
+      const repairedGuidance = repairConstantGuidanceForSelectedModel({ announce: true });
       renderPromptRows();
-      markDirty();
+      markDirty({ validate: repairedGuidance });
       renderSourceState();
     });
+
+    qs('#animation-resolution-preset')?.addEventListener('change',event => {
+      if(!window.MorphorumResolution.apply(event.target,qs('#animation-width'),qs('#animation-height')))return;
+      updateAnimationResolutionHelp();
+      markDirty({validate:true});
+    });
+    for(const id of ['animation-width','animation-height'])
+      qs('#'+id)?.addEventListener('input',syncAnimationResolutionPreset);
 
     qs('#animation-start-mode')?.addEventListener('change', () => {
       markDirty();
@@ -2631,9 +4096,14 @@
     ).forEach(input => {
       if (
         input.id === 'animation-project-select' ||
+        input.id.startsWith('animation-deforum-') ||
+        input.id.startsWith('animation-hybrid-') ||
+        input.id.startsWith('animation-video-') ||
         input.id === 'animation-model' ||
+        input.id === 'animation-resolution-preset' ||
         input.id === 'animation-source-file' ||
         input.id === 'animation-start-mode' ||
+        input.id === 'animation-cadence-preset' ||
         input.id === 'animation-render-select' ||
         INSPECTOR_INPUT_IDS.has(input.id)
       ) {
@@ -2658,6 +4128,7 @@
 
   async function start() {
     setupAnimationAccordions();
+    setupAnimationWorkspaceTabs();
     bind();
     setEditorEnabled(false);
 
@@ -2669,8 +4140,16 @@
       await Promise.all([
         loadCapabilities(),
         loadModels(),
-        loadProjectList({ loadFirst: true }),
+        loadDepthModels(),
+        api('/api/animation/video/availability').then(info => {
+          state.videoAvailability = info;
+          renderVideoExportState();
+        }).catch(() => {
+          state.videoAvailability = { available: false, message: 'Cannot check host FFmpeg installation.' };
+          renderVideoExportState();
+        }),
       ]);
+      await loadProjectList({ loadFirst: true });
       populateSamplerSelect(state.project?.generation?.sampler || '');
     } catch (error) {
       toast('Animation workspace initialization failed', error.message, 'error', 7000);

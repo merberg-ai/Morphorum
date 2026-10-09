@@ -2,7 +2,7 @@ name: Backend tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/3d-depth-quality-b5, feature/deforum-compatibility-hybrid-b6, dev-ui]
     paths:
       - 'backend/**'
       - 'tests/**'
@@ -34,7 +34,7 @@ jobs:
         run: uv venv --python 3.12 .venv
 
       - name: Install CPU PyTorch
-        run: uv pip install --python .venv/bin/python 'torch==2.14.0' --index-url https://download.pytorch.org/whl/cpu
+        run: uv pip install --python .venv/bin/python 'torch==2.14.0' 'torchvision==0.29.0' --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install Morphorum and test tools
         run: |

@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 PYTHON="$ROOT/.venv/bin/python"
+export HF_HUB_DISABLE_PROGRESS_BARS=1
+export HF_HUB_DISABLE_TELEMETRY=1
 HOST="${MORPHORUM_HOST_OVERRIDE:-127.0.0.1}"
 PORT="${MORPHORUM_PORT_OVERRIDE:-7865}"
 

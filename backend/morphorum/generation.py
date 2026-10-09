@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import gc
 import json
+import logging
 import math
+import os
 import random
 import threading
 import time
 import uuid
+import warnings
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +24,59 @@ from .loras import LoRAError, parse_and_resolve_prompt_loras
 from .model_index import get_model
 from .paths import CACHE_DIR, OUTPUTS_DIR, ensure_runtime_dirs
 from .settings import load_settings
+
+class _KnownDiffusersNoiseFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        return not (
+            message.startswith("There are modules in ")
+            and "should be kept in float32: []" in message
+        )
+
+
+_runtime_noise_configured = False
+
+
+def _configure_external_runtime_noise() -> None:
+    global _runtime_noise_configured
+    if _runtime_noise_configured:
+        return
+
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*Already found a `peft_config` attribute.*",
+        category=UserWarning,
+        module=r"peft\.tuners\.tuners_utils",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*`upcast_vae` is deprecated.*",
+        category=FutureWarning,
+        module=r"diffusers\.pipelines\.stable_diffusion_xl.*",
+    )
+
+    try:
+        from huggingface_hub.utils import disable_progress_bars
+
+        disable_progress_bars()
+    except Exception:
+        pass
+
+    try:
+        from diffusers.utils import logging as diffusers_logging
+
+        diffusers_logging.disable_progress_bar()
+        filter_instance = _KnownDiffusersNoiseFilter()
+        for handler in logging.getLogger("diffusers").handlers:
+            handler.addFilter(filter_instance)
+    except Exception:
+        pass
+
+    _runtime_noise_configured = True
+
 
 SUPPORTED_FAMILIES = {"sdxl", "flux", "zimage"}
 FAMILY_IMAGE_EXTENSIONS = {
@@ -237,6 +294,8 @@ class GenerationManager:
         self._pipeline_task: str | None = None
         self._pipeline_loras: dict[str, dict[str, Any]] = {}
         self._active_lora_signature: tuple[tuple[str, float], ...] = ()
+        self._verified_lora_adapters: tuple[str, ...] = ()
+        self._sdxl_transition_profile: dict[str, Any] | None = None
         self._inference_lock = threading.Lock()
 
     def capabilities(self) -> dict[str, dict[str, Any]]:
@@ -268,6 +327,8 @@ class GenerationManager:
                     "name": item["name"],
                     "family": item["family"],
                     "adapter_name": item["adapter_name"],
+                    "compatibility": item.get("compatibility"),
+                    "diagnostics": deepcopy(item.get("diagnostics") or {}),
                 }
                 for item in self._pipeline_loras.values()
             ],
@@ -275,6 +336,7 @@ class GenerationManager:
                 {"adapter_name": name, "weight": weight}
                 for name, weight in self._active_lora_signature
             ],
+            "sdxl_transition_profile": deepcopy(self._sdxl_transition_profile),
             "busy": active,
         }
 
@@ -315,6 +377,54 @@ class GenerationManager:
                 f"Could not read unload-after-generation setting: {exc}",
             )
             return False
+
+    @staticmethod
+    def _sdxl_vae_tiling_enabled() -> bool:
+        try:
+            settings = load_settings()
+            performance = settings.get("performance", {}) if isinstance(settings, dict) else {}
+            return bool(performance.get("sdxl_vae_tiling", False))
+        except Exception as exc:
+            emit_console(
+                "warning",
+                "generation",
+                f"Could not read SDXL VAE tiling setting: {exc}",
+            )
+            return False
+
+    def _apply_sdxl_memory_strategy(self, pipe: Any, device: str) -> bool:
+        """Apply explicit SDXL-only memory experiments.
+
+        B6.0-P keeps these modes opt-in. VAE tiling is intentionally configured
+        at pipeline load so txt2img/img2img wrappers created with from_pipe()
+        share the same VAE configuration without per-frame mutation.
+        """
+        if not self._sdxl_vae_tiling_enabled():
+            return False
+        vae = getattr(pipe, "vae", None)
+        enable_tiling = getattr(vae, "enable_tiling", None)
+        if not callable(enable_tiling):
+            emit_console(
+                "warning",
+                "generation",
+                "SDXL VAE tiling was requested, but this pipeline VAE does not expose enable_tiling(); using native VAE behavior.",
+            )
+            return False
+        try:
+            enable_tiling()
+        except Exception as exc:
+            raise GenerationError(
+                f"Could not enable the requested SDXL VAE tiling mode: {exc}"
+            ) from exc
+
+        base = "native-gpu" if "cuda" in str(device).lower() else str(device)
+        self._pipeline_optimization = f"{base}+vae-tiling"
+        emit_console(
+            "info",
+            "generation",
+            "SDXL VAE tiling enabled for memory-conscious rendering.",
+        )
+        return True
 
     def _ensure_worker(self) -> None:
         with self._lock:
@@ -572,6 +682,16 @@ class GenerationManager:
         if isinstance(exc, GenerationError) and not self._is_cuda_oom(exc):
             return exc
         if self._is_cuda_oom(exc):
+            if "cumemhostalloc" in str(exc).lower():
+                return GenerationError(
+                    f"CUDA pinned-host-memory allocation failed while {action} "
+                    "(cuMemHostAlloc). This can exhaust locked system-memory resources "
+                    "even when ordinary RAM and VRAM appear available. Morphorum will "
+                    "unload the failed pipeline; use the current non-streamed Flux "
+                    "group-offload path on 16/24 GB GPUs and restart Morphorum before "
+                    "retrying. Close other GPU-heavy applications if the allocation "
+                    "still fails."
+                )
             return GenerationError(
                 f"GPU memory exhausted while {action}. Morphorum will unload the failed pipeline and clear "
                 "the CUDA cache. Try a lower resolution, close other GPU-heavy applications, generate fewer "
@@ -579,6 +699,15 @@ class GenerationManager:
             )
         if isinstance(exc, GenerationError):
             return exc
+        if "addmm_cuda" in str(exc).lower() and "float8" in str(exc).lower():
+            return GenerationError(
+                "FP8 CUDA matrix multiplication failed. This usually means a Flux "
+                "layerwise-cast weight was used by PEFT LoRA without being converted "
+                "to BF16/FP16 first. Morphorum should reload Flux in LoRA-safe "
+                "BF16 streamed-offload mode before generation; restart the app "
+                "and retry. Error details: "
+                + str(exc)[:250]
+            )
         return GenerationError(str(exc) or exc.__class__.__name__)
 
     def _fail_job(self, job: GenerationJob, exc: BaseException) -> None:
@@ -601,6 +730,7 @@ class GenerationManager:
             )
 
     def _load_sdxl_pipeline(self, job: GenerationJob, cache_dir: Path):
+        _configure_external_runtime_noise()
         try:
             import torch
             from diffusers import StableDiffusionXLPipeline
@@ -617,6 +747,7 @@ class GenerationManager:
             )
             pipe.set_progress_bar_config(disable=True)
             pipe.to(device)
+            self._apply_sdxl_memory_strategy(pipe, device)
         except Exception as exc:
             if self._is_cuda_oom(exc):
                 raise self._friendly_error(exc, action=f"loading checkpoint '{job.model['name']}'") from exc
@@ -625,7 +756,61 @@ class GenerationManager:
             ) from exc
         return pipe, device, device
 
+    @staticmethod
+    def _flux_uses_fp8_layerwise(*, supports_fp8: bool, loras: list[dict[str, Any]]) -> bool:
+        """Keep FP8 for base Flux, but not when PEFT LoRA wraps its linear layers.
+
+        Diffusers layerwise casting is applied to the original linear modules.
+        After PEFT wraps them, the casting hook may no longer mediate the
+        matrix multiplication, causing addmm_cuda(Float8_e4m3fn) to fail.
+        """
+        return bool(supports_fp8 and not loras)
+
+    def _ensure_flux_lora_compatible_pipeline(
+        self,
+        model: dict[str, Any],
+        loras: list[dict[str, Any]],
+    ) -> None:
+        """A cached base Flux FP8 pipeline cannot be retrofitted safely.
+
+        Recover the checkpoint's original BF16 weights by reloading instead
+        of upcasting already-rounded FP8 weights or altering live casting hooks.
+        """
+        if (
+            str(model.get("family") or "") == "flux"
+            and loras
+            and self._pipeline is not None
+            and self._pipeline_model_id == model.get("id")
+            and "fp8-layerwise" in str(self._pipeline_optimization or "")
+        ):
+            emit_console(
+                "warning",
+                "generation",
+                "Flux LoRA requested while FP8 layerwise base-model pipeline is cached. "
+                "Reloading Flux transformer with BF16 weights and streamed group offload "
+                "because PEFT LoRA layers can bypass FP8 casting hooks.",
+            )
+            self._unload_pipeline()
+
+    @staticmethod
+    def _flux_streaming_offload_enabled(
+        *,
+        vram_bytes: int,
+        with_lora: bool,
+    ) -> bool:
+        """Avoid massive pinned-memory allocations on 16/24 GB GPUs.
+
+        Diffusers v0.40 streamed group offloading pins every parameter of
+        onloaded module groups, using CUDA cuMemHostAlloc. On small VRAM
+        machines, pinned system memory plus prefetch buffers can exhaust
+        CUDA allocations *during hook setup*, even when ordinary RAM is free.
+        Non-streamed group offload retains CPU weights without pinning.
+        """
+        threshold_gib = 48 if with_lora else 32
+        return int(vram_bytes) >= threshold_gib * 1024**3
+
     def _load_flux_pipeline(self, job: GenerationJob, cache_dir: Path):
+        _configure_external_runtime_noise()
         try:
             import torch
             from diffusers import FluxPipeline, FluxTransformer2DModel
@@ -670,7 +855,10 @@ class GenerationManager:
                 and hasattr(torch, "float8_e4m3fn")
                 and hasattr(transformer, "enable_layerwise_casting")
             )
-            if supports_native_fp8:
+            if self._flux_uses_fp8_layerwise(
+                supports_fp8=supports_native_fp8,
+                loras=job.request.loras,
+            ):
                 transformer.enable_layerwise_casting(
                     storage_dtype=torch.float8_e4m3fn,
                     compute_dtype=dtype,
@@ -680,6 +868,14 @@ class GenerationManager:
                     "info",
                     "generation",
                     "Flux fast path enabled: FP8 layerwise weight storage with BF16 compute.",
+                )
+            elif job.request.loras:
+                emit_console(
+                    "info",
+                    "generation",
+                    f"Flux LoRA compatibility mode: keeping transformer weights in "
+                    f"{dtype} instead of FP8; PEFT adapters will use BF16/FP16 "
+                    "compute with streamed group offload.",
                 )
             else:
                 emit_console(
@@ -702,6 +898,18 @@ class GenerationManager:
 
             onload_device = torch.device("cuda")
             offload_device = torch.device("cpu")
+            total_vram = int(torch.cuda.get_device_properties(0).total_memory)
+            use_stream = self._flux_streaming_offload_enabled(
+                vram_bytes=total_vram,
+                with_lora=bool(job.request.loras),
+            )
+            if not use_stream:
+                emit_console(
+                    "info", "generation",
+                    f"Flux memory-safe CPU offload selected for {total_vram / 1024**3:.1f} GiB VRAM: "
+                    "non-streamed transfers avoid CUDA pinned-host-memory allocations "
+                    "during model setup.",
+                )
             offloaded_components = 0
             for component_name in ("transformer", "text_encoder", "text_encoder_2", "vae"):
                 component = getattr(pipe, component_name, None)
@@ -709,6 +917,9 @@ class GenerationManager:
                     continue
                 try:
                     if component_name == "transformer":
+                        # Don't retry an OOM on a partially hooked transformer.
+                        # Streaming retries were repeatedly re-pinning the same
+                        # enormous tensors and could make recovery impossible.
                         try:
                             apply_group_offloading(
                                 component,
@@ -716,33 +927,31 @@ class GenerationManager:
                                 offload_device=offload_device,
                                 offload_type="block_level",
                                 num_blocks_per_group=1,
-                                use_stream=True,
+                                use_stream=use_stream,
                             )
                             emit_console(
-                                "info",
-                                "generation",
-                                "Flux transformer uses streamed block-level group offload (1 block/group).",
+                                "info", "generation",
+                                f"Flux transformer uses {'streamed' if use_stream else 'non-streamed'} "
+                                "block-level CPU group offload (1 block/group).",
                             )
                         except Exception as block_exc:
-                            emit_console(
-                                "warning",
-                                "generation",
-                                f"Flux block-level offload unavailable ({block_exc}); falling back to streamed leaf-level offload.",
-                            )
-                            apply_group_offloading(
-                                component,
-                                onload_device=onload_device,
-                                offload_device=offload_device,
-                                offload_type="leaf_level",
-                                use_stream=True,
-                            )
+                            if self._is_cuda_oom(block_exc):
+                                raise
+                            # Non-OOM errors may reflect unsupported model block
+                            # structures. Never install a second offloader over
+                            # an incompletely installed set of hooks.
+                            raise GenerationError(
+                                f"Flux transformer block-level offload could not initialize: "
+                                f"{block_exc}. No fallback applied to a potentially "
+                                "partially hooked transformer."
+                            ) from block_exc
                     else:
                         apply_group_offloading(
                             component,
                             onload_device=onload_device,
                             offload_device=offload_device,
                             offload_type="leaf_level",
-                            use_stream=True,
+                            use_stream=use_stream,
                         )
                     offloaded_components += 1
                 except Exception as component_exc:
@@ -753,12 +962,13 @@ class GenerationManager:
             if offloaded_components == 0:
                 raise GenerationError("Flux group offload could not find any pipeline components to manage.")
 
-            optimization += "+streamed-group-offload"
+            optimization += "+streamed-group-offload" if use_stream else "+nonstreamed-group-offload"
             self._pipeline_optimization = optimization
             emit_console(
-                "info",
-                "generation",
-                "Flux VRAM headroom mode enabled: streamed group offloading keeps working memory available for activations.",
+                "info", "generation",
+                "Flux VRAM headroom mode enabled: "
+                + ("streamed" if use_stream else "non-streamed")
+                + " CPU group offloading keeps transformer weights off GPU between blocks.",
             )
         except Exception as exc:
             if self._is_cuda_oom(exc):
@@ -791,6 +1001,12 @@ class GenerationManager:
             pass
 
     def release_inference_memory(self, *, synchronize: bool = True) -> None:
+        """Aggressively release transient inference memory.
+
+        This is intentionally reserved for model/task transitions, unloads, failures,
+        and other cold-path cleanup. Animation's hot loop uses
+        maintain_inference_memory() instead so the CUDA allocator stays warm.
+        """
         gc.collect()
         try:
             import torch
@@ -806,24 +1022,124 @@ class GenerationManager:
         except Exception:
             pass
 
+    def maintain_inference_memory(
+        self,
+        *,
+        minimum_free_gib: float = 0.15,
+        minimum_reclaimable_gib: float = 0.50,
+    ) -> dict[str, Any]:
+        """Keep the hot inference allocator intact unless cache pressure is real."""
+        status = self.cuda_memory_status()
+        result: dict[str, Any] = {
+            "trimmed": False,
+            "reason": "allocator-kept-hot",
+            "before": status,
+        }
+        if status is None:
+            result["reason"] = "cuda-unavailable"
+            return result
+
+        reclaimable = max(
+            0.0,
+            float(status["reserved_gib"]) - float(status["allocated_gib"]),
+        )
+        result["reclaimable_gib"] = reclaimable
+        if (
+            float(status["free_gib"]) >= float(minimum_free_gib)
+            or reclaimable < float(minimum_reclaimable_gib)
+        ):
+            return result
+
+        try:
+            import torch
+
+            torch.cuda.empty_cache()
+            result["trimmed"] = True
+            result["reason"] = "low-free-vram-reclaimed-cache"
+            result["after"] = self.cuda_memory_status()
+        except Exception as exc:
+            result["reason"] = f"trim-failed:{exc}"
+        return result
+
     def pipeline_optimization(self) -> str | None:
         return self._pipeline_optimization
 
-    def cuda_memory_status(self) -> dict[str, float] | None:
+    def cuda_memory_status(self) -> dict[str, Any] | None:
+        """Return a read-only CUDA allocator snapshot from this server process.
+
+        The snapshot deliberately avoids synchronize(), empty_cache(), and the
+        heavyweight memory_snapshot() API so it is safe to sample around hot
+        animation phases. Peak values are process-lifetime allocator high-water
+        marks unless explicitly reset elsewhere; they are not physical-residency
+        measurements.
+        """
         try:
             import torch
 
             if not torch.cuda.is_available():
                 return None
-            free_bytes, total_bytes = torch.cuda.mem_get_info()
-            return {
+
+            device_index = int(torch.cuda.current_device())
+            free_bytes, total_bytes = torch.cuda.mem_get_info(device_index)
+            try:
+                stats = torch.cuda.memory_stats(device_index)
+            except Exception:
+                stats = {}
+
+            allocator_backend: str | None = None
+            get_allocator_backend = getattr(torch.cuda, "get_allocator_backend", None)
+            if callable(get_allocator_backend):
+                try:
+                    allocator_backend = str(get_allocator_backend())
+                except Exception:
+                    allocator_backend = None
+
+            def stat_gib(key: str) -> float | None:
+                value = stats.get(key)
+                if not isinstance(value, (int, float)):
+                    return None
+                return float(value) / 1024**3
+
+            result: dict[str, Any] = {
+                "device_index": device_index,
+                "device_name": str(torch.cuda.get_device_name(device_index)),
+                "allocator_backend": allocator_backend,
                 "free_gib": free_bytes / 1024**3,
                 "total_gib": total_bytes / 1024**3,
-                "allocated_gib": torch.cuda.memory_allocated() / 1024**3,
-                "reserved_gib": torch.cuda.memory_reserved() / 1024**3,
+                "allocated_gib": torch.cuda.memory_allocated(device_index) / 1024**3,
+                "reserved_gib": torch.cuda.memory_reserved(device_index) / 1024**3,
+                "peak_allocated_gib": torch.cuda.max_memory_allocated(device_index) / 1024**3,
+                "peak_reserved_gib": torch.cuda.max_memory_reserved(device_index) / 1024**3,
+                "allocation_retries": int(stats.get("num_alloc_retries", 0) or 0),
+                "oom_count": int(stats.get("num_ooms", 0) or 0),
             }
+            for output_key, stat_key in (
+                ("active_gib", "active_bytes.all.current"),
+                ("inactive_split_gib", "inactive_split_bytes.all.current"),
+            ):
+                value = stat_gib(stat_key)
+                if value is not None:
+                    result[output_key] = value
+            return result
         except Exception:
             return None
+
+    def memory_profile(self) -> dict[str, Any]:
+        """Expose current in-process GPU diagnostics without mutating allocator state."""
+        memory = self.cuda_memory_status()
+        return {
+            "schema_version": 1,
+            "cuda_available": memory is not None,
+            "cuda": memory,
+            "model": self.model_status(),
+            "notes": {
+                "peak_scope": (
+                    "PyTorch process allocator high-water marks; not guaranteed "
+                    "simultaneous physical VRAM residency."
+                ),
+                "sampling": "Read-only; no synchronize or cache flush is performed.",
+            },
+        }
 
     def _load_zimage_pipeline(
         self,
@@ -831,6 +1147,7 @@ class GenerationManager:
         cache_dir: Path,
         load_progress_callback: Any = None,
     ):
+        _configure_external_runtime_noise()
         try:
             import torch
             from diffusers import ZImagePipeline
@@ -1104,7 +1421,18 @@ class GenerationManager:
                     f"No {task} pipeline wrapper is registered for model family '{family}'."
                 )
 
-            converted = pipeline_class.from_pipe(pipe)
+            # Diffusers 0.40.0 from_pipe() defaults to float32 when no dtype
+            # is passed, even if the source models are already float16. Since
+            # from_pipe() shares modules, that silently upcasts the resident
+            # SDXL UNet/text encoders and nearly doubles live CUDA allocations
+            # on the txt2img -> img2img switch. Preserve source precision.
+            if family == "sdxl":
+                source_dtype = getattr(getattr(pipe, "unet", None), "dtype", None)
+                if source_dtype is None:
+                    raise GenerationError("Cannot determine the loaded SDXL UNet precision.")
+                converted = pipeline_class.from_pipe(pipe, dtype=source_dtype)
+            else:
+                converted = pipeline_class.from_pipe(pipe)
             converted.set_progress_bar_config(disable=True)
             return converted
         except GenerationError:
@@ -1113,6 +1441,57 @@ class GenerationManager:
             raise GenerationError(
                 f"Could not switch {family} pipeline to {task}: {exc}"
             ) from exc
+
+    def _record_sdxl_transition_stage(self, name: str) -> None:
+        """Read-only CUDA snapshots only during the first task conversion."""
+        profile = self._sdxl_transition_profile
+        if not profile or profile.get("complete"):
+            return
+        try:
+            memory = self.cuda_memory_status()
+            if not isinstance(memory, dict):
+                return
+            profile["stages"].append({
+                "stage": name,
+                "allocated_gib": round(float(memory.get("allocated_gib", 0)), 4),
+                "reserved_gib": round(float(memory.get("reserved_gib", 0)), 4),
+                "free_gib": round(float(memory.get("free_gib", 0)), 4),
+                "allocation_retries": int(memory.get("allocation_retries", 0) or 0),
+                "oom_count": int(memory.get("oom_count", 0) or 0),
+            })
+        except Exception:
+            pass
+
+    @staticmethod
+    def _shared_pipeline_components(previous: Any, converted: Any) -> dict[str, bool]:
+        """Check object identity without touching parameter storage."""
+        return {
+            key: getattr(previous, key) is getattr(converted, key)
+            for key in ("unet", "vae", "text_encoder", "text_encoder_2")
+            if getattr(previous, key, None) is not None
+            and getattr(converted, key, None) is not None
+        }
+
+    def _complete_sdxl_transition_profile(self) -> None:
+        profile = self._sdxl_transition_profile
+        if not profile or profile.get("complete"):
+            return
+        profile["complete"] = True
+        if not profile["stages"]:
+            return
+        sequence = " -> ".join(
+            f"{stage['stage']} {stage['allocated_gib']:.2f} GiB"
+            for stage in profile["stages"]
+        )
+        shared = profile.get("shared_components") or {}
+        sharing = (
+            ", ".join(f"{name}={'shared' if value else 'separate'}"
+                      for name, value in shared.items())
+            if shared else "component identity unavailable"
+        )
+        emit_console("info", "generation",
+                     f"SDXL task transition CUDA allocations: {sequence}; {sharing}. "
+                     "PyTorch allocations only, not physical Windows VRAM residency.")
 
     def _switch_loaded_pipeline_task(
         self,
@@ -1139,11 +1518,80 @@ class GenerationManager:
             "generation",
             f"Switching loaded {model['name']} pipeline from {previous} to {task}.",
         )
+        audit_switch = family == "sdxl" and previous == "txt2img" and task == "img2img"
+        if audit_switch:
+            self._sdxl_transition_profile = {
+                "from_task": previous, "to_task": task,
+                "stages": [], "shared_components": {}, "complete": False,
+            }
+            self._record_sdxl_transition_stage("before_conversion")
         old_pipe = self._pipeline
         self._pipeline = self._convert_pipeline_task(old_pipe, family, task)
         self._pipeline_task = task
+        if audit_switch:
+            try:
+                self._sdxl_transition_profile["shared_components"] = (
+                    self._shared_pipeline_components(old_pipe, self._pipeline)
+                )
+            except Exception:
+                pass
+            self._record_sdxl_transition_stage("after_from_pipe")
+
+        # The new wrapper can share UNet/transformer PEFT layers with the old
+        # pipeline. Resetting the signature alone is unsafe: a LoRA used on
+        # a txt2img starting frame may keep influencing the next img2img
+        # frame even when that frame requests no LoRA at all. Disable on the
+        # converted wrapper before resetting bookkeeping. configure_loras()
+        # will explicitly re-enable and reweight on the next request.
+        if self._active_lora_signature:
+            disable = getattr(self._pipeline, "disable_lora", None)
+            if not callable(disable):
+                raise GenerationError(
+                    f"Cannot safely switch {family} from {previous} to {task}: "
+                    "the converted pipeline cannot disable a previously active LoRA."
+                )
+            try:
+                disable()
+            except Exception as exc:
+                raise GenerationError(
+                    f"Could not deactivate LoRAs after switching {family} "
+                    f"from {previous} to {task}: {exc}"
+                ) from exc
+            emit_console(
+                "info", "generation",
+                f"Disabled previously active LoRAs on {task} task switch; "
+                "the next frame will explicitly configure its requested adapters.",
+            )
+
+        # LoRA adapters live on shared PEFT-enabled components, but task conversion
+        # creates a new pipeline wrapper. Never trust wrapper-local activation state
+        # across that boundary: inspect what survived and force configure_loras()
+        # to reassert the requested adapters on the new task.
+        known_adapters = self._pipeline_adapter_names(self._pipeline)
+        if known_adapters is not None:
+            missing_ids = [
+                lora_id
+                for lora_id, item in self._pipeline_loras.items()
+                if str(item.get("adapter_name") or "") not in known_adapters
+            ]
+            for lora_id in missing_ids:
+                self._pipeline_loras.pop(lora_id, None)
+            if missing_ids:
+                emit_console(
+                    "warning",
+                    "generation",
+                    (
+                        f"{len(missing_ids)} cached LoRA adapter(s) did not survive the "
+                        f"{previous} → {task} pipeline switch; they will be reloaded."
+                    ),
+                )
+        self._active_lora_signature = ()
+        self._verified_lora_adapters = ()
+
         del old_pipe
         self.release_inference_memory()
+        if audit_switch:
+            self._record_sdxl_transition_stage("after_release")
         self._notify_load_progress(
             load_progress_callback,
             1.0,
@@ -1162,6 +1610,7 @@ class GenerationManager:
         model_id = model["id"]
         family = str(model.get("family", ""))
 
+        self._ensure_flux_lora_compatible_pipeline(model, job.request.loras)
         if self._pipeline is not None and self._pipeline_model_id == model_id:
             pipe = self._switch_loaded_pipeline_task(
                 model,
@@ -1239,7 +1688,12 @@ class GenerationManager:
             load_progress_callback,
         )
         self._configure_sampler(pipe, model["family"], request.sampler)
+        if model["family"] == "sdxl":
+            self._record_sdxl_transition_stage("after_sampler")
         self.configure_loras(pipe, model, request.loras)
+        if model["family"] == "sdxl":
+            self._record_sdxl_transition_stage("after_lora_setup")
+            self._complete_sdxl_transition_profile()
         return pipe, generator_device, model
 
     def build_img2img_call_args(
@@ -1294,6 +1748,7 @@ class GenerationManager:
         model_id = model["id"]
         family = str(model.get("family", ""))
 
+        self._ensure_flux_lora_compatible_pipeline(model, job.request.loras)
         if self._pipeline is not None and self._pipeline_model_id == model_id:
             pipe = self._switch_loaded_pipeline_task(
                 model,
@@ -1352,6 +1807,505 @@ class GenerationManager:
         )
         return pipe, generator_device
 
+    @staticmethod
+    def _pipeline_adapter_names(pipe: Any) -> set[str] | None:
+        list_adapters = getattr(pipe, "get_list_adapters", None)
+        if callable(list_adapters):
+            try:
+                listed = list_adapters()
+                if isinstance(listed, dict):
+                    names: set[str] = set()
+                    for values in listed.values():
+                        if isinstance(values, (list, tuple, set)):
+                            names.update(str(value) for value in values)
+                    return names
+            except Exception:
+                pass
+
+        names: set[str] = set()
+        inspected = False
+        for component_name in ("unet", "transformer", "text_encoder", "text_encoder_2"):
+            component = getattr(pipe, component_name, None)
+            config = getattr(component, "peft_config", None)
+            if config is None:
+                continue
+            inspected = True
+            try:
+                names.update(str(value) for value in config.keys())
+            except Exception:
+                try:
+                    names.update(str(value) for value in config)
+                except Exception:
+                    pass
+        return names if inspected else None
+
+    @classmethod
+    def _pipeline_has_adapter(cls, pipe: Any, adapter_name: str) -> bool:
+        names = cls._pipeline_adapter_names(pipe)
+        return names is not None and adapter_name in names
+
+    @staticmethod
+    def _pipeline_active_adapters(pipe: Any) -> set[str] | None:
+        getter = getattr(pipe, "get_active_adapters", None)
+        if callable(getter):
+            try:
+                active = getter()
+                if isinstance(active, str):
+                    return {active}
+                if isinstance(active, (list, tuple, set)):
+                    return {str(value) for value in active}
+            except Exception:
+                pass
+
+        active_names: set[str] = set()
+        inspected = False
+        for component_name in ("unet", "transformer", "text_encoder", "text_encoder_2"):
+            component = getattr(pipe, component_name, None)
+            if component is None:
+                continue
+            for attribute in ("active_adapters", "active_adapter"):
+                active = getattr(component, attribute, None)
+                if active is None:
+                    continue
+                inspected = True
+                try:
+                    if callable(active):
+                        active = active()
+                except Exception:
+                    continue
+                if isinstance(active, str):
+                    active_names.add(active)
+                elif isinstance(active, (list, tuple, set)):
+                    active_names.update(str(value) for value in active)
+        return active_names if inspected else None
+
+    @staticmethod
+    def _delete_adapter_from_component(component: Any, adapter_name: str) -> None:
+        if component is None:
+            return
+        delete_many = getattr(component, "delete_adapters", None)
+        if callable(delete_many):
+            try:
+                delete_many(adapter_name)
+                return
+            except Exception:
+                pass
+        delete_one = getattr(component, "delete_adapter", None)
+        if callable(delete_one):
+            try:
+                delete_one(adapter_name)
+            except Exception:
+                pass
+
+    @classmethod
+    def _delete_pipeline_adapter(cls, pipe: Any, adapter_name: str) -> None:
+        for component_name in ("unet", "transformer", "text_encoder", "text_encoder_2"):
+            cls._delete_adapter_from_component(
+                getattr(pipe, component_name, None),
+                adapter_name,
+            )
+
+    @staticmethod
+    def _adapter_diagnostics(component: Any, adapter_name: str) -> dict[str, Any]:
+        if component is None or not callable(getattr(component, "named_parameters", None)):
+            return {
+                "available": False,
+                "modules": 0,
+                "tensors": 0,
+                "parameters": 0,
+                "abs_sum": 0.0,
+            }
+
+        module_count = 0
+        tensor_count = 0
+        parameter_count = 0
+        absolute_sum = 0.0
+
+        for _module_name, module in component.named_modules():
+            found = False
+            for attribute in (
+                "lora_A",
+                "lora_B",
+                "lora_embedding_A",
+                "lora_embedding_B",
+                "lora_magnitude_vector",
+            ):
+                container = getattr(module, attribute, None)
+                if container is None:
+                    continue
+                try:
+                    present = adapter_name in container
+                except Exception:
+                    present = False
+                if present:
+                    found = True
+            if found:
+                module_count += 1
+
+        for name, parameter in component.named_parameters():
+            if adapter_name not in str(name):
+                continue
+            tensor_count += 1
+            parameter_count += int(parameter.numel())
+            try:
+                absolute_sum += float(
+                    parameter.detach().float().abs().sum().cpu().item()
+                )
+            except Exception:
+                pass
+
+        return {
+            "available": True,
+            "modules": module_count,
+            "tensors": tensor_count,
+            "parameters": parameter_count,
+            "abs_sum": absolute_sum,
+        }
+
+    @classmethod
+    def _verify_adapter_weights(
+        cls,
+        pipe: Any,
+        adapter_name: str,
+        *,
+        component_name: str,
+    ) -> dict[str, Any]:
+        component = getattr(pipe, component_name, None)
+        diagnostics = cls._adapter_diagnostics(component, adapter_name)
+        if diagnostics.get("available") and (
+            diagnostics["tensors"] <= 0
+            or diagnostics["parameters"] <= 0
+            or diagnostics["abs_sum"] <= 0.0
+        ):
+            raise GenerationError(
+                f"LoRA adapter '{adapter_name}' is registered on {component_name}, "
+                "but no usable injected LoRA weights were found "
+                f"(modules={diagnostics['modules']}, "
+                f"tensors={diagnostics['tensors']}, "
+                f"parameters={diagnostics['parameters']}, "
+                f"abs_sum={diagnostics['abs_sum']:.6g})."
+            )
+        return diagnostics
+
+    @staticmethod
+    def _normalize_sdxl_text_encoder_keys(
+        pipe: Any,
+        state_dict: dict[str, Any],
+        network_alphas: Any,
+        metadata: Any,
+    ) -> tuple[dict[str, Any], Any, Any, dict[str, int]]:
+        """Align SDXL CLIP LoRA namespaces to the actual Transformers modules.
+
+        Kohya-converted SDXL TE keys often end in `to_q_lora.down/up`,
+        rather than `lora_A/B`. Compare rank targets only *after* the same
+        Diffusers -> PEFT conversions performed by the text encoder loader.
+        """
+        from diffusers.utils.state_dict_utils import (
+            convert_state_dict_to_diffusers,
+            convert_state_dict_to_peft,
+        )
+
+        mappings: dict[str, str] = {}
+        component_counts: dict[str, int] = {}
+        modules_by_component: dict[str, set[str]] = {}
+        for component_name in ("text_encoder", "text_encoder_2"):
+            prefix = f"{component_name}."
+            source_keys = [
+                key for key in state_dict
+                if str(key).startswith(prefix) and "lora" in str(key).lower()
+            ]
+            if not source_keys:
+                continue
+            encoder = getattr(pipe, component_name, None)
+            named_modules = getattr(encoder, "named_modules", None)
+            if not callable(named_modules):
+                raise GenerationError(
+                    f"Cannot inspect {component_name} modules for SDXL LoRA compatibility."
+                )
+            module_names = {name for name, _ in named_modules()}
+            modules_by_component[component_name] = module_names
+            has_model_wrapper = any(name.startswith("text_model.") for name in module_names)
+            has_flat_encoder = any(name.startswith("encoder.") for name in module_names)
+            has_legacy_keys = any(
+                str(key).startswith(prefix + "text_model.")
+                for key in source_keys
+            )
+            has_flat_keys = any(
+                str(key).startswith(prefix + "encoder.")
+                for key in source_keys
+            )
+            if has_legacy_keys and has_flat_encoder and not has_model_wrapper:
+                mappings[prefix + "text_model."] = prefix
+            elif has_flat_keys and has_model_wrapper and not has_flat_encoder:
+                mappings[prefix + "encoder."] = prefix + "text_model.encoder."
+            component_counts[component_name] = len(source_keys)
+
+        if not mappings:
+            raise GenerationError(
+                "No SDXL text-encoder module namespace mismatch was detected."
+            )
+
+        # Remap *all* weight keys, network alphas, and metadata in the affected
+        # text-encoder namespace, never UNet or unrelated model families.
+        prefixes = sorted(mappings, key=len, reverse=True)
+
+        def remap(values: Any) -> Any:
+            if not isinstance(values, dict):
+                return values
+            result = {}
+            for key, value in values.items():
+                target = str(key)
+                for old in prefixes:
+                    if target.startswith(old):
+                        target = mappings[old] + target[len(old):]
+                        break
+                if target in result:
+                    raise GenerationError(
+                        f"SDXL LoRA key normalization collision: {target}"
+                    )
+                result[target] = value
+            return result
+
+        fixed_state = remap(state_dict)
+        # This is Diffusers 0.40's own two-pass text-encoder conversion.
+        supported = (".q_proj", ".k_proj", ".v_proj", ".out_proj", ".fc1", ".fc2")
+        for component_name, module_names in modules_by_component.items():
+            prefix = f"{component_name}."
+            relative = {
+                key[len(prefix):]: value
+                for key, value in fixed_state.items()
+                if str(key).startswith(prefix)
+            }
+            try:
+                peft_state = convert_state_dict_to_peft(
+                    convert_state_dict_to_diffusers(relative)
+                )
+            except Exception as exc:
+                raise GenerationError(
+                    f"Cannot convert {component_name} LoRA keys to PEFT: {exc}"
+                ) from exc
+            rank_keys = [
+                key for key in peft_state
+                if key.endswith(".lora_B.weight")
+            ]
+            supported_modules = {
+                name for name in module_names if name.endswith(supported)
+            }
+            mismatched = [
+                key for key in rank_keys
+                if key.removesuffix(".lora_B.weight") not in supported_modules
+            ]
+            if not rank_keys or mismatched:
+                raise GenerationError(
+                    f"SDXL {component_name} has no complete CLIP LoRA rank match "
+                    f"({len(mismatched)} unmatched of {len(rank_keys)} B matrices)."
+                )
+
+        return (
+            fixed_state,
+            remap(network_alphas),
+            remap(metadata),
+            component_counts,
+        )
+
+    @classmethod
+    def _load_sdxl_full_text_encoder_adapter(
+        cls,
+        pipe: Any,
+        path: Path,
+        adapter_name: str,
+    ) -> dict[str, Any]:
+        """Retry a rank-mismatched SDXL LoRA with both CLIP encoders intact."""
+        state_loader = getattr(pipe, "lora_state_dict", None)
+        unet_loader = getattr(pipe, "load_lora_into_unet", None)
+        encoder_loader = getattr(pipe, "load_lora_into_text_encoder", None)
+        unet = getattr(pipe, "unet", None)
+        if (
+            not callable(state_loader)
+            or not callable(unet_loader)
+            or not callable(encoder_loader)
+            or getattr(unet, "config", None) is None
+        ):
+            raise GenerationError("SDXL full LoRA compatibility APIs unavailable.")
+
+        parsed = state_loader(
+            str(path.parent),
+            weight_name=path.name,
+            local_files_only=True,
+            unet_config=unet.config,
+            return_lora_metadata=True,
+        )
+        if not isinstance(parsed, tuple) or len(parsed) < 2:
+            raise GenerationError("Unexpected SDXL LoRA state-dict result.")
+        state_dict, network_alphas = parsed[:2]
+        metadata = parsed[2] if len(parsed) >= 3 else None
+        if not isinstance(state_dict, dict) or not state_dict:
+            raise GenerationError("SDXL LoRA state dict is empty.")
+
+        state_dict, network_alphas, metadata, source_counts = (
+            cls._normalize_sdxl_text_encoder_keys(
+                pipe, state_dict, network_alphas, metadata
+            )
+        )
+        unet_state = {
+            key: value for key, value in state_dict.items()
+            if not str(key).startswith(("text_encoder.", "text_encoder_2."))
+        }
+
+        # The normal loader may have injected the UNet and/or first text
+        # encoder before the rank error. Remove that partial adapter first.
+        cls._delete_pipeline_adapter(pipe, adapter_name)
+        if unet_state:
+            kwargs = {
+                "state_dict": state_dict,
+                "network_alphas": network_alphas,
+                "unet": unet,
+                "adapter_name": adapter_name,
+                "_pipeline": pipe,
+            }
+            if metadata is not None:
+                kwargs["metadata"] = metadata
+            try:
+                unet_loader(**kwargs)
+            except TypeError:
+                kwargs.pop("metadata", None)
+                unet_loader(**kwargs)
+
+        for component_name in source_counts:
+            encoder_loader(
+                state_dict,
+                network_alphas=network_alphas,
+                text_encoder=getattr(pipe, component_name),
+                prefix=component_name,
+                lora_scale=getattr(pipe, "lora_scale", 1.0),
+                adapter_name=adapter_name,
+                metadata=metadata,
+                _pipeline=pipe,
+            )
+
+        diagnostics: dict[str, Any] = {
+            "normalized_text_encoder_tensors": sum(source_counts.values()),
+            "components": {},
+        }
+        expected = (["unet"] if unet_state else []) + list(source_counts)
+        for component_name in expected:
+            observed = cls._adapter_diagnostics(
+                getattr(pipe, component_name, None), adapter_name
+            )
+            if (
+                not observed["available"]
+                or observed["tensors"] <= 0
+                or observed["parameters"] <= 0
+                or observed["abs_sum"] <= 0
+            ):
+                raise GenerationError(
+                    f"SDXL LoRA {adapter_name} loaded no verifiable "
+                    f"{component_name} parameters after normalization."
+                )
+            diagnostics["components"][component_name] = observed
+        return diagnostics
+
+    @classmethod
+    def _load_sdxl_unet_only_adapter(
+        cls,
+        pipe: Any,
+        path: Path,
+        adapter_name: str,
+    ) -> dict[str, Any]:
+        state_loader = getattr(pipe, "lora_state_dict", None)
+        unet_loader = getattr(pipe, "load_lora_into_unet", None)
+        unet = getattr(pipe, "unet", None)
+        if not callable(state_loader) or not callable(unet_loader) or unet is None:
+            raise GenerationError(
+                "The active SDXL pipeline does not expose the Diffusers "
+                "state-dict and UNet-only LoRA loader APIs."
+            )
+
+        # Match StableDiffusionXLLoraLoaderMixin.load_lora_weights(): the UNet
+        # config is required to map Kohya/SGM input_blocks/output_blocks indices
+        # to actual SDXL down_blocks/up_blocks module paths. Without it the
+        # fallback silently generates invalid targets such as down_blocks.7.1.
+        unet_config = getattr(unet, "config", None)
+        if unet_config is None:
+            raise GenerationError(
+                "The SDXL UNet configuration is missing; cannot safely remap "
+                "Kohya/SGM LoRA block indices for UNet-only loading."
+            )
+
+        try:
+            parsed = state_loader(
+                str(path.parent),
+                weight_name=path.name,
+                local_files_only=True,
+                unet_config=unet_config,
+                return_lora_metadata=True,
+            )
+        except Exception as exc:
+            raise GenerationError(
+                f"Could not parse SDXL LoRA '{path.name}' for UNet-only loading: {exc}"
+            ) from exc
+
+        if not isinstance(parsed, tuple) or len(parsed) < 2:
+            raise GenerationError(
+                "Diffusers returned an unexpected SDXL LoRA state-dict result."
+            )
+
+        state_dict = parsed[0]
+        network_alphas = parsed[1]
+        metadata = parsed[2] if len(parsed) >= 3 else None
+        if not isinstance(state_dict, dict) or not state_dict:
+            raise GenerationError("Diffusers parsed an empty SDXL LoRA state dict.")
+
+        unet_state = {
+            key: value
+            for key, value in state_dict.items()
+            if not str(key).startswith(("text_encoder.", "text_encoder_2."))
+        }
+        skipped = len(state_dict) - len(unet_state)
+        if not unet_state:
+            raise GenerationError(
+                "The SDXL LoRA contains no denoiser/UNet weights after parsing."
+            )
+
+        if isinstance(network_alphas, dict):
+            unet_alphas = {
+                key: value
+                for key, value in network_alphas.items()
+                if not str(key).startswith(("text_encoder.", "text_encoder_2."))
+            }
+        else:
+            unet_alphas = network_alphas
+
+        cls._delete_pipeline_adapter(pipe, adapter_name)
+
+        kwargs = {
+            "state_dict": unet_state,
+            "network_alphas": unet_alphas,
+            "unet": unet,
+            "adapter_name": adapter_name,
+            "_pipeline": pipe,
+        }
+        if metadata is not None:
+            kwargs["metadata"] = metadata
+        try:
+            unet_loader(**kwargs)
+        except TypeError:
+            kwargs.pop("metadata", None)
+            unet_loader(**kwargs)
+        except Exception as exc:
+            raise GenerationError(
+                f"Could not inject SDXL LoRA '{path.name}' directly into the UNet: {exc}"
+            ) from exc
+
+        diagnostics = cls._verify_adapter_weights(
+            pipe,
+            adapter_name,
+            component_name="unet",
+        )
+        diagnostics["parsed_tensors"] = len(unet_state)
+        diagnostics["skipped_text_encoder_tensors"] = skipped
+        return diagnostics
+
     def configure_loras(
         self,
         pipe: Any,
@@ -1371,8 +2325,17 @@ class GenerationManager:
                 if callable(disable):
                     disable()
                 self._active_lora_signature = ()
+                self._verified_lora_adapters = ()
                 emit_console("info", "generation", "LoRA adapters disabled for base-model inference.")
             return []
+
+        try:
+            import peft  # noqa: F401
+        except Exception as exc:
+            raise GenerationError(
+                "PEFT is required for Diffusers LoRA adapters but is not available. "
+                "Run the Morphorum updater so Python dependencies are refreshed."
+            ) from exc
 
         load = getattr(pipe, "load_lora_weights", None)
         set_adapters = getattr(pipe, "set_adapters", None)
@@ -1400,7 +2363,30 @@ class GenerationManager:
             adapter_name = str(item.get("adapter_name") or f"morphorum_{lora_id}")
             weight = float(item.get("weight", 1.0))
 
+            cached = self._pipeline_loras.get(lora_id)
+            if cached is not None:
+                known_adapters = self._pipeline_adapter_names(pipe)
+                cached_adapter_name = str(
+                    cached.get("adapter_name") or adapter_name
+                )
+                if (
+                    known_adapters is not None
+                    and cached_adapter_name not in known_adapters
+                ):
+                    self._pipeline_loras.pop(lora_id, None)
+                    self._active_lora_signature = ()
+                    self._verified_lora_adapters = ()
+                    emit_console(
+                        "warning",
+                        "generation",
+                        (
+                            f"Cached LoRA {cached.get('name') or path.name} is missing "
+                            "from the active pipeline; reloading its adapter weights."
+                        ),
+                    )
+
             if lora_id not in self._pipeline_loras:
+                compatibility: str | None = None
                 try:
                     load(
                         str(path.parent),
@@ -1408,21 +2394,107 @@ class GenerationManager:
                         adapter_name=adapter_name,
                         local_files_only=True,
                     )
+                except IndexError as exc:
+                    if family != "sdxl" or path.suffix.lower() != ".safetensors":
+                        raise GenerationError(
+                            f"Could not load {family} LoRA '{item.get('name') or path.name}': "
+                            f"{type(exc).__name__}: {exc}"
+                        ) from exc
+
+                    try:
+                        diagnostics = self._load_sdxl_full_text_encoder_adapter(
+                            pipe, path, adapter_name
+                        )
+                    except Exception as full_exc:
+                        try:
+                            diagnostics = self._load_sdxl_unet_only_adapter(
+                                pipe, path, adapter_name
+                            )
+                        except Exception as fallback_exc:
+                            raise GenerationError(
+                                f"Could not load sdxl LoRA '{item.get('name') or path.name}'. "
+                                f"Normal loader: {type(exc).__name__}: {exc}; "
+                                f"full text-encoder retry: {type(full_exc).__name__}: {full_exc}; "
+                                f"UNet-only fallback: {fallback_exc}"
+                            ) from fallback_exc
+                        compatibility = "sdxl-clean-unet-only"
+                        emit_console(
+                            "warning",
+                            "generation",
+                            (
+                                f"SDXL LoRA {path.name}: full text-encoder retry failed "
+                                f"({type(full_exc).__name__}: {full_exc}). "
+                                "Using verified UNet-only compatibility mode."
+                            ),
+                        )
+                        emit_console(
+                            "info",
+                            "generation",
+                            (
+                                f"Verified SDXL LoRA UNet payload {adapter_name}: "
+                                f"{diagnostics['modules']} module(s), "
+                                f"{diagnostics['tensors']} parameter tensors, "
+                                f"{diagnostics['parameters']:,} parameters; "
+                                f"{diagnostics['skipped_text_encoder_tensors']} "
+                                "text-encoder tensors skipped."
+                            ),
+                        )
+                    else:
+                        compatibility = "sdxl-text-encoder-normalized"
+                        component_info = diagnostics["components"]
+                        emit_console(
+                            "info",
+                            "generation",
+                            (
+                                f"SDXL LoRA {path.name}: repaired Transformers 5 "
+                                "text-encoder module naming; verified full adapter "
+                                "payload on "
+                                + ", ".join(
+                                    f"{name} ({info['tensors']} tensors)"
+                                    for name, info in component_info.items()
+                                )
+                                + "."
+                            ),
+                        )
                 except Exception as exc:
                     raise GenerationError(
-                        f"Could not load {family} LoRA '{item.get('name') or path.name}': {exc}"
+                        f"Could not load {family} LoRA '{item.get('name') or path.name}': "
+                        f"{type(exc).__name__}: {exc}"
                     ) from exc
+                component_name = "unet" if family == "sdxl" else "transformer"
+                if family == "sdxl":
+                    unet_diagnostics = self._verify_adapter_weights(
+                        pipe,
+                        adapter_name,
+                        component_name=component_name,
+                    )
+                    if compatibility == "sdxl-text-encoder-normalized":
+                        # Preserve independently verified CLIP text-encoder
+                        # counts and normalization provenance in job diagnostics.
+                        diagnostics["components"]["unet"] = unet_diagnostics
+                    else:
+                        diagnostics = unet_diagnostics
+                else:
+                    diagnostics = self._adapter_diagnostics(
+                        getattr(pipe, component_name, None),
+                        adapter_name,
+                    )
                 self._pipeline_loras[lora_id] = {
                     "id": lora_id,
                     "name": str(item.get("name") or path.stem),
                     "family": family,
                     "path": str(path),
                     "adapter_name": adapter_name,
+                    "compatibility": compatibility,
+                    "diagnostics": diagnostics,
                 }
                 emit_console(
                     "info",
                     "generation",
-                    f"Loaded {family} LoRA adapter: {path.name}.",
+                    (
+                        f"Loaded {family} LoRA adapter: {path.name}"
+                        + (" (U-Net-only compatibility mode)." if compatibility == "sdxl-clean-unet-only" else (" (full text-encoder compatibility mode)." if compatibility == "sdxl-text-encoder-normalized" else "."))
+                    ),
                 )
 
             adapter_names.append(
@@ -1443,7 +2515,56 @@ class GenerationManager:
                 raise GenerationError(
                     f"Could not activate LoRA adapters for {family}: {exc}"
                 ) from exc
+
+            known_adapters = self._pipeline_adapter_names(pipe)
+            if known_adapters is not None:
+                missing = [
+                    name for name in adapter_names
+                    if name not in known_adapters
+                ]
+                if missing:
+                    raise GenerationError(
+                        "LoRA activation returned without an error, but the active "
+                        "pipeline does not contain adapter(s): "
+                        + ", ".join(missing)
+                    )
+
+            active_adapters = self._pipeline_active_adapters(pipe)
+            if active_adapters is not None:
+                inactive = [
+                    name for name in adapter_names
+                    if name not in active_adapters
+                ]
+                if inactive:
+                    raise GenerationError(
+                        "LoRA adapter weights were set, but Diffusers/PEFT reports "
+                        "adapter(s) inactive: "
+                        + ", ".join(inactive)
+                    )
+
             self._active_lora_signature = signature
+            adapter_signature = tuple(adapter_names)
+            if adapter_signature != self._verified_lora_adapters:
+                verification = (
+                    "Diffusers active-adapter state"
+                    if active_adapters is not None
+                    else (
+                        "PEFT adapter registry"
+                        if known_adapters is not None
+                        else "adapter API call"
+                    )
+                )
+                emit_console(
+                    "info",
+                    "generation",
+                    (
+                        f"Verified LoRA attachment on {self._pipeline_task or 'current'} "
+                        f"pipeline via {verification}: "
+                        + ", ".join(adapter_names)
+                    ),
+                )
+                self._verified_lora_adapters = adapter_signature
+
             emit_console(
                 "info",
                 "generation",
@@ -1524,6 +2645,8 @@ class GenerationManager:
         self._pipeline_task = None
         self._pipeline_loras = {}
         self._active_lora_signature = ()
+        self._verified_lora_adapters = ()
+        self._sdxl_transition_profile = None
 
         # Always collect here, even if model loading failed before the pipeline
         # could be registered on the manager.

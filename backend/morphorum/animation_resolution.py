@@ -171,15 +171,64 @@ def resolve_project_frame(
         records=lora_records,
     )
 
-    motion = {
-        key.split(".", 1)[1]: _resolve_field(project, key, frame)
-        for key in SCHEDULE_FIELDS
-        if key.startswith("motion.")
-    }
+    animation_mode = str(animation.get("mode") or "2d").strip().lower()
+    if animation_mode not in {"2d", "3d"}:
+        animation_mode = "2d"
 
+    def resolve_camera_group(
+        prefix: str,
+        *,
+        strict: bool,
+        defaults: dict[str, float],
+    ) -> dict[str, float | int]:
+        resolved: dict[str, float | int] = {}
+        for key in SCHEDULE_FIELDS:
+            if not key.startswith(prefix + "."):
+                continue
+            name = key.split(".", 1)[1]
+            try:
+                resolved[name] = _resolve_field(project, key, frame)
+            except ScheduleError:
+                if strict:
+                    raise
+                resolved[name] = defaults[name]
+        return resolved
+
+    motion = resolve_camera_group(
+        "motion",
+        strict=animation_mode == "2d",
+        defaults={
+            "angle": 0.0,
+            "zoom": 1.0,
+            "translation_x": 0.0,
+            "translation_y": 0.0,
+        },
+    )
     motion["border_mode"] = str(
         project.get("motion", {}).get("border_mode", "replicate") or "replicate"
     ).strip().lower()
+
+    camera_3d = resolve_camera_group(
+        "camera_3d",
+        strict=animation_mode == "3d",
+        defaults={
+            "translation_x": 0.0,
+            "translation_y": 0.0,
+            "translation_z": 0.0,
+            "rotation_x": 0.0,
+            "rotation_y": 0.0,
+            "rotation_z": 0.0,
+            "fov": 40.0,
+        },
+    )
+
+    camera_3d_settings = project.get("camera_3d", {})
+    camera_3d["projection_mode"] = str(
+        camera_3d_settings.get("projection_mode") or "legacy"
+    )
+    camera_3d["hole_fill"] = str(
+        camera_3d_settings.get("hole_fill") or "nearest"
+    )
 
     generation = {
         key.split(".", 1)[1]: _resolve_field(project, key, frame)
@@ -189,6 +238,12 @@ def resolve_project_frame(
     source_generation = project.get("generation", {})
     generation["sampler"] = str(source_generation.get("sampler", "") or "")
     generation["seed"] = _resolved_seed(project, frame)
+
+    cadence = {
+        key.split(".", 1)[1]: _resolve_field(project, key, frame)
+        for key in SCHEDULE_FIELDS
+        if key.startswith("cadence.")
+    }
 
     tracks = project.get("tracks", {})
     timeline_schema = (
@@ -202,6 +257,7 @@ def resolve_project_frame(
         "max_frames": max_frames,
         "fps": fps,
         "time_seconds": frame / fps,
+        "animation_mode": animation_mode,
         "timeline": {
             "schema_version": timeline_schema,
             "source": "tracks",
@@ -217,7 +273,9 @@ def resolve_project_frame(
         },
         "loras": resolved_loras,
         "motion": motion,
+        "camera_3d": camera_3d,
         "generation": generation,
+        "cadence": cadence,
     }
 
 
@@ -320,12 +378,106 @@ def _zoom_schedule_issues(
     return issues
 
 
+def _fov_schedule_issues(
+    project: dict[str, Any],
+    *,
+    max_frames: int,
+    fps: float,
+    seed: int,
+) -> list[dict[str, Any]]:
+    schedule = _schedule_text(project, "camera_3d.fov")
+    interpolation = _track_interpolation(project, "camera_3d.fov")
+    if max_frames <= 5000:
+        frames = range(max_frames)
+    else:
+        last = max_frames - 1
+        frames = sorted(
+            {
+                int(round(index * last / 999))
+                for index in range(1000)
+            }
+        )
+
+    for frame in frames:
+        try:
+            value = float(
+                resolve_numeric_schedule(
+                    schedule,
+                    frame=frame,
+                    max_frames=max_frames,
+                    seed=seed,
+                    fps=fps,
+                    interpolation=interpolation,
+                )
+            )
+        except ScheduleError:
+            return []
+        if not math.isfinite(value) or value <= 1.0 or value >= 179.0:
+            return [
+                {
+                    "severity": "error",
+                    "frame": frame,
+                    "message": (
+                        "3D field of view must resolve between 1 and 179 degrees. "
+                        f"Frame {frame} resolves to {value:g}; 40 degrees is the "
+                        "default starting point."
+                    ),
+                }
+            ]
+    return []
+
+
+def _cadence_schedule_issues(
+    project: dict[str, Any],
+    *,
+    max_frames: int,
+    fps: float,
+    seed: int,
+) -> list[dict[str, Any]]:
+    schedule = _schedule_text(project, "cadence.diffusion")
+    interpolation = _track_interpolation(project, "cadence.diffusion")
+    frames = range(max_frames) if max_frames <= 5000 else sorted(
+        {int(round(index * (max_frames - 1) / 999)) for index in range(1000)}
+    )
+    for frame in frames:
+        try:
+            value = int(round(resolve_numeric_schedule(
+                schedule,
+                frame=frame,
+                max_frames=max_frames,
+                seed=seed,
+                fps=fps,
+                interpolation=interpolation,
+            )))
+        except ScheduleError:
+            return []
+        if value < 1 or value > 64:
+            return [{
+                "severity": "error",
+                "frame": frame,
+                "message": (
+                    "Diffusion cadence must resolve to an integer from 1 through 64. "
+                    f"Frame {frame} resolves to {value}; cadence 1 diffuses every frame, "
+                    "while higher values diffuse anchor frames and transform the frames between them."
+                ),
+            }]
+    return []
+
+
 def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
     max_frames, fps, expression_seed = _project_context(project)
     fields: dict[str, Any] = {}
     all_issues: list[dict[str, Any]] = []
 
+    animation_mode = str(project.get("animation", {}).get("mode") or "2d").strip().lower()
+    if animation_mode not in {"2d", "3d"}:
+        animation_mode = "2d"
+
     for field in SCHEDULE_FIELDS:
+        if animation_mode == "2d" and field.startswith("camera_3d."):
+            continue
+        if animation_mode == "3d" and field.startswith("motion."):
+            continue
         try:
             interpolation = _track_interpolation(project, field)
             result = validate_numeric_schedule(
@@ -349,7 +501,7 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
             all_issues.append({"field": field, **issue})
 
     zoom_field = fields.get("motion.zoom", {})
-    if zoom_field.get("valid", False):
+    if animation_mode == "2d" and zoom_field.get("valid", False):
         zoom_issues = _zoom_schedule_issues(
             project,
             max_frames=max_frames,
@@ -361,6 +513,34 @@ def validate_project_schedules(project: dict[str, Any]) -> dict[str, Any]:
             zoom_field["valid"] = False
         for issue in zoom_issues:
             all_issues.append({"field": "motion.zoom", **issue})
+
+    fov_field = fields.get("camera_3d.fov", {})
+    if animation_mode == "3d" and fov_field.get("valid", False):
+        fov_issues = _fov_schedule_issues(
+            project,
+            max_frames=max_frames,
+            fps=fps,
+            seed=expression_seed,
+        )
+        fov_field.setdefault("issues", []).extend(fov_issues)
+        if any(issue.get("severity") == "error" for issue in fov_issues):
+            fov_field["valid"] = False
+        for issue in fov_issues:
+            all_issues.append({"field": "camera_3d.fov", **issue})
+
+    cadence_field = fields.get("cadence.diffusion", {})
+    if cadence_field.get("valid", False):
+        cadence_issues = _cadence_schedule_issues(
+            project,
+            max_frames=max_frames,
+            fps=fps,
+            seed=expression_seed,
+        )
+        cadence_field.setdefault("issues", []).extend(cadence_issues)
+        if any(issue.get("severity") == "error" for issue in cadence_issues):
+            cadence_field["valid"] = False
+        for issue in cadence_issues:
+            all_issues.append({"field": "cadence.diffusion", **issue})
 
     family = str(project.get("model", {}).get("family") or "").strip().lower()
     prompt_records: list[dict[str, Any]] | None = None

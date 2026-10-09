@@ -51,6 +51,15 @@ def command_doctor(args: argparse.Namespace) -> int:
 def command_self_test(_: argparse.Namespace) -> int:
     ensure_runtime_dirs()
     try:
+        try:
+            import peft  # noqa: F401
+        except Exception as exc:
+            raise RuntimeError(f"PEFT LoRA backend is unavailable: {exc}") from exc
+        try:
+            import torchvision  # noqa: F401
+        except Exception as exc:
+            raise RuntimeError(f"torchvision image backend is unavailable: {exc}") from exc
+
         with TestClient(app) as client:
             health_response = client.get("/api/health")
             health_response.raise_for_status()
@@ -94,6 +103,16 @@ def command_self_test(_: argparse.Namespace) -> int:
             if not any(item.get("id") == "zimage-turbo" for item in managed_catalog):
                 raise RuntimeError("managed model catalog is missing Z-Image-Turbo")
 
+            depth_response = client.get("/api/animation/depth/models")
+            depth_response.raise_for_status()
+            depth_models = depth_response.json().get("models", [])
+            if not any(
+                item.get("id") == "depth-anything-v2-small"
+                and item.get("depth_type") == "relative"
+                for item in depth_models
+            ):
+                raise RuntimeError("depth model catalog is missing Depth Anything V2 Small")
+
             animation_projects_response = client.get("/api/animation/projects")
             animation_projects_response.raise_for_status()
             if not isinstance(animation_projects_response.json().get("projects"), list):
@@ -109,6 +128,7 @@ def command_self_test(_: argparse.Namespace) -> int:
                     "width": 512,
                     "height": 512,
                     "prompt_transition": "blend",
+                    "mode": "2d",
                 },
                 "model": {"model_id": "", "family": "", "variant": ""},
                 "prompts": {"0": "start", "10": "end"},
@@ -129,6 +149,9 @@ def command_self_test(_: argparse.Namespace) -> int:
                     "seed_behavior": "fixed",
                     "seed_increment": 1,
                 },
+                "cadence": {
+                    "diffusion": "0:(2)",
+                },
             }
             resolved_response = client.post(
                 "/api/animation/resolve-frame",
@@ -138,6 +161,10 @@ def command_self_test(_: argparse.Namespace) -> int:
             resolved = resolved_response.json().get("resolved", {})
             if abs(float(resolved.get("motion", {}).get("angle", -999)) - 5.0) > 1e-6:
                 raise RuntimeError("animation schedule resolver returned an unexpected frame state")
+            if abs(float(resolved.get("camera_3d", {}).get("fov", -999)) - 40.0) > 1e-6:
+                raise RuntimeError("3D camera resolver returned an unexpected default FOV")
+            if int(resolved.get("cadence", {}).get("diffusion", -1)) != 2:
+                raise RuntimeError("diffusion cadence resolver returned an unexpected value")
 
             motion_source = Image.new("RGB", (16, 16), "black")
             motion_matrix = _frame_transform_matrix(
@@ -177,7 +204,7 @@ def command_self_test(_: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Morphorum self-test failed: {exc}", file=sys.stderr)
         return 1
-    print("Morphorum self-test passed: API, frontend, settings, animation projects/schedules/2D motion, managed models, model index, generation capabilities, and console OK.")
+    print("Morphorum self-test passed: API, frontend, settings, animation mode/schedules/cadence, 2D/3D render state, PEFT LoRA backend, torchvision image backend, depth registry, managed models, model index, generation capabilities, and console OK.")
     return 0
 
 

@@ -207,3 +207,87 @@ def test_zoom_out_factor_below_one_is_valid() -> None:
     )
     assert np.isfinite(matrix).all()
     assert np.linalg.det(matrix) > 0
+
+
+def test_b53_camera_preview_simulates_cpu_depth_and_tracks_coverage(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import morphorum.animation_motion as motion
+
+    project = sample_project(max_frames=5)
+    project["animation"]["mode"] = "3d"
+    project["camera_3d"] = {
+        "translation_x": "0:(0.2)", "translation_y": "0:(0)",
+        "translation_z": "0:(0)", "rotation_x": "0:(0)",
+        "rotation_y": "0:(0)", "rotation_z": "0:(0)",
+        "fov": "0:(40)", "projection_mode": "splat",
+        "hole_fill": "nearest", "depth_resolution": "auto",
+    }
+    image = Image.fromarray(
+        np.tile(np.arange(64, dtype=np.uint8)[None, :, None], (64, 1, 3)) * 4,
+        mode="RGB",
+    )
+    calls: list[str] = []
+
+    def fake_estimate(frame: Image.Image, **kwargs):
+        calls.append(str(kwargs.get("device")))
+        return {"cache_key": "constant", "cache_hit": False}
+
+    monkeypatch.setattr(motion.depth_manager, "estimate", fake_estimate)
+    monkeypatch.setattr(
+        motion.depth_manager,
+        "load_cached_array",
+        lambda _key: np.full((64, 64), 0.5, dtype=np.float32),
+    )
+    monkeypatch.setattr(motion.depth_manager, "unload", lambda: calls.append("unload"))
+    progress = []
+    plain = motion.render_motion_preview(
+        project, image, tmp_path / "plain.gif",
+        max_dimension=64, max_capture_frames=5,
+        progress_callback=lambda frame, maximum: progress.append((frame, maximum)),
+    )
+    overlay = motion.render_motion_preview(
+        project, image, tmp_path / "overlay.gif",
+        max_dimension=64, max_capture_frames=5, highlight_holes=True,
+    )
+    assert plain["mode"] == "3d"
+    assert plain["depth_device"] == "cpu"
+    assert plain["source_frames"] == plain["captured_frames"] == 5
+    assert len(plain["per_frame_coverage"]) == 5
+    assert plain["minimum_coverage"] < 1.0
+    assert plain["worst_coverage_frame"] >= 1
+    assert overlay["highlight_holes"] is True
+    assert all(0 <= frame["filled_fraction"] <= 1 for frame in plain["per_frame_coverage"])
+    assert progress[-1] == (4, 4)
+    assert calls.count("cpu") == 8
+    assert calls.count("unload") == 2
+    with Image.open(tmp_path / "plain.gif") as gif:
+        plain_last = np.asarray(list(ImageSequence.Iterator(gif))[-1].convert("RGB"))
+    with Image.open(tmp_path / "overlay.gif") as gif:
+        red_last = np.asarray(list(ImageSequence.Iterator(gif))[-1].convert("RGB"))
+    assert not np.array_equal(plain_last, red_last)
+
+
+def test_b53_camera_preview_rejects_unbounded_frame_counts(
+    tmp_path: Path,
+) -> None:
+    project = sample_project(max_frames=181)
+    project["animation"]["mode"] = "3d"
+    with pytest.raises(MotionPreviewError, match="up to 180 frames"):
+        render_motion_preview(
+            project, Image.new("RGB", (32, 32), "red"), tmp_path / "too-long.gif",
+        )
+
+
+def test_b53_legacy_2d_preview_result_unchanged(
+    tmp_path: Path,
+) -> None:
+    result = render_motion_preview(
+        sample_project(max_frames=4),
+        Image.new("RGB", (64, 64), "orange"),
+        tmp_path / "legacy2d.gif",
+        highlight_holes=True,
+    )
+    assert result["border_mode"] == "replicate"
+    assert result["source_frames"] == 4
+    assert "average_coverage" not in result

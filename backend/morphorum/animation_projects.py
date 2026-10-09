@@ -32,7 +32,10 @@ _KNOWN_TOP_LEVEL = {
     "prompts",
     "negative_prompts",
     "motion",
+    "camera_3d",
     "generation",
+    "cadence",
+    "temporal",
     "tracks",
     "notes",
 }
@@ -98,6 +101,7 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "width": 1024,
             "height": 1024,
             "prompt_transition": "blend",
+            "mode": "2d",
             "start_mode": "prompt",
             "source_image": "",
             "source_image_name": "",
@@ -120,6 +124,18 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "translation_y": "0:(0)",
             "border_mode": "replicate",
         },
+        "camera_3d": {
+            "translation_x": "0:(0)",
+            "translation_y": "0:(0)",
+            "translation_z": "0:(0)",
+            "rotation_x": "0:(0)",
+            "rotation_y": "0:(0)",
+            "rotation_z": "0:(0)",
+            "fov": "0:(40)",
+            "depth_resolution": "auto",
+            "projection_mode": "legacy",
+            "hole_fill": "nearest",
+        },
         "generation": {
             "strength": "0:(0.65)",
             "noise": "0:(0.02)",
@@ -129,6 +145,14 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "seed": -1,
             "seed_behavior": "fixed",
             "seed_increment": 1,
+        },
+        "cadence": {
+            "diffusion": "0:(1)",
+        },
+        "temporal": {
+            "mode": "forward",
+            "mix": 0.65,
+            "contrast_threshold": 96,
         },
         "notes": "",
     }
@@ -189,7 +213,17 @@ def _legacy_timeline_changed(
 
     for section, keys in {
         "motion": ("angle", "zoom", "translation_x", "translation_y"),
+        "camera_3d": (
+            "translation_x",
+            "translation_y",
+            "translation_z",
+            "rotation_x",
+            "rotation_y",
+            "rotation_z",
+            "fov",
+        ),
         "generation": ("strength", "noise", "steps", "guidance"),
+        "cadence": ("diffusion",),
     }.items():
         incoming = payload.get(section)
         current = existing.get(section, {})
@@ -298,6 +332,8 @@ def normalize_animation_project(
     animation["prompt_transition"] = (
         prompt_transition if prompt_transition in {"blend", "hold"} else "blend"
     )
+    raw_mode = str(animation.get("mode", "2d") or "2d").strip().lower()
+    animation["mode"] = raw_mode if raw_mode in {"2d", "3d"} else "2d"
     raw_start_mode = animation.get("start_mode")
     if raw_start_mode is None:
         start_mode = "source" if animation.get("source_image") else "prompt"
@@ -343,6 +379,45 @@ def normalize_animation_project(
         border_mode if border_mode in {"replicate", "wrap"} else "replicate"
     )
 
+    project["camera_3d"] = _normalize_string_section(
+        payload.get("camera_3d", project.get("camera_3d")),
+        {
+            "translation_x": "0:(0)",
+            "translation_y": "0:(0)",
+            "translation_z": "0:(0)",
+            "rotation_x": "0:(0)",
+            "rotation_y": "0:(0)",
+            "rotation_z": "0:(0)",
+            "fov": "0:(40)",
+            "depth_resolution": "auto",
+            "projection_mode": "legacy",
+            "hole_fill": "nearest",
+        },
+    )
+    depth_resolution = str(
+        project["camera_3d"].get("depth_resolution") or "auto"
+    ).strip().lower()
+    project["camera_3d"]["depth_resolution"] = (
+        depth_resolution
+        if depth_resolution in {"auto", "384", "512", "768", "full"}
+        else "auto"
+    )
+
+    # Explicit modes keep pre-B5 renders pixel-identical while allowing B5.1
+    # improvements to be selected per project.
+    projection_mode = str(
+        project["camera_3d"].get("projection_mode") or "legacy"
+    ).strip().lower()
+    project["camera_3d"]["projection_mode"] = (
+        projection_mode if projection_mode in {"legacy", "splat"} else "legacy"
+    )
+    hole_fill = str(
+        project["camera_3d"].get("hole_fill") or "nearest"
+    ).strip().lower()
+    project["camera_3d"]["hole_fill"] = (
+        hole_fill if hole_fill in {"nearest", "background"} else "nearest"
+    )
+
     generation_source = payload.get("generation", project.get("generation", {}))
     generation_source = generation_source if isinstance(generation_source, dict) else {}
     generation = dict(project.get("generation", {}))
@@ -360,6 +435,25 @@ def normalize_animation_project(
     generation["seed_behavior"] = behavior if behavior in {"fixed", "increment", "random"} else "fixed"
     generation["seed_increment"] = _safe_int(generation.get("seed_increment"), 1, -2**31, 2**31 - 1)
     project["generation"] = generation
+
+    project["cadence"] = _normalize_string_section(
+        payload.get("cadence", project.get("cadence")),
+        {"diffusion": "0:(1)"},
+    )
+
+    temporal_payload = payload.get("temporal", project.get("temporal"))
+    temporal_payload = temporal_payload if isinstance(temporal_payload, dict) else {}
+    temporal_mode = str(temporal_payload.get("mode") or "forward").strip().lower()
+    temporal_mode = temporal_mode if temporal_mode in {"forward", "future-anchor"} else "forward"
+    temporal_mix = _safe_float(temporal_payload.get("mix"), 0.65, 0.0, 1.0)
+    contrast_threshold = _safe_float(
+        temporal_payload.get("contrast_threshold"), 96.0, 1.0, 255.0,
+    )
+    project["temporal"] = {
+        "mode": temporal_mode,
+        "mix": temporal_mix,
+        "contrast_threshold": contrast_threshold,
+    }
 
     project["notes"] = str(payload.get("notes", project.get("notes", "")) or "")
 

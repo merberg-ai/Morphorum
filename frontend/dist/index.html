@@ -43,23 +43,33 @@
             <div class="telemetry-track"><div class="telemetry-fill free" id="telemetry-vram-fill"></div></div>
           </div>
         </div>
-        <div class="runtime-pill"><span class="status-dot" id="runtime-dot"></span><span id="runtime-text">Connecting…</span></div>
+        <div class="runtime-pill" title="Server version and build details"><span class="status-dot" id="runtime-dot"></span><span id="runtime-text">Connecting…</span></div>
       </div>
+      <button id="global-job-status" class="global-job-status" type="button" aria-label="Open active generation progress" hidden>
+        <span class="global-job-line"><span id="global-job-label">Rendering…</span><strong id="global-job-percent">0%</strong></span>
+        <span class="global-job-progress" role="progressbar" aria-label="Active generation overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="global-job-progress-fill"></span></span>
+      </button>
     </header>
 
     <nav class="main-nav glass" aria-label="Primary">
       <button class="nav-button active" data-view="image"><span class="nav-icon">▣</span><span>Image</span></button>
       <button class="nav-button" data-view="animation"><span class="nav-icon">▶</span><span>Animation</span></button>
       <button class="nav-button" data-view="models"><span class="nav-icon">◫</span><span>Models</span></button>
+      <button class="nav-button" data-view="loras"><span class="nav-icon">◇</span><span>LoRAs</span></button>
       <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
       <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
+      <button class="nav-more-toggle" type="button" id="nav-more-toggle" aria-expanded="false" aria-controls="nav-more-menu"><span class="nav-icon">⋯</span><span>More</span></button>
+      <div class="nav-more-menu" id="nav-more-menu" hidden>
+        <button type="button" data-more-view="settings">⚙ Settings</button>
+        <button type="button" data-more-view="console">›_ Console</button>
+      </div>
     </nav>
 
     <main class="workspace">
       <section class="view active" id="view-image">
         <div class="page-heading">
           <div>
-            <p class="eyebrow">FIRST IMAGE MILESTONE</p>
+            <p class="eyebrow">IMAGE STUDIO</p>
             <h1>Image Generation</h1>
             <p class="muted">Generate locally with SDXL, Flux, and managed Z-Image Turbo models.</p>
           </div>
@@ -72,20 +82,20 @@
               <span class="badge" id="image-model-family-badge">No model</span>
             </div>
 
-            <label class="field-label" for="image-prompt">Prompt</label>
+            <div class="image-prompt-heading"><label class="field-label" for="image-prompt">Prompt</label><div class="image-prompt-tools"><button class="secondary-button compact" type="button" id="image-jump-results">View Results ↓</button><button class="secondary-button compact" type="button" id="image-reset-draft" title="Clear browser-saved Image form values">Reset Image Form</button></div></div>
             <textarea id="image-prompt" class="text-area" rows="5" placeholder="Describe the image you want to make…"></textarea>
             <div class="lora-picker-row" id="image-lora-picker">
               <select id="image-lora-select" disabled aria-label="LoRA"><option value="">Select a model to browse LoRAs</option></select>
               <input id="image-lora-weight" type="number" value="1" step="0.05" min="-4" max="4" disabled aria-label="LoRA weight">
               <button id="image-insert-lora" class="secondary-button compact" type="button" disabled>Insert LoRA</button>
             </div>
-            <div class="field-help" id="image-lora-help">Morphorum inserts Deforum-style &lt;lora:name:weight&gt; directives into the positive prompt.</div>
+            <div class="field-help" id="image-lora-help">Choose a LoRA and insert its prompt tag. Adjust the weight to control its influence.</div>
             <label class="field-label" for="image-negative-prompt">Negative prompt</label>
             <textarea id="image-negative-prompt" class="text-area" rows="3" placeholder="Things you don't want in the image"></textarea>
 
             <div class="field-grid">
               <label><span>Model</span><select id="image-model-select"><option value="">Scan models first</option></select></label>
-              <label><span>Resolution preset</span><select id="image-resolution-preset" disabled><option value="">Select a model</option></select></label>
+              <label class="image-resolution-preset-field"><span>Resolution preset</span><select id="image-resolution-preset" disabled><option value="">Select a model</option></select></label>
               <label><span>Width</span><input id="image-width" type="number" value="512" min="64" max="4096" step="8" disabled></label>
               <label><span>Height</span><div class="inline-input"><input id="image-height" type="number" value="512" min="64" max="4096" step="8" disabled><button id="swap-resolution" class="icon-button" type="button" title="Swap width and height" disabled>⇄</button></div></label>
               <label><span>Steps</span><input id="image-steps" type="number" value="25" min="1" max="150" disabled></label>
@@ -96,6 +106,7 @@
               <label id="seed-increment-field"><span>Increment by</span><input id="image-seed-increment" type="number" value="1" step="1" disabled></label>
               <label><span>Images</span><input id="image-count" type="number" value="1" min="1" max="32" disabled></label>
             </div>
+            <p class="field-help" id="image-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
 
             <div class="generation-actions">
               <button class="primary-button busy-button full-width" id="generate-image" disabled><span class="spinner"></span><span class="button-label">Generate</span></button>
@@ -111,17 +122,23 @@
           </article>
 
           <article class="card glass preview-card image-preview-card">
-            <div class="card-header"><div><h2>Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
+            <div class="card-header"><div><h2 id="image-results-heading">Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
+            <div class="image-history-controls"><label for="image-job-history">Recent jobs</label><select id="image-job-history" aria-label="Recent Image Generation jobs"><option value="">No recent jobs</option></select><button class="secondary-button compact" id="image-history-refresh" type="button">Refresh</button></div>
             <div class="preview-placeholder" id="image-empty-preview">
               <div class="preview-glyph">◇</div>
-              <strong>No image yet</strong>
-              <span>Configure model folders, scan, select a checkpoint, and generate.</span>
+              <strong>No images yet</strong>
+              <span>Add model folders in Settings, scan Models, and choose one to get started.</span>
               <div class="button-row">
                 <button class="secondary-button" data-jump="settings">Settings</button>
                 <button class="secondary-button" data-jump="models">Models</button>
               </div>
             </div>
             <div class="image-gallery" id="image-gallery" hidden></div>
+            <dialog id="image-result-lightbox" class="image-result-lightbox" aria-label="Generated image preview">
+              <div class="image-result-lightbox-toolbar"><span id="image-lightbox-details"></span><button class="secondary-button compact" id="image-lightbox-close" type="button">Close</button></div>
+              <img id="image-lightbox-full" alt="Full generated image">
+              <a id="image-lightbox-download" class="secondary-button compact" href="#" download>Download image</a>
+            </dialog>
           </article>
         </div>
       </section>
@@ -129,7 +146,7 @@
       <section class="view" id="view-animation">
         <div class="page-heading animation-heading">
           <div>
-            <p class="eyebrow">DEFORUM-STYLE SCHEDULE ENGINE</p>
+            <p class="eyebrow">ANIMATION STUDIO</p>
             <h1>Animation</h1>
             <p class="muted">Build projects, resolve keyframed schedules, inspect exact frame state, and preview motion curves before rendering.</p>
           </div>
@@ -137,6 +154,8 @@
             <button class="secondary-button compact" id="animation-collapse-all" type="button">Collapse Sections</button>
             <button class="secondary-button compact" id="animation-expand-all" type="button">Expand Sections</button>
             <button class="secondary-button busy-button" id="animation-reload" type="button" disabled><span class="spinner"></span><span class="button-label">Reload</span></button>
+            <button class="secondary-button busy-button" id="animation-import-deforum" type="button"><span class="spinner"></span><span class="button-label">Import Deforum</span></button>
+            <input id="animation-deforum-file" type="file" accept=".json,.txt,application/json,text/plain" hidden>
             <button class="secondary-button busy-button" id="animation-new" type="button"><span class="spinner"></span><span class="button-label">New Project</span></button>
             <button class="primary-button busy-button" id="animation-save" type="button" disabled><span class="spinner"></span><span class="button-label">Save Project</span></button>
           </div>
@@ -147,29 +166,125 @@
           <code id="animation-project-path" title="">Create or select an animation project.</code>
         </div>
 
+        <dialog class="animation-import-dialog" id="animation-deforum-dialog" aria-labelledby="animation-deforum-title">
+          <form method="dialog" class="animation-import-shell" id="animation-deforum-form">
+            <div class="animation-import-heading">
+              <div>
+                <p class="eyebrow">IMPORT ANIMATION SETTINGS</p>
+                <h2 id="animation-deforum-title">Import Deforum Settings</h2>
+                <p class="muted">Review your Deforum settings before creating a new project. Choose a model from your Morphorum library for the imported animation.</p>
+              </div>
+              <button class="icon-button animation-import-close" id="animation-deforum-close" type="button" aria-label="Close Deforum importer">×</button>
+            </div>
+
+            <div class="animation-import-source">
+              <div>
+                <span class="muted">Source</span>
+                <strong id="animation-deforum-filename">No file selected</strong>
+              </div>
+              <span class="badge" id="animation-deforum-status">Waiting</span>
+            </div>
+
+            <div class="field-grid animation-import-fields">
+              <label class="animation-span-2"><span>New project name</span><input id="animation-deforum-name" type="text" maxlength="160" placeholder="Use name from Deforum settings"></label>
+              <label class="animation-span-2"><span>Morphorum model <small class="muted">(required, imported model paths are ignored)</small></span><select id="animation-deforum-model"><option value="">Choose an indexed checkpoint…</option></select></label>
+            </div>
+
+            <div class="notice subtle animation-import-safety">
+              <span>Choose a Deforum settings file in JSON format (<code>.json</code> or <code>.txt</code>). The importer reads settings only; it does not run scripts or open model paths from the file.</span>
+            </div>
+
+            <div class="animation-import-summary" id="animation-deforum-summary" hidden></div>
+
+            <section class="animation-import-section">
+              <div class="animation-import-section-heading">
+                <h3>Warnings</h3>
+                <span class="badge" id="animation-deforum-warning-count">0</span>
+              </div>
+              <div class="animation-import-list" id="animation-deforum-warnings">
+                <p class="muted">Choose a settings file to inspect compatibility warnings.</p>
+              </div>
+            </section>
+
+            <section class="animation-import-section">
+              <div class="animation-import-section-heading">
+                <h3>Field Mapping Preview</h3>
+                <span class="badge" id="animation-deforum-mapping-count">0</span>
+              </div>
+              <div class="animation-import-mappings" id="animation-deforum-mappings">
+                <p class="muted">Mapped, unsupported, and preserved fields will appear here.</p>
+              </div>
+            </section>
+
+            <div class="animation-import-actions">
+              <button class="secondary-button" id="animation-deforum-cancel" type="button">Cancel</button>
+              <button class="secondary-button busy-button" id="animation-deforum-refresh" type="button" disabled><span class="spinner"></span><span class="button-label">Refresh Preview</span></button>
+              <button class="primary-button busy-button" id="animation-deforum-create" type="button" disabled><span class="spinner"></span><span class="button-label">Create New Project</span></button>
+            </div>
+          </form>
+        </dialog>
+
         <div class="grid animation-layout">
           <article class="card glass animation-project-card">
             <div class="card-header">
-              <div><h2>Project</h2><p class="muted">Core timeline and output dimensions.</p></div>
-              <span class="badge" id="animation-schema-badge">Schema 1</span>
+              <div><h2>Project</h2><p class="muted">Name your project and choose its animation settings.</p></div>
+              <span class="badge" id="animation-schema-badge">Choose a project</span>
             </div>
             <div class="field-grid">
               <label class="animation-span-2"><span>Project</span><select id="animation-project-select"><option value="">No projects yet</option></select></label>
               <label class="animation-span-2"><span>Name</span><input id="animation-name" type="text" placeholder="Untitled Animation" disabled></label>
               <label><span>Max frames</span><input id="animation-max-frames" type="number" min="1" max="1000000" value="120" disabled></label>
               <label><span>FPS</span><input id="animation-fps" type="number" min="1" max="240" step="0.01" value="24" disabled></label>
+              <label class="animation-span-2"><span>Resolution preset</span><select id="animation-resolution-preset" disabled><option value="">Select a model</option></select></label>
               <label><span>Width</span><input id="animation-width" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
               <label><span>Height</span><input id="animation-height" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
+              <label><span>Animation mode</span><select id="animation-mode" disabled><option value="2d">2D</option><option value="3d">3D depth-aware</option></select></label>
+              <label><span>Prompt transition</span><select id="animation-prompt-transition" disabled><option value="blend">Blend between keyframes</option><option value="hold">Hold until next keyframe</option></select></label>
               <label class="animation-span-2"><span>Model</span><select id="animation-model" disabled><option value="">No model selected</option></select></label>
-              <label class="animation-span-2"><span>Prompt transition</span><select id="animation-prompt-transition" disabled><option value="blend">Blend between keyframes</option><option value="hold">Hold until next keyframe</option></select></label>
             </div>
+            <p class="field-help" id="animation-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
+          </article>
+
+          <article class="card glass animation-cadence-card" id="animation-cadence-card">
+            <div class="card-header">
+              <div>
+                <h2>Diffusion Cadence</h2>
+                <p class="muted">Choose how often AI redraws a frame. Camera movement continues on frames between diffusion passes.</p>
+              </div>
+            </div>
+            <div class="animation-cadence-controls">
+              <label>
+                <span>Diffusion frequency</span>
+                <select id="animation-cadence-preset" disabled>
+                  <option value="1">Every frame (cadence 1)</option>
+                  <option value="2">Every 2 frames</option>
+                  <option value="3">Every 3 frames</option>
+                  <option value="4">Every 4 frames</option>
+                  <option value="6">Every 6 frames</option>
+                  <option value="8">Every 8 frames</option>
+                  <option value="custom">Custom keyframed schedule…</option>
+                </select>
+              </label>
+              <label>
+                <span>Keyframe schedule <small class="muted">(advanced)</small></span>
+                <input id="animation-cadence" class="animation-schedule" type="text" value="0:(1)" placeholder="0:(1), 24:(3)" disabled>
+              </label>
+            </div>
+            <div class="animation-cadence-controls" data-animation-mode="3d">
+              <label><span>3D frame blending</span><select id="animation-temporal-mode" disabled><option value="forward">Forward only</option><option value="future-anchor">Depth-aligned blending</option></select></label>
+              <label><span>Blend strength</span><input id="animation-temporal-mix" type="number" min="0" max="1" step="0.05" value="0.65" disabled></label>
+              <label><span>Appearance guard (RGB difference)</span><input id="animation-temporal-contrast" type="number" min="1" max="255" step="1" value="96" disabled></label>
+            </div>
+            <p class="animation-cadence-explainer muted" data-animation-mode="3d">Depth-aligned blending smooths movement between generated 3D frames where reliable scene depth is available. Higher blend strength keeps more detail from neighboring frames.</p>
+            <p class="animation-cadence-explainer muted" id="animation-cadence-help" aria-live="polite">Cadence 1 runs diffusion for every eligible frame.</p>
+            <p class="muted animation-cadence-explainer">For changing cadence, enter a schedule such as <code>0:(1), 24:(3)</code>, or edit the Diffusion Cadence track in Visual Timeline. The last frame is always a diffusion anchor if denoising is enabled.</p>
           </article>
 
           <article class="card glass animation-start-card">
             <div class="card-header">
               <div>
                 <h2>Start Frame</h2>
-                <p class="muted">Choose how frame 0 is created. This is the actual first frame of the diffusion animation.</p>
+                <p class="muted">Choose how frame 0 is created. This sets the opening frame of your animation.</p>
               </div>
               <span class="badge" id="animation-start-mode-badge">Prompt</span>
             </div>
@@ -197,7 +312,42 @@
               </div>
               <div class="animation-source-preview-wrap">
                 <img id="animation-source-preview" class="animation-source-preview" alt="Uploaded animation start or preview reference" hidden>
-                <div id="animation-source-empty" class="animation-empty">No image uploaded. Prompt mode can render without one.</div>
+                <div id="animation-source-empty" class="animation-empty">No starting image selected. You can generate the first frame from a prompt.</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card glass animation-depth-card" id="animation-depth-card" data-animation-mode="3d">
+            <div class="card-header">
+              <div>
+                <h2>3D Depth</h2>
+                <p class="muted">Estimate relative scene depth from the uploaded reference image before depth-aware camera warping.</p>
+              </div>
+              <span class="badge" id="animation-depth-status">No preview</span>
+            </div>
+
+            <div class="animation-depth-grid">
+              <div class="animation-depth-controls">
+                <label><span>Depth estimator</span><select id="animation-depth-model" disabled><option value="">Loading depth models…</option></select></label>
+                <label><span>Device</span><select id="animation-depth-device" disabled>
+                  <option value="auto">Auto</option>
+                  <option value="cuda">CUDA</option>
+                  <option value="cpu">CPU</option>
+                </select></label>
+                <div class="button-row animation-depth-actions">
+                  <button class="primary-button busy-button" id="animation-generate-depth" type="button" disabled><span class="spinner"></span><span class="button-label">Generate Depth Preview</span></button>
+                  <button class="secondary-button compact busy-button" id="animation-recompute-depth" type="button" disabled><span class="spinner"></span><span class="button-label">Recompute</span></button>
+                  <button class="secondary-button compact" id="animation-clear-depth" type="button" disabled>Clear Preview</button>
+                </div>
+                <div class="notice subtle animation-depth-note">
+                  <strong>Relative depth</strong>
+                  <span>White is nearer and black is farther. This is geometry guidance for the 3D warp, not a distance measurement in meters.</span>
+                </div>
+                <div class="animation-depth-meta" id="animation-depth-meta">Upload an image in Start Frame to generate a depth map.</div>
+              </div>
+              <div class="animation-depth-preview-wrap">
+                <img id="animation-depth-preview" class="animation-depth-preview" alt="Estimated relative depth map" hidden>
+                <div id="animation-depth-empty" class="animation-empty">No depth preview generated.</div>
               </div>
             </div>
           </article>
@@ -206,7 +356,7 @@
             <div class="card-header">
               <div>
                 <h2>Visual Timeline</h2>
-                <p class="muted">Drag keyframes across tracks, edit values at the playhead, and keep Deforum schedules synchronized automatically.</p>
+                <p class="muted">Move keyframes, edit motion values, and preview how your animation changes over time.</p>
               </div>
               <div class="animation-timeline-header-actions">
                 <span class="badge" id="animation-timeline-status">No project</span>
@@ -246,13 +396,13 @@
 
             <div class="notice subtle animation-timeline-note">
               <strong>Timeline edits save immediately</strong>
-              <span>Raw schedule fields remain available below as an advanced compatibility editor. Save unsaved form changes before dragging timeline keyframes.</span>
+              <span>Edit animation values on the timeline or adjust the detailed schedules below. Save your changes before dragging keyframes.</span>
             </div>
           </article>
 
           <article class="card glass animation-prompts-card">
             <div class="card-header">
-              <div><h2>Prompt Keyframes</h2><p class="muted">Positive and negative prompts resolve into per-frame transition weights.</p></div>
+              <div><h2>Prompt Keyframes</h2><p class="muted">Set prompts at different frames to change the scene over time.</p></div>
               <button class="secondary-button compact" id="animation-add-prompt" type="button" disabled>+ Keyframe</button>
             </div>
             <div class="animation-prompt-list" id="animation-prompt-list">
@@ -260,9 +410,9 @@
             </div>
           </article>
 
-          <article class="card glass">
+          <article class="card glass" id="animation-2d-motion-card" data-animation-mode="2d">
             <div class="card-header">
-              <div><h2>2D Motion Schedules</h2><p class="muted">Classic Deforum-style keyframes and safe math expressions using t, max_f, sin(), cos(), and related functions. 2D zoom is a multiplicative factor per frame, so small changes compound quickly.</p></div>
+              <div><h2>2D Motion Schedules</h2><p class="muted">Pan, rotate, and zoom the scene over time. Even small zoom changes add up across frames.</p></div>
             </div>
             <div class="animation-schedule-grid">
               <label><span>Border mode</span><select id="animation-border-mode" disabled><option value="replicate">Replicate edges</option><option value="wrap">Wrap opposite edge</option></select></label>
@@ -270,6 +420,45 @@
               <label><span>Zoom factor / frame <small class="muted">(1.0 = none · 1.005 = slow in · 0.995 = slow out)</small></span><input id="animation-zoom" class="animation-schedule" type="text" value="0:(1.0)" disabled></label>
               <label><span>Translation X</span><input id="animation-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
               <label><span>Translation Y</span><input id="animation-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+            </div>
+          </article>
+
+          <article class="card glass" id="animation-3d-camera-card" data-animation-mode="3d">
+            <div class="card-header">
+              <div><h2>3D Camera Schedules</h2><p class="muted">Depth-aware virtual camera controls. Signed translation and rotation values are resolved per frame; FOV controls perspective.</p></div>
+              <span class="badge">3D</span>
+            </div>
+            <div class="animation-camera-preset-bar">
+              <label><span>Camera movement preset</span><select id="animation-3d-preset" disabled>
+                <option value="">Choose a gentle camera motion…</option>
+                <option value="dolly-in">Slow dolly in</option>
+                <option value="dolly-out">Slow dolly out</option>
+                <option value="orbit-left">Orbit left</option>
+                <option value="orbit-right">Orbit right</option>
+                <option value="pan-left">Pan left</option>
+                <option value="pan-right">Pan right</option>
+                <option value="tilt-up">Tilt up</option>
+                <option value="tilt-down">Tilt down</option>
+                <option value="still">Still camera (reset 3D motion)</option>
+              </select></label>
+              <button id="animation-3d-apply-preset" class="secondary-button compact" type="button" disabled>Apply to camera schedules</button>
+            </div>
+            <p class="muted animation-camera-preset-note">Applying a preset replaces the six 3D motion schedules with constant per-frame values. It does not change FOV, depth settings, prompts, or LoRAs. Save to keep it.</p>
+            <div class="animation-schedule-grid">
+              <label><span>Translation X</span><input id="animation-3d-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Translation Y</span><input id="animation-3d-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Translation Z <small class="muted">(signed depth motion)</small></span><input id="animation-3d-translation-z" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Rotation X</span><input id="animation-3d-rotation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Rotation Y</span><input id="animation-3d-rotation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Rotation Z</span><input id="animation-3d-rotation-z" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label><span>Field of view <small class="muted">(degrees)</small></span><input id="animation-3d-fov" class="animation-schedule" type="text" value="0:(40)" disabled></label>
+              <label><span>Depth resolution</span><select id="animation-3d-depth-resolution" disabled><option value="auto">Auto</option><option value="384">384 px</option><option value="512">512 px</option><option value="768">768 px</option><option value="full">Full render size</option></select></label>
+              <label><span>3D projection quality</span><select id="animation-3d-projection-mode" disabled><option value="legacy">Classic projection</option><option value="splat">Smooth subpixel projection</option></select></label>
+              <label><span>Exposed-pixel fill</span><select id="animation-3d-hole-fill" disabled><option value="nearest">Nearest visible pixel</option><option value="background">Background-aware fill</option></select></label>
+            </div>
+            <div class="notice subtle">
+              <strong>Projection details</strong>
+              <span>Smooth subpixel projection improves edges during movement. Background-aware fill can help reduce exposed gaps. For subtle motion, start with Translation Z between ±0.02 and ±0.08 scene units and rotation between ±0.25° and ±1° per frame. Larger changes can quickly amplify across frames.</span>
             </div>
           </article>
 
@@ -293,14 +482,15 @@
             <div class="card-header">
               <div>
                 <h2>Camera Motion Preview</h2>
-                <p class="muted">CPU-only geometry check using the optional uploaded image. No diffusion and no GPU model load.</p>
+                <p class="muted">CPU-only 2D or 3D camera-motion preview from your uploaded image. No diffusion and no GPU model load.</p>
               </div>
               <button class="primary-button compact busy-button" id="animation-generate-motion-preview" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Camera Motion</span></button>
             </div>
 
+            <label class="animation-preview-hole-toggle" data-animation-mode="3d"><input id="animation-preview-highlight-holes" type="checkbox" disabled> Highlight exposed pixels in red</label>
             <div class="notice subtle animation-motion-preview-note">
               <strong>Geometry only</strong>
-              <span>This preview uses the uploaded image above only as a visual reference. It never decides how the real animation starts. Uploading an image is required for this diagnostic preview.</span>
+              <span>3D mode simulates sequential depth warps and reports projected coverage and newly exposed pixels. The red overlay is only a preview aid. The uploaded reference does not change your real starting-frame mode or model.</span>
             </div>
 
             <div class="animation-motion-progress" id="animation-motion-progress" hidden>
@@ -314,6 +504,7 @@
             <div class="animation-motion-result" id="animation-motion-result" hidden>
               <img id="animation-motion-preview-image" alt="Motion-only animation preview">
               <div class="animation-motion-result-meta" id="animation-motion-result-meta"></div>
+              <div class="animation-camera-coverage" id="animation-camera-coverage" hidden></div>
             </div>
           </article>
 
@@ -321,7 +512,7 @@
             <div class="card-header">
               <div>
                 <h2>Animation Render</h2>
-                <p class="muted">Render the real diffusion sequence. Frame 0 comes from the selected Start Mode; each later frame transforms the previous rendered frame before img2img diffusion.</p>
+                <p class="muted">Render the real diffusion sequence. Choose a starting frame, render your animation, and follow progress here.</p>
               </div>
               <div class="button-row animation-render-actions">
                 <button class="secondary-button compact" id="animation-resume-render" type="button" disabled>Resume</button>
@@ -332,7 +523,7 @@
 
             <div class="notice subtle animation-render-notice">
               <strong>Real diffusion render</strong>
-              <span>This can take a while. Morphorum freezes the current browser project state into a render manifest, saves every completed frame, and can resume interrupted renders.</span>
+              <span>Rendering may take some time. Completed frames are saved as the animation runs, and interrupted renders can be resumed.</span>
             </div>
 
             <div class="animation-render-history-row">
@@ -357,7 +548,11 @@
                 <span id="animation-render-status">Waiting…</span>
                 <strong id="animation-render-percent">0%</strong>
               </div>
-              <div class="progress-track"><div class="progress-fill" id="animation-render-progress-fill"></div></div>
+              <div class="progress-track" role="progressbar" aria-label="Overall animation render" aria-valuemin="0" aria-valuemax="100" id="animation-overall-progress-track"><div class="progress-fill" id="animation-render-progress-fill"></div></div>
+              <div class="animation-step-progress" id="animation-step-progress">
+                <div class="progress-row"><span id="animation-step-progress-label">No active diffusion</span><strong id="animation-step-progress-value"></strong></div>
+                <div class="progress-track" id="animation-step-progress-track" role="progressbar" aria-label="Current diffusion steps" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-fill" id="animation-step-progress-fill"></div></div>
+              </div>
               <div class="animation-render-stats">
                 <span>Frame <strong id="animation-render-frame">--</strong></span>
                 <span>Step <strong id="animation-render-step">--</strong></span>
@@ -385,18 +580,27 @@
               </div>
               <div class="animation-render-frame-telemetry" id="animation-render-frame-telemetry" hidden>
                 <div class="animation-render-prompt-heading">
-                  <span class="field-label">Resolved 2D / generation state</span>
+                  <span class="field-label" id="animation-render-frame-state-label">Resolved motion / generation state</span>
                   <span class="badge" id="animation-render-diffusion-mode">--</span>
                 </div>
                 <div class="animation-render-state-grid">
-                  <div><span>Angle</span><strong id="animation-render-state-angle">--</strong></div>
-                  <div><span>Zoom / frame</span><strong id="animation-render-state-zoom">--</strong></div>
-                  <div><span>Translate X</span><strong id="animation-render-state-x">--</strong></div>
-                  <div><span>Translate Y</span><strong id="animation-render-state-y">--</strong></div>
-                  <div><span>Cumulative zoom</span><strong id="animation-render-state-cum-zoom">--</strong></div>
-                  <div><span>Cumulative angle</span><strong id="animation-render-state-cum-angle">--</strong></div>
-                  <div><span>Center offset</span><strong id="animation-render-state-center">--</strong></div>
-                  <div><span>Border</span><strong id="animation-render-state-border">--</strong></div>
+                  <div data-render-motion="2d"><span>Angle</span><strong id="animation-render-state-angle">--</strong></div>
+                  <div data-render-motion="2d"><span>Zoom / frame</span><strong id="animation-render-state-zoom">--</strong></div>
+                  <div data-render-motion="2d"><span>Translate X</span><strong id="animation-render-state-x">--</strong></div>
+                  <div data-render-motion="2d"><span>Translate Y</span><strong id="animation-render-state-y">--</strong></div>
+                  <div data-render-motion="2d"><span>Cumulative zoom</span><strong id="animation-render-state-cum-zoom">--</strong></div>
+                  <div data-render-motion="2d"><span>Cumulative angle</span><strong id="animation-render-state-cum-angle">--</strong></div>
+                  <div data-render-motion="2d"><span>Center offset</span><strong id="animation-render-state-center">--</strong></div>
+                  <div data-render-motion="2d"><span>Border</span><strong id="animation-render-state-border">--</strong></div>
+                  <div data-render-motion="3d"><span>Translate X</span><strong id="animation-render-state-3d-x">--</strong></div>
+                  <div data-render-motion="3d"><span>Translate Y</span><strong id="animation-render-state-3d-y">--</strong></div>
+                  <div data-render-motion="3d"><span>Translate Z</span><strong id="animation-render-state-3d-z">--</strong></div>
+                  <div data-render-motion="3d"><span>Rotate X</span><strong id="animation-render-state-3d-rx">--</strong></div>
+                  <div data-render-motion="3d"><span>Rotate Y</span><strong id="animation-render-state-3d-ry">--</strong></div>
+                  <div data-render-motion="3d"><span>Rotate Z</span><strong id="animation-render-state-3d-rz">--</strong></div>
+                  <div data-render-motion="3d"><span>FOV</span><strong id="animation-render-state-3d-fov">--</strong></div>
+                  <div data-render-motion="3d"><span>Depth</span><strong id="animation-render-state-depth">--</strong></div>
+                  <div data-render-motion="3d"><span>Projection coverage</span><strong id="animation-render-state-coverage">--</strong></div>
                   <div><span>Strength</span><strong id="animation-render-state-strength">--</strong></div>
                   <div><span>Denoise</span><strong id="animation-render-state-denoise">--</strong></div>
                   <div><span>Noise</span><strong id="animation-render-state-noise">--</strong></div>
@@ -405,6 +609,8 @@
                   <div><span>Sampler</span><strong id="animation-render-state-sampler">--</strong></div>
                   <div><span>Seed</span><strong id="animation-render-state-seed">--</strong></div>
                   <div><span>Seed mode</span><strong id="animation-render-state-seed-mode">--</strong></div>
+                  <div><span>Cadence</span><strong id="animation-render-state-cadence">--</strong></div>
+                  <div><span>Stage timing</span><strong id="animation-render-state-timing">--</strong></div>
                 </div>
               </div>
             </div>
@@ -422,6 +628,65 @@
               </div>
             </div>
 
+            <section class="animation-performance-summary" id="animation-performance-summary" hidden>
+              <div class="animation-performance-heading">
+                <strong>Performance & Memory</strong>
+                <a id="animation-performance-report" href="#" target="_blank" rel="noopener">View frame-by-frame JSON</a>
+              </div>
+              <div class="animation-performance-stats" id="animation-performance-stats" aria-live="off"></div>
+              <p class="muted">Observed values, not an automatic CPU fallback. GPU memory includes live models and resident LoRAs; peak allocation is process-wide.</p>
+            </section>
+            <section class="animation-video-export animation-hybrid-source" id="animation-hybrid-source">
+              <div class="animation-video-export-heading">
+                <div><h3>Source Video</h3><p class="muted">Upload a video, inspect its details, and extract frames for preview. The extracted frames can be previewed here; rendering still uses your project's selected starting frame and prompts.</p></div>
+                <span class="animation-video-status" id="animation-hybrid-status">Select a project</span>
+              </div>
+              <div class="animation-hybrid-controls">
+                <label><span>Video (MP4, MOV, MKV, WebM; max 512 MiB)</span><input type="file" accept=".mp4,.mov,.mkv,.webm,video/*" id="animation-hybrid-file"></label>
+                <button type="button" class="secondary-button" id="animation-hybrid-upload">Upload &amp; inspect</button>
+                <label><span>From second</span><input type="number" id="animation-hybrid-start" min="0" step="0.1" value="0"></label>
+                <label><span>To second</span><input type="number" id="animation-hybrid-end" min="0.1" step="0.1" placeholder="Video duration"></label>
+                <label><span>Output FPS</span><input type="number" id="animation-hybrid-fps" min="1" max="120" step="1" value="12"></label>
+                <button type="button" class="primary-button" id="animation-hybrid-extract" disabled>Extract frames</button>
+                <button type="button" class="secondary-button" id="animation-hybrid-cancel" disabled>Cancel extraction</button>
+              </div>
+              <p class="muted animation-video-job-status" id="animation-hybrid-meta" role="status">Upload a local video to begin.</p>
+              <div class="animation-hybrid-preview" id="animation-hybrid-preview" hidden>
+                <img id="animation-hybrid-frame" alt="Extracted hybrid source frame preview">
+                <input id="animation-hybrid-frame-slider" type="range" min="1" value="1" max="1" aria-label="Extracted frame">
+                <span id="animation-hybrid-frame-caption" class="muted"></span>
+              </div>
+            </section>
+            <section class="animation-video-export" id="animation-video-export">
+              <div class="animation-video-export-heading">
+                <div>
+                  <h3>Video Export</h3>
+                  <p class="muted">Turn completed animation frames into a downloadable MP4 or WebM video.</p>
+                </div>
+                <span class="animation-video-status" id="animation-video-availability">Checking FFmpeg…</span>
+              </div>
+              <div class="animation-video-export-controls">
+                <label><span>Format</span><select id="animation-video-format">
+                  <option value="mp4">MP4 (H.264, broadly compatible)</option>
+                  <option value="webm">WebM (VP9)</option>
+                </select></label>
+                <label><span>Quality</span><select id="animation-video-quality">
+                  <option value="balanced">Balanced</option>
+                  <option value="high">High quality</option>
+                  <option value="compact">Smaller file</option>
+                </select></label>
+                <label><span>FPS (optional)</span><input id="animation-video-fps" type="number" min="1" max="120" step="1" placeholder="Original render FPS"></label>
+                <button class="primary-button compact busy-button" id="animation-export-video" type="button" disabled><span class="spinner"></span><span class="button-label">Export Video</span></button>
+              </div>
+              <div class="animation-video-job-status" id="animation-video-job-status" role="status">Select a completed render to export its PNG sequence.</div>
+              <div class="animation-video-result" id="animation-video-result" hidden>
+                <video id="animation-video-playback" controls preload="metadata" playsinline></video>
+                <div class="animation-video-result-links">
+                  <a id="animation-video-download" class="secondary-button compact" href="#" download>Download video</a>
+                  <span id="animation-video-result-meta" class="muted"></span>
+                </div>
+              </div>
+            </section>
             <div class="animation-render-error" id="animation-render-error" hidden></div>
           </article>
 
@@ -429,7 +694,7 @@
             <div class="card-header">
               <div>
                 <h2>Resolved Frame Inspector</h2>
-                <p class="muted">See the exact state Morphorum will hand to the future frame renderer.</p>
+                <p class="muted">Review the prompts, motion, and generation settings calculated for any frame.</p>
               </div>
               <button class="secondary-button compact busy-button" id="animation-validate-schedules" type="button" disabled><span class="spinner"></span><span class="button-label">Validate</span></button>
             </div>
@@ -442,10 +707,18 @@
                 <option value="motion.angle">Angle</option>
                 <option value="motion.translation_x">Translation X</option>
                 <option value="motion.translation_y">Translation Y</option>
+                <option value="camera_3d.translation_x">3D Translation X</option>
+                <option value="camera_3d.translation_y">3D Translation Y</option>
+                <option value="camera_3d.translation_z">3D Translation Z</option>
+                <option value="camera_3d.rotation_x">3D Rotation X</option>
+                <option value="camera_3d.rotation_y">3D Rotation Y</option>
+                <option value="camera_3d.rotation_z">3D Rotation Z</option>
+                <option value="camera_3d.fov">3D Field of View</option>
                 <option value="generation.strength">Strength</option>
                 <option value="generation.noise">Noise</option>
                 <option value="generation.steps">Steps</option>
                 <option value="generation.guidance">Guidance</option>
+                <option value="cadence.diffusion">Diffusion cadence</option>
               </select></label>
             </div>
 
@@ -472,10 +745,18 @@
               <div><span>Angle</span><strong id="resolved-angle">--</strong></div>
               <div><span>Translate X</span><strong id="resolved-translation-x">--</strong></div>
               <div><span>Translate Y</span><strong id="resolved-translation-y">--</strong></div>
+              <div><span>3D X</span><strong id="resolved-3d-x">--</strong></div>
+              <div><span>3D Y</span><strong id="resolved-3d-y">--</strong></div>
+              <div><span>3D Z</span><strong id="resolved-3d-z">--</strong></div>
+              <div><span>Rotate X</span><strong id="resolved-3d-rx">--</strong></div>
+              <div><span>Rotate Y</span><strong id="resolved-3d-ry">--</strong></div>
+              <div><span>Rotate Z</span><strong id="resolved-3d-rz">--</strong></div>
+              <div><span>3D FOV</span><strong id="resolved-3d-fov">--</strong></div>
               <div><span>Strength</span><strong id="resolved-strength">--</strong></div>
               <div><span>Noise</span><strong id="resolved-noise">--</strong></div>
               <div><span>Steps</span><strong id="resolved-steps">--</strong></div>
               <div><span>Guidance</span><strong id="resolved-guidance">--</strong></div>
+              <div><span>Cadence</span><strong id="resolved-cadence">--</strong></div>
               <div><span>Seed</span><strong id="resolved-seed">--</strong></div>
               <div class="animation-resolved-loras"><span>LoRAs</span><strong id="resolved-loras">None</strong></div>
             </div>
@@ -497,23 +778,7 @@
             <textarea id="animation-notes" class="text-area" rows="5" placeholder="Notes about this animation…" disabled></textarea>
           </article>
 
-          <article class="card glass animation-foundation-card">
-            <div class="card-header"><div><h2>Animation Pipeline</h2><p class="muted">One project flows from start-frame choice through schedules, previews, resumable diffusion frames, and final assembly.</p></div></div>
-            <div class="animation-foundation-grid">
-              <div><strong>Timeline</strong><span>Frames, FPS, dimensions</span></div>
-              <div><strong>Prompts</strong><span>Positive + negative keyframes</span></div>
-              <div><strong>Motion</strong><span>Raw 2D schedule strings</span></div>
-              <div><strong>Generation</strong><span>Strength, noise, steps, guidance, seeds</span></div>
-              <div><strong>Model</strong><span>Stable indexed model reference</span></div>
-              <div><strong>Persistence</strong><span>Atomic human-readable project.json</span></div>
-              <div><strong>Expressions</strong><span>Safe t/max_f math evaluation</span></div>
-              <div><strong>Inspector</strong><span>Resolved frame values + curve preview</span></div>
-              <div><strong>2D Transform</strong><span>Cumulative angle, zoom, translation</span></div>
-              <div><strong>Motion Preview</strong><span>CPU-only animated source-image preview</span></div>
-              <div><strong>Img2Img Loop</strong><span>Previous frame → transform → diffusion → next frame</span></div>
-              <div><strong>Resume</strong><span>Per-frame manifest + interrupted render recovery</span></div>
-            </div>
-          </article>
+  
         </div>
       </section>
 
@@ -523,18 +788,19 @@
           <button class="primary-button busy-button" id="scan-models"><span class="spinner"></span><span class="button-label">Scan Models</span></button>
         </div>
 
-        <article class="card glass managed-models-card">
+        <details class="card glass managed-models-card" id="managed-models-catalog">
+          <summary>Managed Downloads <span class="muted">Optional model catalog</span></summary>
           <div class="card-header">
             <div>
               <h2>Managed Downloads</h2>
-              <p class="muted">Official model packages downloaded and maintained by Morphorum.</p>
+              <p class="muted">Download and manage supported models from the built-in catalog.</p>
             </div>
             <span class="badge">Morphorum managed</span>
           </div>
           <div id="managed-model-list" class="managed-model-list">
             <div class="model-empty"><span class="large-spinner"></span><span>Checking managed models…</span></div>
           </div>
-        </article>
+        </details>
 
         <div class="model-summary-row" id="model-summary-row">
           <div class="mini-stat glass"><span class="mini-stat-value" id="model-total">0</span><span class="mini-stat-label">Indexed files</span></div>
@@ -544,18 +810,19 @@
 
         <article class="card glass model-browser-card">
           <div class="model-toolbar">
-            <input type="search" id="model-search" placeholder="Search models, filenames, or paths…">
-            <select id="model-family-filter">
+            <input type="search" aria-label="Search indexed models" id="model-search" placeholder="Search models, filenames, or paths…">
+            <select id="model-family-filter" aria-label="Filter model family">
               <option value="">All families</option>
               <option value="sdxl">SDXL</option>
               <option value="flux">Flux</option>
               <option value="zimage">Z-Image</option>
             </select>
-            <select id="model-kind-filter">
+            <select id="model-kind-filter" aria-label="Filter model type">
               <option value="">Models + LoRAs</option>
               <option value="checkpoints">Checkpoints</option>
               <option value="loras">LoRAs</option>
             </select>
+            <button class="secondary-button compact" type="button" id="model-filters-clear">Clear Filters</button>
           </div>
           <div id="model-list" class="model-list">
             <div class="model-empty"><span class="large-spinner"></span><span>Loading model index…</span></div>
@@ -563,10 +830,71 @@
         </article>
       </section>
 
+
+      <section class="view" id="view-loras">
+        <div class="page-heading">
+          <div><p class="eyebrow">LORA LABORATORY</p><h1>LoRA Manager</h1><p class="muted">Browse LoRAs, copy prompt tags, and inspect their details.</p></div>
+          <button class="primary-button busy-button" id="lora-manager-scan" type="button"><span class="spinner"></span><span class="button-label">Scan Directories</span></button>
+        </div>
+        <div class="lora-manager-grid">
+          <article class="card glass lora-manager-library">
+            <div class="card-header"><div><h2>Library</h2><p class="muted" id="lora-manager-count">Scanning indexed LoRAs…</p></div></div>
+            <div class="lora-manager-toolbar">
+              <label class="field-label" for="lora-manager-family">Model family</label>
+              <select id="lora-manager-family"><option value="sdxl">SDXL</option><option value="flux">Flux</option><option value="zimage">Z-Image</option></select>
+              <label class="field-label" for="lora-manager-search">Find a LoRA</label>
+              <input id="lora-manager-search" type="search" placeholder="Search name or filename…">
+            </div>
+            <div id="lora-manager-list" class="lora-manager-list" role="listbox" aria-label="LoRA library"><div class="model-empty">Loading library…</div></div>
+            <p class="muted lora-manager-footnote">Uses the directories in Settings. Scanning refreshes the shared Models index.</p>
+          </article>
+          <article class="card glass lora-manager-details">
+            <div class="card-header"><div><h2 id="lora-manager-title">Choose a LoRA</h2><p class="muted" id="lora-manager-subtitle">Choose a LoRA to see its details and prompt tag.</p></div></div>
+            <div class="lora-manager-insert lora-manager-quick-use">
+              <div class="lora-manager-quick-title"><h3>Quick Use</h3><p class="muted">Copy a LoRA prompt snippet or add it to Image Generation.</p></div>
+              <div class="lora-manager-insert-controls">
+                <label class="field-label" for="lora-manager-weight">Strength</label>
+                <input type="number" id="lora-manager-weight" min="-4" max="4" step=".05" value="1.0">
+                <label class="lora-manager-checkbox"><input id="lora-manager-add-triggers" type="checkbox" checked> Include recorded trigger words</label>
+              </div>
+              <div class="lora-manager-snippet" id="lora-manager-snippet" tabindex="0" aria-label="Prompt snippet">Select a LoRA to preview its prompt tag.</div>
+              <div class="lora-manager-quick-actions"><button class="secondary-button" id="lora-manager-copy" type="button" disabled>Copy Prompt Tag</button>
+              <button class="primary-button" id="lora-manager-insert" type="button" disabled>Add to Image Prompt</button></div>
+              <p class="muted lora-manager-footnote">The prompt tag uses your chosen strength. Include trigger words when available, and use a compatible image model.</p>
+            </div>
+
+            <details class="lora-manager-expert">
+              <summary>Online metadata (Civitai)</summary>
+            <div class="lora-manager-civitai-actions">
+              <button type="button" class="secondary-button compact busy-button" id="lora-manager-civitai" disabled><span class="spinner"></span><span class="button-label">Fetch from Civitai</span></button>
+              <span class="muted lora-manager-small">Optional online lookup sends the file's SHA-256 to Civitai, not the file itself.</span>
+            </div>
+            <div id="lora-manager-civitai-result" aria-live="polite"></div>
+            </details>
+            <div id="lora-manager-detail-body" class="lora-manager-detail-body" aria-live="polite">
+              <div class="model-empty">Select a LoRA to inspect its local file.</div>
+            </div>
+            <details class="lora-manager-expert"><summary>Advanced model and training diagnostics</summary>
+              <div id="lora-manager-detail-advanced" class="lora-manager-detail-body"></div>
+            </details>
+            <details class="lora-manager-expert">
+              <summary>Loaded LoRA details</summary>
+            <div class="lora-manager-runtime">
+              <div class="card-header"><div><h3>Active LoRA adapters</h3><p class="muted">See which LoRAs are loaded and how they are applied. Compare generated images to check their effect.</p></div>
+                <button class="secondary-button compact" type="button" id="lora-manager-refresh-runtime">Refresh</button>
+              </div>
+              <div id="lora-manager-runtime-details" class="lora-manager-fields"><span class="muted">Load a model to view active LoRAs.</span></div>
+            </div>
+            </details>
+          </article>
+        </div>
+      </section>
+
       <section class="view" id="view-settings">
         <div class="page-heading settings-heading">
-          <div><p class="eyebrow">CONFIGURATION</p><h1>Settings</h1><p class="muted">External libraries stay where you keep them; managed models use Morphorum-controlled storage.</p></div>
+          <div><p class="eyebrow">PREFERENCES & LIBRARIES</p><h1>Settings</h1><p class="muted">External libraries stay where you keep them; managed models use Morphorum-controlled storage.</p></div>
           <div class="button-row">
+            <span class="settings-dirty-badge" id="settings-dirty-state" aria-live="polite">All changes saved</span>
             <button class="secondary-button busy-button" id="load-settings"><span class="spinner"></span><span class="button-label">Reload</span></button>
             <button class="primary-button busy-button" id="save-settings"><span class="spinner"></span><span class="button-label">Save Settings</span></button>
           </div>
@@ -596,24 +924,35 @@
               <label class="chip"><input type="checkbox" value="warning" checked><span>Warn</span></label>
               <label class="chip"><input type="checkbox" value="error" checked><span>Error</span></label>
             </div>
+            <div class="console-presets" aria-label="Log filters">
+              <button type="button" class="secondary-button compact" data-console-preset="all">All</button>
+              <button type="button" class="secondary-button compact" data-console-preset="errors">Errors</button>
+              <button type="button" class="secondary-button compact" data-console-preset="warnings">Warnings+</button>
+            </div>
+            <input type="search" id="console-search" aria-label="Search console messages" placeholder="Search logs…" />
+            <details class="console-category-details"><summary>Source filters</summary>
             <div class="filter-group" id="category-filters">
               <span class="filter-label">Source</span>
               <label class="chip"><input type="checkbox" value="api"><span>API</span></label>
               <label class="chip"><input type="checkbox" value="runtime" checked><span>Runtime</span></label>
               <label class="chip"><input type="checkbox" value="server" checked><span>Server</span></label>
               <label class="chip"><input type="checkbox" value="model" checked><span>Models</span></label>
+              <label class="chip"><input type="checkbox" value="lora" checked><span>LoRAs</span></label>
               <label class="chip"><input type="checkbox" value="generation" checked><span>Generation</span></label>
               <label class="chip"><input type="checkbox" value="animation" checked><span>Animation</span></label>
               <label class="chip"><input type="checkbox" value="system" checked><span>System</span></label>
             </div>
+            </details>
             <div class="console-actions">
               <label class="chip"><input type="checkbox" id="auto-scroll" checked><span>Auto-scroll</span></label>
+              <button class="secondary-button compact" id="console-jump-latest" type="button">Latest</button>
               <button class="secondary-button compact" id="copy-console-view" type="button" title="Copy the currently filtered console view">Copy View</button>
               <button class="secondary-button compact" id="copy-console-buffer" type="button" title="Copy the full server console buffer">Copy Buffer</button>
               <button class="secondary-button compact" id="clear-console-view" type="button">Clear View</button>
               <button class="secondary-button compact danger" id="clear-console-server" type="button">Clear Buffer</button>
             </div>
           </div>
+          <div class="console-count" id="console-count" aria-live="off">0 messages</div>
           <div class="console-window" id="console-window" role="log" aria-live="polite"></div>
         </article>
       </section>
@@ -621,9 +960,12 @@
   </div>
 
   <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+  <script src="/assets/ui-services.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/resolution.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/app.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/loras.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>

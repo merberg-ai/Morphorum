@@ -175,6 +175,13 @@ def _normalize_preferences(settings: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(unload, bool):
         unload = str(unload).strip().lower() in {"1", "true", "yes", "on"}
     performance["unload_after_generation"] = unload
+
+    sdxl_vae_tiling = performance.get("sdxl_vae_tiling", False)
+    if not isinstance(sdxl_vae_tiling, bool):
+        sdxl_vae_tiling = str(sdxl_vae_tiling).strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+    performance["sdxl_vae_tiling"] = sdxl_vae_tiling
     return settings
 
 

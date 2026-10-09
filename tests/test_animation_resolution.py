@@ -18,6 +18,7 @@ def sample_project() -> dict:
         "name": "Phase 2 Test",
         "animation": {
             "max_frames": 101,
+            "mode": "2d",
             "fps": 20.0,
             "width": 1024,
             "height": 768,
@@ -42,6 +43,15 @@ def sample_project() -> dict:
             "translation_x": "0:(0), 100:(20)",
             "translation_y": "0:(0)",
         },
+        "camera_3d": {
+            "translation_x": "0:(0), 100:(2)",
+            "translation_y": "0:(0), 100:(-2)",
+            "translation_z": "0:(0), 100:(-4)",
+            "rotation_x": "0:(0), 100:(6)",
+            "rotation_y": "0:(0), 100:(-8)",
+            "rotation_z": "0:(0), 100:(2)",
+            "fov": "0:(40), 100:(60)",
+        },
         "generation": {
             "strength": "0:(0.6), 100:(0.8)",
             "noise": "0:(0.02)",
@@ -52,6 +62,9 @@ def sample_project() -> dict:
             "seed_behavior": "increment",
             "seed_increment": 3,
         },
+        "cadence": {
+            "diffusion": "0:(1), 100:(3)",
+        },
     }
 
 
@@ -59,16 +72,25 @@ def test_resolve_project_frame_contract() -> None:
     resolved = resolve_project_frame(sample_project(), 50)
 
     assert resolved["frame"] == 50
+    assert resolved["animation_mode"] == "2d"
     assert resolved["time_seconds"] == pytest.approx(2.5)
     assert resolved["dimensions"] == {"width": 1024, "height": 768}
     assert resolved["motion"]["angle"] == pytest.approx(5)
     assert resolved["motion"]["zoom"] == pytest.approx(1.05)
     assert resolved["motion"]["translation_x"] == pytest.approx(10)
     assert resolved["motion"]["border_mode"] == "replicate"
+    assert resolved["camera_3d"]["translation_x"] == pytest.approx(1.0)
+    assert resolved["camera_3d"]["translation_y"] == pytest.approx(-1.0)
+    assert resolved["camera_3d"]["translation_z"] == pytest.approx(-2.0)
+    assert resolved["camera_3d"]["rotation_x"] == pytest.approx(3.0)
+    assert resolved["camera_3d"]["rotation_y"] == pytest.approx(-4.0)
+    assert resolved["camera_3d"]["rotation_z"] == pytest.approx(1.0)
+    assert resolved["camera_3d"]["fov"] == pytest.approx(50.0)
     assert resolved["generation"]["strength"] == pytest.approx(0.7)
     assert resolved["generation"]["steps"] == 9
     assert resolved["generation"]["sampler"] == "flowmatch_euler"
     assert resolved["generation"]["seed"]["resolved"] == 1150
+    assert resolved["cadence"]["diffusion"] == 2
 
     positive = resolved["prompts"]["positive"]
     assert positive["mode"] == "blend"
@@ -269,3 +291,114 @@ def test_zoom_validation_warns_when_compounding_becomes_extreme() -> None:
     assert "compounds every frame" in issue["message"]
     assert "1.005" in issue["message"]
     assert "0.995" in issue["message"]
+
+
+
+def test_3d_camera_schedule_series_and_hold_interpolation() -> None:
+    project = sample_project()
+    project["animation"]["mode"] = "3d"
+    project["tracks"] = build_tracks_from_legacy(project)
+    project["tracks"]["camera_3d"]["translation_z"]["interpolation"] = "hold"
+
+    resolved = resolve_project_frame(project, 50)
+    series = project_schedule_series(
+        project,
+        "camera_3d.translation_z",
+        sample_count=5,
+    )
+
+    assert resolved["camera_3d"]["translation_z"] == pytest.approx(0.0)
+    assert series["field"] == "camera_3d.translation_z"
+    assert series["interpolation"] == "hold"
+    assert series["samples"][2]["value"] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("schedule", ["0:(0)", "0:(180)", "0:(-30)"])
+def test_3d_fov_validation_rejects_invalid_projection_ranges(schedule: str) -> None:
+    project = sample_project()
+    project["animation"]["mode"] = "3d"
+    project["camera_3d"]["fov"] = schedule
+
+    result = validate_project_schedules(project)
+
+    assert result["valid"] is False
+    issue = next(
+        item
+        for item in result["issues"]
+        if item["field"] == "camera_3d.fov"
+    )
+    assert issue["severity"] == "error"
+    assert "between 1 and 179 degrees" in issue["message"]
+
+
+def test_3d_translation_and_rotation_accept_signed_values() -> None:
+    project = sample_project()
+    project["animation"]["mode"] = "3d"
+    project["camera_3d"]["translation_z"] = "0:(-3), 100:(2)"
+    project["camera_3d"]["rotation_y"] = "0:(-15), 100:(20)"
+
+    result = validate_project_schedules(project)
+    resolved = resolve_project_frame(project, 50)
+
+    assert result["valid"] is True
+    assert resolved["camera_3d"]["translation_z"] == pytest.approx(-0.5)
+    assert resolved["camera_3d"]["rotation_y"] == pytest.approx(2.5)
+
+
+
+def test_inactive_3d_schedule_error_does_not_break_2d_resolver() -> None:
+    project = sample_project()
+    project["animation"]["mode"] = "2d"
+    project["camera_3d"]["fov"] = "0:(totally_not_math(t))"
+
+    resolved = resolve_project_frame(project, 50)
+    validation = validate_project_schedules(project)
+
+    assert resolved["animation_mode"] == "2d"
+    assert resolved["motion"]["zoom"] == pytest.approx(1.05)
+    assert resolved["camera_3d"]["fov"] == pytest.approx(40.0)
+    assert "camera_3d.fov" not in validation["fields"]
+    assert validation["valid"] is True
+
+
+def test_inactive_2d_schedule_error_does_not_break_3d_resolver() -> None:
+    project = sample_project()
+    project["animation"]["mode"] = "3d"
+    project["motion"]["zoom"] = "0:(totally_not_math(t))"
+
+    resolved = resolve_project_frame(project, 50)
+    validation = validate_project_schedules(project)
+
+    assert resolved["animation_mode"] == "3d"
+    assert resolved["camera_3d"]["translation_z"] == pytest.approx(-2.0)
+    assert resolved["motion"]["zoom"] == pytest.approx(1.0)
+    assert "motion.zoom" not in validation["fields"]
+    assert validation["valid"] is True
+
+
+
+@pytest.mark.parametrize("schedule", ["0:(0)", "0:(65)"])
+def test_cadence_validation_rejects_out_of_range_values(schedule: str) -> None:
+    project = sample_project()
+    project["cadence"]["diffusion"] = schedule
+    project.pop("tracks", None)
+
+    result = validate_project_schedules(project)
+
+    assert result["valid"] is False
+    issue = next(
+        item for item in result["issues"]
+        if item["field"] == "cadence.diffusion"
+    )
+    assert issue["severity"] == "error"
+
+
+def test_cadence_schedule_series_is_resolvable() -> None:
+    result = project_schedule_series(
+        sample_project(),
+        "cadence.diffusion",
+        sample_count=5,
+    )
+
+    assert result["samples"][0]["value"] == pytest.approx(1.0)
+    assert result["samples"][-1]["value"] == pytest.approx(3.0)

@@ -32,6 +32,7 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
         "width": 1024,
         "height": 1024,
         "prompt_transition": "blend",
+        "mode": "2d",
         "start_mode": "prompt",
         "source_image": "",
         "source_image_name": "",
@@ -45,8 +46,18 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
         {"frame": 0, "value": ""}
     ]
     assert project["tracks"]["camera_2d"]["zoom"]["schedule"] == "0:(1.0)"
-    assert project["tracks"]["camera_3d"] == {}
-    assert project["tracks"]["cadence"] == {}
+    assert project["camera_3d"]["translation_z"] == "0:(0)"
+    assert project["camera_3d"]["fov"] == "0:(40)"
+    assert project["tracks"]["camera_3d"]["translation_z"]["schedule"] == "0:(0)"
+    assert project["tracks"]["camera_3d"]["fov"]["schedule"] == "0:(40)"
+    assert project["cadence"]["diffusion"] == "0:(1)"
+    assert project["temporal"] == {
+        "mode": "forward", "mix": 0.65, "contrast_threshold": 96.0,
+    }
+    assert project["camera_3d"]["depth_resolution"] == "auto"
+    assert project["camera_3d"]["projection_mode"] == "legacy"
+    assert project["camera_3d"]["hole_fill"] == "nearest"
+    assert project["tracks"]["cadence"]["diffusion"]["schedule"] == "0:(1)"
     assert project["tracks"]["loras"] == {}
     assert project["id"].startswith("my-first-morph-")
 
@@ -272,3 +283,162 @@ def test_unsaved_payload_detects_legacy_changes_against_stale_tracks(tmp_path, m
 
     assert normalized["tracks"]["camera_2d"]["zoom"]["schedule"] == "0:(1.0), 119:(1.4)"
     assert normalized["tracks"]["generation"]["strength"]["schedule"] == "0:(1)"
+
+
+
+def test_animation_mode_normalizes_to_2d_or_3d() -> None:
+    project_3d = normalize_animation_project(
+        {
+            "name": "3D Project",
+            "animation": {"mode": "3d"},
+        },
+        project_id="3d-project",
+    )
+    invalid = normalize_animation_project(
+        {
+            "name": "Invalid Mode",
+            "animation": {"mode": "volumetric-ish"},
+        },
+        project_id="invalid-mode",
+    )
+
+    assert project_3d["animation"]["mode"] == "3d"
+    assert invalid["animation"]["mode"] == "2d"
+
+
+def test_legacy_project_without_animation_mode_defaults_to_2d() -> None:
+    payload = {
+        "schema_version": 1,
+        "id": "legacy-mode",
+        "name": "Legacy Mode",
+        "animation": {
+            "max_frames": 10,
+            "fps": 12,
+            "width": 512,
+            "height": 512,
+        },
+        "prompts": {"0": "test"},
+        "negative_prompts": {"0": ""},
+        "motion": {
+            "angle": "0:(0)",
+            "zoom": "0:(1)",
+            "translation_x": "0:(0)",
+            "translation_y": "0:(0)",
+        },
+        "generation": {
+            "strength": "0:(0.65)",
+            "noise": "0:(0.02)",
+            "steps": "0:(9)",
+            "guidance": "0:(0)",
+        },
+    }
+
+    normalized = normalize_animation_project(
+        payload,
+        existing=payload,
+        project_id=payload["id"],
+    )
+
+    assert normalized["animation"]["mode"] == "2d"
+
+
+
+def test_project_normalizes_depth_resolution_and_cadence() -> None:
+    project = normalize_animation_project(
+        {
+            "name": "Perf Settings",
+            "camera_3d": {"depth_resolution": "768"},
+            "cadence": {"diffusion": "0:(3)"},
+        },
+        project_id="perf-settings",
+    )
+
+    assert project["camera_3d"]["depth_resolution"] == "768"
+    assert project["cadence"]["diffusion"] == "0:(3)"
+    assert project["tracks"]["cadence"]["diffusion"]["schedule"] == "0:(3)"
+
+    invalid = normalize_animation_project(
+        {
+            "name": "Bad Depth",
+            "camera_3d": {"depth_resolution": "gigantic"},
+        },
+        project_id="bad-depth",
+    )
+    assert invalid["camera_3d"]["depth_resolution"] == "auto"
+
+
+def test_b51_projection_options_round_trip_and_invalid_values_fallback(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "B5 Warp Quality"})
+    payload = deepcopy(created)
+    payload["camera_3d"]["projection_mode"] = "splat"
+    payload["camera_3d"]["hole_fill"] = "background"
+
+    saved = save_animation_project(created["id"], payload)
+    assert saved["camera_3d"]["projection_mode"] == "splat"
+    assert saved["camera_3d"]["hole_fill"] == "background"
+    loaded = load_animation_project(created["id"])
+    assert loaded["camera_3d"]["projection_mode"] == "splat"
+    assert loaded["camera_3d"]["hole_fill"] == "background"
+
+    payload = deepcopy(loaded)
+    payload["camera_3d"]["projection_mode"] = "nonsense"
+    payload["camera_3d"]["hole_fill"] = "unknown"
+    saved = save_animation_project(created["id"], payload)
+    assert saved["camera_3d"]["projection_mode"] == "legacy"
+    assert saved["camera_3d"]["hole_fill"] == "nearest"
+
+
+def test_b51_existing_project_without_quality_fields_defaults_to_legacy(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "Previous B5 Project"})
+    path = tmp_path / created["id"] / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["camera_3d"].pop("projection_mode")
+    payload["camera_3d"].pop("hole_fill")
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    loaded = load_animation_project(created["id"])
+    assert loaded["camera_3d"]["projection_mode"] == "legacy"
+    assert loaded["camera_3d"]["hole_fill"] == "nearest"
+
+
+def test_b52_temporal_options_round_trip_and_invalid_values_use_defaults(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    project = create_animation_project({"name": "B5.2 Tween"})
+    payload = deepcopy(project)
+    payload["temporal"] = {
+        "mode": "future-anchor", "mix": 0.4, "contrast_threshold": 80,
+    }
+    saved = save_animation_project(project["id"], payload)
+    assert saved["temporal"]["mode"] == "future-anchor"
+    assert saved["temporal"]["mix"] == pytest.approx(0.4)
+    assert saved["temporal"]["contrast_threshold"] == pytest.approx(80)
+    assert load_animation_project(project["id"])["temporal"] == saved["temporal"]
+
+    invalid = deepcopy(saved)
+    invalid["temporal"] = {
+        "mode": "invalid", "mix": -100, "contrast_threshold": 100000,
+    }
+    normalized = save_animation_project(project["id"], invalid)
+    assert normalized["temporal"]["mode"] == "forward"
+    assert 0.0 <= normalized["temporal"]["mix"] <= 1.0
+    assert 1.0 <= normalized["temporal"]["contrast_threshold"] <= 255.0
+
+
+def test_b52_legacy_project_without_temporal_settings_defaults_to_forward(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "Legacy B5.1"})
+    path = tmp_path / created["id"] / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload.pop("temporal")
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    loaded = load_animation_project(created["id"])
+    assert loaded["temporal"]["mode"] == "forward"

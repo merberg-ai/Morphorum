@@ -1,0 +1,30 @@
+{
+  "batch_name": "Deforum Golden 3D",
+  "max_frames": 30,
+  "fps": 15,
+  "W": 640,
+  "H": 640,
+  "animation_mode": "3D",
+  "animation_prompts": {
+    "0": "surreal moonlit ruins",
+    "15": "surreal moonlit ruins, impossible geometry"
+  },
+  "negative_prompt": "low quality, oversaturated",
+  "translation_x": "0:(0), 15:(0.02)",
+  "translation_y": "0:(0), 15:(-0.01)",
+  "translation_z": "0:(0.01), 15:(0.04)",
+  "rotation_3d_x": "0:(0), 15:(0.25)",
+  "rotation_3d_y": "0:(0), 15:(-0.5)",
+  "rotation_3d_z": "0:(0), 15:(0.1)",
+  "fov_schedule": "0:(40), 15:(48)",
+  "strength_schedule": "0:(0.62)",
+  "noise_schedule": "0:(0.015)",
+  "steps_schedule": "0:(22), 15:(28)",
+  "cfg_scale": 6,
+  "diffusion_cadence": 3,
+  "seed": 9001,
+  "seed_behavior": "fixed",
+  "sampler": "Euler",
+  "use_mask": true,
+  "mask_file": "C:\\\\unsafe\\\\mask.png"
+}

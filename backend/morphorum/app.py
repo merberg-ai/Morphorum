@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -36,6 +37,14 @@ from .animation_timeline import (
     timeline_track_descriptors,
     upsert_track_keyframe,
 )
+from .animation_depth import (
+    DepthError,
+    clear_project_depth_manifest,
+    depth_manager,
+    depth_model_catalog,
+    load_project_depth_manifest,
+    save_project_depth_manifest,
+)
 from .animation_motion import (
     MotionPreviewError,
     motion_preview_manager,
@@ -44,6 +53,14 @@ from .animation_motion import (
 from .animation_render import (
     AnimationRenderError,
     animation_render_manager,
+)
+from .animation_hybrid_extract import hybrid_extraction_manager
+from .animation_hybrid_source import (
+    HybridSourceError, managed_video_path, probe_managed_video, store_managed_video,
+)
+from .animation_video import (
+    VideoExportError,
+    video_export_manager,
 )
 from .schedules import ScheduleError
 from .console import (
@@ -54,11 +71,26 @@ from .console import (
     sse_events,
 )
 from .generation import GenerationError, generation_manager
+from .deforum_import import (
+    DeforumImportError,
+    create_deforum_import,
+    preview_deforum_import,
+)
+from .loras import LoRAError
+from .lora_inspector import LoRAInspectionError, inspect_lora
+from .civitai import CivitaiLookupError, lookup_civitai
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
-from .system_info import doctor_report, install_manifest, live_telemetry
+from .system_info import (
+    doctor_report,
+    git_branch,
+    git_commit,
+    install_manifest,
+    live_telemetry,
+    windows_gpu_process_memory,
+)
 
 FRONTEND_DIR = ROOT / "frontend" / "dist"
 FRONTEND_INDEX = FRONTEND_DIR / "index.html"
@@ -150,6 +182,8 @@ def health() -> dict:
         "status": "ok",
         "app": "Morphorum",
         "version": __version__,
+        "git_branch": git_branch(),
+        "git_commit": git_commit(),
         "frontend_asset_version": FRONTEND_ASSET_VERSION,
         "root": str(ROOT),
     }
@@ -163,6 +197,14 @@ def system() -> dict:
 @app.get("/api/system/telemetry")
 def system_telemetry() -> dict:
     return live_telemetry()
+
+
+@app.get("/api/system/gpu-memory")
+def system_gpu_memory() -> dict[str, Any]:
+    """Read Morphorum's own CUDA allocator state plus on-demand WDDM counters."""
+    profile = generation_manager.memory_profile()
+    profile["windows_wddm"] = windows_gpu_process_memory()
+    return profile
 
 
 @app.get("/api/install")
@@ -183,6 +225,45 @@ def get_settings() -> dict[str, Any]:
 @app.get("/api/animation/projects")
 def api_animation_projects() -> dict[str, Any]:
     return {"projects": list_animation_projects()}
+
+
+@app.post("/api/animation/import/deforum/preview")
+def api_preview_deforum_import(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return preview_deforum_import(
+            payload.get("content"),
+            filename=str(payload.get("filename") or ""),
+            model_id=payload.get("model_id"),
+            project_name=payload.get("name"),
+        )
+    except DeforumImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/import/deforum/create", status_code=201)
+def api_create_deforum_import(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        project, report = create_deforum_import(
+            payload.get("content"),
+            filename=str(payload.get("filename") or ""),
+            model_id=payload.get("model_id"),
+            project_name=payload.get("name"),
+        )
+        return {
+            "status": "created",
+            "project": project,
+            "path": animation_project_path(project["id"]),
+            "import": {
+                "importer_version": report["importer_version"],
+                "source_filename": report["source_filename"],
+                "source_sha256": report["source_sha256"],
+                "warnings": report["warnings"],
+                "unsupported_keys": report["unsupported_keys"],
+                "unmapped_keys": report["unmapped_keys"],
+            },
+        }
+    except DeforumImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/animation/projects", status_code=201)
@@ -397,6 +478,98 @@ def api_set_animation_timeline_interpolation(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.put("/api/animation/projects/{project_id}/hybrid-video", status_code=201)
+async def api_upload_hybrid_video(project_id: str, request: Request) -> dict[str, Any]:
+    """B6.2 managed video upload only; does not change active render semantics."""
+    try:
+        load_animation_project(project_id)
+        filename = str(request.headers.get("x-filename") or "source.mp4")
+        info = await store_managed_video(project_id, filename, request.stream())
+        emit_console("info", "animation",
+                     f"Source video uploaded and inspected for project {project_id}.")
+        return {"status": "uploaded", "video": info, "render_enabled": False}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/hybrid-video")
+def api_hybrid_video_status(project_id: str, filename: str = "source.mp4") -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return {
+            "video": probe_managed_video(project_id, filename),
+            "render_enabled": False,
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/hybrid-extraction", status_code=202)
+def api_start_hybrid_extraction(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return hybrid_extraction_manager.start(
+            project_id, str(payload.get("filename", "source.mp4")),
+            payload.get("start"), payload.get("end"), payload.get("fps"))
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/hybrid-extraction/{job_id}")
+def api_hybrid_extraction_status(project_id: str, job_id: str) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return hybrid_extraction_manager.status(project_id, job_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/hybrid-extraction/{job_id}/cancel")
+def api_cancel_hybrid_extraction(project_id: str, job_id: str) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return hybrid_extraction_manager.cancel(project_id, job_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/hybrid-frames")
+def api_hybrid_frames(project_id: str) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return hybrid_extraction_manager.manifest(project_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/hybrid-frames/{frame_number}")
+def api_hybrid_frame_file(project_id: str, frame_number: int):
+    try:
+        load_animation_project(project_id)
+        manifest = hybrid_extraction_manager.manifest(project_id)
+        if frame_number < 1 or frame_number > manifest["frames"]:
+            raise HybridSourceError("Frame number out of bounds.")
+        filename = manifest["filenames"][frame_number - 1]
+        path = animation_project_directory(project_id) / "assets" / "hybrid" / "frames" / filename
+        return FileResponse(path, media_type="image/png")
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HybridSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/projects/{project_id}/source-image", status_code=201)
 async def api_upload_animation_source_image(project_id: str, request: Request) -> dict[str, Any]:
     try:
@@ -408,6 +581,7 @@ async def api_upload_animation_source_image(project_id: str, request: Request) -
         project.setdefault("animation", {})["source_image"] = "assets/source.png"
         project["animation"]["source_image_name"] = filename
         saved = save_animation_project(project_id, project)
+        clear_project_depth_manifest(animation_project_directory(project_id))
         emit_console(
             "info",
             "animation",
@@ -451,9 +625,120 @@ def api_delete_animation_source_image(project_id: str) -> dict[str, Any]:
         path.unlink(missing_ok=True)
         project.setdefault("animation", {})["source_image"] = ""
         project["animation"]["source_image_name"] = ""
+        clear_project_depth_manifest(animation_project_directory(project_id))
         saved = save_animation_project(project_id, project)
         emit_console("info", "animation", f"Cleared source image for animation project {project_id}.")
         return {"status": "cleared", "project": saved}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/depth/models")
+def api_animation_depth_models() -> dict[str, Any]:
+    return {
+        "models": depth_model_catalog(),
+        "status": depth_manager.status(),
+    }
+
+
+@app.get("/api/animation/projects/{project_id}/depth-preview/status")
+def api_animation_depth_preview_status(project_id: str) -> dict[str, Any]:
+    try:
+        project_dir = animation_project_directory(project_id)
+        load_animation_project(project_id)
+        manifest = load_project_depth_manifest(project_dir)
+        if not manifest:
+            return {
+                "available": False,
+                "preview": None,
+                "manager": depth_manager.status(),
+            }
+        cache_key = str(manifest.get("cache_key") or "")
+        cached = depth_manager.cached(cache_key) if cache_key else None
+        return {
+            "available": bool(cached),
+            "preview": ({**manifest, "cache_hit": True} if cached else manifest),
+            "manager": depth_manager.status(),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DepthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/depth-preview")
+def api_generate_animation_depth_preview(
+    project_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        project_dir = animation_project_directory(project_id)
+        source_rel = str(project.get("animation", {}).get("source_image") or "").strip()
+        if not source_rel:
+            raise DepthError(
+                "Upload an animation source image before generating a depth preview."
+            )
+        source_path = (project_dir / source_rel).resolve(strict=False)
+        project_root = project_dir.resolve(strict=False)
+        if source_path != project_root and project_root not in source_path.parents:
+            raise DepthError("Animation source image path escaped the project directory.")
+        if not source_path.is_file():
+            raise DepthError("Animation source image not found.")
+
+        result = depth_manager.estimate_path(
+            source_path,
+            model_id=payload.get("model_id"),
+            device=str(payload.get("device") or "auto"),
+            force=bool(payload.get("force", False)),
+            release_after=True,
+        )
+        save_project_depth_manifest(project_dir, result)
+        return {
+            "status": "ready",
+            "preview": {
+                **{
+                    key: value
+                    for key, value in result.items()
+                    if key not in {"data_path", "preview_path", "metadata_path"}
+                },
+                "url": f"/api/animation/projects/{project_id}/depth-preview/image?v={result['cache_key'][:12]}",
+            },
+            "manager": depth_manager.status(),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DepthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/depth-preview/image")
+def api_animation_depth_preview_image(project_id: str):
+    try:
+        project_dir = animation_project_directory(project_id)
+        load_animation_project(project_id)
+        manifest = load_project_depth_manifest(project_dir)
+        cache_key = str((manifest or {}).get("cache_key") or "")
+        if not cache_key:
+            raise DepthError("No depth preview has been generated for this project.")
+        return FileResponse(
+            depth_manager.preview_path(cache_key),
+            media_type="image/png",
+            filename="depth-preview.png",
+        )
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DepthError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/animation/projects/{project_id}/depth-preview")
+def api_clear_animation_depth_preview(project_id: str) -> dict[str, Any]:
+    try:
+        project_dir = animation_project_directory(project_id)
+        load_animation_project(project_id)
+        clear_project_depth_manifest(project_dir)
+        return {"status": "cleared"}
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -482,7 +767,12 @@ def api_start_motion_preview(payload: dict[str, Any]) -> dict[str, Any]:
                 f"Cannot preview invalid schedule {first['field']}: {first['message']}"
             )
         source_path = animation_project_directory(project_id) / "assets" / "source.png"
-        return motion_preview_manager.start(project=normalized, source_path=source_path)
+        options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+        return motion_preview_manager.start(
+            project=normalized,
+            source_path=source_path,
+            highlight_holes=bool(options.get("highlight_holes", False)),
+        )
     except (AnimationProjectError, MotionPreviewError, ScheduleError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -594,6 +884,70 @@ def api_animation_render_preview(project_id: str, render_id: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/renders/{project_id}/{render_id}/performance")
+def api_animation_render_performance(project_id: str, render_id: str) -> dict[str, Any]:
+    try:
+        return animation_render_manager.performance_report(project_id, render_id)
+    except AnimationRenderError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/video/availability")
+def api_animation_video_availability() -> dict[str, Any]:
+    return video_export_manager.available()
+
+
+@app.post(
+    "/api/animation/renders/{project_id}/{render_id}/video",
+    status_code=202,
+)
+def api_start_animation_video_export(
+    project_id: str, render_id: str, payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return video_export_manager.start(
+            project_id, render_id,
+            format=str(payload.get("format") or "mp4"),
+            quality=str(payload.get("quality") or "balanced"),
+            fps=payload.get("fps"),
+        )
+    except VideoExportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/video/jobs/{job_id}")
+def api_animation_video_export_job(job_id: str) -> dict[str, Any]:
+    try:
+        return video_export_manager.get(job_id)
+    except VideoExportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/renders/{project_id}/{render_id}/videos")
+def api_animation_render_video_exports(project_id: str, render_id: str) -> dict[str, Any]:
+    try:
+        return {"exports": video_export_manager.list(project_id, render_id)}
+    except VideoExportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/renders/{project_id}/{render_id}/video/{format}/{quality}/{fps}")
+def api_download_animation_video(
+    project_id: str, render_id: str, format: str, quality: str, fps: int,
+    inline: bool = False,
+):
+    try:
+        path = video_export_manager.file(project_id, render_id, format, quality, fps)
+        return FileResponse(
+            path,
+            media_type="video/mp4" if format == "mp4" else "video/webm",
+            filename=path.name,
+            content_disposition_type="inline" if inline else "attachment",
+        )
+    except VideoExportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/resolve-frame")
 def api_resolve_animation_frame(payload: dict[str, Any]) -> dict[str, Any]:
     project_payload = payload.get("project")
@@ -608,7 +962,19 @@ def api_resolve_animation_frame(payload: dict[str, Any]) -> dict[str, Any]:
         )
         frame = int(payload.get("frame", 0))
         return {"resolved": resolve_project_frame(normalized, frame)}
-    except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
+    except (
+        AnimationProjectError,
+        ScheduleError,
+        TimelineError,
+        LoRAError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        emit_console(
+            "warning",
+            "animation",
+            f"Resolved-frame preview failed for {project_id}: {exc}",
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -671,6 +1037,157 @@ def api_animation_schedule_series(payload: dict[str, Any]) -> dict[str, Any]:
         )
     except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/loras")
+def api_lora_library(family: str | None = None, search: str | None = None) -> dict[str, Any]:
+    """List LoRAs already indexed from configured directories."""
+    supported = {"sdxl", "flux", "zimage"}
+    if family is not None and family not in supported:
+        raise HTTPException(status_code=400, detail="Unsupported LoRA family.")
+    records = list_models(family=family, kind="loras", search=search, limit=2000)
+    counts = {key: sum(item.get("family") == key for item in records) for key in sorted(supported)}
+    emit_console(
+        "info", "lora",
+        f"LoRA Manager library ready: {len(records)} indexed item(s), "
+        + ", ".join(f"{name}={count}" for name, count in counts.items())
+        + ("; filtered by " + family if family else "") + ".",
+    )
+    return {"loras": records}
+
+
+@app.get("/api/loras/{model_id}/inspect")
+def api_lora_inspect(model_id: str) -> dict[str, Any]:
+    """Inspect the file referenced by an indexed LoRA ID, never an arbitrary path."""
+    try:
+        detail = inspect_lora(model_id)
+    except LoRAInspectionError as exc:
+        emit_console("warning", "lora", f"LoRA inspection refused for ID {model_id[:32]}: {exc}")
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    summary = str(detail.get("name") or "")[:130].replace("\n", " ").replace("\r", " ")
+    components = detail.get("components") or {}
+    ranks = detail.get("ranks") or []
+    rank_text = ", ".join(f"{item['rank']}x{item['modules']}" for item in ranks[:10]) or "unknown"
+    emit_console(
+        "info", "lora",
+        f"Inspected [{detail.get('family')}] {summary}: "
+        f"format={detail.get('adapter_format')}, tensors={detail.get('tensor_count')}, "
+        f"UNet={components.get('unet', 0)}, transformer={components.get('transformer', 0)}, "
+        f"TE1={components.get('text_encoder', 0)}, TE2={components.get('text_encoder_2', 0)}, "
+        f"ranks={rank_text}.",
+    )
+    emit_console(
+        "info", "lora",
+        f"Metadata for {summary}: base_model={str(detail.get('metadata_base_model') or 'not recorded')[:120]}, "
+        f"trigger_source={detail.get('trigger_source')}, trigger_count={len(detail.get('trigger_words') or [])}, "
+        f"sidecar_json={detail.get('sidecar') or 'none'}, "
+        f"sidecar_html={(detail.get('html_sidecar') or {}).get('filename') or 'none'}.",
+    )
+    for warning in (detail.get("warnings") or [])[:8]:
+        emit_console("warning", "lora", f"{summary}: {str(warning)[:220]}")
+    for error in (detail.get("errors") or [])[:6]:
+        emit_console("warning", "lora", f"{summary}: {str(error)[:220]}")
+    return detail
+
+
+@app.post("/api/loras/{model_id}/civitai-lookup")
+def api_lora_civitai_lookup(model_id: str) -> dict[str, Any]:
+    """Network lookup is opt-in; the indexed file SHA-256 is sent to Civitai."""
+    indexed = get_model(model_id)
+    display = (str(indexed.get("name") or "")[:130].replace("\n", " ").replace("\r", " ")
+               if indexed and indexed.get("kind") == "loras" else model_id[:32])
+    emit_console("info", "lora", f"Civitai lookup requested for {display}: hashing local LoRA file.")
+    try:
+        result = lookup_civitai(model_id)
+    except CivitaiLookupError as exc:
+        emit_console("warning", "lora", f"Civitai lookup failed for {display}: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result.get("found"):
+        emit_console(
+            "info", "lora",
+            f"Civitai matched {display}: {result.get('confidence')}, "
+            f"model={result.get('model_id')}, version={result.get('version_id')}, "
+            f"base={result.get('base_model') or 'unknown'}, "
+            f"trained_words={len(result.get('trained_words') or [])}, "
+            f"sha256={str(result.get('sha256') or '')[:12]}…",
+        )
+    else:
+        emit_console(
+            "warning", "lora", f"No Civitai version match for {display}, "
+            f"sha256={str(result.get('sha256') or '')[:12]}…",
+        )
+    return result
+
+
+@app.post("/api/loras/{model_id}/runtime-audit")
+def api_lora_runtime_audit(model_id: str) -> dict[str, Any]:
+    """Record an explicit read-only snapshot of LoRA state on the live pipeline."""
+    record = get_model(model_id)
+    if not record or record.get("kind") != "loras":
+        raise HTTPException(status_code=404, detail="Indexed LoRA not found.")
+    status = generation_manager.model_status()
+    entry = next((item for item in status.get("loras", []) if item.get("id") == model_id), None)
+    active = next(
+        (item for item in status.get("active_loras", [])
+         if entry and item.get("adapter_name") == entry.get("adapter_name")),
+        None,
+    )
+    name = str(record.get("name") or "")[:130].replace("\n", " ").replace("\r", " ")
+    diagnostics = (entry or {}).get("diagnostics") or {}
+    emit_console(
+        "info", "lora",
+        f"Runtime audit [{record.get('family')}] {name}: "
+        f"checkpoint={status.get('model_name') or 'none'}, "
+        f"family={status.get('family') or 'none'}, task={status.get('task') or 'none'}, "
+        f"attached={'yes' if entry else 'no'}, "
+        f"active_weight={active.get('weight') if active else 'none'}, "
+        f"compatibility={(entry or {}).get('compatibility') or 'unspecified'}, "
+        f"injected_modules={diagnostics.get('modules', 'unknown')}, "
+        f"tensor_abs_sum={diagnostics.get('abs_sum', 'unknown')}. "
+        "Adapter registration does not establish pixel-level influence.",
+    )
+    return status
+
+
+@app.post("/api/loras/{model_id}/activity")
+def api_lora_manager_activity(model_id: str, payload: dict[str, Any]) -> dict[str, str]:
+    """Record prompt insertion outcomes without accepting arbitrary log messages."""
+    record = get_model(model_id)
+    if record is None or record.get("kind") != "loras":
+        raise HTTPException(status_code=404, detail="Indexed LoRA not found.")
+    event = str(payload.get("event") or "")
+    if event not in {"prompt_inserted", "prompt_rejected"}:
+        raise HTTPException(status_code=400, detail="Invalid LoRA Manager event.")
+    reason = str(payload.get("reason") or "")
+    allowed_reasons = {"", "no_model", "wrong_family", "not_indexed",
+                       "invalid_strength", "invalid_name"}
+    if reason not in allowed_reasons:
+        raise HTTPException(status_code=400, detail="Invalid LoRA Manager reason.")
+    weight = payload.get("weight")
+    if not isinstance(weight, (int, float)) or isinstance(weight, bool) or not math.isfinite(weight):
+        raise HTTPException(status_code=400, detail="A finite LoRA weight is required.")
+    family = str(payload.get("image_family") or "")
+    if family not in {"", "sdxl", "flux", "zimage"}:
+        raise HTTPException(status_code=400, detail="Invalid image model family.")
+    try:
+        count = int(payload.get("trigger_count", 0))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid trigger word count.") from exc
+    if count < 0 or count > 64:
+        raise HTTPException(status_code=400, detail="Invalid trigger word count.")
+    if event == "prompt_inserted" and reason:
+        raise HTTPException(status_code=400, detail="An inserted LoRA cannot have a rejection reason.")
+    if event == "prompt_rejected" and not reason:
+        raise HTTPException(status_code=400, detail="A rejected LoRA must have a reason.")
+    display = str(record.get("name") or "")[:130].replace("\n", " ").replace("\r", " ")
+    emit_console(
+        "info" if event == "prompt_inserted" else "warning", "lora",
+        f"Image prompt {'insertion succeeded' if event == 'prompt_inserted' else 'insertion rejected'} "
+        f"for [{record.get('family')}] {display}: "
+        f"weight={weight:.3g}, image_family={family or 'none'}, trigger_words={count}"
+        + (f", reason={reason}" if reason else "") + ".",
+    )
+    return {"status": "recorded"}
 
 
 @app.get("/api/models/families")

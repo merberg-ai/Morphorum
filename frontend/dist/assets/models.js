@@ -231,7 +231,16 @@
     } catch (error) {
       const list = qs('#managed-model-list');
       if (list) {
-        list.innerHTML = `<div class="model-empty"><strong>Could not load managed catalog</strong><span>${String(error.message)}</span></div>`;
+        {
+          const empty = document.createElement('div');
+          empty.className = 'model-empty';
+          const title = document.createElement('strong');
+          title.textContent = 'Could not load ' + 'managed catalog';
+          const detail = document.createElement('span');
+          detail.textContent = String(error.message);
+          empty.append(title, detail);
+          list.replaceChildren(empty);
+        }
       }
       toast('Managed model catalog unavailable', error.message, 'error', 6500);
     }
@@ -279,17 +288,7 @@
     });
   }
 
-  function copyText(text) {
-    if (navigator.clipboard?.writeText && window.isSecureContext) return navigator.clipboard.writeText(text);
-    const area = document.createElement('textarea');
-    area.value = text;
-    area.style.position = 'fixed';
-    area.style.opacity = '0';
-    document.body.appendChild(area);
-    area.select();
-    try { document.execCommand('copy'); } finally { area.remove(); }
-    return Promise.resolve();
-  }
+  function copyText(text) { return window.MorphorumClipboard.writeText(text); }
 
   function modelRow(model) {
     const row = document.createElement('div');
@@ -317,7 +316,11 @@
     const path = document.createElement('div');
     path.className = 'model-path';
     path.textContent = model.path;
-    path.title = model.path;
+    const pathDetails = document.createElement('details');
+    pathDetails.className = 'model-path-details';
+    const pathSummary = document.createElement('summary');
+    pathSummary.textContent = 'Show full file path';
+    pathDetails.append(pathSummary, path);
 
     const size = document.createElement('div');
     size.className = 'model-size';
@@ -334,7 +337,7 @@
       action.className = 'secondary-button use-model-button';
       action.textContent = 'Copy Tag';
       action.addEventListener('click', async () => {
-        const tag = `<lora:${model.name}:1.0>`;
+        const tag = window.MorphorumPromptTags.lora({ name: model.name, weight: 1 });
         try {
           await copyText(tag);
           toast('LoRA tag copied', tag, 'success');
@@ -344,7 +347,7 @@
       });
     }
 
-    row.append(nameWrap, family, kind, path, size, action);
+    row.append(nameWrap, family, kind, pathDetails, size, action);
     return row;
   }
 
@@ -436,7 +439,16 @@
       populateImageModelSelect();
       if (announce) toast('Model index loaded', `${state.models.length} file(s) available.`, 'success');
     } catch (error) {
-      if (list) list.innerHTML = `<div class="model-empty"><strong>Could not load model index</strong><span>${String(error.message)}</span></div>`;
+      if (list) {
+          const empty = document.createElement('div');
+          empty.className = 'model-empty';
+          const title = document.createElement('strong');
+          title.textContent = 'Could not load ' + 'model index';
+          const detail = document.createElement('span');
+          detail.textContent = String(error.message);
+          empty.append(title, detail);
+          list.replaceChildren(empty);
+        }
       toast('Model index unavailable', error.message, 'error', 6500);
     }
   }
@@ -464,6 +476,12 @@
     qs('#model-search')?.addEventListener('input', renderModels);
     qs('#model-family-filter')?.addEventListener('change', renderModels);
     qs('#model-kind-filter')?.addEventListener('change', renderModels);
+    qs('#model-filters-clear')?.addEventListener('click', () => {
+      qs('#model-search').value = '';
+      qs('#model-family-filter').value = '';
+      qs('#model-kind-filter').value = '';
+      renderModels();
+    });
     qs('#image-model-select')?.addEventListener('change', updateImageBadge);
   }
 

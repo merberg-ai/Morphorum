@@ -52,6 +52,10 @@
     lastEventId: 0,
     eventSource: null,
     telemetryTimer: null,
+    jobs: { image: null, animation: null },
+    settingsDirty: false,
+    settingsTab: 'appearance',
+    foregroundJobType: null,
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -96,10 +100,56 @@
     return item;
   }
 
+  function updateGlobalJobStatus() {
+    const panel = qs('#global-job-status');
+    if (!panel) return;
+    const active = Object.values(state.jobs).filter(job => job &&
+      ['queued','loading_model','generating','rendering','finalizing','paused','pause_requested'].includes(job.status));
+    if (!active.some(job => job.type === state.foregroundJobType)) {
+      state.foregroundJobType = active[0]?.type || null;
+    }
+    const current = active.find(job => job.type === state.foregroundJobType);
+    panel.hidden = !current;
+    panel.dataset.jobType = current?.type || '';
+    if (!current) return;
+    const percent = Math.max(0, Math.min(100, Math.round(Number(current.progress || 0) * 100)));
+    const kind = current.type === 'image' ? 'Image' : 'Animation';
+    const phase = String(current.status || '').replaceAll('_',' ');
+    const count = current.total ? ' · ' + Math.min(current.current, current.total) + '/' + current.total : '';
+    const eta = current.eta_seconds == null || !Number.isFinite(Number(current.eta_seconds))
+      ? '' : ' · ETA ' + Math.round(Number(current.eta_seconds)) + 's';
+    qs('#global-job-label').textContent = kind + count + ' · ' + phase + eta;
+    qs('#global-job-percent').textContent = percent + '%';
+    qs('#global-job-progress-fill').style.width = percent + '%';
+    qs('.global-job-progress', panel)?.setAttribute('aria-valuenow', String(percent));
+  }
+  function openActiveJob() {
+    const kind = qs('#global-job-status')?.dataset.jobType;
+    if (!kind) return;
+    switchView(kind === 'image' ? 'image' : 'animation');
+    if (kind === 'animation') {
+      qs('#animation-tab-monitor')?.click();
+    } else {
+      qs('#generation-progress')?.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  }
+  function closeNavMore() {
+    const menu = qs('#nav-more-menu'), toggle = qs('#nav-more-toggle');
+    if (menu) menu.hidden = true;
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
+  function refreshNavMore(name) {
+    const more = qs('#nav-more-toggle');
+    if (more) more.classList.toggle('active', name === 'settings' || name === 'console');
+    closeNavMore();
+  }
+
   function switchView(name) {
     qsa('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === name));
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
+    refreshNavMore(name);
     if (name === 'console') renderConsole();
+    if (name === 'loras') window.MorphorumLoras?.refreshRuntime?.();
     try { history.replaceState(null, '', `#${name}`); } catch (_) {}
   }
 
@@ -192,6 +242,9 @@
     state.settings.performance.unload_after_generation = Boolean(
       state.settings.performance.unload_after_generation
     );
+    state.settings.performance.sdxl_vae_tiling = Boolean(
+      state.settings.performance.sdxl_vae_tiling
+    );
   }
 
   function ensureManagedModels() {
@@ -200,6 +253,35 @@
     state.settings.managed_models.locations ||= {};
     state.settings.managed_models.locations.zimage ||= '.\\ckpts\\z-image';
     return state.settings.managed_models;
+  }
+
+  function markSettingsDirty() {
+    state.settingsDirty = true;
+    renderSettingsDirtyState();
+  }
+  function setSettingsClean() {
+    state.settingsDirty = false;
+    renderSettingsDirtyState();
+  }
+  function renderSettingsDirtyState() {
+    const badge = qs('#settings-dirty-state');
+    if (badge) {
+      badge.textContent = state.settingsDirty ? 'Unsaved changes' : 'All changes saved';
+      badge.classList.toggle('dirty', state.settingsDirty);
+    }
+  }
+  function selectSettingsTab(tab, { persist = true } = {}) {
+    if (!['appearance','generation','paths','storage'].includes(tab)) return;
+    state.settingsTab = tab;
+    qsa('#settings-internal-tabs button[data-settings-tab]').forEach(button => {
+      const selected = button.dataset.settingsTab === tab;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-selected', String(selected));
+    });
+    qsa('#model-path-cards .settings-pane').forEach(pane => {
+      pane.hidden = pane.dataset.settingsPane !== tab;
+    });
+    if (persist) try { localStorage.setItem('morphorum.settings.tab.v1', tab); } catch (_) {}
   }
 
   function createSelectField(id, labelText, options, value, onChange) {
@@ -402,7 +484,30 @@
     unloadRow.append(unloadInput, unloadCopy);
     unloadLabel.append(unloadTitle, unloadRow);
 
-    grid.append(previewLabel, unloadLabel);
+    const tilingLabel = document.createElement('label');
+    tilingLabel.className = 'setting-toggle';
+    const tilingTitle = document.createElement('span');
+    tilingTitle.textContent = 'SDXL high-resolution memory';
+    const tilingRow = document.createElement('div');
+    tilingRow.className = 'toggle-row';
+    const tilingInput = document.createElement('input');
+    tilingInput.type = 'checkbox';
+    tilingInput.id = 'sdxl-vae-tiling';
+    tilingInput.checked = Boolean(state.settings.performance.sdxl_vae_tiling);
+    tilingInput.addEventListener('change', () => {
+      state.settings.performance.sdxl_vae_tiling = tilingInput.checked;
+    });
+    const tilingCopy = document.createElement('div');
+    const tilingStrong = document.createElement('strong');
+    tilingStrong.textContent = 'VAE tiling (optional)';
+    const tilingHelp = document.createElement('small');
+    tilingHelp.textContent =
+      'Split SDXL VAE processing into smaller tiles to reduce memory pressure at larger sizes. Turn on only if needed, then unload and reload the model.';
+    tilingCopy.append(tilingStrong, tilingHelp);
+    tilingRow.append(tilingInput, tilingCopy);
+    tilingLabel.append(tilingTitle, tilingRow);
+
+    grid.append(previewLabel, unloadLabel, tilingLabel);
     card.append(header, grid);
     return card;
   }
@@ -506,6 +611,7 @@
     remove.addEventListener('click', () => {
       ensureFamily(family)[kind].splice(index, 1);
       renderSettings();
+      markSettingsDirty();
     });
 
     row.append(inputWrap, validate, remove, message);
@@ -525,6 +631,7 @@
     add.addEventListener('click', () => {
       ensureFamily(family)[kind].push('');
       renderSettings();
+      markSettingsDirty();
       const inputs = qsa(`.family-card[data-family="${family}"] .path-input`);
       inputs.at(-1)?.focus();
     });
@@ -552,9 +659,28 @@
     if (!container || !state.settings) return;
 
     container.replaceChildren();
-    container.appendChild(createAppearanceCard());
-    container.appendChild(createPreferencesCard());
-    container.appendChild(createManagedModelsCard());
+    const tabs = document.createElement('nav');
+    tabs.id = 'settings-internal-tabs';
+    tabs.className = 'settings-internal-tabs';
+    tabs.setAttribute('aria-label', 'Settings groups');
+    const panes = {};
+    for (const [name,label] of [['appearance','Appearance'],['generation','Generation'],['paths','Model Paths'],['storage','Storage']]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.settingsTab = name;
+      button.textContent = label;
+      button.addEventListener('click', () => selectSettingsTab(name));
+      tabs.appendChild(button);
+      const pane = document.createElement('section');
+      pane.className = 'settings-pane';
+      pane.dataset.settingsPane = name;
+      panes[name] = pane;
+    }
+    container.appendChild(tabs);
+    for (const pane of Object.values(panes)) container.appendChild(pane);
+    panes.appearance.appendChild(createAppearanceCard());
+    panes.generation.appendChild(createPreferencesCard());
+    panes.storage.appendChild(createManagedModelsCard());
     for (const [family, fallbackLabel, source, loraSource, supportsLoras] of FAMILY_DEFS) {
       if (source === 'managed' && !(supportsLoras && loraSource === 'external')) continue;
       const familyData = ensureFamily(family);
@@ -585,14 +711,24 @@
       if (supportsLoras && loraSource === 'external') {
         card.appendChild(createPathSection(family, 'loras', 'LoRA directories'));
       }
-      container.appendChild(card);
+      panes.paths.appendChild(card);
     }
 
+    selectSettingsTab(state.settingsTab, { persist: false });
+    renderSettingsDirtyState();
     loader.hidden = true;
     container.hidden = false;
   }
 
   async function loadSettings({ announce = false } = {}) {
+    if (announce && state.settingsDirty) {
+      const allowed = await window.MorphorumDialog.confirm({
+        title:'Discard unsaved settings?',
+        message:'Reloading from the server will discard edits to model paths and preferences that you have not saved.',
+        variant:'danger', confirmText:'Discard & Reload', cancelText:'Keep Editing'
+      });
+      if (!allowed) return;
+    }
     const button = qs('#load-settings');
     setBusy(button, true);
     try {
@@ -611,6 +747,7 @@
       ensurePreferences();
       applyAppearance(state.settings.ui);
       renderSettings();
+      setSettingsClean();
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       if (announce) toast('Settings loaded', 'Configuration reloaded from the Morphorum server.', 'success');
     } catch (error) {
@@ -652,6 +789,7 @@
       },
       performance: {
         unload_after_generation: Boolean(state.settings.performance.unload_after_generation),
+        sdxl_vae_tiling: Boolean(state.settings.performance.sdxl_vae_tiling),
       },
     };
   }
@@ -669,6 +807,7 @@
       ensurePreferences();
       applyAppearance(state.settings.ui);
       renderSettings();
+      setSettingsClean();
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       const warnings = (payload.validation || []).filter(item => !(item.exists && item.is_directory && item.readable));
       if (warnings.length) {
@@ -696,7 +835,9 @@
   function filteredConsoleEvents(events = state.events) {
     const levels = checkedValues('#level-filters');
     const categories = checkedValues('#category-filters');
-    return (events || []).filter(event => levels.has(event.level) && categories.has(event.category));
+    const search = (qs('#console-search')?.value || '').trim().toLowerCase();
+    return (events || []).filter(event => levels.has(event.level) && categories.has(event.category) &&
+      (!search || [event.message,event.category,event.level].some(value => String(value || '').toLowerCase().includes(search))));
   }
 
   function consoleEventTime(event) {
@@ -720,30 +861,7 @@
   }
 
   async function writeClipboardText(text) {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    textarea.style.top = '0';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
-
-    let copied = false;
-    try {
-      copied = document.execCommand('copy');
-    } finally {
-      textarea.remove();
-    }
-    if (!copied) throw new Error('The browser blocked clipboard access.');
+    return window.MorphorumClipboard.writeText(text);
   }
 
   async function copyConsoleEvents(events, title) {
@@ -786,6 +904,8 @@
     const windowEl = qs('#console-window');
     if (!windowEl) return;
     const filtered = filteredConsoleEvents();
+    const count = qs('#console-count');
+    if (count) count.textContent = filtered.length + ' matching messages';
 
     if (!filtered.length) {
       windowEl.innerHTML = '<div class="console-empty">No messages match the current filters.</div>';
@@ -843,6 +963,12 @@
   }
 
   async function clearServerConsole() {
+    const accepted = await window.MorphorumDialog.confirm({
+      title: 'Clear server console buffer?',
+      message: 'This deletes the current server-side log buffer for every connected browser. Local filtering is unaffected.',
+      variant: 'danger', confirmText: 'Clear Server Buffer', cancelText: 'Keep Buffer',
+    });
+    if (!accepted) return;
     try {
       await api('/api/console', { method: 'DELETE' });
       state.events = [];
@@ -879,11 +1005,16 @@
       setTelemetryGauge('#telemetry-cpu-fill', '#telemetry-cpu-value', data.cpu_percent, `${Math.round(clampPercent(data.cpu_percent))}%`);
 
       const ram = data.ram || {};
+      const compact = window.matchMedia('(max-width: 640px)').matches;
+      const compactMemory = bytes => {
+        const n = Number(bytes) / (1024 ** 3);
+        return Number.isFinite(n) ? (n >= 10 ? Math.round(n) : n.toFixed(1)) + ' GB' : '--';
+      };
       setTelemetryGauge(
         '#telemetry-ram-fill',
         '#telemetry-ram-value',
         ram.free_percent,
-        `${formatGiB(ram.available_bytes)} / ${formatGiB(ram.total_bytes)} GiB`
+        compact ? compactMemory(ram.available_bytes) : `${formatGiB(ram.available_bytes)} / ${formatGiB(ram.total_bytes)} GiB`
       );
 
       const gpuItems = qsa('.gpu-telemetry');
@@ -902,7 +1033,7 @@
           '#telemetry-vram-fill',
           '#telemetry-vram-value',
           gpu.memory_free_percent,
-          `${formatGiB(freeBytes)} / ${formatGiB(totalBytes)} GiB`
+          compact ? compactMemory(freeBytes) : `${formatGiB(freeBytes)} / ${formatGiB(totalBytes)} GiB`
         );
         const strip = qs('#telemetry-strip');
         if (strip) strip.title = `${gpu.name} · ${gpu.temperature_c}°C`;
@@ -926,20 +1057,83 @@
       const health = await api('/api/health');
       dot?.classList.add('ok');
       dot?.classList.remove('bad');
-      if (text) text.textContent = `v${health.version} · API ready`;
+      if (text) {
+        const branch = String(health.git_branch || 'detached');
+        const commit = String(health.git_commit || '').slice(0, 12);
+        text.textContent = 'Connected';
+        text.title = `Morphorum ${health.version} · Server connected`;
+      }
     } catch (error) {
       dot?.classList.add('bad');
       dot?.classList.remove('ok');
-      if (text) text.textContent = 'API offline';
+      if (text) text.textContent = 'Disconnected';
     }
+  }
+
+  function syncMobileViewport() {
+    const mobile = window.matchMedia('(max-width: 640px)').matches;
+    const viewport = window.visualViewport;
+    if (!mobile || !viewport) {
+      document.documentElement.style.setProperty('--mobile-viewport-inset', '0px');
+      document.body.classList.remove('mobile-keyboard-open');
+      return;
+    }
+    const obstructed = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+    const keyboard = obstructed > 170 && document.activeElement?.matches?.('input,textarea,[contenteditable="true"]');
+    document.body.classList.toggle('mobile-keyboard-open', Boolean(keyboard));
+    document.documentElement.style.setProperty('--mobile-viewport-inset',
+      (keyboard ? 0 : Math.min(110, Math.round(obstructed))) + 'px');
   }
 
   function bindUi() {
     qsa('.nav-button').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
+    const moreToggle = qs('#nav-more-toggle');
+    moreToggle?.addEventListener('click', () => {
+      const menu = qs('#nav-more-menu');
+      if (!menu) return;
+      menu.hidden = !menu.hidden;
+      moreToggle.setAttribute('aria-expanded', String(!menu.hidden));
+    });
+    qsa('#nav-more-menu [data-more-view]').forEach(button => button.addEventListener('click', () => switchView(button.dataset.moreView)));
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.main-nav')) closeNavMore();
+    });
+    qs('#global-job-status')?.addEventListener('click', openActiveJob);
+    window.addEventListener('morphorum:job-status', event => {
+      const job = event.detail || {};
+      if (!['image','animation'].includes(job.type)) return;
+      state.jobs[job.type] = job.id ? { ...job, updated: Date.now() } : null;
+      updateGlobalJobStatus();
+    });
     qsa('[data-jump]').forEach(button => button.addEventListener('click', () => switchView(button.dataset.jump)));
     qs('#load-settings')?.addEventListener('click', () => loadSettings({ announce: true }));
+    const settingsArea = qs('#model-path-cards');
+    settingsArea?.addEventListener('input', markSettingsDirty);
+    settingsArea?.addEventListener('change', markSettingsDirty);
+    try { state.settingsTab = localStorage.getItem('morphorum.settings.tab.v1') || 'appearance'; } catch (_) {}
     qs('#save-settings')?.addEventListener('click', saveSettings);
     qsa('#level-filters input, #category-filters input').forEach(input => input.addEventListener('change', renderConsole));
+    qs('#console-search')?.addEventListener('input', renderConsole);
+    qsa('[data-console-preset]').forEach(button => button.addEventListener('click', () => {
+      const type = button.dataset.consolePreset;
+      qsa('#level-filters input').forEach(input => {
+        input.checked = type === 'all' || (type === 'errors' ? input.value === 'error' :
+          ['warning','error'].includes(input.value));
+      });
+      qsa('#category-filters input').forEach(input => { input.checked = true; });
+      renderConsole();
+    }));
+    qs('#console-jump-latest')?.addEventListener('click', () => {
+      const element = qs('#console-window');
+      if (element) element.scrollTop = element.scrollHeight;
+      const auto = qs('#auto-scroll');
+      if (auto) auto.checked = true;
+    });
+    qs('#console-window')?.addEventListener('scroll', event => {
+      const el = event.currentTarget;
+      const auto = qs('#auto-scroll');
+      if (auto?.checked && el.scrollHeight - el.scrollTop - el.clientHeight > 100) auto.checked = false;
+    });
     qs('#auto-scroll')?.addEventListener('change', renderConsole);
     qs('#copy-console-view')?.addEventListener('click', copyConsoleView);
     qs('#copy-console-buffer')?.addEventListener('click', copyConsoleBuffer);
@@ -950,8 +1144,14 @@
     });
     qs('#clear-console-server')?.addEventListener('click', clearServerConsole);
 
+    window.visualViewport?.addEventListener('resize', syncMobileViewport);
+    window.visualViewport?.addEventListener('scroll', syncMobileViewport);
+    window.addEventListener('resize', syncMobileViewport);
+    document.addEventListener('focusin', syncMobileViewport);
+    document.addEventListener('focusout', () => window.setTimeout(syncMobileViewport, 120));
+    syncMobileViewport();
     const requested = location.hash.replace('#', '');
-    if (['image', 'animation', 'models', 'settings', 'console'].includes(requested)) switchView(requested);
+    if (['image', 'animation', 'models', 'loras', 'settings', 'console'].includes(requested)) switchView(requested);
   }
 
   async function start() {

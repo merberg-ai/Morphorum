@@ -8,6 +8,7 @@ import threading
 import time
 import uuid
 from copy import deepcopy
+from functools import wraps
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,12 +19,19 @@ import numpy as np
 from PIL import Image, ImageOps
 from PIL.PngImagePlugin import PngInfo
 
+from .animation_3d import Camera3DError, render_depth_warp, reverse_camera_chain
+from .animation_depth import DepthError, depth_manager
 from .animation_motion import (
     _frame_transform_matrix,
     capture_frames,
     render_affine,
 )
 from .animation_resolution import resolve_project_frame, validate_project_schedules
+from .animation_temporal import blend_future_anchor
+from .animation_performance import (
+    AnimationPerformance, append_performance_record, load_performance_records,
+    performance_record, summarize_records,
+)
 from .console import emit_console
 from .generation import GenerationError, GenerationRequest, generation_manager
 from .loras import lora_catalog
@@ -158,6 +166,44 @@ def _detach_conditioning_to_cpu(value: Any):
     return value
 
 
+# Multiple LoRA weights and keyframed prompts can create a distinct conditioning
+# cache key on each animation anchor. Retain only the most recent small set of
+# embeddings; old entries otherwise keep CUDA tensors (and potentially autograd
+# graphs) alive across the entire render.
+MAX_CONDITIONING_CACHE_ENTRIES = 8
+
+
+def _inference_only_conditioning(function):
+    """Diffusers encode_prompt() is not itself decorated with no_grad.
+
+    Pipeline.__call__() wraps its own inference in no_grad, but our animation
+    renderer encodes blended prompts *before* entering pipeline.__call__.
+    Without this guard, encoding a new prompt for every LoRA strength can
+    retain a whole CLIP forward graph in conditioning_cache each frame.
+    """
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        import torch
+
+        with torch.inference_mode():
+            return function(*args, **kwargs)
+
+    return wrapped
+
+
+def _cache_conditioning_value(
+    cache: dict[tuple[Any, ...], Any] | None,
+    key: tuple[Any, ...],
+    value: Any,
+) -> None:
+    if cache is None:
+        return
+    while len(cache) >= MAX_CONDITIONING_CACHE_ENTRIES:
+        cache.pop(next(iter(cache)))
+    cache[key] = value
+
+
+@_inference_only_conditioning
 def _prompt_conditioning_kwargs(
     pipe: Any,
     family: str,
@@ -168,6 +214,7 @@ def _prompt_conditioning_kwargs(
     max_sequence_length: int = 512,
     conditioning_cache: dict[tuple[Any, ...], Any] | None = None,
     cache_zimage_on_cpu: bool = False,
+    lora_signature: tuple[Any, ...] = (),
 ) -> dict[str, Any]:
     positive_to_weight = float(positive.get("to_weight") or 0.0)
     same_positive = (
@@ -197,18 +244,28 @@ def _prompt_conditioning_kwargs(
     try:
         if family == "sdxl":
             do_cfg = float(guidance_scale) > 1.0
-            first = pipe.encode_prompt(
-                prompt=from_prompt,
-                negative_prompt=from_negative or None,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=do_cfg,
-            )
-            second = pipe.encode_prompt(
-                prompt=to_prompt,
-                negative_prompt=to_negative or None,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=do_cfg,
-            )
+
+            def sdxl_encoded(prompt_text: str, negative_text: str):
+                key = (
+                    "sdxl",
+                    prompt_text,
+                    negative_text,
+                    bool(do_cfg),
+                    tuple(lora_signature),
+                )
+                if conditioning_cache is not None and key in conditioning_cache:
+                    return conditioning_cache[key]
+                encoded = pipe.encode_prompt(
+                    prompt=prompt_text,
+                    negative_prompt=negative_text or None,
+                    num_images_per_prompt=1,
+                    do_classifier_free_guidance=do_cfg,
+                )
+                _cache_conditioning_value(conditioning_cache, key, encoded)
+                return encoded
+
+            first = sdxl_encoded(from_prompt, from_negative)
+            second = sdxl_encoded(to_prompt, to_negative)
             result = {
                 "prompt": None,
                 "negative_prompt": None,
@@ -230,16 +287,25 @@ def _prompt_conditioning_kwargs(
             return result
 
         if family == "flux":
-            first = pipe.encode_prompt(
-                prompt=from_prompt,
-                num_images_per_prompt=1,
-                max_sequence_length=max_sequence_length,
-            )
-            second = pipe.encode_prompt(
-                prompt=to_prompt,
-                num_images_per_prompt=1,
-                max_sequence_length=max_sequence_length,
-            )
+            def flux_encoded(prompt_text: str):
+                key = (
+                    "flux",
+                    prompt_text,
+                    int(max_sequence_length),
+                    tuple(lora_signature),
+                )
+                if conditioning_cache is not None and key in conditioning_cache:
+                    return conditioning_cache[key]
+                encoded = pipe.encode_prompt(
+                    prompt=prompt_text,
+                    num_images_per_prompt=1,
+                    max_sequence_length=max_sequence_length,
+                )
+                _cache_conditioning_value(conditioning_cache, key, encoded)
+                return encoded
+
+            first = flux_encoded(from_prompt)
+            second = flux_encoded(to_prompt)
             return {
                 "prompt": None,
                 "prompt_embeds": _blend_value(
@@ -252,7 +318,12 @@ def _prompt_conditioning_kwargs(
 
         if family == "zimage":
             def zimage_embeds(prompt_text: str):
-                key = ("zimage", prompt_text, int(max_sequence_length))
+                key = (
+                    "zimage",
+                    prompt_text,
+                    int(max_sequence_length),
+                    tuple(lora_signature),
+                )
                 if conditioning_cache is not None and key in conditioning_cache:
                     return conditioning_cache[key]
 
@@ -265,8 +336,7 @@ def _prompt_conditioning_kwargs(
                     encoded = _detach_conditioning_to_cpu(encoded)
                     generation_manager.release_inference_memory()
 
-                if conditioning_cache is not None:
-                    conditioning_cache[key] = encoded
+                _cache_conditioning_value(conditioning_cache, key, encoded)
                 return encoded
 
             first = zimage_embeds(from_prompt)
@@ -287,6 +357,18 @@ def _prompt_conditioning_kwargs(
     raise AnimationRenderError(
         f"Prompt blending is not implemented for model family '{family}'."
     )
+
+
+def _resolved_lora_signature(resolved: dict[str, Any]) -> tuple[Any, ...]:
+    values = []
+    for item in resolved.get("loras", []) if isinstance(resolved, dict) else []:
+        if not isinstance(item, dict):
+            continue
+        values.append((
+            str(item.get("id") or item.get("adapter_name") or item.get("name") or ""),
+            round(float(item.get("weight", 1.0)), 6),
+        ))
+    return tuple(values)
 
 
 def _prompt_state_for_frame(
@@ -354,21 +436,27 @@ def _frame_state_for_frame(
     diffusion_mode: str,
     motion_applied: bool,
     cumulative_matrix: np.ndarray,
+    depth_state: dict[str, Any] | None = None,
+    cadence_state: dict[str, Any] | None = None,
+    timings: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     motion = resolved.get("motion", {})
     generation = resolved.get("generation", {})
     retention_strength = float(generation.get("strength", 0.0))
     denoise_strength = (
         1.0 - retention_strength
-        if diffusion_mode in {"img2img", "transform-only"}
+        if diffusion_mode in {"img2img", "transform-only", "cadence-transform"}
         else None
     )
     dimensions = resolved.get("dimensions", {})
     width = int(dimensions.get("width") or 1)
     height = int(dimensions.get("height") or 1)
     seed_state = generation.get("seed", {})
+    camera_3d = resolved.get("camera_3d", {})
+    animation_mode = str(resolved.get("animation_mode") or "2d")
     return {
         "frame": int(resolved.get("frame") or 0),
+        "animation_mode": animation_mode,
         "motion_applied": bool(motion_applied),
         "motion": {
             "angle": float(motion.get("angle", 0.0)),
@@ -382,6 +470,23 @@ def _frame_state_for_frame(
             width=width,
             height=height,
         ),
+        "camera_3d": {
+            "translation_x": float(camera_3d.get("translation_x", 0.0)),
+            "translation_y": float(camera_3d.get("translation_y", 0.0)),
+            "translation_z": float(camera_3d.get("translation_z", 0.0)),
+            "rotation_x": float(camera_3d.get("rotation_x", 0.0)),
+            "rotation_y": float(camera_3d.get("rotation_y", 0.0)),
+            "rotation_z": float(camera_3d.get("rotation_z", 0.0)),
+            "fov": float(camera_3d.get("fov", 40.0)),
+            "projection_mode": str(camera_3d.get("projection_mode") or "legacy"),
+            "hole_fill": str(camera_3d.get("hole_fill") or "nearest"),
+        },
+        "depth_3d": deepcopy(depth_state) if depth_state else None,
+        "cadence": deepcopy(cadence_state) if cadence_state else {
+            "diffusion": int(resolved.get("cadence", {}).get("diffusion", 1) or 1),
+            "anchor": True,
+        },
+        "timings": deepcopy(timings) if timings else {},
         "generation": {
             "strength": retention_strength,
             "denoise_strength": denoise_strength,
@@ -434,6 +539,54 @@ def _prepare_source(source: Image.Image, width: int, height: int) -> Image.Image
     )
 
 
+def _prepare_depth_input(
+    image: Image.Image,
+    setting: str,
+) -> tuple[Image.Image, str]:
+    raw = str(setting or "auto").strip().lower()
+    maximum = max(image.size)
+    if raw == "full":
+        return image, "full"
+    if raw == "auto":
+        target = min(512, maximum)
+        label = "auto"
+    else:
+        try:
+            target = max(128, min(2048, int(raw)))
+        except (TypeError, ValueError):
+            target = min(512, maximum)
+            label = "auto"
+        else:
+            label = str(target)
+
+    if maximum <= target:
+        return image, label
+
+    scale = target / maximum
+    resized = image.resize(
+        (
+            max(2, int(round(image.width * scale))),
+            max(2, int(round(image.height * scale))),
+        ),
+        Image.Resampling.BILINEAR,
+    )
+    return resized, label
+
+
+def _resize_depth_map(
+    depth: np.ndarray,
+    *,
+    width: int,
+    height: int,
+) -> np.ndarray:
+    value = np.asarray(depth, dtype=np.float32)
+    if value.shape == (height, width):
+        return value
+    depth_image = Image.fromarray(value, mode="F")
+    resized = depth_image.resize((width, height), Image.Resampling.BILINEAR)
+    return np.asarray(resized, dtype=np.float32)
+
+
 def _save_frame(
     image: Image.Image,
     path: Path,
@@ -444,8 +597,137 @@ def _save_frame(
     pnginfo = PngInfo()
     pnginfo.add_text("Morphorum", json.dumps(metadata, ensure_ascii=False))
     temp = path.with_name(path.name + ".tmp")
-    image.save(temp, format="PNG", pnginfo=pnginfo)
+    image.save(
+        temp,
+        format="PNG",
+        pnginfo=pnginfo,
+        compress_level=1,
+        optimize=False,
+    )
     temp.replace(path)
+
+
+def _last_diffused_anchor(
+    project_id: str, render_id: str, before_frame: int,
+) -> int:
+    """Resume-safe: determine which already saved frame last ran diffusion."""
+    for frame in range(before_frame - 1, 0, -1):
+        path = _frame_path(project_id, render_id, frame)
+        if not path.is_file():
+            continue
+        with Image.open(path) as opened:
+            try:
+                metadata = json.loads(opened.info.get("Morphorum", "{}"))
+            except (ValueError, TypeError):
+                continue
+        state = metadata.get("render_state") or {}
+        if (state.get("generation") or {}).get("diffusion_mode") == "img2img":
+            return frame
+    return 0
+
+
+def _tween_between_depth_anchors(
+    job: "AnimationRenderJob",
+    *,
+    previous_anchor: int,
+    future_anchor: int,
+    future_image: Image.Image,
+    depth_resolution_setting: str,
+    lora_records: list[dict[str, Any]] | None,
+) -> int:
+    """Refine already-rendered cadence frames after the next anchor exists.
+
+    Does not modify the forward input used for subsequent diffusion. Runs on
+    CPU only; depth of the future anchor is computed once and cached on disk.
+    Every changed PNG is written atomically, retaining frame metadata.
+    """
+    distance = future_anchor - previous_anchor
+    if distance <= 1:
+        return 0
+    if distance > 32:
+        emit_console(
+            "warning", "animation",
+            f"{job.id}: skipping temporal tween over {distance} frames; "
+            "maximum supported anchor gap is 32.",
+        )
+        return 0
+
+    width = future_image.width
+    height = future_image.height
+    depth_input, _label = _prepare_depth_input(
+        future_image, depth_resolution_setting,
+    )
+    result = depth_manager.estimate(
+        depth_input, device="cpu", release_after=False,
+    )
+    depth = _resize_depth_map(
+        depth_manager.load_cached_array(str(result["cache_key"])),
+        width=width, height=height,
+    )
+    camera_states = {
+        index: resolve_project_frame(
+            job.project, index, lora_records=lora_records,
+        )["camera_3d"]
+        for index in range(previous_anchor + 1, future_anchor + 1)
+    }
+    source_camera = camera_states[future_anchor]
+    settings = job.project.get("temporal") or {}
+    mix = float(settings.get("mix", 0.65))
+    contrast = float(settings.get("contrast_threshold", 96.0))
+
+    # Complete all calculations before replacing any PNG. If reprojection
+    # fails, preserve the entire forward-only segment.
+    changes: list[tuple[Path, Image.Image, dict[str, Any]]] = []
+    for frame in range(previous_anchor + 1, future_anchor):
+        matrix, offset = reverse_camera_chain([
+            camera_states[index]
+            for index in range(frame + 1, future_anchor + 1)
+        ])
+        camera = camera_states[frame]
+        projected = render_depth_warp(
+            future_image,
+            depth,
+            source_fov=float(source_camera["fov"]),
+            fov=float(camera["fov"]),
+            projection_mode="splat",
+            fill_mode="nearest",
+            transform_matrix=matrix,
+            transform_offset=offset,
+        )
+        path = _frame_path(job.project_id, job.id, frame)
+        with Image.open(path) as opened:
+            forward_image = opened.convert("RGB").copy()
+            metadata = json.loads(opened.info["Morphorum"])
+        mask_path = _render_dir(job.project_id, job.id) / "masks" / f"frame_{frame:06d}.png"
+        forward_holes = None
+        if mask_path.is_file():
+            with Image.open(mask_path) as mask_opened:
+                forward_holes = mask_opened.convert("L").copy()
+
+        blend = blend_future_anchor(
+            forward_image,
+            projected.image,
+            future_holes=projected.hole_mask,
+            forward_holes=forward_holes,
+            position=(frame - previous_anchor) / distance,
+            mix=mix,
+            contrast_threshold=contrast,
+        )
+        metadata.setdefault("render_state", {})["temporal"] = {
+            "mode": "future-anchor",
+            "previous_anchor": previous_anchor,
+            "future_anchor": future_anchor,
+            "mix": mix,
+            "contrast_threshold": contrast,
+            "fraction_blended": blend.fraction_blended,
+            "fraction_repaired": blend.fraction_replaced,
+            "average_weight": blend.average_weight,
+            "future_coverage": projected.telemetry["projected_coverage"],
+        }
+        changes.append((path, blend.image, metadata))
+    for path, image, metadata in changes:
+        _save_frame(image, path, metadata=metadata)
+    return len(changes)
 
 
 def _build_render_preview(
@@ -524,6 +806,7 @@ class AnimationRenderJob:
     message: str = "Queued animation render"
     current_frame: int = 0
     current_step: int = 0
+    current_step_total: int = 0
     total_frames: int = 0
     progress: float = 0.0
     eta_seconds: float | None = None
@@ -541,6 +824,7 @@ class AnimationRenderJob:
     current_prompt_state: dict[str, Any] = field(default_factory=dict)
     current_frame_state: dict[str, Any] = field(default_factory=dict)
     resumed: bool = False
+    performance: dict[str, Any] = field(default_factory=dict)
     _frame_times: list[float] = field(default_factory=list, repr=False)
 
     def public(self) -> dict[str, Any]:
@@ -789,6 +1073,7 @@ class AnimationRenderManager:
             load_detail=payload.get("load_detail"),
             current_prompt_state=deepcopy(payload.get("current_prompt_state") or {}),
             current_frame_state=deepcopy(payload.get("current_frame_state") or {}),
+            performance=deepcopy(payload.get("performance") or {}),
             resumed=True,
         )
         with self._lock:
@@ -814,6 +1099,37 @@ class AnimationRenderManager:
         if not path.is_file():
             raise AnimationRenderError("Rendered animation frame not found.")
         return path
+
+    def performance_report(self, project_id: str, render_id: str) -> dict[str, Any]:
+        """Diagnostics for existing renders, including interrupted runs."""
+        import re
+
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", project_id) or not re.fullmatch(
+            r"[A-Za-z0-9_-]{1,100}", render_id
+        ):
+            raise AnimationRenderError("Invalid project or render identifier.")
+        path = _manifest_path(project_id, render_id)
+        if not path.is_file():
+            raise AnimationRenderError("Animation render manifest not found.")
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise AnimationRenderError("Animation render manifest is unreadable.") from exc
+        if manifest.get("project_id") != project_id or manifest.get("id") != render_id:
+            raise AnimationRenderError("Render identity mismatch.")
+        try:
+            records = load_performance_records(
+                _render_dir(project_id, render_id) / "performance.jsonl"
+            )
+        except OSError as exc:
+            raise AnimationRenderError(f"Could not read performance records: {exc}") from exc
+        return {
+            "project_id": project_id,
+            "render_id": render_id,
+            "status": manifest.get("status"),
+            "summary": summarize_records(records),
+            "frames": records,
+        }
 
     def preview_path(self, project_id: str, render_id: str) -> Path:
         path = _render_dir(project_id, render_id) / "preview.gif"
@@ -965,6 +1281,12 @@ class AnimationRenderManager:
         family = str(model["family"])
         capability = generation_manager._effective_capability(model)
         start_mode = str(animation.get("start_mode", "prompt") or "prompt").lower()
+        animation_mode = str(animation.get("mode", "2d") or "2d").strip().lower()
+        if animation_mode not in {"2d", "3d"}:
+            animation_mode = "2d"
+        depth_resolution_setting = str(
+            project.get("camera_3d", {}).get("depth_resolution") or "auto"
+        ).strip().lower()
 
         load_started = time.monotonic()
         pipe = None
@@ -997,10 +1319,21 @@ class AnimationRenderManager:
                 job.message = str(message)
 
         render_dir = _render_dir(job.project_id, job.id)
+        performance_path = render_dir / "performance.jsonl"
+        # Keep a bounded summary in the render manifest, and a detailed
+        # per-frame diagnostic sidecar that survives cancellation/restart.
+        performance_tracker = AnimationPerformance()
+        try:
+            for prior_record in load_performance_records(performance_path):
+                if int(prior_record.get("frame", -1)) < start_frame:
+                    performance_tracker.observe(prior_record)
+        except OSError as exc:
+            emit_console("warning", "animation", f"{job.id}: previous performance records unavailable: {exc}")
+        job.performance = performance_tracker.public()
         copied_source = render_dir / "source.png"
 
         cumulative_matrix = np.eye(3, dtype=np.float64)
-        if start_frame > 1:
+        if animation_mode == "2d" and start_frame > 1:
             for completed_frame in range(1, start_frame):
                 prior_resolved = resolve_project_frame(
                     project,
@@ -1081,6 +1414,7 @@ class AnimationRenderManager:
                     job.status = "loading_model"
                     job.current_frame = 0
                     job.current_step = 0
+                    job.current_step_total = steps
                     job.message = f"Loading model for starting frame 1 of {total}"
 
                 pipe, generator_device, validated_model = (
@@ -1151,6 +1485,7 @@ class AnimationRenderManager:
                             "bf16-streamed-group-offload",
                         }
                     ),
+                    lora_signature=_resolved_lora_signature(resolved),
                 )
                 call_args.update(conditioning)
 
@@ -1166,7 +1501,6 @@ class AnimationRenderManager:
                 frame_image = result.images[0].convert("RGB")
                 del result, call_args, conditioning, generator
                 pipe = None
-                generation_manager.release_inference_memory()
                 start_metadata = {
                     "source_frame": False,
                     "generated_start": True,
@@ -1201,6 +1535,7 @@ class AnimationRenderManager:
             ]
             job.current_frame = 0
             job.current_step = int(resolved["generation"]["steps"]) if start_mode == "prompt" else 0
+            job.current_step_total = int(resolved["generation"]["steps"]) if start_mode == "prompt" else 0
             job.progress = 1 / total
             job.message = f"Starting frame 1 of {total} complete"
             self._write_manifest(job)
@@ -1219,28 +1554,117 @@ class AnimationRenderManager:
             with Image.open(previous_path) as opened:
                 frame_image = opened.convert("RGB").copy()
 
+        previous_diffusion_anchor = _last_diffused_anchor(
+            job.project_id, job.id, start_frame,
+        )
+        previous_camera_fov = 40.0
+        if animation_mode == "3d" and start_frame > 0:
+            previous_resolved = resolve_project_frame(
+                project,
+                start_frame - 1,
+                lora_records=lora_records,
+            )
+            previous_camera_fov = float(
+                previous_resolved.get("camera_3d", {}).get("fov", 40.0)
+            )
+
         for frame in range(start_frame, total):
+            # Read-only allocator snapshot; never synchronize or clear CUDA
+            # caches in the hot frame loop just to collect diagnostics.
+            cuda_before = generation_manager.cuda_memory_status()
+            phase_memory: dict[str, dict[str, Any] | None] = {
+                "frame_start": cuda_before,
+            }
             if job.cancel_requested:
                 self._cancel(job)
                 return
 
             frame_started = time.monotonic()
+            timings: dict[str, float] = {}
+            resolve_started = time.monotonic()
             resolved = resolve_project_frame(project, frame, lora_records=lora_records)
-            motion = resolved["motion"]
-            step_matrix = _frame_transform_matrix(
-                width=width,
-                height=height,
-                angle=float(motion["angle"]),
-                zoom=float(motion["zoom"]),
-                translation_x=float(motion["translation_x"]),
-                translation_y=float(motion["translation_y"]),
-            )
-            transformed = render_affine(
-                frame_image,
-                step_matrix,
-                border_mode=border_mode,
-            )
-            cumulative_matrix = step_matrix @ cumulative_matrix
+            timings["resolve"] = max(0.0, time.monotonic() - resolve_started)
+            depth_state: dict[str, Any] | None = None
+            if animation_mode == "3d":
+                try:
+                    depth_input, depth_resolution_label = _prepare_depth_input(
+                        frame_image,
+                        depth_resolution_setting,
+                    )
+                    depth_started = time.monotonic()
+                    depth_result = depth_manager.estimate(
+                        depth_input,
+                        device="cpu",
+                        release_after=False,
+                    )
+                    depth_map = depth_manager.load_cached_array(
+                        str(depth_result["cache_key"])
+                    )
+                    timings["depth"] = max(0.0, time.monotonic() - depth_started)
+
+                    depth_map = _resize_depth_map(
+                        depth_map,
+                        width=width,
+                        height=height,
+                    )
+                    camera = resolved["camera_3d"]
+                    warp_started = time.monotonic()
+                    warp = render_depth_warp(
+                        frame_image,
+                        depth_map,
+                        translation_x=float(camera["translation_x"]),
+                        translation_y=float(camera["translation_y"]),
+                        translation_z=float(camera["translation_z"]),
+                        rotation_x=float(camera["rotation_x"]),
+                        rotation_y=float(camera["rotation_y"]),
+                        rotation_z=float(camera["rotation_z"]),
+                        fov=float(camera["fov"]),
+                        source_fov=previous_camera_fov,
+                        projection_mode=str(camera.get("projection_mode") or "legacy"),
+                        fill_mode=str(camera.get("hole_fill") or "nearest"),
+                    )
+                    timings["warp"] = max(0.0, time.monotonic() - warp_started)
+                    previous_camera_fov = float(camera["fov"])
+                    transformed = warp.image
+                    mask_path = _render_dir(job.project_id, job.id) / "masks" / f"frame_{frame:06d}.png"
+                    if warp.hole_mask is not None:
+                        mask_path.parent.mkdir(parents=True, exist_ok=True)
+                        warp.hole_mask.save(mask_path)
+                    depth_state = {
+                        "disocclusion_mask": (
+                            f"masks/frame_{frame:06d}.png" if warp.hole_mask is not None else None
+                        ),
+                        "cache_key": str(depth_result["cache_key"]),
+                        "cache_hit": bool(depth_result.get("cache_hit")),
+                        "device": str(depth_result.get("device") or "cpu"),
+                        "seconds": timings["depth"],
+                        "internal_width": depth_input.width,
+                        "internal_height": depth_input.height,
+                        "resolution_setting": depth_resolution_label,
+                        **warp.telemetry,
+                    }
+                except (DepthError, Camera3DError) as exc:
+                    raise AnimationRenderError(
+                        f"3D depth/camera warp failed at frame {frame}: {exc}"
+                    ) from exc
+            else:
+                warp_started = time.monotonic()
+                motion = resolved["motion"]
+                step_matrix = _frame_transform_matrix(
+                    width=width,
+                    height=height,
+                    angle=float(motion["angle"]),
+                    zoom=float(motion["zoom"]),
+                    translation_x=float(motion["translation_x"]),
+                    translation_y=float(motion["translation_y"]),
+                )
+                transformed = render_affine(
+                    frame_image,
+                    step_matrix,
+                    border_mode=border_mode,
+                )
+                cumulative_matrix = step_matrix @ cumulative_matrix
+                timings["warp"] = max(0.0, time.monotonic() - warp_started)
 
             generation = resolved["generation"]
             retention_strength = float(generation["strength"])
@@ -1250,23 +1674,51 @@ class AnimationRenderManager:
                     "Deforum-style strength must be between 0 and 1."
                 )
             denoise_strength = 1.0 - retention_strength
+            cadence_value = max(
+                1,
+                int(resolved.get("cadence", {}).get("diffusion", 1) or 1),
+            )
+            cadence_anchor = (
+                cadence_value <= 1
+                or frame % cadence_value == 0
+                or frame == total - 1
+            )
+            should_diffuse = denoise_strength > 0.0 and cadence_anchor
+            cadence_state = {
+                "diffusion": cadence_value,
+                "anchor": bool(cadence_anchor),
+                "phase": int(frame % cadence_value),
+            }
+            if should_diffuse:
+                diffusion_mode = "img2img"
+                prompt_reason = None
+            elif denoise_strength <= 0.0:
+                diffusion_mode = "transform-only"
+                prompt_reason = (
+                    "Retention strength is 1.0, so this frame skips diffusion."
+                )
+            else:
+                diffusion_mode = "cadence-transform"
+                prompt_reason = (
+                    f"Diffusion cadence {cadence_value} skips this intermediate frame; "
+                    "camera transform is applied without diffusion."
+                )
 
             with self._lock:
                 job.current_prompt_state = _prompt_state_for_frame(
                     resolved,
-                    applied=denoise_strength > 0.0,
-                    reason=(
-                        None
-                        if denoise_strength > 0.0
-                        else "Retention strength is 1.0, so this frame skips diffusion."
-                    ),
+                    applied=should_diffuse,
+                    reason=prompt_reason,
                 )
                 job.current_frame_state = _frame_state_for_frame(
                     resolved,
                     seed=int(job.seed_plan[frame]),
-                    diffusion_mode=("img2img" if denoise_strength > 0.0 else "transform-only"),
+                    diffusion_mode=diffusion_mode,
                     motion_applied=True,
                     cumulative_matrix=cumulative_matrix,
+                    depth_state=depth_state,
+                    cadence_state=cadence_state,
+                    timings=timings,
                 )
 
             positive = resolved["prompts"]["positive"]
@@ -1276,20 +1728,27 @@ class AnimationRenderManager:
             guidance = float(generation["guidance"])
             sampler = str(generation["sampler"])
             noise_amount = float(generation["noise"])
-            transformed = _add_uniform_noise(
-                transformed,
-                amount=noise_amount,
-                seed=seed,
-            )
+            noise_started = time.monotonic()
+            if should_diffuse:
+                transformed = _add_uniform_noise(
+                    transformed,
+                    amount=noise_amount,
+                    seed=seed,
+                )
+            timings["noise"] = max(0.0, time.monotonic() - noise_started)
 
             with self._lock:
                 job.status = "rendering"
                 job.current_frame = frame
                 job.current_step = 0
+                job.current_step_total = 0
                 job.message = f"Rendering frame {frame + 1} of {total}"
 
-            if denoise_strength <= 0:
+            if not should_diffuse:
                 image = transformed
+                timings["prepare"] = 0.0
+                timings["conditioning"] = 0.0
+                timings["diffusion"] = 0.0
             else:
                 request = GenerationRequest(
                     model_id=model_id,
@@ -1306,12 +1765,18 @@ class AnimationRenderManager:
                     loras=deepcopy(resolved.get("loras", [])),
                 )
 
+                prepare_started = time.monotonic()
                 pipe, generator_device, validated_model = (
                     generation_manager.prepare_img2img(
                         request,
                         on_model_load,
                     )
                 )
+                timings["prepare"] = max(
+                    0.0,
+                    time.monotonic() - prepare_started,
+                )
+                phase_memory["post_prepare"] = generation_manager.cuda_memory_status()
                 if job.model_load_seconds is None:
                     job.model_load_seconds = max(
                         0.0,
@@ -1337,6 +1802,8 @@ class AnimationRenderManager:
                 ).manual_seed(seed)
 
                 effective_steps = max(1, int(round(steps * denoise_strength)))
+                with self._lock:
+                    job.current_step_total = effective_steps
 
                 def on_step_end(
                     pipeline,
@@ -1368,6 +1835,7 @@ class AnimationRenderManager:
                     on_step_end=on_step_end,
                 )
 
+                conditioning_started = time.monotonic()
                 conditioning = _prompt_conditioning_kwargs(
                     pipe,
                     family,
@@ -1386,11 +1854,28 @@ class AnimationRenderManager:
                             "bf16-streamed-group-offload",
                         }
                     ),
+                    lora_signature=_resolved_lora_signature(resolved),
                 )
+                timings["conditioning"] = max(
+                    0.0,
+                    time.monotonic() - conditioning_started,
+                )
+                phase_memory["post_conditioning"] = generation_manager.cuda_memory_status()
                 call_args.update(conditioning)
 
+                diffusion_started = time.monotonic()
                 with torch.inference_mode():
                     result = pipe(**call_args)
+                timings["diffusion"] = max(
+                    0.0,
+                    time.monotonic() - diffusion_started,
+                )
+                # This sample includes denoising plus the pipeline's VAE encode/decode
+                # work. Deeper UNet/VAE separation will require family-specific hooks;
+                # do not add per-step synchronization just for profiling.
+                phase_memory["post_diffusion_decode"] = (
+                    generation_manager.cuda_memory_status()
+                )
                 if job.cancel_requested:
                     self._cancel(job)
                     return
@@ -1400,9 +1885,12 @@ class AnimationRenderManager:
                     )
                 image = result.images[0].convert("RGB")
                 del result, call_args, conditioning, generator
-                generation_manager.release_inference_memory()
+
+            with self._lock:
+                job.current_frame_state["timings"] = deepcopy(timings)
 
             path = _frame_path(job.project_id, job.id, frame)
+            save_started = time.monotonic()
             _save_frame(
                 image,
                 path,
@@ -1419,6 +1907,9 @@ class AnimationRenderManager:
                     "render_state": deepcopy(job.current_frame_state),
                 },
             )
+            timings["save"] = max(0.0, time.monotonic() - save_started)
+            with self._lock:
+                job.current_frame_state["timings"] = deepcopy(timings)
 
             job.results = [
                 item
@@ -1435,22 +1926,109 @@ class AnimationRenderManager:
             )
             job.results.sort(key=lambda item: int(item["frame"]))
 
+            job.current_frame = frame
+            job.current_step = job.current_step_total if should_diffuse else 0
+            job.progress = (frame + 1) / total
+            job.message = f"Rendered frame {frame + 1} of {total}"
+
+            manifest_started = time.monotonic()
+            self._write_manifest(job)
+            timings["manifest"] = max(
+                0.0,
+                time.monotonic() - manifest_started,
+            )
+
+            if (
+                should_diffuse
+                and animation_mode == "3d"
+                and str(project.get("temporal", {}).get("mode") or "forward")
+                == "future-anchor"
+                and float(project.get("temporal", {}).get("mix", 0.0)) > 0
+            ):
+                tween_started = time.monotonic()
+                try:
+                    refined = _tween_between_depth_anchors(
+                        job,
+                        previous_anchor=previous_diffusion_anchor,
+                        future_anchor=frame,
+                        future_image=image,
+                        depth_resolution_setting=depth_resolution_setting,
+                        lora_records=lora_records,
+                    )
+                    if refined:
+                        emit_console(
+                            "info", "animation",
+                            f"{job.id}: depth-aligned frame blending updated "
+                            f"{refined} intermediate frame(s) between anchors "
+                            f"{previous_diffusion_anchor} and {frame}.",
+                        )
+                except (Camera3DError, DepthError, ValueError, OSError) as exc:
+                    emit_console(
+                        "warning", "animation",
+                        f"{job.id}: depth-aligned blending skipped for "
+                        f"anchor {frame}: {exc}. Original cadence frames retained.",
+                    )
+                timings["temporal"] = max(0.0, time.monotonic() - tween_started)
+            if should_diffuse:
+                previous_diffusion_anchor = frame
+
+            frame_image = image
+            memory_started = time.monotonic()
+            memory_maintenance = generation_manager.maintain_inference_memory()
+            timings["memory"] = max(
+                0.0,
+                time.monotonic() - memory_started,
+            )
+            timings["memory_trimmed"] = 1.0 if memory_maintenance.get("trimmed") else 0.0
+            phase_memory["post_maintenance"] = generation_manager.cuda_memory_status()
+
             frame_seconds = max(0.0, time.monotonic() - frame_started)
+            timings["total"] = frame_seconds
             job._frame_times.append(frame_seconds)
             recent = job._frame_times[-8:]
             job.frame_seconds = frame_seconds
             job.average_frame_seconds = sum(recent) / len(recent)
             remaining = max(0, total - frame - 1)
             job.eta_seconds = job.average_frame_seconds * remaining
-            job.current_frame = frame
-            job.current_step = steps
-            job.progress = (frame + 1) / total
-            job.message = f"Rendered frame {frame + 1} of {total}"
-            self._write_manifest(job)
-            frame_image = image
-            generation_manager.release_inference_memory(synchronize=False)
+            with self._lock:
+                job.current_frame_state["timings"] = deepcopy(timings)
 
             memory = generation_manager.cuda_memory_status()
+            status_method = getattr(generation_manager, "model_status", None)
+            try:
+                pipeline_status = status_method() if callable(status_method) else {}
+            except Exception:
+                pipeline_status = {}
+            record = performance_record(
+                frame=frame,
+                diffused=should_diffuse,
+                timings=timings,
+                cuda_before=cuda_before,
+                cuda_after=memory,
+                model_status=pipeline_status,
+                conditioning_cache_entries=len(conditioning_cache),
+                phase_memory=phase_memory,
+            )
+            performance_tracker.observe(record)
+            job.performance = performance_tracker.public()
+            try:
+                append_performance_record(performance_path, record)
+            except OSError as exc:
+                emit_console(
+                    "warning", "animation",
+                    f"{job.id}: could not save performance details for frame {frame}: {exc}",
+                )
+            if should_diffuse and timings["diffusion"] >= 30.0:
+                emit_console(
+                    "warning", "animation",
+                    f"{job.id}: slow diffusion anchor {frame} took "
+                    f"{timings['diffusion']:.1f}s; execution device "
+                    f"{record.get('pipeline_device') or 'unknown'}, "
+                    f"cached LoRAs {record['resident_loras']}, "
+                    f"active {len(record['active_loras'])}. "
+                    "See performance.jsonl for allocator growth; "
+                    "no automatic CPU fallback was activated.",
+                )
             memory_text = ""
             if memory is not None:
                 memory_text = (
@@ -1459,13 +2037,30 @@ class AnimationRenderManager:
                     f"reserved {memory['reserved_gib']:.1f} GiB."
                 )
 
+            depth_text = ""
+            if depth_state is not None:
+                depth_text = (
+                    f" 3D depth {depth_state['seconds']:.2f}s "
+                    f"({'cache' if depth_state['cache_hit'] else 'CPU'}), "
+                    f"coverage {depth_state['projected_coverage'] * 100:.1f}%."
+                )
             emit_console(
                 "info",
                 "animation",
                 f"{job.id}: frame {frame}/{total - 1} complete "
                 f"in {frame_seconds:.1f}s, seed {seed}, "
                 f"strength {retention_strength:g} "
-                f"(denoise {denoise_strength:g}), noise {noise_amount:g}."
+                f"(denoise {denoise_strength:g}), noise {noise_amount:g}, "
+                f"cadence {cadence_value} "
+                f"({'anchor' if cadence_anchor else 'transform'})."
+                f"{depth_text} "
+                f"timing resolve {timings.get('resolve', 0):.2f}s, "
+                f"warp {timings.get('warp', 0):.2f}s, "
+                f"cond {timings.get('conditioning', 0):.2f}s, "
+                f"diff {timings.get('diffusion', 0):.2f}s, "
+                f"save {timings.get('save', 0):.2f}s, "
+                f"manifest {timings.get('manifest', 0):.2f}s, "
+                f"mem {timings.get('memory', 0):.2f}s."
                 f"{memory_text}",
             )
 
@@ -1483,6 +2078,8 @@ class AnimationRenderManager:
         job: AnimationRenderJob,
         fps: float,
     ) -> None:
+        if str(job.project.get("animation", {}).get("mode") or "2d").lower() == "3d":
+            depth_manager.unload()
         job.status = "finalizing"
         job.message = "Building animation preview"
         self._write_manifest(job)
@@ -1506,6 +2103,8 @@ class AnimationRenderManager:
         )
 
     def _cancel(self, job: AnimationRenderJob) -> None:
+        if str(job.project.get("animation", {}).get("mode") or "2d").lower() == "3d":
+            depth_manager.unload()
         job.status = "cancelled"
         job.message = "Animation render cancelled"
         job.completed_at = _utc_now()
@@ -1519,6 +2118,7 @@ class AnimationRenderManager:
         )
 
     def _fail(self, job: AnimationRenderJob, exc: BaseException) -> None:
+        depth_manager.unload()
         generation_manager.reset_inference_pipeline()
         error = (
             generation_manager._friendly_error(

@@ -11,6 +11,8 @@ def test_health_endpoint() -> None:
     assert payload["status"] == "ok"
     assert payload["app"] == "Morphorum"
     assert payload["version"]
+    assert "git_branch" in payload
+    assert "git_commit" in payload
 
 
 def test_root_serves_application_shell() -> None:
@@ -43,3 +45,18 @@ def test_model_family_registry_is_modern_only() -> None:
     families = response.json()["families"]
     assert [item["id"] for item in families] == ["sdxl", "flux", "zimage"]
     assert all(item["supports_loras"] is True for item in families)
+
+
+def test_gpu_memory_profile_endpoint_is_read_only_surface() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/system/gpu-memory")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == 1
+    assert "cuda_available" in payload
+    assert "cuda" in payload
+    assert "model" in payload
+    assert "windows_wddm" in payload
+    assert "available" in payload["windows_wddm"]
+    assert "high-water" in payload["notes"]["peak_scope"]
+    assert "Read-only" in payload["notes"]["sampling"]

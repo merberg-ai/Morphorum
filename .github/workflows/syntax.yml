@@ -2,7 +2,7 @@ name: Syntax checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/3d-depth-quality-b5, feature/deforum-compatibility-hybrid-b6, dev-ui]
   pull_request:
 
 jobs:
@@ -27,7 +27,12 @@ jobs:
 
       - name: Check browser JavaScript syntax
         run: |
+          node --check frontend/dist/assets/ui-services.js
           node --check frontend/dist/assets/app.js
           node --check frontend/dist/assets/models.js
           node --check frontend/dist/assets/image.js
+          node --check frontend/dist/assets/loras.js
           node --check frontend/dist/assets/animation.js
+
+      - name: Regression-test browser LoRA prompt insertion
+        run: node --test tests/frontend_lora_insertion.test.cjs tests/frontend_animation_cadence.test.cjs tests/frontend_animation_video.test.cjs tests/frontend_deforum_import.test.cjs tests/frontend_deforum_layout.test.cjs tests/frontend_shared_ui.test.cjs tests/frontend_dev_ui.test.cjs tests/frontend_public_copy.test.cjs tests/frontend_resolution_presets.test.cjs

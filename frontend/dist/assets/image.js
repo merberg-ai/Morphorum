@@ -12,6 +12,9 @@
     currentResultJobId: null,
     modelLoaded: false,
     loras: [],
+    draft: null,
+    restoredModel: '',
+    modelRequest: 0,
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -32,6 +35,99 @@
       throw new Error(detail || `${response.status} ${response.statusText}`);
     }
     return payload;
+  }
+
+  // Browser-local Image draft. Model fields restore only after capabilities/LoRAs resolve.
+  const IMAGE_DRAFT_KEY = 'morphorum.image.form.v1';
+  const DRAFT_FIELDS = [
+    'image-prompt', 'image-negative-prompt', 'image-resolution-preset',
+    'image-width', 'image-height', 'image-steps', 'image-sampler', 'image-guidance',
+    'image-seed', 'image-seed-mode', 'image-seed-increment', 'image-count',
+    'image-lora-select', 'image-lora-weight'
+  ];
+  let draftTimer = null;
+  function readImageDraft() {
+    try {
+      const draft = JSON.parse(localStorage.getItem(IMAGE_DRAFT_KEY) || 'null');
+      return draft?.version === 1 && draft.values && typeof draft.values === 'object' ? draft : null;
+    } catch (_) { return null; }
+  }
+  function saveImageDraft() {
+    if (draftTimer) window.clearTimeout(draftTimer);
+    draftTimer = null;
+    const values = {};
+    DRAFT_FIELDS.forEach(id => { const element = document.getElementById(id); if (element) values[id] = element.value; });
+    const modelId = qs('#image-model-select')?.value || state.draft?.modelId || '';
+    const draft = { version: 1, modelId, values };
+    state.draft = draft;
+    try {
+      localStorage.setItem(IMAGE_DRAFT_KEY, JSON.stringify(draft));
+      if (modelId) localStorage.setItem('morphorum.image.modelId', modelId);
+    } catch (_) { /* Storage may be restricted or full. */ }
+  }
+  function scheduleDraftSave() {
+    if (draftTimer) window.clearTimeout(draftTimer);
+    draftTimer = window.setTimeout(saveImageDraft, 300);
+  }
+  function restoreNumeric(id, value) {
+    const input = document.getElementById(id);
+    if (!input || input.type !== 'number') return;
+    if (value == null || String(value).trim() === '') return;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return;
+    if (input.min !== '' && n < Number(input.min)) return;
+    if (input.max !== '' && n > Number(input.max)) return;
+    input.value = String(n);
+  }
+  function restoreImageDraft(modelId) {
+    const draft = state.draft;
+    if (!draft || draft.modelId !== modelId || state.restoredModel === modelId) return;
+    const values = draft.values;
+    const selectFields = ['image-sampler', 'image-seed-mode', 'image-lora-select'];
+    for (const id of selectFields) {
+      const node = document.getElementById(id);
+      const value = values[id];
+      if (node && typeof value === 'string' && [...node.options].some(option => option.value === value)) node.value = value;
+    }
+    for (const id of ['image-width','image-height','image-steps','image-guidance','image-seed','image-seed-increment','image-count','image-lora-weight']) {
+      restoreNumeric(id, values[id]);
+    }
+    syncResolutionPreset();
+    updateSeedMode();
+    state.restoredModel = modelId;
+  }
+  async function resetImageDraft() {
+    const accepted = await window.MorphorumDialog.confirm({
+      title: 'Reset Image Generation form?',
+      message: 'Clear locally saved prompts and Image Generation settings for this browser. Generated files will not be deleted.',
+      variant: 'warning', confirmText: 'Reset Image Form', cancelText: 'Keep Draft'
+    });
+    if (!accepted) return;
+    if (draftTimer) window.clearTimeout(draftTimer);
+    draftTimer = null;
+    state.draft = null;
+    state.restoredModel = '';
+    try {
+      localStorage.removeItem(IMAGE_DRAFT_KEY);
+      localStorage.removeItem('morphorum.image.modelId');
+    } catch (_) {}
+    qs('#image-prompt').value = '';
+    qs('#image-negative-prompt').value = '';
+    qs('#image-seed').value = '-1';
+    qs('#image-seed-mode').value = 'fixed';
+    qs('#image-seed-increment').value = '1';
+    qs('#image-count').value = '1';
+    qs('#image-lora-weight').value = '1';
+    const model = state.model;
+    if (model) {
+      const cap = effectiveCapability(model);
+      populatePresets(cap);
+      populateSamplers(cap);
+      applyModelDefaults(cap);
+      updateSeedMode();
+    }
+    try { localStorage.removeItem(IMAGE_DRAFT_KEY); } catch (_) {}
+    toast('Image draft cleared', 'Current form reset. Generated images remain untouched.', 'success');
   }
 
   function resultKey(result) {
@@ -159,22 +255,22 @@
     updateUnloadButton();
   }
 
-  function populatePresets(capability) {
-    const select = qs('#image-resolution-preset');
-    if (!select) return;
-    select.replaceChildren();
-    for (const preset of capability.resolutions || []) {
-      const option = document.createElement('option');
-      option.value = `${preset.width}x${preset.height}`;
-      option.textContent = `${preset.label} · ${preset.width} × ${preset.height}`;
-      select.appendChild(option);
-    }
-    const custom = document.createElement('option');
-    custom.value = 'custom';
-    custom.textContent = 'Custom';
-    select.appendChild(custom);
+  function updateResolutionGuidance() {
+    window.MorphorumResolution.guidance(qs('#image-resolution-help'),state.model?.family,
+      qs('#image-width')?.value,qs('#image-height')?.value);
   }
-
+  function syncResolutionPreset() {
+    window.MorphorumResolution.sync(qs('#image-resolution-preset'),
+      qs('#image-width')?.value,qs('#image-height')?.value);
+    updateResolutionGuidance();
+  }
+  function populatePresets(capability) {
+    window.MorphorumResolution.populate(qs('#image-resolution-preset'),capability,
+      state.model?.family,qs('#image-width')?.value,qs('#image-height')?.value);
+    const step=window.MorphorumResolution.divisorForFamily(state.model?.family);
+    qs('#image-width').step=step;qs('#image-height').step=step;
+    updateResolutionGuidance();
+  }
   function populateSamplers(capability) {
     const select = qs('#image-sampler');
     if (!select) return;
@@ -215,11 +311,7 @@
       const height = Number(resolution.height);
       qs('#image-width').value = width;
       qs('#image-height').value = height;
-      const presetValue = `${width}x${height}`;
-      const preset = qs('#image-resolution-preset');
-      preset.value = [...preset.options].some(option => option.value === presetValue)
-        ? presetValue
-        : 'custom';
+      syncResolutionPreset();
     }
 
     const negativePrompt = qs('#image-negative-prompt');
@@ -297,7 +389,7 @@
     if (!state.model?.family) return;
     try {
       const payload = await api(
-        `/api/models?family=${encodeURIComponent(state.model.family)}&kind=loras&limit=500`
+        `/api/models?family=${encodeURIComponent(state.model.family)}&kind=loras&limit=2000`
       );
       state.loras = Array.isArray(payload.models) ? payload.models : [];
     } catch (error) {
@@ -330,10 +422,13 @@
     if (!name || !textarea) return;
     const rawWeight = Number(qs('#image-lora-weight')?.value);
     const weight = Number.isFinite(rawWeight) ? rawWeight : 1;
-    insertAtCursor(textarea, `<lora:${name}:${Number(weight.toFixed(4))}>`);
+    try {
+      insertAtCursor(textarea, window.MorphorumPromptTags.lora({ name, weight }));
+    } catch (error) { toast('Invalid LoRA tag', error.message, 'warning'); }
   }
 
   async function configureModel() {
+    const requestId = ++state.modelRequest;
     const select = qs('#image-model-select');
     const modelId = select?.value || '';
     state.model = null;
@@ -343,13 +438,17 @@
       renderLoraPicker();
       qs('#image-capability-note').textContent = 'Select an indexed checkpoint to begin.';
       qs('#image-model-family-badge').textContent = 'No model';
+      window.MorphorumResolution.populate(qs('#image-resolution-preset'),{},'',0,0);
+      updateResolutionGuidance();
       return;
     }
 
     try {
       const model = await api(`/api/models/${encodeURIComponent(modelId)}`);
+      if (requestId !== state.modelRequest) return;
       state.model = model;
       await loadLorasForModel();
+      if (requestId !== state.modelRequest) return;
       const capability = effectiveCapability(model);
       qs('#image-model-family-badge').textContent = capability?.label || model.family;
       if (!capability?.supported) {
@@ -368,6 +467,8 @@
       setEnabled(true);
       applyModelDefaults(capability);
       updateSeedMode();
+      restoreImageDraft(modelId);
+      saveImageDraft();
     } catch (error) {
       setEnabled(false);
       toast('Could not load model details', error.message, 'error');
@@ -378,6 +479,7 @@
     const values = new Uint32Array(1);
     crypto.getRandomValues(values);
     qs('#image-seed').value = String(values[0]);
+    saveImageDraft();
   }
 
   function formatEta(seconds) {
@@ -403,15 +505,72 @@
       const speedText = Number.isFinite(speed) && speed > 0 ? ` · ${speed.toFixed(1)}s/step` : '';
       qs('#generation-step').textContent = `Image ${job.current_image}/${job.request.images} · Step ${job.current_step}/${job.total_steps}${speedText}`;
     } else if (job.status === 'loading_model') {
-      qs('#generation-step').textContent = 'Loading checkpoint and pipeline configuration…';
+      qs('#generation-step').textContent = 'Preparing the selected model…';
     } else if (job.status === 'queued') {
       qs('#generation-step').textContent = 'Waiting for generation worker…';
     } else {
       qs('#generation-step').textContent = job.message || '';
     }
     qs('#generation-eta').textContent = formatEta(job.eta_seconds);
+    window.dispatchEvent(new CustomEvent('morphorum:job-status', {detail: {
+      type:'image', id:job.id, status:job.status, progress:Number(job.progress || 0),
+      current:Number(job.current_image || 0), total:Number(job.request?.images || 0),
+      eta_seconds:job.eta_seconds
+    }}));
   }
 
+  function openImageLightbox(result) {
+    const dialog = qs('#image-result-lightbox');
+    if (!dialog || !result.url) return;
+    qs('#image-lightbox-details').textContent = 'Image ' + result.index + ' · Seed ' + result.seed;
+    qs('#image-lightbox-full').src = result.url;
+    const download = qs('#image-lightbox-download');
+    download.href = result.url;
+    download.download = result.filename || 'morphorum.png';
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+  }
+  async function loadImageJobHistory({ reconnect = false } = {}) {
+    try {
+      const payload = await api('/api/generation/jobs?limit=20');
+      const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+      const select = qs('#image-job-history');
+      const selected = state.activeJobId || (reconnect ? '' : select.value);
+      select.replaceChildren();
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = jobs.length ? 'Choose a recent job…' : 'No recent jobs';
+      select.appendChild(placeholder);
+      jobs.forEach(job => {
+        const option = document.createElement('option');
+        option.value = job.id;
+        option.textContent = (job.status || 'unknown') + ' · ' + job.id;
+        select.appendChild(option);
+      });
+      if (jobs.some(j => j.id === selected)) select.value = selected;
+      if (reconnect) {
+        const job = jobs.find(j => ['queued','loading_model','generating'].includes(j.status)) || jobs[0];
+        if (job) await showImageJob(job.id);
+      }
+    } catch (error) { toast('Image history unavailable', error.message, 'warning'); }
+  }
+  async function showImageJob(jobId) {
+    if (!jobId) return;
+    if (state.pollTimer) window.clearTimeout(state.pollTimer);
+    state.pollTimer = null;
+    try {
+      const job = await api('/api/generation/jobs/' + encodeURIComponent(jobId));
+      state.currentResultJobId = job.id;
+      state.currentResults = [];
+      state.renderedResults.clear();
+      qs('#image-gallery')?.replaceChildren();
+      state.activeJobId = ['queued','loading_model','generating'].includes(job.status) ? job.id : null;
+      updateProgress(job);
+      renderResults(job);
+      setGenerateBusy(Boolean(state.activeJobId));
+      qs('#cancel-generation').hidden = !state.activeJobId;
+      if (state.activeJobId) pollJob(job.id);
+    } catch (error) { toast('Could not open image job', error.message, 'warning'); }
+  }
   function resultCard(result) {
     const card = document.createElement('div');
     card.className = 'result-card';
@@ -423,7 +582,13 @@
     image.loading = 'lazy';
     image.alt = `Generated image, seed ${result.seed}`;
     image.src = `${result.url}?v=${Date.now()}`;
-    imageWrap.appendChild(image);
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.title = 'View generated image full-size';
+    open.setAttribute('aria-label', 'View image ' + result.index + ' full-size');
+    open.appendChild(image);
+    open.addEventListener('click', () => openImageLightbox(result));
+    imageWrap.appendChild(open);
 
     const meta = document.createElement('div');
     meta.className = 'result-meta';
@@ -445,6 +610,7 @@
       qs('#image-seed-mode').value = 'fixed';
       qs('#image-seed').value = result.seed;
       updateSeedMode();
+      saveImageDraft();
       toast('Seed reused', `Seed ${result.seed} is ready for the next generation.`, 'success');
     });
     const save = document.createElement('a');
@@ -568,6 +734,7 @@
       updateUnloadButton();
       toast('Generation started', `Job ${job.id} was queued.`, 'info');
       pollJob(job.id);
+      loadImageJobHistory();
     } catch (error) {
       state.activeJobId = null;
       setGenerateBusy(false);
@@ -608,33 +775,117 @@
     qs('#image-model-select')?.addEventListener('change', configureModel);
     qs('#image-insert-lora')?.addEventListener('click', insertSelectedLora);
     qs('#image-resolution-preset')?.addEventListener('change', event => {
-      if (event.target.value === 'custom') return;
-      const [width, height] = event.target.value.split('x').map(Number);
-      if (width && height) {
-        qs('#image-width').value = width;
-        qs('#image-height').value = height;
-      }
+      window.MorphorumResolution.apply(event.target,qs('#image-width'),qs('#image-height'));
+      updateResolutionGuidance();saveImageDraft();
     });
-    qs('#image-width')?.addEventListener('input', () => { qs('#image-resolution-preset').value = 'custom'; });
-    qs('#image-height')?.addEventListener('input', () => { qs('#image-resolution-preset').value = 'custom'; });
+    qs('#image-width')?.addEventListener('input',syncResolutionPreset);
+    qs('#image-height')?.addEventListener('input',syncResolutionPreset);
     qs('#swap-resolution')?.addEventListener('click', () => {
       const width = qs('#image-width').value;
       qs('#image-width').value = qs('#image-height').value;
       qs('#image-height').value = width;
-      qs('#image-resolution-preset').value = 'custom';
+      syncResolutionPreset();
+      saveImageDraft();
     });
     qs('#random-seed')?.addEventListener('click', randomSeed);
     qs('#image-seed-mode')?.addEventListener('change', updateSeedMode);
     qs('#generate-image')?.addEventListener('click', generate);
     qs('#cancel-generation')?.addEventListener('click', cancel);
     qs('#unload-model')?.addEventListener('click', unloadModel);
+    qs('#image-reset-draft')?.addEventListener('click', resetImageDraft);
+    qs('#image-jump-results')?.addEventListener('click', () => qs('#image-results-heading')?.scrollIntoView({behavior:'smooth',block:'start'}));
+    qs('#image-job-history')?.addEventListener('change', event => showImageJob(event.target.value));
+    qs('#image-history-refresh')?.addEventListener('click', () => loadImageJobHistory());
+    qs('#image-lightbox-close')?.addEventListener('click', () => qs('#image-result-lightbox')?.close());
+    const root = qs('#view-image');
+    root?.addEventListener('input', event => {
+      if (event.target?.id?.startsWith('image-') && event.target.id !== 'image-model-select') scheduleDraftSave();
+    });
+    root?.addEventListener('change', event => {
+      if (event.target?.id?.startsWith('image-') && event.target.id !== 'image-model-select') scheduleDraftSave();
+    });
+    state.draft = readImageDraft();
+    if (state.draft) {
+      for (const id of ['image-prompt','image-negative-prompt']) {
+        if (typeof state.draft.values[id] === 'string') qs('#' + id).value = state.draft.values[id];
+      }
+    }
   }
 
-  window.MorphorumImage = { configureModel, loadCapabilities, refreshModelStatus };
+  function reportManagerInsertion({ id, event, reason = '', weight, imageFamily = '', triggerCount = 0 }) {
+    if (!id) return;
+    // Send diagnostic facts, not the user's prompt or third-party sidecar text.
+    api('/api/loras/' + encodeURIComponent(id) + '/activity', {
+      method: 'POST',
+      body: JSON.stringify({
+        event, reason, weight,
+        image_family: imageFamily, trigger_count: triggerCount,
+      }),
+    }).catch(error => console.warn('LoRA Manager console event unavailable:', error.message));
+  }
+
+  function insertFromManager({ id, family, name, weight = 1, triggers = [] } = {}) {
+    const prompt = qs('#image-prompt');
+    const model = state.model;
+    const rawWeight = Number(weight);
+    const imageFamily = model?.family || '';
+    const reject = (reason, title, message) => {
+      reportManagerInsertion({
+        id, event: 'prompt_rejected', reason,
+        weight: Number.isFinite(rawWeight) ? rawWeight : 1,
+        imageFamily, triggerCount: 0,
+      });
+      toast(title, message, 'warning');
+      return false;
+    };
+
+    if (!prompt || !model) {
+      return reject('no_model', 'Select an image model',
+        'Choose a checkpoint in the Image tab first.');
+    }
+    if (model.family !== family) {
+      return reject('wrong_family', 'LoRA family mismatch',
+        'Selected image checkpoint is ' + model.family + '; this LoRA is ' +
+        family + '. Choose a matching checkpoint first.');
+    }
+    // IDs are unambiguous even when two directories contain the same filename.
+    const candidate = state.loras.find(lora => lora.id === id) ||
+      (!id && state.loras.find(lora => lora.name === name || lora.filename === name));
+    if (!candidate) {
+      return reject('not_indexed', 'LoRA not indexed for image model',
+        'Refresh the library and reselect your checkpoint before inserting.');
+    }
+    if (!Number.isFinite(rawWeight) || rawWeight < -4 || rawWeight > 4) {
+      return reject('invalid_strength', 'Invalid LoRA strength', 'Use a finite value between -4 and 4.');
+    }
+    // Only literal colons, angle brackets and real CR/LF characters are invalid.
+    // Do not double-escape CR/LF patterns: doing so rejects ordinary r and n in names.
+    if (!name || /[:<>\r\n]/.test(name)) {
+      return reject('invalid_name', 'Invalid LoRA name',
+        'This LoRA filename contains characters that cannot be used in a prompt tag.');
+    }
+    const words = Array.isArray(triggers)
+      ? [...new Set(triggers.filter(value => typeof value === 'string' && !/[<>\r\n]/.test(value))
+        .map(value => value.trim()).filter(Boolean))].slice(0, 20)
+      : [];
+    insertAtCursor(prompt, window.MorphorumPromptTags.lora({ name, weight: rawWeight, triggers: words }));
+    reportManagerInsertion({
+      id, event: 'prompt_inserted', weight: rawWeight,
+      imageFamily, triggerCount: words.length,
+    });
+    qs('.nav-button[data-view="image"]')?.click();
+    return true;
+  }
+
+  window.MorphorumImage = {
+    configureModel, loadCapabilities, refreshModelStatus,
+    refreshLoras: loadLorasForModel, insertFromManager,
+  };
   window.addEventListener('morphorum:settings-changed', event => applySettings(event.detail || {}));
   window.addEventListener('DOMContentLoaded', async () => {
     bind();
     syncPreviewVisibility(false);
     await Promise.all([loadCapabilities(), refreshModelStatus()]);
+    await loadImageJobHistory({ reconnect: true });
   });
 })();

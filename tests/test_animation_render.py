@@ -64,6 +64,9 @@ def sample_project(max_frames: int = 4) -> dict:
             "seed_behavior": "increment",
             "seed_increment": 1,
         },
+        "cadence": {
+            "diffusion": "0:(1)",
+        },
         "notes": "",
     }
 
@@ -87,7 +90,10 @@ def wait_for(manager: AnimationRenderManager, render_id: str) -> dict:
     for _ in range(200):
         job = manager.get(render_id)
         if job["status"] in {"completed", "failed", "cancelled"}:
-            return job
+            # The in-memory terminal state can precede the final manifest
+            # write. Wait for the worker to finish before inspecting disk.
+            manager._queue.join()
+            return manager.get(render_id)
         time.sleep(0.025)
     raise AssertionError(f"render did not finish: {job}")
 
@@ -192,6 +198,13 @@ def test_interrupted_manifest_can_resume_from_last_completed_frame(
     assert finished["current_frame_state"]["cumulative_2d"]["zoom"] == pytest.approx(1.0)
     assert finished["current_frame_state"]["cumulative_2d"]["center_offset_x"] == pytest.approx(3.0)
     assert finished["current_frame_state"]["cumulative_2d"]["center_offset_y"] == pytest.approx(0.0)
+    # Per-frame B5.5 records from the interrupted process must remain
+    # available while regenerated/resumed frame IDs appear only once.
+    report = second_manager.performance_report("render-test", started["id"])
+    assert report["summary"]["frames_observed"] == 3
+    assert [frame["frame"] for frame in report["frames"]] == [1, 2, 3]
+    assert finished["performance"]["frames_observed"] == 3
+
 
 
 class FakeSDXLPipe:
@@ -390,6 +403,9 @@ class FakePromptStartGenerationManager:
 
     def release_inference_memory(self, **_kwargs):
         return None
+
+    def maintain_inference_memory(self, **_kwargs):
+        return {"trimmed": False, "reason": "test"}
 
     def cuda_memory_status(self):
         return None
@@ -687,6 +703,9 @@ class RecordingSDXLGenerationManager:
     def release_inference_memory(self, **_kwargs):
         return None
 
+    def maintain_inference_memory(self, **_kwargs):
+        return {"trimmed": False, "reason": "test"}
+
     def cuda_memory_status(self):
         return None
 
@@ -903,3 +922,552 @@ def test_source_frame_telemetry_marks_motion_and_diffusion_not_applied(
     assert state["cumulative_2d"]["rotation_degrees"] == pytest.approx(0.0)
     assert state["generation"]["diffusion_mode"] == "source"
     assert state["generation"]["denoise_strength"] is None
+
+
+
+def test_3d_render_uses_cpu_depth_and_persists_warp_telemetry(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    depth_calls = []
+    unload_calls = []
+
+    def fake_estimate(image, *, device, release_after, **_kwargs):
+        depth_calls.append((image.size, device, release_after))
+        return {
+            "cache_key": "a" * 64,
+            "cache_hit": False,
+            "device": device,
+        }
+
+    def fake_depth_array(_cache_key):
+        depth = np.full((64, 64), 0.2, dtype=np.float32)
+        depth[16:48, 16:48] = 0.9
+        return depth
+
+    monkeypatch.setattr(animation_render.depth_manager, "estimate", fake_estimate)
+    monkeypatch.setattr(
+        animation_render.depth_manager,
+        "load_cached_array",
+        fake_depth_array,
+    )
+    monkeypatch.setattr(
+        animation_render.depth_manager,
+        "unload",
+        lambda: unload_calls.append(True),
+    )
+
+    source = tmp_path / "source.png"
+    image = Image.new("RGB", (64, 64), "black")
+    for x in range(18, 46):
+        for y in range(18, 46):
+            image.putpixel((x, y), (255, 120, 0))
+    image.save(source)
+
+    project = sample_project(max_frames=3)
+    project["animation"]["mode"] = "3d"
+    project["camera_3d"] = {
+        "translation_x": "0:(0)",
+        "translation_y": "0:(0)",
+        "translation_z": "0:(0.05)",
+        "rotation_x": "0:(0)",
+        "rotation_y": "0:(0.4)",
+        "rotation_z": "0:(0)",
+        "fov": "0:(40)",
+    }
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished
+    assert len(depth_calls) == 2
+    assert all(device == "cpu" for _size, device, _release in depth_calls)
+    assert all(release is False for _size, _device, release in depth_calls)
+    assert unload_calls
+
+    state = finished["current_frame_state"]
+    assert state["animation_mode"] == "3d"
+    assert state["camera_3d"]["translation_z"] == pytest.approx(0.05)
+    assert state["camera_3d"]["rotation_y"] == pytest.approx(0.4)
+    assert state["depth_3d"]["device"] == "cpu"
+    assert state["depth_3d"]["projected_coverage"] > 0.0
+    assert state["depth_3d"]["warp"] == "depth-forward-zbuffer-nearest-fill"
+
+    render_dir = (
+        tmp_path / "outputs" / "animations" / "render-test" / started["id"]
+    )
+    with Image.open(render_dir / "frames" / "frame_000002.png") as final:
+        metadata = json.loads(final.text["Morphorum"])
+    assert metadata["resolved"]["animation_mode"] == "3d"
+    assert metadata["render_state"]["depth_3d"]["cache_key"] == "a" * 64
+
+
+
+def test_depth_input_auto_caps_large_frames_at_512() -> None:
+    image = Image.new("RGB", (1024, 768), "black")
+
+    auto, auto_label = animation_render._prepare_depth_input(image, "auto")
+    full, full_label = animation_render._prepare_depth_input(image, "full")
+    fixed, fixed_label = animation_render._prepare_depth_input(image, "384")
+
+    assert auto.size == (512, 384)
+    assert auto_label == "auto"
+    assert full.size == image.size
+    assert full_label == "full"
+    assert fixed.size == (384, 288)
+    assert fixed_label == "384"
+
+
+def test_resize_depth_map_restores_render_resolution() -> None:
+    depth = np.linspace(0.0, 1.0, 32 * 24, dtype=np.float32).reshape(24, 32)
+
+    resized = animation_render._resize_depth_map(
+        depth,
+        width=64,
+        height=48,
+    )
+
+    assert resized.shape == (48, 64)
+    assert resized.dtype == np.float32
+    assert np.isfinite(resized).all()
+
+
+@pytest.mark.parametrize("projection_mode", ["legacy", "splat"])
+@pytest.mark.parametrize("temporal_mode", ["forward", "future-anchor"])
+def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
+    tmp_path: Path,
+    monkeypatch,
+    projection_mode: str,
+    temporal_mode: str,
+) -> None:
+    """B5 cadence baseline: 3D transform frames still perform depth projection,
+    but only frame 3 and the forced last frame 5 perform GPU diffusion.
+    """
+    fake_generation = RecordingSDXLGenerationManager()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    depth_calls: list[int] = []
+
+    def estimate_depth(image, *, device, release_after, **_kwargs):
+        depth_calls.append(image.width)
+        return {"cache_key": "d" * 64, "cache_hit": False, "device": "cpu"}
+
+    def depth_array(_cache_key):
+        result = np.full((64, 64), 0.3, dtype=np.float32)
+        result[12:52, 12:52] = 0.8
+        return result
+
+    monkeypatch.setattr(animation_render.depth_manager, "estimate", estimate_depth)
+    monkeypatch.setattr(animation_render.depth_manager, "load_cached_array", depth_array)
+    monkeypatch.setattr(animation_render.depth_manager, "unload", lambda: None)
+
+    source = tmp_path / "start.png"
+    image = Image.new("RGB", (64, 64), "black")
+    for y in range(12, 52):
+        for x in range(12, 52):
+            image.putpixel((x, y), (255, 128, 32))
+    image.save(source)
+
+    project = sample_project(max_frames=6)
+    project["animation"]["mode"] = "3d"
+    project["camera_3d"] = {
+        "translation_x": "0:(0.02)",
+        "translation_y": "0:(0)",
+        "translation_z": "0:(0.02)",
+        "rotation_x": "0:(0)",
+        "rotation_y": "0:(0.2)",
+        "rotation_z": "0:(0)",
+        "fov": "0:(40)",
+    }
+    project["camera_3d"]["projection_mode"] = projection_mode
+    project["camera_3d"]["hole_fill"] = "background"
+    project["temporal"] = {
+        "mode": temporal_mode, "mix": 0.65, "contrast_threshold": 96,
+    }
+    project["generation"]["strength"] = "0:(0.5)"
+    project["generation"]["noise"] = "0:(0.02)"
+    project["cadence"]["diffusion"] = "0:(3)"
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished.get("error") or finished
+    expected_depth_calls = 5 + (2 if temporal_mode == "future-anchor" else 0)
+    assert len(depth_calls) == expected_depth_calls, (
+        "Forward depth runs every frame; B5.2 additionally measures each future anchor."
+    )
+    assert [request.seed for request in fake_generation.requests] == [103, 105]
+
+    frames = (tmp_path / "outputs" / "animations" / "render-test" /
+              started["id"] / "frames")
+    expected_modes = {
+        1: ("cadence-transform", False, 1),
+        2: ("cadence-transform", False, 2),
+        3: ("img2img", True, 0),
+        4: ("cadence-transform", False, 1),
+        5: ("img2img", True, 2),  # Forced final anchor: 5 % 3 != 0.
+    }
+    for frame, (mode, anchor, phase) in expected_modes.items():
+        with Image.open(frames / f"frame_{frame:06d}.png") as result:
+            info = json.loads(result.text["Morphorum"])
+        state = info["render_state"]
+        assert state["animation_mode"] == "3d"
+        assert state["generation"]["diffusion_mode"] == mode
+        assert state["cadence"] == {
+            "diffusion": 3, "anchor": anchor, "phase": phase,
+        }
+        assert state["depth_3d"]["projected_coverage"] > 0.0
+        expected = (
+            "depth-forward-zbuffer-nearest-fill" if projection_mode == "legacy"
+            else "depth-bilinear-zbuffer-background-fill"
+        )
+        assert state["depth_3d"]["warp"] == expected
+        assert state["camera_3d"]["projection_mode"] == projection_mode
+        assert state["depth_3d"]["projection_mode"] == projection_mode
+        if temporal_mode == "future-anchor" and frame in {1, 2, 4}:
+            tween = state["temporal"]
+            assert tween["mode"] == "future-anchor"
+            assert tween["future_anchor"] == (3 if frame <= 2 else 5)
+            assert tween["previous_anchor"] == (0 if frame <= 2 else 3)
+            assert 0 <= tween["average_weight"] <= 1
+            assert 0 <= tween["fraction_blended"] <= 1
+        else:
+            assert "temporal" not in state
+
+        assert state["depth_3d"]["visible_pixels"] + state["depth_3d"]["disoccluded_pixels"] == 64 * 64
+        mask_relative = state["depth_3d"]["disocclusion_mask"]
+        assert mask_relative == f"masks/frame_{frame:06d}.png"
+        mask_path = frames.parent / mask_relative
+        assert mask_path.is_file()
+        with Image.open(mask_path) as mask:
+            pixels = np.asarray(mask)
+            assert mask.mode == "L"
+            assert pixels.shape == (64, 64)
+            assert set(np.unique(pixels)).issubset({0, 255})
+            assert np.count_nonzero(pixels) == state["depth_3d"]["disoccluded_pixels"]
+
+
+def test_b52_resume_recovers_last_diffusion_anchor_from_existing_frame_metadata(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path)
+    for frame, mode in [(0, "source"), (1, "cadence-transform"),
+                        (2, "cadence-transform"), (3, "img2img"),
+                        (4, "cadence-transform")]:
+        path = animation_render._frame_path("resume-test", "test-run", frame)
+        animation_render._save_frame(
+            Image.new("RGB", (8, 8), "gray"), path,
+            metadata={"render_state": {"generation": {"diffusion_mode": mode}}},
+        )
+    assert animation_render._last_diffused_anchor(
+        "resume-test", "test-run", before_frame=5,
+    ) == 3
+    assert animation_render._last_diffused_anchor(
+        "resume-test", "test-run", before_frame=3,
+    ) == 0
+    assert animation_render._last_diffused_anchor(
+        "resume-test", "test-run", before_frame=1,
+    ) == 0
+
+
+def test_diffusion_cadence_skips_intermediate_diffusion_but_keeps_motion(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_generation = RecordingSDXLGenerationManager()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    motion_calls = []
+    noise_calls = []
+    real_render_affine = animation_render.render_affine
+    real_add_noise = animation_render._add_uniform_noise
+
+    def recording_render_affine(source, matrix, *, border_mode):
+        motion_calls.append(matrix.copy())
+        return real_render_affine(source, matrix, border_mode=border_mode)
+
+    def recording_add_noise(image, *, amount, seed):
+        noise_calls.append((float(amount), int(seed)))
+        return real_add_noise(image, amount=amount, seed=seed)
+
+    monkeypatch.setattr(animation_render, "render_affine", recording_render_affine)
+    monkeypatch.setattr(animation_render, "_add_uniform_noise", recording_add_noise)
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "orange").save(source)
+
+    project = sample_project(max_frames=5)
+    project["generation"]["strength"] = "0:(0.5)"
+    project["generation"]["noise"] = "0:(0.02)"
+    project["cadence"]["diffusion"] = "0:(2)"
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+
+    assert finished["status"] == "completed", finished
+    assert len(motion_calls) == 4
+    assert len(fake_generation.requests) == 2
+    assert [request.seed for request in fake_generation.requests] == [102, 104]
+    assert [seed for _amount, seed in noise_calls] == [102, 104]
+
+    render_dir = (
+        tmp_path / "outputs" / "animations" / "render-test" / started["id"]
+    )
+    with Image.open(render_dir / "frames" / "frame_000001.png") as skipped:
+        skipped_meta = json.loads(skipped.text["Morphorum"])
+    with Image.open(render_dir / "frames" / "frame_000002.png") as anchor:
+        anchor_meta = json.loads(anchor.text["Morphorum"])
+
+    assert skipped_meta["render_state"]["generation"]["diffusion_mode"] == "cadence-transform"
+    assert skipped_meta["render_state"]["cadence"] == {
+        "diffusion": 2,
+        "anchor": False,
+        "phase": 1,
+    }
+    assert anchor_meta["render_state"]["generation"]["diffusion_mode"] == "img2img"
+    assert anchor_meta["render_state"]["cadence"]["anchor"] is True
+    assert finished["current_frame_state"]["cadence"]["anchor"] is True
+    assert finished["current_frame_state"]["timings"]["diffusion"] >= 0.0
+
+    # B5.5 must not alter the actual diffusion/cadence output, and the
+    # low-overhead profiler must preserve every completed frame.
+    assert finished["performance"]["frames_observed"] == 4
+    assert finished["performance"]["diffusion_anchors"] == 2
+    assert finished["performance"]["latest_frame"] == 4
+    report = manager.performance_report("render-test", started["id"])
+    assert report["summary"]["frames_observed"] == 4
+    assert [item["frame"] for item in report["frames"]] == [1, 2, 3, 4]
+    assert [item["diffused"] for item in report["frames"]] == [False, True, False, True]
+    assert all(item["conditioning_cache_entries"] <= 8 for item in report["frames"])
+    assert all(item["timings"]["total"] >= 0 for item in report["frames"])
+    with pytest.raises(animation_render.AnimationRenderError, match="Invalid"):
+        manager.performance_report("../escape", started["id"])
+
+
+
+
+def test_animation_sdxl_blended_conditioning_never_retains_autograd_graphs() -> None:
+    """Diffusers SDXL encode_prompt is NOT decorated with no_grad.
+
+    The animation renderer calls it outside pipeline.__call__. A keyframed LoRA
+    gets a new cache signature each anchor, so raw autograd graphs otherwise
+    pile up and can consume hundreds of MiB per frame.
+    """
+    class GradientSDXLPipe:
+        def __init__(self):
+            self.weight = torch.nn.Parameter(torch.ones((1, 8), dtype=torch.float32))
+            self.grad_enabled = []
+            self.calls = 0
+
+        def encode_prompt(self, **kwargs):
+            self.calls += 1
+            self.grad_enabled.append(torch.is_grad_enabled())
+            # Without inference_mode this output has a live grad_fn and holds
+            # model intermediates, exactly what render-long cache must avoid.
+            embedding = self.weight * float(self.calls)
+            return embedding, embedding, embedding, embedding
+
+    pipe = GradientSDXLPipe()
+    cache = {}
+    positive = {
+        "from_frame": 0, "to_frame": 25,
+        "from_text": "forest", "to_text": "city",
+        "from_weight": 0.5, "to_weight": 0.5,
+    }
+    negative = {
+        "from_frame": 0, "to_frame": 25,
+        "from_text": "noise", "to_text": "artifact",
+        "from_weight": 0.5, "to_weight": 0.5,
+    }
+
+    with torch.enable_grad():
+        for frame in range(1, 15):
+            conditioning = _prompt_conditioning_kwargs(
+                pipe, "sdxl", positive, negative, guidance_scale=6.0,
+                conditioning_cache=cache,
+                lora_signature=(("style", frame / 25),),
+            )
+            assert not conditioning["prompt_embeds"].requires_grad
+            assert conditioning["prompt_embeds"].grad_fn is None
+            assert not conditioning["pooled_prompt_embeds"].requires_grad
+            assert not conditioning["negative_prompt_embeds"].requires_grad
+
+    assert pipe.calls == 28, "Changing LoRA weight means distinct prompt encodings"
+    assert pipe.grad_enabled == [False] * pipe.calls
+    assert len(cache) == animation_render.MAX_CONDITIONING_CACHE_ENTRIES
+    for encoded in cache.values():
+        assert all(not value.requires_grad and value.grad_fn is None
+                   for value in encoded)
+
+
+def test_animation_flux_blended_conditioning_is_inference_only_and_bounded() -> None:
+    class GradientFluxPipe:
+        def __init__(self):
+            self.weight = torch.nn.Parameter(torch.ones((1, 4)))
+            self.grad_enabled = []
+
+        def encode_prompt(self, **kwargs):
+            self.grad_enabled.append(torch.is_grad_enabled())
+            return self.weight * 2, self.weight * 3
+
+    pipe = GradientFluxPipe()
+    cache = {}
+    positive = {
+        "from_frame": 0, "to_frame": 20,
+        "from_text": "forest", "to_text": "city",
+        "from_weight": 0.5, "to_weight": 0.5,
+    }
+    with torch.enable_grad():
+        for frame in range(10):
+            result = _prompt_conditioning_kwargs(
+                pipe, "flux", positive, {}, guidance_scale=1.0,
+                conditioning_cache=cache, lora_signature=(("test", frame),),
+            )
+            assert not result["prompt_embeds"].requires_grad
+            assert not result["pooled_prompt_embeds"].requires_grad
+    assert not any(pipe.grad_enabled)
+    assert len(cache) <= animation_render.MAX_CONDITIONING_CACHE_ENTRIES
+
+
+def test_sdxl_conditioning_cache_is_isolated_by_lora_signature() -> None:
+    class CountingSDXLPipe(FakeSDXLPipe):
+        def __init__(self) -> None:
+            self.calls = []
+
+        def encode_prompt(self, **kwargs):
+            self.calls.append(
+                (
+                    kwargs.get("prompt"),
+                    kwargs.get("negative_prompt"),
+                )
+            )
+            return super().encode_prompt(**kwargs)
+
+    pipe = CountingSDXLPipe()
+    cache = {}
+    positive = {
+        "from_frame": 0,
+        "to_frame": 10,
+        "from_text": "forest",
+        "to_text": "city",
+        "from_weight": 0.75,
+        "to_weight": 0.25,
+    }
+    negative = {
+        "from_frame": 0,
+        "to_frame": 10,
+        "from_text": "bad",
+        "to_text": "worse",
+        "from_weight": 0.5,
+        "to_weight": 0.5,
+    }
+
+    first_signature = (("style-id", 1.0),)
+    second_signature = (("style-id", 0.5),)
+
+    for _ in range(2):
+        _prompt_conditioning_kwargs(
+            pipe,
+            "sdxl",
+            positive,
+            negative,
+            guidance_scale=6.0,
+            conditioning_cache=cache,
+            lora_signature=first_signature,
+        )
+
+    assert pipe.calls == [
+        ("forest", "bad"),
+        ("city", "worse"),
+    ]
+    assert len(cache) == 2
+
+    _prompt_conditioning_kwargs(
+        pipe,
+        "sdxl",
+        positive,
+        negative,
+        guidance_scale=6.0,
+        conditioning_cache=cache,
+        lora_signature=second_signature,
+    )
+
+    assert pipe.calls == [
+        ("forest", "bad"),
+        ("city", "worse"),
+        ("forest", "bad"),
+        ("city", "worse"),
+    ]
+    assert len(cache) == 4
+
+def test_animation_img2img_frame_requests_resolve_loras_before_shared_generation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The animation renderer must forward the resolved per-frame adapter
+    state to GenerationManager.prepare_img2img rather than using a separate
+    LoRA loading implementation.
+    """
+    import morphorum.animation_resolution as resolution
+
+    path = tmp_path / "CreepyDroneStyle.safetensors"
+    path.write_bytes(b"fake-lora-for-resolution")
+    records = [
+        {
+            "id": "creepy-style-id", "kind": "loras", "family": "sdxl",
+            "name": "CreepyDroneStyle", "filename": path.name,
+            "path": str(path), "size_bytes": path.stat().st_size,
+            "preview_path": None,
+        }
+    ]
+    fake_generation = RecordingSDXLGenerationManager()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "lora_catalog", lambda: records)
+    monkeypatch.setattr(resolution, "lora_catalog", lambda: records)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "orange").save(source)
+
+    project = sample_project(max_frames=4)
+    project["generation"]["strength"] = "0:(0.5)"
+    project["prompts"] = {
+        "0": "forest <lora:CreepyDroneStyle:0.2>",
+        "3": "city <lora:CreepyDroneStyle:0.8>",
+    }
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    completed = wait_for(manager, started["id"])
+    assert completed["status"] == "completed", completed.get("error") or completed
+    assert len(fake_generation.requests) == 3
+
+    weights = []
+    for request in fake_generation.requests:
+        assert "<lora:" not in request.prompt
+        assert len(request.loras) == 1
+        adapter = request.loras[0]
+        assert adapter["id"] == "creepy-style-id"
+        assert adapter["adapter_name"] == "morphorum_creepy-style-id"
+        assert adapter["family"] == "sdxl"
+        weights.append(adapter["weight"])
+
+    assert weights == pytest.approx([0.4, 0.6, 0.8])

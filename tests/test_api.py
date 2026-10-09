@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import io
+import json
 import time
 
 from fastapi.testclient import TestClient
 from PIL import Image
 
+import morphorum.animation_depth as animation_depth
 import morphorum.animation_motion as animation_motion
 import morphorum.animation_projects as animation_projects
 import morphorum.animation_render as animation_render
@@ -28,10 +30,29 @@ def test_frontend_and_health() -> None:
         assert "Settings" in frontend.text
         assert "Console" in frontend.text
         assert "Animation" in frontend.text
+        assert 'id="view-loras"' in frontend.text
+        assert 'id="lora-manager-family"' in frontend.text
+        assert 'id="lora-manager-civitai"' in frontend.text
+        assert 'id="lora-manager-refresh-runtime"' in frontend.text
+        assert 'value="lora" checked' in frontend.text
+        assert 'id="lora-manager-insert"' in frontend.text
         assert 'id="view-animation"' in frontend.text
         assert '<select id="animation-sampler"' in frontend.text
         assert 'id="animation-start-render"' in frontend.text
+        assert 'id="animation-import-deforum"' in frontend.text
+        assert 'id="animation-deforum-file"' in frontend.text
+        assert 'id="animation-deforum-dialog"' in frontend.text
+        assert 'id="animation-deforum-model"' in frontend.text
+        assert 'id="animation-deforum-mappings"' in frontend.text
+        assert 'id="animation-deforum-create"' in frontend.text
         assert 'id="animation-start-mode"' in frontend.text
+        assert 'id="animation-mode"' in frontend.text
+        assert 'id="animation-2d-motion-card"' in frontend.text
+        assert 'id="animation-3d-camera-card"' in frontend.text
+        assert 'id="animation-3d-translation-z"' in frontend.text
+        assert 'id="animation-3d-rotation-y"' in frontend.text
+        assert 'id="animation-3d-fov"' in frontend.text
+        assert 'data-animation-mode="3d"' in frontend.text
         assert 'id="animation-model-load-progress"' in frontend.text
         assert 'id="animation-model-load-status"' in frontend.text
         assert 'id="animation-resume-render"' in frontend.text
@@ -55,6 +76,25 @@ def test_frontend_and_health() -> None:
         assert 'id="animation-render-state-cum-zoom"' in frontend.text
         assert 'id="animation-render-state-strength"' in frontend.text
         assert 'id="animation-render-state-seed"' in frontend.text
+        assert 'id="animation-render-state-3d-z"' in frontend.text
+        assert 'id="animation-render-state-3d-ry"' in frontend.text
+        assert 'id="animation-render-state-depth"' in frontend.text
+        assert 'id="animation-render-state-coverage"' in frontend.text
+        assert 'id="animation-render-state-cadence"' in frontend.text
+        assert 'id="animation-render-state-timing"' in frontend.text
+        assert 'id="animation-cadence"' in frontend.text
+        assert 'id="animation-3d-depth-resolution"' in frontend.text
+        assert 'id="resolved-cadence"' in frontend.text
+        assert 'value="cadence.diffusion"' in frontend.text
+        assert 'id="resolved-3d-z"' in frontend.text
+        assert 'id="resolved-3d-ry"' in frontend.text
+        assert 'id="resolved-3d-fov"' in frontend.text
+        assert 'value="camera_3d.translation_z"' in frontend.text
+        assert 'value="camera_3d.fov"' in frontend.text
+        assert 'id="animation-depth-card"' in frontend.text
+        assert 'id="animation-depth-model"' in frontend.text
+        assert 'id="animation-generate-depth"' in frontend.text
+        assert 'id="animation-depth-preview"' in frontend.text
         assert 'id="copy-console-view"' in frontend.text
         assert 'id="copy-console-buffer"' in frontend.text
         assert "__MORPHORUM_ASSET_VERSION__" not in frontend.text
@@ -62,11 +102,18 @@ def test_frontend_and_health() -> None:
         assert f"/assets/app.js?v={asset_version}" in frontend.text
         assert f"/assets/animation.css?v={asset_version}" in frontend.text
         assert f"/assets/animation.js?v={asset_version}" in frontend.text
+        assert f"/assets/loras.js?v={asset_version}" in frontend.text
         assert "no-cache" in frontend.headers.get("cache-control", "")
 
         css = client.get("/assets/app.css")
         assert css.status_code == 200
         assert "no-cache" in css.headers.get("cache-control", "")
+
+        app_js = client.get("/assets/app.js")
+        assert app_js.status_code == 200
+        assert "health.git_branch" in app_js.text
+        assert "health.git_commit" in app_js.text
+        assert "Connected" in app_js.text
 
         animation_js = client.get("/assets/animation.js")
         assert animation_js.status_code == 200
@@ -74,8 +121,21 @@ def test_frontend_and_health() -> None:
         assert "current_prompt_state" in animation_js.text
         assert "current_frame_state" in animation_js.text
         assert "animation-render-state-cum-zoom" in animation_js.text
+        assert "resolved.camera_3d?.translation_z" in animation_js.text
+        assert "resolved.camera_3d?.fov" in animation_js.text
+        assert "function animationMode()" in animation_js.text
+        assert "syncAnimationModeUi" in animation_js.text
+        assert "repairConstantGuidanceForSelectedModel" in animation_js.text
+        assert "/api/animation/depth/models" in animation_js.text
+        assert "generateDepthPreview" in animation_js.text
         assert "animation-timeline-keyframe-chip" in animation_js.text
         assert "animation-timeline-track-select" in animation_js.text
+        assert "cadence.diffusion" in animation_js.text
+        assert "animation-3d-depth-resolution" in animation_js.text
+        assert "animation-render-state-timing" in animation_js.text
+        assert "/api/animation/import/deforum/preview" in animation_js.text
+        assert "/api/animation/import/deforum/create" in animation_js.text
+        assert "file.text()" in animation_js.text
 
 
 def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
@@ -101,7 +161,10 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
             "ui_scale": "compact",
             "image_preview_limit": 7,
         },
-        "performance": {"unload_after_generation": True},
+        "performance": {
+            "unload_after_generation": True,
+            "sdxl_vae_tiling": True,
+        },
     }
 
     with TestClient(app) as client:
@@ -120,6 +183,7 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
         assert settings["ui"]["ui_scale"] == "compact"
         assert settings["ui"]["image_preview_limit"] == 7
         assert settings["performance"]["unload_after_generation"] is True
+        assert settings["performance"]["sdxl_vae_tiling"] is True
 
         # Checkpoint and LoRA source policies are independent.
         for family in ("sdxl", "flux", "zimage"):
@@ -608,3 +672,222 @@ def test_animation_sampler_capabilities_are_model_specific() -> None:
     }
     assert flux == {"flowmatch_euler"}
     assert zimage == {"flowmatch_euler"}
+
+def test_lora_inspection_api_rejects_unindexed_file_and_requires_explicit_online_action(
+    tmp_path, monkeypatch
+) -> None:
+    import importlib
+    from safetensors.torch import save_file
+    import torch
+    module = importlib.import_module("morphorum.app")
+    inspector = importlib.import_module("morphorum.lora_inspector")
+    file = tmp_path / "trigger.safetensors"
+    save_file({"unet.down_blocks.0.attn.to_q.lora_A.weight": torch.ones(2, 4)},
+              str(file), metadata={"trigger_words": "marker"})
+    record = {"id": "synthetic-id", "kind": "loras", "family": "sdxl",
+              "name": "trigger", "path": str(file)}
+    monkeypatch.setattr(module, "list_models", lambda **kwargs: [record])
+    monkeypatch.setattr(inspector, "get_model", lambda model_id: record if model_id == "synthetic-id" else None)
+    with TestClient(app) as client:
+        library = client.get("/api/loras?family=sdxl")
+        assert library.status_code == 200
+        assert library.json()["loras"][0]["id"] == "synthetic-id"
+        detail = client.get("/api/loras/synthetic-id/inspect")
+        assert detail.status_code == 200
+        assert detail.json()["trigger_words"] == ["marker"]
+
+        missing = client.get("/api/loras/synthetic-id-absent/inspect")
+        # The metadata route is indexed-id restricted, not an arbitrary path read.
+        assert missing.status_code == 404
+
+        calls = []
+        monkeypatch.setattr(module, "lookup_civitai", lambda model_id: calls.append(model_id) or {
+            "found": False, "message": "offline",
+        })
+        assert not calls
+        lookup = client.post("/api/loras/synthetic-id/civitai-lookup")
+        assert lookup.status_code == 200
+        assert calls == ["synthetic-id"]
+
+def test_lora_manager_server_audit_logs_and_validation(monkeypatch) -> None:
+    import importlib
+    from morphorum.console import snapshot
+
+    module = importlib.import_module("morphorum.app")
+    record = {
+        "id": "audit-529922", "kind": "loras", "family": "sdxl",
+        "name": "DonMCr33pyD0115XL_529922",
+    }
+    monkeypatch.setattr(
+        module, "get_model",
+        lambda model_id: record if model_id == "audit-529922" else None,
+    )
+    monkeypatch.setattr(
+        module.generation_manager, "model_status",
+        lambda: {
+            "loaded": True, "model_name": "artUniverse", "family": "sdxl",
+            "task": "txt2img",
+            "loras": [{
+                "id": record["id"], "adapter_name": "morphorum_audit",
+                "compatibility": "unet-only",
+                "diagnostics": {"modules": 12, "abs_sum": 42.25},
+            }],
+            "active_loras": [{"adapter_name": "morphorum_audit", "weight": 0.8}],
+        },
+    )
+    events = snapshot(limit=1500)
+    last_id = events[-1]["id"] if events else 0
+    with TestClient(app) as client:
+        audit = client.post("/api/loras/audit-529922/runtime-audit")
+        assert audit.status_code == 200
+        assert audit.json()["active_loras"][0]["weight"] == 0.8
+
+        payload = {
+            "event": "prompt_inserted", "weight": 0.85,
+            "image_family": "sdxl", "trigger_count": 2,
+        }
+        ok = client.post("/api/loras/audit-529922/activity", json=payload)
+        assert ok.status_code == 200
+        assert ok.json()["status"] == "recorded"
+        fail = client.post(
+            "/api/loras/audit-529922/activity",
+            json={**payload, "event": "prompt_rejected", "reason": "invalid_name"},
+        )
+        assert fail.status_code == 200
+        assert client.post(
+            "/api/loras/audit-529922/activity", json={**payload, "reason": "spoofed message"},
+        ).status_code == 400
+        assert client.post(
+            "/api/loras/no-such-file/activity", json=payload,
+        ).status_code == 404
+        assert client.post(
+            "/api/loras/audit-529922/activity",
+            json={**payload, "weight": "nan"},
+        ).status_code in (400, 422)
+
+    lora_lines = [
+        event for event in snapshot(after_id=last_id, limit=1500)
+        if event["category"] == "lora"
+    ]
+    assert any("Runtime audit" in event["message"] and "12" in event["message"] for event in lora_lines)
+    assert any("insertion succeeded" in event["message"] for event in lora_lines)
+    assert any("insertion rejected" in event["message"] for event in lora_lines)
+    assert any("DonMCr33pyD0115XL" in event["message"] for event in lora_lines)
+
+
+def test_b53_3d_preview_api_forwards_red_overlay_to_manager(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path / "projects")
+    seen = []
+
+    def fake_start(*, project, source_path, highlight_holes=False):
+        seen.append((project, source_path, highlight_holes))
+        return {"id": "b53-preview-test", "status": "queued"}
+
+    monkeypatch.setattr(animation_motion.motion_preview_manager, "start", fake_start)
+
+    with TestClient(app) as client:
+        created = client.post("/api/animation/projects", json={"name": "B5.3 API"})
+        assert created.status_code == 201
+        project_id = created.json()["project"]["id"]
+        image_bytes = io.BytesIO()
+        Image.new("RGB", (48, 32), "teal").save(image_bytes, format="PNG")
+        uploaded = client.post(
+            f"/api/animation/projects/{project_id}/source-image",
+            content=image_bytes.getvalue(),
+            headers={"content-type": "image/png", "x-filename": "ref.png"},
+        )
+        assert uploaded.status_code == 201
+        project = uploaded.json()["project"]
+        project["animation"]["mode"] = "3d"
+        project["animation"]["max_frames"] = 12
+        response = client.post(
+            "/api/animation/motion-preview",
+            json={"project": project, "options": {"highlight_holes": True}},
+        )
+        assert response.status_code == 202, response.text
+        assert len(seen) == 1
+        assert seen[0][0]["animation"]["mode"] == "3d"
+        assert seen[0][2] is True
+        assert seen[0][1].is_file()
+
+
+def test_deforum_import_preview_and_create_routes(tmp_path, monkeypatch) -> None:
+    import morphorum.app as app_module
+    import morphorum.deforum_import as importer
+
+    model = {
+        "id": "model-1",
+        "kind": "checkpoints",
+        "family": "sdxl",
+        "variant": "sdxl",
+        "name": "Test SDXL",
+        "filename": "test.safetensors",
+        "path": str(tmp_path / "test.safetensors"),
+    }
+    monkeypatch.setattr(importer, "get_model", lambda _model_id: model)
+    monkeypatch.setattr(
+        importer,
+        "validate_project_schedules",
+        lambda project: {"valid": True, "issues": [], "fields": {}},
+    )
+
+    created = {}
+
+    def fake_create(content, *, filename="", model_id=None, project_name=None):
+        report = importer.preview_deforum_import(
+            content,
+            filename=filename,
+            model_id=model_id,
+            project_name=project_name,
+        )
+        project = dict(report["project"])
+        project["id"] = "imported-project-1234"
+        project["name"] = project_name or project["name"]
+        created["project"] = project
+        return project, report
+
+    monkeypatch.setattr(app_module, "create_deforum_import", fake_create)
+
+    source = json.dumps({
+        "max_frames": 12,
+        "animation_prompts": {"0": "legacy prompt"},
+        "sampler": "Euler",
+    })
+    with TestClient(app) as client:
+        preview = client.post(
+            "/api/animation/import/deforum/preview",
+            json={"content": source, "filename": "legacy.json", "model_id": "model-1"},
+        )
+        assert preview.status_code == 200
+        assert preview.json()["project"]["animation"]["max_frames"] == 12
+        assert preview.json()["project"]["generation"]["sampler"] == "euler"
+
+        response = client.post(
+            "/api/animation/import/deforum/create",
+            json={
+                "content": source,
+                "filename": "legacy.json",
+                "model_id": "model-1",
+                "name": "Imported Legacy",
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["project"]["id"] == "imported-project-1234"
+        assert response.json()["project"]["name"] == "Imported Legacy"
+        assert response.json()["import"]["source_filename"] == "legacy.json"
+        assert created["project"]["prompts"]["0"] == "legacy prompt"
+
+
+def test_deforum_import_route_rejects_python_text() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/animation/import/deforum/preview",
+            json={
+                "content": "max_frames = 120",
+                "filename": "legacy.txt",
+            },
+        )
+    assert response.status_code == 400
+    assert "not JSON-serialized" in response.json()["detail"]
