@@ -92,11 +92,7 @@
     for (const id of ['image-width','image-height','image-steps','image-guidance','image-seed','image-seed-increment','image-count','image-lora-weight']) {
       restoreNumeric(id, values[id]);
     }
-    const preset = qs('#image-resolution-preset');
-    if (preset) {
-      const match = values['image-width'] + 'x' + values['image-height'];
-      preset.value = [...preset.options].some(opt => opt.value === match) ? match : 'custom';
-    }
+    syncResolutionPreset();
     updateSeedMode();
     state.restoredModel = modelId;
   }
@@ -259,22 +255,22 @@
     updateUnloadButton();
   }
 
-  function populatePresets(capability) {
-    const select = qs('#image-resolution-preset');
-    if (!select) return;
-    select.replaceChildren();
-    for (const preset of capability.resolutions || []) {
-      const option = document.createElement('option');
-      option.value = `${preset.width}x${preset.height}`;
-      option.textContent = `${preset.label} · ${preset.width} × ${preset.height}`;
-      select.appendChild(option);
-    }
-    const custom = document.createElement('option');
-    custom.value = 'custom';
-    custom.textContent = 'Custom';
-    select.appendChild(custom);
+  function updateResolutionGuidance() {
+    window.MorphorumResolution.guidance(qs('#image-resolution-help'),state.model?.family,
+      qs('#image-width')?.value,qs('#image-height')?.value);
   }
-
+  function syncResolutionPreset() {
+    window.MorphorumResolution.sync(qs('#image-resolution-preset'),
+      qs('#image-width')?.value,qs('#image-height')?.value);
+    updateResolutionGuidance();
+  }
+  function populatePresets(capability) {
+    window.MorphorumResolution.populate(qs('#image-resolution-preset'),capability,
+      state.model?.family,qs('#image-width')?.value,qs('#image-height')?.value);
+    const step=window.MorphorumResolution.divisorForFamily(state.model?.family);
+    qs('#image-width').step=step;qs('#image-height').step=step;
+    updateResolutionGuidance();
+  }
   function populateSamplers(capability) {
     const select = qs('#image-sampler');
     if (!select) return;
@@ -315,11 +311,7 @@
       const height = Number(resolution.height);
       qs('#image-width').value = width;
       qs('#image-height').value = height;
-      const presetValue = `${width}x${height}`;
-      const preset = qs('#image-resolution-preset');
-      preset.value = [...preset.options].some(option => option.value === presetValue)
-        ? presetValue
-        : 'custom';
+      syncResolutionPreset();
     }
 
     const negativePrompt = qs('#image-negative-prompt');
@@ -446,6 +438,8 @@
       renderLoraPicker();
       qs('#image-capability-note').textContent = 'Select an indexed checkpoint to begin.';
       qs('#image-model-family-badge').textContent = 'No model';
+      window.MorphorumResolution.populate(qs('#image-resolution-preset'),{},'',0,0);
+      updateResolutionGuidance();
       return;
     }
 
@@ -781,20 +775,16 @@
     qs('#image-model-select')?.addEventListener('change', configureModel);
     qs('#image-insert-lora')?.addEventListener('click', insertSelectedLora);
     qs('#image-resolution-preset')?.addEventListener('change', event => {
-      if (event.target.value === 'custom') return;
-      const [width, height] = event.target.value.split('x').map(Number);
-      if (width && height) {
-        qs('#image-width').value = width;
-        qs('#image-height').value = height;
-      }
+      window.MorphorumResolution.apply(event.target,qs('#image-width'),qs('#image-height'));
+      updateResolutionGuidance();saveImageDraft();
     });
-    qs('#image-width')?.addEventListener('input', () => { qs('#image-resolution-preset').value = 'custom'; });
-    qs('#image-height')?.addEventListener('input', () => { qs('#image-resolution-preset').value = 'custom'; });
+    qs('#image-width')?.addEventListener('input',syncResolutionPreset);
+    qs('#image-height')?.addEventListener('input',syncResolutionPreset);
     qs('#swap-resolution')?.addEventListener('click', () => {
       const width = qs('#image-width').value;
       qs('#image-width').value = qs('#image-height').value;
       qs('#image-height').value = width;
-      qs('#image-resolution-preset').value = 'custom';
+      syncResolutionPreset();
       saveImageDraft();
     });
     qs('#random-seed')?.addEventListener('click', randomSeed);

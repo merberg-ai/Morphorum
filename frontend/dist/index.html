@@ -106,6 +106,7 @@
               <label id="seed-increment-field"><span>Increment by</span><input id="image-seed-increment" type="number" value="1" step="1" disabled></label>
               <label><span>Images</span><input id="image-count" type="number" value="1" min="1" max="32" disabled></label>
             </div>
+            <p class="field-help" id="image-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
 
             <div class="generation-actions">
               <button class="primary-button busy-button full-width" id="generate-image" disabled><span class="spinner"></span><span class="button-label">Generate</span></button>
@@ -234,12 +235,14 @@
               <label class="animation-span-2"><span>Name</span><input id="animation-name" type="text" placeholder="Untitled Animation" disabled></label>
               <label><span>Max frames</span><input id="animation-max-frames" type="number" min="1" max="1000000" value="120" disabled></label>
               <label><span>FPS</span><input id="animation-fps" type="number" min="1" max="240" step="0.01" value="24" disabled></label>
+              <label class="animation-span-2"><span>Resolution preset</span><select id="animation-resolution-preset" disabled><option value="">Select a model</option></select></label>
               <label><span>Width</span><input id="animation-width" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
               <label><span>Height</span><input id="animation-height" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
               <label><span>Animation mode</span><select id="animation-mode" disabled><option value="2d">2D</option><option value="3d">3D depth-aware</option></select></label>
               <label><span>Prompt transition</span><select id="animation-prompt-transition" disabled><option value="blend">Blend between keyframes</option><option value="hold">Hold until next keyframe</option></select></label>
               <label class="animation-span-2"><span>Model</span><select id="animation-model" disabled><option value="">No model selected</option></select></label>
             </div>
+            <p class="field-help" id="animation-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
           </article>
 
           <article class="card glass animation-cadence-card" id="animation-cadence-card">
@@ -958,6 +961,7 @@
 
   <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
   <script src="/assets/ui-services.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/resolution.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/app.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>

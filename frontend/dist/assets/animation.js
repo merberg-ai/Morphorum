@@ -623,6 +623,28 @@
     return merged;
   }
 
+  function populateResolutionPresets() {
+    const model=modelById(qs('#animation-model')?.value||'');
+    const capability=model?effectiveCapability(model):{};
+    const width=qs('#animation-width'),height=qs('#animation-height');
+    window.MorphorumResolution.populate(qs('#animation-resolution-preset'),
+      capability,model?.family||'',width?.value,height?.value);
+    const divisor=window.MorphorumResolution.divisorForFamily(model?.family);
+    if(width)width.step=divisor;
+    if(height)height.step=divisor;
+    updateAnimationResolutionHelp();
+  }
+  function updateAnimationResolutionHelp() {
+    const model=modelById(qs('#animation-model')?.value||'');
+    window.MorphorumResolution.guidance(qs('#animation-resolution-help'),
+      model?.family,qs('#animation-width')?.value,qs('#animation-height')?.value);
+  }
+  function syncAnimationResolutionPreset() {
+    window.MorphorumResolution.sync(qs('#animation-resolution-preset'),
+      qs('#animation-width')?.value,qs('#animation-height')?.value);
+    updateAnimationResolutionHelp();
+  }
+
   function populateSamplerSelect(preferredSampler = '') {
     const select = qs('#animation-sampler');
     if (!select) return;
@@ -744,6 +766,7 @@
     }
     select.value = selected;
     populateSamplerSelect(state.project?.generation?.sampler || '');
+    populateResolutionPresets();
   }
 
   function renderProjectSelect() {
@@ -1858,7 +1881,8 @@
         renderTimeline();
         renderDepthState();
         qs('#animation-project-path').textContent = 'Create or select an animation project.';
-        qs('#animation-schema-badge').textContent = 'Schema 2';
+        qs('#animation-schema-badge').textContent = 'Choose a project';
+        populateResolutionPresets();
         clearInspector();
         clearDirty();
         return;
@@ -1869,6 +1893,7 @@
       qs('#animation-fps').value = project.animation?.fps ?? 24;
       qs('#animation-width').value = project.animation?.width ?? 1024;
       qs('#animation-height').value = project.animation?.height ?? 1024;
+      syncAnimationResolutionPreset();
       qs('#animation-mode').value = project.animation?.mode || '2d';
       qs('#animation-prompt-transition').value = project.animation?.prompt_transition || 'blend';
       qs('#animation-start-mode').value = project.animation?.start_mode || (project.animation?.source_image ? 'source' : 'prompt');
@@ -3297,6 +3322,7 @@
       const payload = await api('/api/generation/capabilities');
       state.capabilities = payload.families || {};
       populateSamplerSelect(state.project?.generation?.sampler || '');
+      populateResolutionPresets();
     } catch (error) {
       state.capabilities = {};
       toast('Animation generation capabilities unavailable', error.message, 'warning', 6500);
@@ -4108,11 +4134,20 @@
 
     qs('#animation-model')?.addEventListener('change', () => {
       populateSamplerSelect('');
+      populateResolutionPresets();
       const repairedGuidance = repairConstantGuidanceForSelectedModel({ announce: true });
       renderPromptRows();
       markDirty({ validate: repairedGuidance });
       renderSourceState();
     });
+
+    qs('#animation-resolution-preset')?.addEventListener('change',event => {
+      if(!window.MorphorumResolution.apply(event.target,qs('#animation-width'),qs('#animation-height')))return;
+      updateAnimationResolutionHelp();
+      markDirty({validate:true});
+    });
+    for(const id of ['animation-width','animation-height'])
+      qs('#'+id)?.addEventListener('input',syncAnimationResolutionPreset);
 
     qs('#animation-start-mode')?.addEventListener('change', () => {
       markDirty();
@@ -4136,6 +4171,7 @@
         input.id.startsWith('animation-hybrid-') ||
         input.id.startsWith('animation-video-') ||
         input.id === 'animation-model' ||
+        input.id === 'animation-resolution-preset' ||
         input.id === 'animation-source-file' ||
         input.id === 'animation-start-mode' ||
         input.id === 'animation-cadence-preset' ||
