@@ -536,7 +536,11 @@
                 <span id="animation-render-status">Waiting…</span>
                 <strong id="animation-render-percent">0%</strong>
               </div>
-              <div class="progress-track"><div class="progress-fill" id="animation-render-progress-fill"></div></div>
+              <div class="progress-track" role="progressbar" aria-label="Overall animation render" aria-valuemin="0" aria-valuemax="100" id="animation-overall-progress-track"><div class="progress-fill" id="animation-render-progress-fill"></div></div>
+              <div class="animation-step-progress" id="animation-step-progress">
+                <div class="progress-row"><span id="animation-step-progress-label">No active diffusion</span><strong id="animation-step-progress-value"></strong></div>
+                <div class="progress-track" id="animation-step-progress-track" role="progressbar" aria-label="Current diffusion steps" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-fill" id="animation-step-progress-fill"></div></div>
+              </div>
               <div class="animation-render-stats">
                 <span>Frame <strong id="animation-render-frame">--</strong></span>
                 <span>Step <strong id="animation-render-step">--</strong></span>

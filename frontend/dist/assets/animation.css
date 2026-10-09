@@ -1904,3 +1904,36 @@ dialog#animation-deforum-dialog {
 .animation-hybrid-preview input {width:100%;}
 @media(max-width:720px){.animation-hybrid-controls {grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:440px){.animation-hybrid-controls {grid-template-columns:minmax(0,1fr);}}
+
+/* dev-ui: one active Animation workspace panel with no duplicate render pollers. */
+.animation-workspace-nav {max-width:1260px;margin:0 auto 15px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;position:sticky;top:90px;z-index:15;padding:6px;border:1px solid var(--border);border-radius:13px;background:var(--panel-strong);}
+.animation-workspace-nav button {min-width:0;min-height:43px;padding:9px 11px;background:transparent;border:0;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:600;}
+.animation-workspace-nav button.active {color:#091016;background:linear-gradient(135deg,var(--accent),#85e5ff);}
+.animation-workspace-panel {max-width:1260px;margin:0 auto;min-width:0;}
+.animation-workspace-panel[hidden] {display:none!important;}
+.animation-monitor-panel {display:block;}
+#animation-panel-monitor .animation-render-card {grid-column:1/-1;padding:18px;}
+#animation-panel-monitor .animation-card-content {display:block!important;}
+#animation-panel-monitor .animation-card-toggle {display:none;}
+#animation-panel-monitor .animation-render-notice {display:none;}
+#animation-panel-monitor .animation-render-visuals {grid-template-columns:minmax(0,1fr);max-width:800px;margin:12px auto;}
+#animation-panel-monitor .animation-render-frame-wrap img {max-height:min(58dvh,680px);object-fit:contain;}
+#animation-panel-monitor .animation-render-progress {max-width:950px;margin:8px auto 0;}
+.animation-step-progress {margin:12px 0 0;padding:10px 12px;background:rgba(164,108,255,.035);border:1px solid var(--border);border-radius:10px;}
+.animation-step-progress .progress-fill {background:linear-gradient(90deg,var(--accent-2),var(--accent));}
+.animation-monitor-diagnostics {border-top:1px solid var(--border);margin-top:15px;padding-top:14px;min-width:0;}
+.animation-monitor-diagnostics > summary {cursor:pointer;color:var(--muted);font-size:.8rem;}
+.animation-monitor-diagnostics > *:not(summary){margin-top:14px;}
+#animation-panel-media .animation-video-export,
+#animation-panel-outputs .animation-video-export {margin:0;min-width:0;}
+#animation-panel-media .animation-media-card,
+#animation-panel-outputs .animation-output-card {padding:16px;min-width:0;}
+#animation-panel-outputs .animation-render-history-row {margin-bottom:12px;}
+#animation-panel-outputs .animation-render-preview-wrap {margin-top:12px;}
+#animation-panel-outputs .animation-render-preview-wrap img {display:block;max-width:100%;max-height:68dvh;object-fit:contain;}
+@media(max-width:640px){
+  .animation-workspace-nav {top:5px;gap:3px;padding:4px;}
+  .animation-workspace-nav button {font-size:.76rem;padding:9px 3px;}
+  #animation-panel-monitor .animation-render-card {padding:12px;}
+  #animation-panel-monitor .animation-render-visuals {max-width:100%;}
+}

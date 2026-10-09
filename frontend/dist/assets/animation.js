@@ -3023,10 +3023,38 @@
     if (percentEl) percentEl.textContent = percent + '%';
     const fill = qs('#animation-render-progress-fill');
     if (fill) fill.style.width = percent + '%';
+    const overall = qs('#animation-overall-progress-track');
+    if (overall) overall.setAttribute('aria-valuenow', String(percent));
     const frameStat = qs('#animation-render-frame');
     if (frameStat) frameStat.textContent = job ? ((Number(job.current_frame || 0) + 1) + ' / ' + Number(job.total_frames || 0)) : '--';
     const stepStat = qs('#animation-render-step');
     if (stepStat) stepStat.textContent = job ? String(job.current_step ?? 0) : '--';
+    const stepPanel = qs('#animation-step-progress');
+    if (stepPanel) stepPanel.hidden = !job;
+    const stepTotal = Number(job?.current_step_total || 0);
+    const currentStep = Math.max(0, Math.min(stepTotal, Number(job?.current_step || 0)));
+    const stepPercent = stepTotal ? Math.min(100, Math.round(currentStep / stepTotal * 100)) : 0;
+    const stepLabel = qs('#animation-step-progress-label');
+    if (stepLabel) stepLabel.textContent = job?.status === 'loading_model' ? 'Loading model…' :
+      job?.status === 'queued' ? 'Waiting for worker…' :
+      job?.status === 'finalizing' ? 'Finalizing frames…' :
+      stepTotal ? 'Diffusion step ' + currentStep + ' / ' + stepTotal :
+      job?.status === 'rendering' ? 'No diffusion this frame' : 'No active diffusion';
+    const stepValue = qs('#animation-step-progress-value');
+    if (stepValue) stepValue.textContent = stepTotal ? stepPercent + '%' : '';
+    const stepFill = qs('#animation-step-progress-fill');
+    if (stepFill) stepFill.style.width = stepPercent + '%';
+    const stepMeter = qs('#animation-step-progress-track');
+    if (stepMeter) {
+      stepMeter.setAttribute('aria-valuenow', String(stepPercent));
+      stepMeter.setAttribute('aria-valuetext', stepTotal ? currentStep + ' of ' + stepTotal + ' steps' : 'No active diffusion');
+    }
+    if (job) window.dispatchEvent(new CustomEvent('morphorum:job-status', {detail: {
+      type: 'animation', id: job.id, status: job.status, progress: Number(job.progress || 0),
+      current: Number(job.current_frame || 0) + 1, total: Number(job.total_frames || 0),
+      eta_seconds: job.eta_seconds
+    }}));
+
     const frameTime = qs('#animation-render-frame-time');
     if (frameTime) frameTime.textContent = formatSeconds(job?.frame_seconds);
     const eta = qs('#animation-render-eta');
@@ -3230,6 +3258,7 @@
       const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project }) });
       state.renderJobId = job.id;
       renderAnimationJob(job);
+      showAnimationTab('monitor');
       await loadRenderHistory();
       pollAnimationRender(job.id);
       toast('Animation render queued', 'Current browser project state was frozen into the render manifest.', 'success');
@@ -3884,6 +3913,113 @@
     hybridButtons();
   }
 
+  // Four views share the original render controls and poller, never duplicate them.
+  const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
+  let animationTab = 'editor';
+  function showAnimationTab(name, { persist = true } = {}) {
+    if (!['editor','monitor','media','outputs'].includes(name)) return;
+    animationTab = name;
+    qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
+      const selected = button.dataset.animationTab === name;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-selected', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    });
+    qsa('#view-animation .animation-workspace-panel').forEach(panel => {
+      const selected = panel.dataset.animationPanel === name;
+      panel.hidden = !selected;
+      panel.classList.toggle('active', selected);
+    });
+    if (persist) try { localStorage.setItem(ANIMATION_TAB_KEY, name); } catch (_) {}
+  }
+  function setupAnimationWorkspaceTabs() {
+    const layout = qs('#view-animation .animation-layout');
+    const root = qs('#view-animation');
+    const card = qs('#view-animation .animation-render-card');
+    if (!layout || !root || !card) return;
+    const nav = document.createElement('nav');
+    nav.id = 'animation-workspace-nav';
+    nav.className = 'animation-workspace-nav';
+    nav.setAttribute('aria-label', 'Animation workspace');
+    nav.setAttribute('role', 'tablist');
+    const panels = {};
+    const names = { editor: 'Editor', monitor: 'Monitor', media: 'Media', outputs: 'Outputs' };
+    for (const [name, label] of Object.entries(names)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.animationTab = name;
+      button.id = 'animation-tab-' + name;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-controls', 'animation-panel-' + name);
+      button.textContent = label;
+      button.addEventListener('click', () => showAnimationTab(name));
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const keys = Object.keys(names);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? keys.length - 1 :
+          (keys.indexOf(name) + (event.key === 'ArrowRight' ? 1 : keys.length - 1)) % keys.length;
+        qs('#animation-tab-' + keys[next])?.focus();
+        showAnimationTab(keys[next]);
+      });
+      nav.appendChild(button);
+      const panel = document.createElement('section');
+      panel.className = 'animation-workspace-panel';
+      panel.id = 'animation-panel-' + name;
+      panel.dataset.animationPanel = name;
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('aria-labelledby', button.id);
+      panel.hidden = name !== 'editor';
+      panels[name] = panel;
+    }
+    layout.parentNode.insertBefore(nav, layout);
+    layout.parentNode.insertBefore(panels.editor, layout);
+    panels.editor.appendChild(layout);
+    let last = panels.editor;
+    for (const name of ['monitor','media','outputs']) {
+      last.after(panels[name]);
+      last = panels[name];
+    }
+
+    // The old accordion was initialized while Render was a direct child.
+    setAnimationCardCollapsed(card, false);
+    panels.monitor.appendChild(card);
+    const inner = qs('.animation-card-content', card) || card;
+    const hybrid = qs('#animation-hybrid-source');
+    const video = qs('#animation-video-export');
+    if (hybrid) {
+      const wrapper = document.createElement('article');
+      wrapper.className = 'card glass animation-media-card';
+      wrapper.appendChild(hybrid);
+      panels.media.appendChild(wrapper);
+    }
+    if (video) {
+      const wrapper = document.createElement('article');
+      wrapper.className = 'card glass animation-output-card';
+      wrapper.appendChild(video);
+      panels.outputs.appendChild(wrapper);
+    }
+    const history = qs('.animation-render-history-row');
+    if (history) panels.outputs.prepend(history);
+    const completedPreview = qs('.animation-render-preview-wrap');
+    if (completedPreview) panels.outputs.appendChild(completedPreview);
+    const prompt = qs('#animation-render-prompt-telemetry');
+    const motion = qs('#animation-render-frame-telemetry');
+    const perf = qs('#animation-performance-summary');
+    const expert = document.createElement('details');
+    expert.className = 'animation-monitor-diagnostics';
+    const expertTitle = document.createElement('summary');
+    expertTitle.textContent = 'Advanced diagnostics: prompts, camera state and performance';
+    expert.appendChild(expertTitle);
+    for (const item of [prompt,motion,perf]) if (item) expert.appendChild(item);
+    inner.appendChild(expert);
+    qs('#animation-collapse-all')?.setAttribute('title', 'Collapse Editor cards');
+    qs('#animation-expand-all')?.setAttribute('title', 'Expand Editor cards');
+    let previous = 'editor';
+    try { previous = localStorage.getItem(ANIMATION_TAB_KEY) || 'editor'; } catch (_) {}
+    showAnimationTab(previous, { persist: false });
+  }
+
   function bind() {
     bindHybrid();
     qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
@@ -4025,6 +4161,7 @@
 
   async function start() {
     setupAnimationAccordions();
+    setupAnimationWorkspaceTabs();
     bind();
     setEditorEnabled(false);
 

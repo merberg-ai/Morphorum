@@ -806,6 +806,7 @@ class AnimationRenderJob:
     message: str = "Queued animation render"
     current_frame: int = 0
     current_step: int = 0
+    current_step_total: int = 0
     total_frames: int = 0
     progress: float = 0.0
     eta_seconds: float | None = None
@@ -1413,6 +1414,7 @@ class AnimationRenderManager:
                     job.status = "loading_model"
                     job.current_frame = 0
                     job.current_step = 0
+                    job.current_step_total = steps
                     job.message = f"Loading model for starting frame 1 of {total}"
 
                 pipe, generator_device, validated_model = (
@@ -1533,6 +1535,7 @@ class AnimationRenderManager:
             ]
             job.current_frame = 0
             job.current_step = int(resolved["generation"]["steps"]) if start_mode == "prompt" else 0
+            job.current_step_total = int(resolved["generation"]["steps"]) if start_mode == "prompt" else 0
             job.progress = 1 / total
             job.message = f"Starting frame 1 of {total} complete"
             self._write_manifest(job)
@@ -1738,6 +1741,7 @@ class AnimationRenderManager:
                 job.status = "rendering"
                 job.current_frame = frame
                 job.current_step = 0
+                job.current_step_total = 0
                 job.message = f"Rendering frame {frame + 1} of {total}"
 
             if not should_diffuse:
@@ -1798,6 +1802,8 @@ class AnimationRenderManager:
                 ).manual_seed(seed)
 
                 effective_steps = max(1, int(round(steps * denoise_strength)))
+                with self._lock:
+                    job.current_step_total = effective_steps
 
                 def on_step_end(
                     pipeline,
@@ -1921,7 +1927,7 @@ class AnimationRenderManager:
             job.results.sort(key=lambda item: int(item["frame"]))
 
             job.current_frame = frame
-            job.current_step = steps if should_diffuse else 0
+            job.current_step = job.current_step_total if should_diffuse else 0
             job.progress = (frame + 1) / total
             job.message = f"Rendered frame {frame + 1} of {total}"
 
