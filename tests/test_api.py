@@ -161,7 +161,10 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
             "ui_scale": "compact",
             "image_preview_limit": 7,
         },
-        "performance": {"unload_after_generation": True},
+        "performance": {
+            "unload_after_generation": True,
+            "sdxl_vae_tiling": True,
+        },
     }
 
     with TestClient(app) as client:
@@ -180,6 +183,7 @@ def test_settings_round_trip_and_path_validation(tmp_path, monkeypatch) -> None:
         assert settings["ui"]["ui_scale"] == "compact"
         assert settings["ui"]["image_preview_limit"] == 7
         assert settings["performance"]["unload_after_generation"] is True
+        assert settings["performance"]["sdxl_vae_tiling"] is True
 
         # Checkpoint and LoRA source policies are independent.
         for family in ("sdxl", "flux", "zimage"):

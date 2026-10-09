@@ -376,6 +376,54 @@ class GenerationManager:
             )
             return False
 
+    @staticmethod
+    def _sdxl_vae_tiling_enabled() -> bool:
+        try:
+            settings = load_settings()
+            performance = settings.get("performance", {}) if isinstance(settings, dict) else {}
+            return bool(performance.get("sdxl_vae_tiling", False))
+        except Exception as exc:
+            emit_console(
+                "warning",
+                "generation",
+                f"Could not read SDXL VAE tiling setting: {exc}",
+            )
+            return False
+
+    def _apply_sdxl_memory_strategy(self, pipe: Any, device: str) -> bool:
+        """Apply explicit SDXL-only memory experiments.
+
+        B6.0-P keeps these modes opt-in. VAE tiling is intentionally configured
+        at pipeline load so txt2img/img2img wrappers created with from_pipe()
+        share the same VAE configuration without per-frame mutation.
+        """
+        if not self._sdxl_vae_tiling_enabled():
+            return False
+        vae = getattr(pipe, "vae", None)
+        enable_tiling = getattr(vae, "enable_tiling", None)
+        if not callable(enable_tiling):
+            emit_console(
+                "warning",
+                "generation",
+                "SDXL VAE tiling was requested, but this pipeline VAE does not expose enable_tiling(); using native VAE behavior.",
+            )
+            return False
+        try:
+            enable_tiling()
+        except Exception as exc:
+            raise GenerationError(
+                f"Could not enable the requested SDXL VAE tiling mode: {exc}"
+            ) from exc
+
+        base = "native-gpu" if "cuda" in str(device).lower() else str(device)
+        self._pipeline_optimization = f"{base}+vae-tiling"
+        emit_console(
+            "info",
+            "generation",
+            "SDXL VAE tiling enabled (experimental B6.0-P memory mode).",
+        )
+        return True
+
     def _ensure_worker(self) -> None:
         with self._lock:
             if self._worker and self._worker.is_alive():
@@ -697,6 +745,7 @@ class GenerationManager:
             )
             pipe.set_progress_bar_config(disable=True)
             pipe.to(device)
+            self._apply_sdxl_memory_strategy(pipe, device)
         except Exception as exc:
             if self._is_cuda_oom(exc):
                 raise self._friendly_error(exc, action=f"loading checkpoint '{job.model['name']}'") from exc

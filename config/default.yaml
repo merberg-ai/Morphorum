@@ -43,6 +43,7 @@ performance:
   profile: auto
   keep_model_loaded: true
   unload_after_generation: false
+  sdxl_vae_tiling: false
   unload_after_minutes: 0
 
 managed_models:

@@ -193,6 +193,9 @@
     state.settings.performance.unload_after_generation = Boolean(
       state.settings.performance.unload_after_generation
     );
+    state.settings.performance.sdxl_vae_tiling = Boolean(
+      state.settings.performance.sdxl_vae_tiling
+    );
   }
 
   function ensureManagedModels() {
@@ -403,7 +406,30 @@
     unloadRow.append(unloadInput, unloadCopy);
     unloadLabel.append(unloadTitle, unloadRow);
 
-    grid.append(previewLabel, unloadLabel);
+    const tilingLabel = document.createElement('label');
+    tilingLabel.className = 'setting-toggle';
+    const tilingTitle = document.createElement('span');
+    tilingTitle.textContent = 'SDXL high-resolution memory';
+    const tilingRow = document.createElement('div');
+    tilingRow.className = 'toggle-row';
+    const tilingInput = document.createElement('input');
+    tilingInput.type = 'checkbox';
+    tilingInput.id = 'sdxl-vae-tiling';
+    tilingInput.checked = Boolean(state.settings.performance.sdxl_vae_tiling);
+    tilingInput.addEventListener('change', () => {
+      state.settings.performance.sdxl_vae_tiling = tilingInput.checked;
+    });
+    const tilingCopy = document.createElement('div');
+    const tilingStrong = document.createElement('strong');
+    tilingStrong.textContent = 'Experimental VAE tiling';
+    const tilingHelp = document.createElement('small');
+    tilingHelp.textContent =
+      'Opt-in SDXL VAE encode/decode tiling for high-resolution tests. Default is off; unload/reload the model after changing it.';
+    tilingCopy.append(tilingStrong, tilingHelp);
+    tilingRow.append(tilingInput, tilingCopy);
+    tilingLabel.append(tilingTitle, tilingRow);
+
+    grid.append(previewLabel, unloadLabel, tilingLabel);
     card.append(header, grid);
     return card;
   }
@@ -653,6 +679,7 @@
       },
       performance: {
         unload_after_generation: Boolean(state.settings.performance.unload_after_generation),
+        sdxl_vae_tiling: Boolean(state.settings.performance.sdxl_vae_tiling),
       },
     };
   }

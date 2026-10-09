@@ -161,6 +161,51 @@ def test_flux_fp8_lora_error_is_rewritten_with_compatibility_guidance() -> None:
     assert "updated B4 branch" in str(error)
 
 
+def test_sdxl_vae_tiling_is_opt_in_and_updates_optimization(monkeypatch) -> None:
+    manager = GenerationManager()
+    called = []
+    pipe = SimpleNamespace(
+        vae=SimpleNamespace(enable_tiling=lambda: called.append("tiling"))
+    )
+    monkeypatch.setattr(
+        generation,
+        "load_settings",
+        lambda: {"performance": {"sdxl_vae_tiling": True}},
+    )
+
+    assert manager._apply_sdxl_memory_strategy(pipe, "cuda") is True
+    assert called == ["tiling"]
+    assert manager.pipeline_optimization() == "native-gpu+vae-tiling"
+
+
+def test_sdxl_vae_tiling_default_does_not_mutate_vae(monkeypatch) -> None:
+    manager = GenerationManager()
+    called = []
+    pipe = SimpleNamespace(
+        vae=SimpleNamespace(enable_tiling=lambda: called.append("tiling"))
+    )
+    monkeypatch.setattr(
+        generation,
+        "load_settings",
+        lambda: {"performance": {"sdxl_vae_tiling": False}},
+    )
+
+    assert manager._apply_sdxl_memory_strategy(pipe, "cuda") is False
+    assert called == []
+    assert manager.pipeline_optimization() is None
+
+
+def test_sdxl_vae_tiling_missing_api_falls_back_without_enabling(monkeypatch) -> None:
+    manager = GenerationManager()
+    monkeypatch.setattr(
+        generation,
+        "load_settings",
+        lambda: {"performance": {"sdxl_vae_tiling": True}},
+    )
+    assert manager._apply_sdxl_memory_strategy(SimpleNamespace(vae=object()), "cuda") is False
+    assert manager.pipeline_optimization() is None
+
+
 def test_cuda_memory_status_reports_allocator_context_without_mutation(monkeypatch) -> None:
     manager = GenerationManager()
     gib = 1024**3
