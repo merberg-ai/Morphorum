@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
 import morphorum.animation_projects as animation_projects
 import morphorum.deforum_import as deforum_import
+from morphorum.animation_resolution import resolve_project_frame
+from morphorum.animation_timeline import timeline_snapshot
 from morphorum.deforum_import import (
     DeforumImportError,
     create_deforum_import,
     parse_deforum_source,
     preview_deforum_import,
+    translate_deforum_settings,
 )
 
 
@@ -240,3 +245,97 @@ def test_create_requires_explicit_indexed_model() -> None:
             filename="legacy.json",
             model_id="",
         )
+
+
+FIXTURES = Path(__file__).with_name("fixtures") / "deforum"
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected_mode", "expected_frames"),
+    [
+        ("golden_2d.json", "2d", 24),
+        ("golden_3d.json", "3d", 30),
+    ],
+)
+def test_golden_deforum_fixtures_translate_without_mutating_source(
+    filename,
+    expected_mode,
+    expected_frames,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(deforum_import, "get_model", lambda _model_id: _model("sdxl"))
+    source = json.loads((FIXTURES / filename).read_text(encoding="utf-8"))
+    before = deepcopy(source)
+
+    report = translate_deforum_settings(
+        source,
+        filename=filename,
+        model_id="model-1",
+    )
+
+    assert source == before
+    assert report["project"]["animation"]["mode"] == expected_mode
+    assert report["project"]["animation"]["max_frames"] == expected_frames
+    assert report["validation"]["valid"] is True
+    assert report["can_create"] is True
+
+
+def test_golden_2d_round_trip_timeline_and_resolved_frame_agree(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(deforum_import, "get_model", lambda _model_id: _model("sdxl"))
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    monkeypatch.setattr(
+        deforum_import,
+        "create_animation_project",
+        animation_projects.create_animation_project,
+    )
+
+    content = (FIXTURES / "golden_2d.json").read_text(encoding="utf-8")
+    project, _report = create_deforum_import(
+        content,
+        filename="golden_2d.json",
+        model_id="model-1",
+    )
+    reopened = animation_projects.load_animation_project(project["id"])
+    timeline = timeline_snapshot(reopened)
+    frame = resolve_project_frame(reopened, 6, lora_records=[])
+
+    assert reopened["compatibility"]["deforum"]["source_filename"] == "golden_2d.json"
+    assert reopened["generation"]["sampler"] == "dpmpp_2m"
+    assert reopened["generation"]["seed_behavior"] == "increment"
+    assert reopened["generation"]["seed_increment"] == 2
+    assert timeline["tracks"]["camera_2d"]["angle"]["keyframes"][1]["frame"] == 12
+    assert frame["motion"]["angle"] == pytest.approx(3.0)
+    assert frame["motion"]["translation_x"] == pytest.approx(4.0)
+    assert frame["generation"]["strength"] == pytest.approx(0.60)
+    assert frame["generation"]["seed"]["value"] == 424254
+    assert frame["prompts"]["positive"]["from_frame"] == 0
+    assert frame["prompts"]["positive"]["to_frame"] == 12
+    assert frame["prompts"]["positive"]["to_weight"] == pytest.approx(0.5)
+
+
+def test_golden_3d_round_trip_preserves_warned_camera_values(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(deforum_import, "get_model", lambda _model_id: _model("sdxl"))
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    monkeypatch.setattr(
+        deforum_import,
+        "create_animation_project",
+        animation_projects.create_animation_project,
+    )
+
+    content = (FIXTURES / "golden_3d.json").read_text(encoding="utf-8")
+    project, report = create_deforum_import(
+        content,
+        filename="golden_3d.json",
+        model_id="model-1",
+    )
+    reopened = animation_projects.load_animation_project(project["id"])
+    frame = resolve_project_frame(reopened, 15, lora_records=[])
+
+    assert reopened["animation"]["mode"] == "3d"
+    assert frame["camera_3d"]["translation_z"] == pytest.approx(0.04)
+    assert frame["camera_3d"]["rotation_y"] == pytest.approx(-0.5)
+    assert frame["camera_3d"]["fov"] == pytest.approx(48.0)
+    assert frame["cadence"]["diffusion"] == pytest.approx(3.0)
+    assert "use_mask" in report["unsupported_keys"]
+    assert "mask_file" in report["unsupported_keys"]
+    assert any("coordinate direction and scale" in item for item in report["warnings"])
