@@ -211,6 +211,81 @@ Implement a centralized frontend `MorphorumDialog` service (separate `modal.js` 
 
 **Scope:** Add to `dev-ui` backlog only. Defer implementation until the consolidated UI pass; preserve B6.2 checkpoint and feature branch.
 
+## 6. Models page: compact browser, consistent filters, and sane metadata
+
+**Priority:** P1 usability. **Status:** Planned, not implemented.
+
+**Source findings:** `frontend/dist/index.html` puts large managed-download rows above indexed-model stats and search. `frontend/dist/assets/models.css` uses a six-column `.model-row` grid with fixed/minimum widths of 180/90/95/260/90 pixels plus action and gaps. At <=900px it reshuffles those fields into multiple rows, with full-length paths ellipsized by default. The Models page currently offers an independent LoRA `Copy Tag` action in `models.js` as well as the separate LoRA Manager, which will soon have a canonical trigger-aware formatter (item #3).
+
+**Plan:**
+- Keep `Managed Downloads` and `Indexed Library` as compact subpanels or collapsible sections. Prefer showing a searchable indexed library near the top for returning users; don't make them scroll through large catalog rows before using a checkpoint.
+- Rework model entries as readable desktop rows and mobile cards: model name and family first, status and file size second, path expandable/copyable by tap, and a clear **Use for Image** primary action. Keep full path in accessible details instead of relying on touch-unavailable hover titles.
+- Consolidate redundant model/LoRA discovery: Models can browse both for diagnostics, but direct users wanting LoRA inspection, trigger words or copyable prompt text to the redesigned LoRA Manager. If `Copy Tag` stays in Models it must call the *same* safe formatter and clipboard helper as item #3 rather than copying independent `<lora:name:1.0>` text.
+- Present download state, bytes/percent and retry/error actions compactly; don't misrepresent preparing/checking as a percentage. Preserve existing managed model installation behavior and background polling.
+- Give filter inputs explicit accessible labels, a one-tap Clear Filters action, a results count, useful empty states and remembered local filter choices if helpful.
+
+**Acceptance:** Test long checkpoint filenames/paths, mixed families, empty index, search and filters, active managed download, error/retry, and 320–430px mobile widths. Selecting a model must still populate Image Generation, and LoRA actions must not differ between pages. No model-indexing/backend semantic change.
+
+## 7. Settings: grouped configuration, dirty indicator, and safer path editing
+
+**Priority:** P1 usability/data loss. **Status:** Planned, not implemented.
+
+**Source findings:** `frontend/dist/assets/app.js` dynamically builds Theme & Appearance, Generation Behavior, Managed Models and multiple family checkpoint/LoRA directory cards in one `settings-grid`. Changes mutate `state.settings`; `loadSettings()` replaces it from the server and rebuilds the form, without a dirty marker or unsaved-changes confirmation. `applyAppearance()` also writes browser preferences immediately, while the other settings require Save Settings. On mobile `app.css` hides the explicit path `Check` buttons entirely, leaving blur validation.
+
+**Plan:**
+- Organize Settings into understandable subgroups (Appearance, Generation & Memory, Model Paths, Managed Storage), using compact collapsible panels or internal tabs analogous to item #2.
+- Add clear **Unsaved changes** state with Save/Revert actions. Ask through shared modal (item #4) before Reload discards pending edits, including added/removed model paths. Explain distinction between appearance preview applied immediately and server-persisted preferences.
+- Keep each model-path editor compact but retain an accessible Check button on mobile, or an equivalent explicit validation action; do not hide important functionality just to fit the width. Display validation result next to each directory path with specific feedback.
+- Avoid full-form rerender/focus loss for ordinary input edits. Where checking a path asynchronously, ensure an old response cannot overwrite status for a subsequently changed value.
+- Provide clear model-directory vs LoRA-directory grouping, display path count and readable warnings. Use plain text rendering for host paths and errors.
+
+**Acceptance:** Change Appearance and model paths, navigate away/return, exercise Save, Reload and cancel-discard; validate wrong/nonexistent paths from mobile; use keyboard/phone and test font/UI-scale changes. Preserve server settings schema and backend API.
+
+## 8. Image results: visible output, lightbox, and generation-job reconnect
+
+**Priority:** P1 usability/reliability. **Status:** Planned, not implemented.
+
+**Source findings:** Image Generation is one two-column view that becomes vertically stacked on mobile: entire long form comes before Results. `frontend/dist/assets/image.js` shows previews limited by `ui.image_preview_limit` (default five), adds Reuse Seed and Save actions, but does not provide a full-image viewer or clear access to earlier jobs in the Image tab. On DOMContentLoaded it loads capabilities/model status only, although backend already exposes `GET /api/generation/jobs` and individual job status. A browser reload during a long job therefore loses visible job tracking even if the server continues processing.
+
+**Plan:**
+- Make the latest result visible much sooner on mobile, via a prominent jump-to-results action, compact result preview near generation controls, or an Image **Results** panel. Do not cover prompt fields with a sticky full-size image.
+- Tap an output thumbnail to open an accessible full-resolution lightbox with filename/seed/model metadata and actions to Download, Reuse Seed and Close. Use lazy loading/containment so large results don't force horizontal scrolling.
+- Provide compact **Recent Jobs / Results** view using the existing list API, reconnect to a running job after a page refresh when available, and let users revisit completed results retained by the server; do **not** promise persistence after server restart or deleted output files.
+- Explain `Visible image previews` as a UI limit rather than a deletion limit. Retain easy download of results beyond the current thumbnail limit, where source data still exists.
+- Reuse a single progress/event update path with global mini-status in item #5. Reuse-image seed and direct LoRA insertion must update saved form state from item #1.
+
+**Acceptance:** Image batch with >preview limit; mobile preview without substantial scrolling; browser refresh mid-generation and successful job reattach; old results selection; lightbox zoom/dismiss; no lost prompt draft, duplicate polling or reload of unchanged images.
+
+## 9. Console: compact filters, clear operation safety, and mobile log readability
+
+**Priority:** P2 usability plus P1 confirmation safety. **Status:** Planned, not implemented.
+
+**Source findings:** Console toolbar currently contains four level choices, eight source choices, auto-scroll and four actions in one wrapping band. Mobile CSS moves every action into a two-column grid and gives `.console-window` a minimum 390px height; the resulting toolbar can dominate a phone viewport. `clearServerConsole()` calls `DELETE /api/console` immediately, without a confirmation, whereas **Clear View** is a local non-destructive operation. Console stream deduplication and filters already exist and should be preserved.
+
+**Plan:**
+- Compress level filters into a small chip row and make source-category filters an expandable **Filters** panel, with useful **All / Errors / Warnings+Errors** presets plus custom selection. Keep search text and current match count if inexpensive.
+- Make **Auto-scroll** a normal compact toggle with a **Jump to latest** action; when users scroll to older entries, do not keep yanking the scroll position. Preserve live SSE and bounded event buffering.
+- Rework phone log lines as time + severity followed by wrapping content, with category in a chip/secondary line rather than squeeze four small columns. Keep readable font and safe copy controls.
+- Distinguish **Clear View** (browser only) from **Clear Server Buffer** (server-side). Require an explicit danger confirmation via shared modal item #4 for server deletion, and retain existing Copy View / Copy Buffer functions.
+- Consider an expandable log details view for long exceptions/tracebacks instead of filling every row with tiny wrapped text.
+
+**Acceptance:** 320–430px view, keyboard filters, active stream while changing views, auto-scroll behavior, copy over HTTP LAN, danger cancellation, and long multiline warnings. Keep stream API and log contents unchanged.
+
+## 10. Shared frontend hardening, clipboard service, and accessible states
+
+**Priority:** **P0 for unsafe error output**, P1 for shared clipboard and focus behavior. **Status:** Planned, not implemented.
+
+**Concrete code issues:**
+- `frontend/dist/assets/models.js` inserts `String(error.message)` directly into `list.innerHTML` in both managed catalog error and model-index error handlers. Unlike `app.js`'s escaped Console rows, these are not HTML-escaped. Replace with programmatically created nodes and `textContent`; avoid constructing error HTML from responses.
+- `models.js` has a separate `copyText()` whose `document.execCommand('copy')` result is ignored, then resolves as if it succeeded even when the browser denies copying. `app.js` already has a different copy helper that checks the return value. The planned LoRA Manager clipboard action in item #3 should not create yet another divergent implementation.
+- Each page implements its own fetch/error/toast helpers and several forms of loading, empty and busy states. Avoid a massive risky rewrite, but extract tiny reusable helpers (safe clipboard, escaped/text-only error view, loading/error/empty status) where clear duplication matters.
+- CSS `.chip input` visually hides checkboxes for Console filters without an explicit `:focus-visible` style on the adjacent chip, reducing keyboard discoverability. Add consistent focus rings, descriptive labels and screen-reader progress semantics to compact interactions.
+- Align newly introduced shared modal service (item #4), global status strip (item #5), subtab controls (item #2), and LoRA copy controls (item #3) with one typography/touch/focus policy.
+
+**Plan:** Address unsafe `innerHTML` error interpolation first in the implementation sequence, add focused security regression tests including angle brackets/HTML-like API errors, then centralize the clipboard fallback with truthful success/failure UI and improve keyboard focus/empty states. Avoid changing working API contracts or server semantics.
+
+**Acceptance:** Simulated malformed API error text is displayed literally (never interpreted as markup); denied clipboard never reports success; keyboard tab order and focus are visible; model download errors, text-heavy paths and Console chip controls remain accessible.
+
 ## Next entries
 
-Append items #6, #7, etc. as supplied by the user. Collect the list before implementing the UI pass.
+Append items #11 onward as supplied by the user. Collect the list before implementing the UI pass.
