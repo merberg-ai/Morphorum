@@ -25,7 +25,8 @@ MAX_PROBE_SECONDS = 15
 
 
 def managed_video_path(project_id: str, filename: str) -> Path:
-    if (not isinstance(filename, str) or not filename or "/" in filename\n            or "\\\\" in filename or ":" in filename or filename in {".", ".."}):
+    if (not isinstance(filename, str) or not filename or "/" in filename
+            or "\\\\" in filename or ":" in filename or filename in {".", ".."}):
         raise HybridSourceError("Video filename must not contain path components.")
     suffix = Path(filename).suffix.lower()
     if suffix not in VIDEO_SUFFIXES:
