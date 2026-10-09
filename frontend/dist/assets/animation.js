@@ -1830,6 +1830,8 @@
       qs('#animation-3d-rotation-z').value = project.camera_3d?.rotation_z || '0:(0)';
       qs('#animation-3d-fov').value = project.camera_3d?.fov || '0:(40)';
       qs('#animation-3d-depth-resolution').value = project.camera_3d?.depth_resolution || 'auto';
+      qs('#animation-3d-projection-mode').value = project.camera_3d?.projection_mode || 'legacy';
+      qs('#animation-3d-hole-fill').value = project.camera_3d?.hole_fill || 'nearest';
       qs('#animation-strength').value = project.generation?.strength || '0:(0.65)';
       qs('#animation-noise').value = project.generation?.noise || '0:(0.02)';
       qs('#animation-steps').value = project.generation?.steps || '0:(20)';
@@ -1933,6 +1935,8 @@
         rotation_z: qs('#animation-3d-rotation-z')?.value || '0:(0)',
         fov: qs('#animation-3d-fov')?.value || '0:(40)',
         depth_resolution: qs('#animation-3d-depth-resolution')?.value || 'auto',
+        projection_mode: qs('#animation-3d-projection-mode')?.value || 'legacy',
+        hole_fill: qs('#animation-3d-hole-fill')?.value || 'nearest',
       },
       generation: {
         ...(state.project.generation || {}),
