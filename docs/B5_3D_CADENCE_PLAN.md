@@ -256,6 +256,110 @@ implementation prioritizes preserving the already-proven 3D, LoRA, and CUDA
 pipeline. Further temporal filtering/optical flow can be scoped separately
 after actual image comparisons.
 
+## B5.3: CPU-only 3D camera preview, presets, and coverage metrics
+
+**Status:** Implemented on `feature/3d-depth-quality-b5`; automated
+checks pending Windows acceptance. B5.2 is independently preserved at
+`checkpoint/b5-2-temporal-gpu-verified-20261008`
+(commit `e69b70503563d899affb2bb484cbd77bdfd18bcb`).
+
+### Motion preview
+
+- Extends the existing `/api/animation/motion-preview` asynchronous job
+  and animated GIF output to **3D projects**. Existing 2D affine preview
+  remains unchanged.
+- Uses the optional uploaded source/reference image. A source image is
+  required **only for this diagnostic preview**. Real prompt-start
+  rendering does not depend on it.
+- Simulates sequential 3D depth warps on the CPU using the same
+  `render_depth_warp` projection settings and resolved per-frame
+  camera schedules used by real 3D renders. Depth Anything V2 Small
+  is estimated per intermediate preview frame at up to **320 px**.
+  The CPU depth estimator is released after preview completion/failure.
+- Saves an animated GIF and a JSON per-frame coverage series,
+  plus average, minimum, worst frame, and final projected coverage.
+- Optional red overlay highlights **unexplained/disoccluded pixels**
+  for captured preview frames. Red is a diagnostic and is never fed
+  back into subsequent camera transforms.
+- At most 180 project frames are supported for a 3D preview. Longer
+  projects currently require a shorter diagnostic project/segment.
+  GIF frames are sampled down to the existing 72-frame preview cap.
+- No diffusion checkpoint or LoRA is loaded by the motion preview.
+  Unlike full renders, intermediate frames are **never rediffused**.
+  Strong camera motion therefore accumulates forward-warp artifacts;
+  preview coverage is a planning aid, not a prediction of final
+  diffusion-corrected quality.
+
+### Camera presets
+
+The 3D Camera Schedules card offers one-click conservative
+`0:(constant)` values for the **six** translations/rotations:
+
+- Slow dolly in/out;
+- Orbit left/right (yaw with small lateral translation);
+- Pan left/right (yaw-only);
+- Tilt up/down (pitch-only);
+- Still camera reset.
+
+The preset operation resets the six **motion** schedules only.
+It intentionally leaves FOV, projection/fill, depth resolution,
+cadence, source mode, prompts, LoRAs, and model unchanged. Applying
+a preset marks the project unsaved so the user can inspect/edit it
+before saving. Regular manual keyframes remain supported.
+
+### Performance diagnosis from Windows Oct 8 console + screenshot
+
+- SDXL checkpoint `artUniverse_sdxlV60_874843` reports
+  **`Model ready on cuda ... (native-gpu)`**. This explicitly rejects
+  the hypothesis that diffusion was CPU-offloaded.
+- At anchor frames PyTorch reports about **14.0–14.4 GiB allocated**
+  and 14.3–14.5 GiB reserved on the 16 GiB GPU. GPU utilization
+  in the screenshot was 100%. Diffusion per anchor typically took
+  **6–10 s**, with a slower outlier around 14.8 s.
+- CPU Depth Anything V2 Small performs relative depth estimation
+  on every intermediate frame, around **0.45–0.5 s** per frame.
+  Forward-only motion frames complete around **0.5–0.6 s**,
+  with `diff 0.00s` showing no diffusion pass.
+- Header's **RAM FREE 51.2 / 63.6 GiB** at the captured moment
+  means system RAM was not exhausted. VRAM free was just 0.24 GiB.
+- Three changing SDXL PEFT LoRAs were logged across prompt windows;
+  their injected parameters put additional pressure on GPU memory.
+  An optimization pass should profile LoRA residency and CUDA peak
+  memory separately, *not* silently enable CPU offload for SDXL.
+- The supplied Oct 8 console capture had **no**
+  `B5.2 future-anchor refinement updated...` messages. Those two
+  75-frame renders alone do not establish that the opt-in B5.2
+  mode was enabled, though both completed successfully.
+
+### Physical Windows GPU/UI test gate
+
+1. Pull B5.3, restart Morphorum, and load the 75-frame three-prompt
+   project (or a reduced 30-frame copy). Keep the successful B5.2
+   checkpoint available.
+2. Under 3D Camera Schedules choose **Slow dolly in** and Apply.
+   Verify the Z schedule becomes `0:(0.02)`, and the other five
+   motion schedules are reset. FOV, LoRAs, prompts, and other settings
+   must remain unchanged. Save and reload.
+3. Upload a **reference image** in Start Frame if one is not
+   already present. Start Mode may still remain Prompt.
+4. Generate Camera Motion Preview. Ensure progress advances, a GIF
+   appears, and the coverage panel shows avg/minimum/worst/final
+   statistics. No GPU model load should occur.
+5. Enable the exposed-pixel overlay, preview again, and inspect red
+   areas around edges and surfaces appearing behind moving objects.
+   Compare against the non-overlay preview.
+6. Repeat with Orbit left and a gentle Pan/Tilt preset; inspect
+   orientation, clip and disocclusion behavior. Extreme motion
+   should lower projected coverage rather than trigger inference OOM.
+7. Switch to 2D mode and verify its original affine preview works.
+8. If you test the B5.2 feature itself, explicitly select
+   `Future-anchor depth-aligned tween` under Diffusion Cadence and
+   confirm the console logs `B5.2 future-anchor refinement updated`
+   at later anchors.
+9. For SDXL performance comparisons, use identical seed/schedules/
+   model/LoRAs and record anchor diffusion time, GPU VRAM reserved,
+   and number of resident LoRAs. B5.3 does not change this pipeline.
+
 ## Proposed B5 work order
 
 1. **B5.1 Depth warp quality**: retain the original Z-buffer/occlusion mask,
