@@ -1032,10 +1032,12 @@ def test_resize_depth_map_restores_render_resolution() -> None:
 
 
 @pytest.mark.parametrize("projection_mode", ["legacy", "splat"])
+@pytest.mark.parametrize("temporal_mode", ["forward", "future-anchor"])
 def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
     tmp_path: Path,
     monkeypatch,
     projection_mode: str,
+    temporal_mode: str,
 ) -> None:
     """B5 cadence baseline: 3D transform frames still perform depth projection,
     but only frame 3 and the forced last frame 5 perform GPU diffusion.
@@ -1082,6 +1084,9 @@ def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
     }
     project["camera_3d"]["projection_mode"] = projection_mode
     project["camera_3d"]["hole_fill"] = "background"
+    project["temporal"] = {
+        "mode": temporal_mode, "mix": 0.65, "contrast_threshold": 96,
+    }
     project["generation"]["strength"] = "0:(0.5)"
     project["generation"]["noise"] = "0:(0.02)"
     project["cadence"]["diffusion"] = "0:(3)"
@@ -1091,7 +1096,10 @@ def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
     finished = wait_for(manager, started["id"])
 
     assert finished["status"] == "completed", finished.get("error") or finished
-    assert len(depth_calls) == 5, "3D depth projection must run on every frame after source."
+    expected_depth_calls = 5 + (2 if temporal_mode == "future-anchor" else 0)
+    assert len(depth_calls) == expected_depth_calls, (
+        "Forward depth runs every frame; B5.2 additionally measures each future anchor."
+    )
     assert [request.seed for request in fake_generation.requests] == [103, 105]
 
     frames = (tmp_path / "outputs" / "animations" / "render-test" /
@@ -1120,6 +1128,16 @@ def test_3d_cadence_three_keeps_depth_camera_warps_and_forces_last_anchor(
         assert state["depth_3d"]["warp"] == expected
         assert state["camera_3d"]["projection_mode"] == projection_mode
         assert state["depth_3d"]["projection_mode"] == projection_mode
+        if temporal_mode == "future-anchor" and frame in {1, 2, 4}:
+            tween = state["temporal"]
+            assert tween["mode"] == "future-anchor"
+            assert tween["future_anchor"] == (3 if frame <= 2 else 5)
+            assert tween["previous_anchor"] == (0 if frame <= 2 else 3)
+            assert 0 <= tween["average_weight"] <= 1
+            assert 0 <= tween["fraction_blended"] <= 1
+        else:
+            assert "temporal" not in state
+
         assert state["depth_3d"]["visible_pixels"] + state["depth_3d"]["disoccluded_pixels"] == 64 * 64
         mask_relative = state["depth_3d"]["disocclusion_mask"]
         assert mask_relative == f"masks/frame_{frame:06d}.png"
