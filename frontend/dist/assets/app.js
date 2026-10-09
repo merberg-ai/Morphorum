@@ -499,10 +499,10 @@
     });
     const tilingCopy = document.createElement('div');
     const tilingStrong = document.createElement('strong');
-    tilingStrong.textContent = 'Experimental VAE tiling';
+    tilingStrong.textContent = 'VAE tiling (optional)';
     const tilingHelp = document.createElement('small');
     tilingHelp.textContent =
-      'Opt-in SDXL VAE encode/decode tiling for high-resolution tests. Default is off; unload/reload the model after changing it.';
+      'Split SDXL VAE processing into smaller tiles to reduce memory pressure at larger sizes. Turn on only if needed, then unload and reload the model.';
     tilingCopy.append(tilingStrong, tilingHelp);
     tilingRow.append(tilingInput, tilingCopy);
     tilingLabel.append(tilingTitle, tilingRow);
@@ -1060,13 +1060,13 @@
       if (text) {
         const branch = String(health.git_branch || 'detached');
         const commit = String(health.git_commit || '').slice(0, 12);
-        text.textContent = `v${health.version} · ${branch}${commit ? ` · ${commit}` : ''}`;
-        text.title = `Morphorum ${health.version} · ${branch}${commit ? ` · ${commit}` : ''} · API ready`;
+        text.textContent = 'Connected';
+        text.title = `Morphorum ${health.version} · ${branch}${commit ? ` · ${commit}` : ''} · Server connected`;
       }
     } catch (error) {
       dot?.classList.add('bad');
       dot?.classList.remove('ok');
-      if (text) text.textContent = 'API offline';
+      if (text) text.textContent = 'Disconnected';
     }
   }
 

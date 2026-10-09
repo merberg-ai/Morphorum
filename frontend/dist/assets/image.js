@@ -511,7 +511,7 @@
       const speedText = Number.isFinite(speed) && speed > 0 ? ` · ${speed.toFixed(1)}s/step` : '';
       qs('#generation-step').textContent = `Image ${job.current_image}/${job.request.images} · Step ${job.current_step}/${job.total_steps}${speedText}`;
     } else if (job.status === 'loading_model') {
-      qs('#generation-step').textContent = 'Loading checkpoint and pipeline configuration…';
+      qs('#generation-step').textContent = 'Preparing the selected model…';
     } else if (job.status === 'queued') {
       qs('#generation-step').textContent = 'Waiting for generation worker…';
     } else {
@@ -872,7 +872,7 @@
     // Do not double-escape CR/LF patterns: doing so rejects ordinary r and n in names.
     if (!name || /[:<>\r\n]/.test(name)) {
       return reject('invalid_name', 'Invalid LoRA name',
-        'This filename cannot be represented by a Deforum-style directive.');
+        'This LoRA filename contains characters that cannot be used in a prompt tag.');
     }
     const words = Array.isArray(triggers)
       ? [...new Set(triggers.filter(value => typeof value === 'string' && !/[<>\r\n]/.test(value))
