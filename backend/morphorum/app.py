@@ -608,7 +608,12 @@ def api_start_motion_preview(payload: dict[str, Any]) -> dict[str, Any]:
                 f"Cannot preview invalid schedule {first['field']}: {first['message']}"
             )
         source_path = animation_project_directory(project_id) / "assets" / "source.png"
-        return motion_preview_manager.start(project=normalized, source_path=source_path)
+        options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+        return motion_preview_manager.start(
+            project=normalized,
+            source_path=source_path,
+            highlight_holes=bool(options.get("highlight_holes", False)),
+        )
     except (AnimationProjectError, MotionPreviewError, ScheduleError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
