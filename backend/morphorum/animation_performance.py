@@ -161,8 +161,18 @@ def performance_record(
 def append_performance_record(path: Path, record: dict[str, Any]) -> None:
     """Append only a completed frame; no model writes or expensive fsync."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+    # After a killed process, the final line may be truncated. Make sure
+    # the next JSON object starts cleanly instead of joining a broken line.
+    with path.open("ab+") as handle:
+        handle.seek(0, 2)
+        if handle.tell():
+            handle.seek(-1, 2)
+            if handle.read(1) != b"\n":
+                handle.write(b"\n")
+        handle.write(
+            (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+            .encode("utf-8")
+        )
 
 
 def load_performance_records(path: Path) -> list[dict[str, Any]]:
