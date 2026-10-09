@@ -54,6 +54,10 @@ from .animation_render import (
     AnimationRenderError,
     animation_render_manager,
 )
+from .animation_video import (
+    VideoExportError,
+    video_export_manager,
+)
 from .schedules import ScheduleError
 from .console import (
     clear_console,
@@ -722,6 +726,61 @@ def api_animation_render_preview(project_id: str, render_id: str):
             filename="animation-preview.gif",
         )
     except AnimationRenderError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/video/availability")
+def api_animation_video_availability() -> dict[str, Any]:
+    return video_export_manager.available()
+
+
+@app.post(
+    "/api/animation/renders/{project_id}/{render_id}/video",
+    status_code=202,
+)
+def api_start_animation_video_export(
+    project_id: str, render_id: str, payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return video_export_manager.start(
+            project_id, render_id,
+            format=str(payload.get("format") or "mp4"),
+            quality=str(payload.get("quality") or "balanced"),
+            fps=payload.get("fps"),
+        )
+    except VideoExportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/video/jobs/{job_id}")
+def api_animation_video_export_job(job_id: str) -> dict[str, Any]:
+    try:
+        return video_export_manager.get(job_id)
+    except VideoExportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/renders/{project_id}/{render_id}/videos")
+def api_animation_render_video_exports(project_id: str, render_id: str) -> dict[str, Any]:
+    try:
+        return {"exports": video_export_manager.list(project_id, render_id)}
+    except VideoExportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/renders/{project_id}/{render_id}/video/{format}/{quality}/{fps}")
+def api_download_animation_video(
+    project_id: str, render_id: str, format: str, quality: str, fps: int,
+):
+    try:
+        path = video_export_manager.file(project_id, render_id, format, quality, fps)
+        return FileResponse(
+            path,
+            media_type="video/mp4" if format == "mp4" else "video/webm",
+            filename=path.name,
+            content_disposition_type="attachment",
+        )
+    except VideoExportError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
