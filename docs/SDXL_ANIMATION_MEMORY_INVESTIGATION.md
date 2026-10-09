@@ -36,3 +36,33 @@ Each phase records allocated/reserved/free GiB and CUDA allocation-retry/OOM cou
 ### Success criterion for an optimization
 
 Demonstrate a lower steady and peak PyTorch allocation or lower anchor times, with image quality and LoRA influence preserved; repeat the same 13-frame test to exclude transient WDDM scheduling artifacts.
+
+
+## October 9 follow-up: root cause found and corrected on dev-ui
+
+The second uploaded `performance.jsonl` (render `anim-20261009-060611-15b17a`, 89 post-start frame records) contains the new one-time `sdxl_transition_profile`. It shows:
+
+| Stage | Allocated GiB |
+|---|---:|
+| before_conversion | 6.8921 |
+| after_from_pipe | 13.7646 |
+| after_release | 13.7646 |
+| after_sampler | 13.7643 |
+| after_lora_setup | 13.7643 |
+
+Both pipeline wrappers identify the exact same UNet, VAE and two text encoder objects as shared. Subsequent memory does not keep doubling. Across this longer run, 23 diffusion anchors average ~28.82 seconds at frames 4–16, ~54.04 seconds at frames 20–28, and ~70.55 seconds from frames 32–89. A third LoRA enters at frame 32, adding about 0.34 GiB live memory, but frame 20 was already slow. Peak PyTorch allocated reached 17.8612 GiB, peak reserved reached 21.877 GiB, and zero allocator retries/OOMs were recorded. This is a severe memory-pressure pattern, not proof of physical shared-memory paging.
+
+**Verified upstream cause:** Morphorum pinned Diffusers `0.40.0`. In `DiffusionPipeline.from_pipe()`, the source at `v0.40.0/src/diffusers/pipelines/pipeline_utils.py` defaults to `torch.float32` when neither `dtype` nor `torch_dtype` is supplied, and calls `new_pipeline.to(dtype=dtype)`. Morphorum previously called `StableDiffusionXLImg2ImgPipeline.from_pipe(pipe)` without explicit dtype. Since the wrappers share components, that **upcast the existing FP16 weights to FP32** on the first task switch. This exactly accounts for the near-2× live-memory increase and likely causes Windows WDDM memory pressure and erratic diffusion performance.
+
+**Fix:** `GenerationManager._convert_pipeline_task` now passes the existing SDXL UNet `dtype` to `from_pipe()` for both directions of SDXL task conversion, rejecting a missing dtype instead of silently defaulting to FP32. Flux and Z-Image conversion code is unchanged. Two regression checks cover source FP16/FP32 precision and the missing-dtype guard. No generation scheduling, LoRA activation, image pixels or depth processing code was intentionally changed.
+
+### Acceptance test after applying the fix
+
+1. Update `dev-ui`, restart the runtime (a browser refresh alone does not reload Python), and **unload/reload SDXL** before the test.
+2. Repeat **13 frames, 512×512**, same sampler and two LoRAs as original, cadence 4, VAE tiling unchanged.
+3. In Console and `performance.jsonl`, check that `before_conversion` and `after_from_pipe` allocated GiB are nearly identical, with UNet/VAE/encoders shared and both model precisions still FP16.
+4. Compare anchor diffusion times with the old **~29–37 second** values, noting other GPU activity. Peak allocated/reserved should remain significantly lower and available VRAM should increase substantially.
+5. If step 3 succeeds, repeat at **1024×1024** using the same controlled setup; treat runtime and image quality as physical acceptance criteria. Benchmark with and without the additional third LoRA only after the core precision issue is resolved.
+6. Keep the prior UI and B6 checkpoints untouched until results are verified. If unexpectedly no memory benefit, inspect live tensor dtype and keep the precise five-stage profiler enabled.
+
+Source: https://raw.githubusercontent.com/huggingface/diffusers/v0.40.0/src/diffusers/pipelines/pipeline_utils.py (`from_pipe`, default dtype and `new_pipeline.to`).
