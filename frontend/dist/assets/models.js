@@ -316,7 +316,11 @@
     const path = document.createElement('div');
     path.className = 'model-path';
     path.textContent = model.path;
-    path.title = model.path;
+    const pathDetails = document.createElement('details');
+    pathDetails.className = 'model-path-details';
+    const pathSummary = document.createElement('summary');
+    pathSummary.textContent = 'Show full file path';
+    pathDetails.append(pathSummary, path);
 
     const size = document.createElement('div');
     size.className = 'model-size';
@@ -333,7 +337,7 @@
       action.className = 'secondary-button use-model-button';
       action.textContent = 'Copy Tag';
       action.addEventListener('click', async () => {
-        const tag = `<lora:${model.name}:1.0>`;
+        const tag = window.MorphorumPromptTags.lora({ name: model.name, weight: 1 });
         try {
           await copyText(tag);
           toast('LoRA tag copied', tag, 'success');
@@ -343,7 +347,7 @@
       });
     }
 
-    row.append(nameWrap, family, kind, path, size, action);
+    row.append(nameWrap, family, kind, pathDetails, size, action);
     return row;
   }
 
@@ -472,6 +476,12 @@
     qs('#model-search')?.addEventListener('input', renderModels);
     qs('#model-family-filter')?.addEventListener('change', renderModels);
     qs('#model-kind-filter')?.addEventListener('change', renderModels);
+    qs('#model-filters-clear')?.addEventListener('click', () => {
+      qs('#model-search').value = '';
+      qs('#model-family-filter').value = '';
+      qs('#model-kind-filter').value = '';
+      renderModels();
+    });
     qs('#image-model-select')?.addEventListener('change', updateImageBadge);
   }
 

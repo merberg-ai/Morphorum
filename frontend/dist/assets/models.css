@@ -161,3 +161,28 @@
   .model-row { padding: 11px 10px; }
   .model-family-badge, .model-kind-badge { font-size: .62rem; padding: 3px 6px; }
 }
+
+/* Indexed library is compact and readable when viewed on a phone. */
+.model-toolbar {grid-template-columns:minmax(180px,1fr) minmax(110px,150px) minmax(110px,150px) auto;}
+.model-path-details {min-width:0;font-size:.73rem;color:var(--muted);}
+.model-path-details summary {cursor:pointer;white-space:nowrap;}
+.model-path-details .model-path {margin-top:7px;white-space:normal;overflow-wrap:anywhere;user-select:text;}
+@media(max-width:900px) {
+  .model-toolbar {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .model-row {grid-template-columns:minmax(0,1fr) auto auto;align-items:start;}
+  .model-path-details {grid-column:1/-1;grid-row:auto;order:8;}
+  .model-size {grid-column:1/-1;grid-row:auto;order:9;}
+  .use-model-button {grid-column:3;grid-row:1 / 3;}
+}
+@media(max-width:640px){
+  .model-toolbar {grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+  .model-toolbar input {grid-column:1/-1;}
+  #model-filters-clear {width:100%;}
+  .model-row {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;}
+  .model-name-wrap {grid-column:1/-1;}
+  .model-family-badge {grid-column:1;grid-row:2;}
+  .model-kind-badge {grid-column:2;grid-row:2;}
+  .model-path-details {grid-column:1/-1;}
+  .model-size {grid-column:1/-1;}
+  .use-model-button {grid-column:1/-1;grid-row:auto;width:100%;}
+}

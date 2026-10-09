@@ -164,4 +164,16 @@
     confirm: options => ask('confirm', options),
     prompt: options => ask('prompt', options),
   };
+}  function makeLoraSnippet({ name, weight = 1, triggers = [] } = {}) {
+    const identifier = String(name || '').trim();
+    if (!identifier || /[:<>\r\n]/.test(identifier)) throw new Error('This LoRA name cannot be used in a prompt tag.');
+    const value = Number(weight);
+    if (!Number.isFinite(value) || value < -4 || value > 4) throw new Error('LoRA strength must be between -4 and 4.');
+    const words = [...new Set((Array.isArray(triggers) ? triggers : [])
+      .filter(item => typeof item === 'string' && !/[<>\r\n]/.test(item))
+      .map(item => item.trim()).filter(Boolean))].slice(0, 20);
+    const tag = '<lora:' + identifier + ':' + Number(value.toFixed(4)) + '>';
+    return [...words, tag].join(', ');
+  }
+  window.MorphorumPromptTags = { lora: makeLoraSnippet };
 })();

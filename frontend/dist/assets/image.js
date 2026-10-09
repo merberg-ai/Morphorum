@@ -427,7 +427,9 @@
     if (!name || !textarea) return;
     const rawWeight = Number(qs('#image-lora-weight')?.value);
     const weight = Number.isFinite(rawWeight) ? rawWeight : 1;
-    insertAtCursor(textarea, `<lora:${name}:${Number(weight.toFixed(4))}>`);
+    try {
+      insertAtCursor(textarea, window.MorphorumPromptTags.lora({ name, weight }));
+    } catch (error) { toast('Invalid LoRA tag', error.message, 'warning'); }
   }
 
   async function configureModel() {
@@ -867,8 +869,7 @@
       ? [...new Set(triggers.filter(value => typeof value === 'string' && !/[<>\r\n]/.test(value))
         .map(value => value.trim()).filter(Boolean))].slice(0, 20)
       : [];
-    const tag = '<lora:' + name + ':' + Number(rawWeight.toFixed(4)) + '>';
-    insertAtCursor(prompt, [...words, tag].join(words.length ? ', ' : ''));
+    insertAtCursor(prompt, window.MorphorumPromptTags.lora({ name, weight: rawWeight, triggers: words }));
     reportManagerInsertion({
       id, event: 'prompt_inserted', weight: rawWeight,
       imageFamily, triggerCount: words.length,

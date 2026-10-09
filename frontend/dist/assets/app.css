@@ -623,3 +623,20 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .morphorum-modal-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
   .morphorum-modal-actions button:only-child { grid-column:1/-1; }
 }
+
+/* LoRA Manager quick-use and metadata hierarchy */
+.lora-manager-checkbox input[type="checkbox"] {width:18px;height:18px;min-height:18px;padding:0;margin:0;flex:0 0 18px;accent-color:var(--accent);}
+.lora-manager-quick-use {order:0;border:1px solid var(--border-strong);background:rgba(65,217,255,.025);border-radius:12px;padding:13px;margin:0 0 16px;}
+.lora-manager-quick-title h3 {margin:0 0 3px;font-size:1rem;}
+.lora-manager-quick-title p {font-size:.74rem;margin:0 0 12px;}
+.lora-manager-snippet {padding:12px;border:1px solid var(--border);border-radius:9px;background:rgba(3,5,9,.7);white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font-mono);font-size:.78rem;user-select:text;min-height:45px;}
+.lora-manager-quick-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.lora-manager-quick-actions button {min-width:0;}
+.lora-manager-expert {margin:12px 0 0;border:1px solid var(--border);border-radius:10px;padding:12px;min-width:0;}
+.lora-manager-expert > summary {cursor:pointer;color:var(--text);font-weight:600;}
+.lora-manager-expert[open] > summary {margin-bottom:12px;}
+@media(max-width:480px) {
+  .lora-manager-insert-controls {grid-template-columns:auto minmax(65px,1fr);gap:9px;}
+  .lora-manager-checkbox {grid-column:1/-1;}
+  .lora-manager-quick-actions {grid-template-columns:minmax(0,1fr);}
+}

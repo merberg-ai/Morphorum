@@ -809,18 +809,19 @@
 
         <article class="card glass model-browser-card">
           <div class="model-toolbar">
-            <input type="search" id="model-search" placeholder="Search models, filenames, or paths…">
-            <select id="model-family-filter">
+            <input type="search" aria-label="Search indexed models" id="model-search" placeholder="Search models, filenames, or paths…">
+            <select id="model-family-filter" aria-label="Filter model family">
               <option value="">All families</option>
               <option value="sdxl">SDXL</option>
               <option value="flux">Flux</option>
               <option value="zimage">Z-Image</option>
             </select>
-            <select id="model-kind-filter">
+            <select id="model-kind-filter" aria-label="Filter model type">
               <option value="">Models + LoRAs</option>
               <option value="checkpoints">Checkpoints</option>
               <option value="loras">LoRAs</option>
             </select>
+            <button class="secondary-button compact" type="button" id="model-filters-clear">Clear Filters</button>
           </div>
           <div id="model-list" class="model-list">
             <div class="model-empty"><span class="large-spinner"></span><span>Loading model index…</span></div>
@@ -848,29 +849,42 @@
           </article>
           <article class="card glass lora-manager-details">
             <div class="card-header"><div><h2 id="lora-manager-title">Choose a LoRA</h2><p class="muted" id="lora-manager-subtitle">Metadata and architecture diagnostics appear here.</p></div></div>
+            <div class="lora-manager-insert lora-manager-quick-use">
+              <div class="lora-manager-quick-title"><h3>Quick Use</h3><p class="muted">Copy a LoRA prompt snippet or add it to Image Generation.</p></div>
+              <div class="lora-manager-insert-controls">
+                <label class="field-label" for="lora-manager-weight">Strength</label>
+                <input type="number" id="lora-manager-weight" min="-4" max="4" step=".05" value="1.0">
+                <label class="lora-manager-checkbox"><input id="lora-manager-add-triggers" type="checkbox" checked> Include recorded trigger words</label>
+              </div>
+              <div class="lora-manager-snippet" id="lora-manager-snippet" tabindex="0" aria-label="Prompt snippet">Select a LoRA to preview its prompt tag.</div>
+              <div class="lora-manager-quick-actions"><button class="secondary-button" id="lora-manager-copy" type="button" disabled>Copy Prompt Tag</button>
+              <button class="primary-button" id="lora-manager-insert" type="button" disabled>Add to Image Prompt</button></div>
+              <p class="muted lora-manager-footnote">A prompt directive selects the LoRA. Trigger words only come from explicit file or sidecar metadata, never guessed training tags. Image model family must match.</p>
+            </div>
+
+            <details class="lora-manager-expert">
+              <summary>Online metadata (Civitai)</summary>
             <div class="lora-manager-civitai-actions">
               <button type="button" class="secondary-button compact busy-button" id="lora-manager-civitai" disabled><span class="spinner"></span><span class="button-label">Fetch from Civitai</span></button>
               <span class="muted lora-manager-small">Optional online lookup sends the file's SHA-256 to Civitai, not the file itself.</span>
             </div>
             <div id="lora-manager-civitai-result" aria-live="polite"></div>
+            </details>
             <div id="lora-manager-detail-body" class="lora-manager-detail-body" aria-live="polite">
               <div class="model-empty">Select a LoRA to inspect its local file.</div>
             </div>
+            <details class="lora-manager-expert"><summary>Advanced model and training diagnostics</summary>
+              <div id="lora-manager-detail-advanced" class="lora-manager-detail-body"></div>
+            </details>
+            <details class="lora-manager-expert">
+              <summary>Runtime adapter audit</summary>
             <div class="lora-manager-runtime">
               <div class="card-header"><div><h3>Runtime adapter state</h3><p class="muted">Registered weights are not proof of visible LoRA influence.</p></div>
                 <button class="secondary-button compact" type="button" id="lora-manager-refresh-runtime">Refresh</button>
               </div>
               <div id="lora-manager-runtime-details" class="lora-manager-fields"><span class="muted">No runtime sample yet.</span></div>
             </div>
-            <div class="lora-manager-insert">
-              <div class="lora-manager-insert-controls">
-                <label class="field-label" for="lora-manager-weight">Strength</label>
-                <input type="number" id="lora-manager-weight" min="-4" max="4" step=".05" value="1.0">
-                <label class="lora-manager-checkbox"><input id="lora-manager-add-triggers" type="checkbox" checked> Include recorded trigger words</label>
-              </div>
-              <button class="primary-button" id="lora-manager-insert" type="button" disabled>Add to Image Prompt</button>
-              <p class="muted lora-manager-footnote">A prompt directive selects the LoRA. Trigger words only come from explicit file or sidecar metadata, never guessed training tags. Image model family must match.</p>
-            </div>
+            </details>
           </article>
         </div>
       </section>

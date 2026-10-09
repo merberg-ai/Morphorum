@@ -57,10 +57,14 @@
     const title = qs('#lora-manager-title');
     const subtitle = qs('#lora-manager-subtitle');
     const insert = qs('#lora-manager-insert');
-    if (!target || !title || !subtitle || !insert) return;
+    const advanced = qs('#lora-manager-detail-advanced');
+    if (!target || !title || !subtitle || !insert || !advanced) return;
     target.replaceChildren();
+    advanced.replaceChildren();
     const d = state.detail;
     insert.disabled = !d;
+    qs('#lora-manager-copy').disabled = !d;
+    updatePromptSnippet();
     qs('#lora-manager-civitai').disabled = !d;
     renderCivitai();
     if (!d) {
@@ -86,34 +90,34 @@
       const htmlData = document.createElement('div');
       htmlData.append(text('p', d.html_sidecar.text_excerpt, 'muted lora-manager-small'));
       if (d.html_sidecar.civitai_model_id) field(htmlData, 'Civitai model ID', d.html_sidecar.civitai_model_id);
-      target.appendChild(section('Local HTML information', htmlData));
+      advanced.appendChild(section('Local HTML information', htmlData));
     }
 
     target.appendChild(section('Recorded trigger words', pillRow(d.trigger_words)));
     const tags = document.createElement('div');
     tags.appendChild(text('p', 'Most frequent training tags, not automatically confirmed triggers.', 'muted lora-manager-small'));
     tags.appendChild(pillRow(d.top_training_tags, 'tag', 24));
-    target.appendChild(section('Training vocabulary', tags));
+    advanced.appendChild(section('Training vocabulary', tags));
 
     const components = document.createElement('div');
     components.className = 'lora-manager-fields';
     field(components, 'Tensor keys', d.tensor_count);
     for (const [name, amount] of Object.entries(d.components || {})) field(components, name, amount);
     field(components, 'LoRA ranks (A/down weights)', (d.ranks || []).map(item => item.rank + ' × ' + item.modules).join(', ') || 'Unavailable');
-    target.appendChild(section('Static tensor diagnostics', components));
+    advanced.appendChild(section('Static tensor diagnostics', components));
 
     const training = document.createElement('div');
     training.className = 'lora-manager-fields';
     for (const [key, value] of Object.entries(d.training || {})) field(training, key.replace(/^ss_/, ''), value);
     if (!training.childElementCount) training.appendChild(text('p', 'No training parameters recorded.', 'muted'));
-    target.appendChild(section('Training metadata', training));
+    advanced.appendChild(section('Training metadata', training));
 
     const notes = document.createElement('div');
     for (const warning of [...(d.warnings || []), ...(d.errors || [])]) {
       notes.appendChild(text('p', warning, 'lora-manager-warning'));
     }
     notes.appendChild(text('p', d.inspection, 'muted lora-manager-small'));
-    target.appendChild(section('Compatibility and limitations', notes));
+    advanced.appendChild(section('Compatibility and limitations', notes));
 
     const more = document.createElement('details');
     more.className = 'lora-manager-more';
@@ -124,7 +128,7 @@
       tensor_shape_examples: d.shape_examples,
     }, null, 2);
     more.appendChild(raw);
-    target.appendChild(more);
+    advanced.appendChild(more);
   }
 
   function renderLibrary() {
@@ -254,6 +258,7 @@
       if (request !== state.request) return;
       state.civitai = result;
       renderCivitai();
+      updatePromptSnippet();
       toast('Civitai lookup finished', result.found ? 'Version found (' + result.confidence + ').' : result.message, result.found ? 'success' : 'warning');
     } catch (error) {
       if (request !== state.request) return;
@@ -300,21 +305,49 @@
     }
   }
 
-  function insertIntoImage() {
+  function snippetData() {
     const detail = state.detail;
-    if (!detail) return;
-    const raw = Number(qs('#lora-manager-weight').value);
-    if (!Number.isFinite(raw) || raw < -4 || raw > 4) {
-      toast('Invalid LoRA strength', 'Use a value between -4 and 4.', 'warning');
+    if (!detail) return null;
+    return {
+      id: detail.id, family: detail.family, name: detail.name,
+      weight: Number(qs('#lora-manager-weight').value),
+      triggers: qs('#lora-manager-add-triggers').checked
+        ? ((detail.trigger_words || []).length ? detail.trigger_words : state.civitai?.trained_words || [])
+        : [],
+    };
+  }
+  function updatePromptSnippet() {
+    const output = qs('#lora-manager-snippet');
+    if (!output) return;
+    const data = snippetData();
+    try {
+      output.textContent = data ? window.MorphorumPromptTags.lora(data) : 'Select a LoRA to preview its prompt tag.';
+    } catch (error) {
+      output.textContent = error.message;
+    }
+  }
+  async function copyPromptSnippet() {
+    const data = snippetData();
+    if (!data) return;
+    try {
+      const snippet = window.MorphorumPromptTags.lora(data);
+      await window.MorphorumClipboard.writeText(snippet);
+      toast('Prompt tag copied', 'Snippet copied with recorded trigger words when available.', 'success');
+    } catch (error) {
+      toast('Could not copy tag', error.message, 'warning');
+    }
+  }
+  function insertIntoImage() {
+    const data = snippetData();
+    if (!data) return;
+    try {
+      window.MorphorumPromptTags.lora(data); // Validate the exact text that Copy uses.
+    } catch (error) {
+      toast('Invalid LoRA prompt tag', error.message, 'warning');
       return;
     }
-    const triggers = qs('#lora-manager-add-triggers').checked
-      ? ((detail.trigger_words || []).length ? detail.trigger_words : state.civitai?.trained_words || [])
-      : [];
-    const applied = window.MorphorumImage?.insertFromManager?.({
-      id: detail.id, family: detail.family, name: detail.name, weight: raw, triggers,
-    });
-    if (applied) toast('Prompt updated', detail.name + ' added to Image generation.', 'success');
+    const applied = window.MorphorumImage?.insertFromManager?.(data);
+    if (applied) toast('Prompt updated', data.name + ' added to Image generation.', 'success');
   }
 
   function init() {
@@ -327,6 +360,9 @@
     qs('#lora-manager-civitai')?.addEventListener('click', lookupCivitai);
     qs('#lora-manager-refresh-runtime')?.addEventListener('click', refreshRuntime);
     qs('#lora-manager-insert')?.addEventListener('click', insertIntoImage);
+    qs('#lora-manager-copy')?.addEventListener('click', copyPromptSnippet);
+    qs('#lora-manager-weight')?.addEventListener('input', updatePromptSnippet);
+    qs('#lora-manager-add-triggers')?.addEventListener('change', updatePromptSnippet);
     reload();
     refreshRuntime();
   }
