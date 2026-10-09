@@ -30,6 +30,53 @@ Keep `feature/deforum-compatibility-hybrid-b6` and `checkpoint/b6-2-hybrid-sourc
 
 **Acceptance:** Enter prompts and generation settings, refresh browser, switch tabs and return, close/reopen browser, and verify values persist on the same browser origin; verify stale model gracefully falls back. Nothing persists as server-side project settings.
 
+## 2. Redesign the Animation workspace with dedicated Monitor, Media, and Outputs views
+
+**Status:** Planned, not implemented.
+
+**Problem:** The current Animation tab is one tall collection of cards. The render progress and live preview are below many project, camera, timeline, and motion settings. Hybrid Source Lab and Video Export also sit inside the already oversized render card. A user must scroll significantly during active generation just to see progress and the latest frame.
+
+**Verified source details (dev-ui baseline):**
+- `frontend/dist/index.html` contains the Render card with model-load, progress, prompt and frame telemetry, live frame and animated preview, performance summary, hybrid media upload/extraction, and MP4/WebM export as nested sections.
+- `frontend/dist/assets/animation.js` has an existing render polling loop (~700 ms), `job.progress`, `current_frame`, `total_frames`, `current_step`, `eta_seconds`, model-load progress and preview image URLs.
+- `backend/morphorum/animation_render.py` sends current diffusion step and overall job progress. Its img2img step budget is `effective_steps = round(steps * denoise_strength)`, and cadence frames may involve no diffusion. The backend does **not** currently publish that effective step total as a stable dedicated telemetry value; do not divide `current_step` by the nominal steps schedule.
+
+### Proposed internal Animation navigation
+
+Use **secondary tabs inside Animation**, not additional items in the main site navigation, and retain the selected project and persistent render status header across views:
+
+1. **Editor** (default): project/model configuration, prompt keyframes, visual timeline, cadence, start frame, camera/depth, motion preview, frame inspector, notes. Group advanced/expert controls in collapsible panels, not one endless page.
+2. **Monitor**: primary render dashboard, selected render, start/pause/resume/cancel actions as supported, current phase/status, dual progress bars, latest generated frame large and above the fold, optional animated preview, compact ETA/performance details, link to completed output. Optionally switch here automatically when rendering starts.
+3. **Media**: Hybrid Source Lab upload/FFprobe, bounded FFmpeg extraction, scrubber, project-managed video assets, and future B6.3 hybrid conditioning inputs. Preserve the tested upload/extraction flow.
+4. **Outputs**: render history, completed render preview, image-sequence/results navigation, video export (MP4/WebM), playback, and download links. Keep outputs visible independently of the active render.
+
+**Live status strip:** Across all four Animation subtabs, show compact status, frame count, overall percent, ETA and a **View Monitor** action while a render is active. On mobile use a small nonintrusive bar, not a huge overlay that covers inputs. Clicking it takes the user directly to the Monitor view. When no render is running, show latest status unobtrusively.
+
+### Monitor layout and two progress bars
+
+**Desktop idea:** slim top row with current project/render and run controls; below it a wide live frame preview on the left and a compact stats/progress stack on the right. Mobile: status/progress first, live preview immediately after, secondary diagnostics collapsed below.
+
+- **Bar 1: overall animation progress** = existing `job.progress`; label `Frame N / Total · X%`. Must be monotonic through model load/render/finalization as appropriate, with nonmisleading phase labels.
+- **Bar 2: current diffusion pass** = `current_step / current_step_total`; label `Diffusion step n / m`. Add a small backend field to publish the **actual effective step count** for the current frame/pass; do not infer solely from nominal scheduled steps. For `loading_model`, `queued`, `finalizing`, or cadence-interpolated frames, show explicit `Loading model`, `Waiting`, `Compositing`, or `No diffusion this frame` state rather than fabricated step percentages. Reset the second bar on a new diffusion frame to prevent a stale 100% display.
+- Reuse model-loading progress as a distinct phase indicator, not as a third permanently visible bar. Preserve frame time, estimated remaining time, average frame time, and clear paused/cancelled/failed states.
+- **Latest frame should be immediately visible** without scrolling, at usable size and preserving aspect ratio. Separate it from the completed GIF/video preview and don't refetch unchanged images needlessly.
+- Put current prompts/weights, seed/LoRAs, resolved camera parameters, CPU/CUDA/VRAM/WDDM diagnostics into an **Advanced Diagnostics** expandable panel. Leave a small always-visible status/ETA row for day-to-day use.
+- Finished render shows success state, last frame and direct **Open Outputs**; failed render shows a readable error plus supported Resume/Retry/Inspect actions, never a fake success state.
+
+### Further usability suggestions to consider
+
+- Preserve selected Animation subtab per browser, but auto-switch to Monitor on explicit Render start (with an optional preference to keep current view).
+- Add a project identity banner and **dirty/unsaved** marker visible across subtabs so edits aren't lost when navigating.
+- Add breadcrumb-like shortcuts: `Edit prompts` from Monitor and `Monitor` from Editor; no duplicate/conflicting render controls.
+- Responsive layout and touch-sized actions on phone/laptop browsers.
+- Keep existing active render polling and render history reconnect working when switching internal tabs or primary app tabs.
+- Prefer moving existing DOM elements and reusing existing IDs and event handlers over duplicating state, creating two independent polling loops, or changing rendering semantics.
+- Explicitly test accessibility: tab keyboard navigation, focus management, announceable progress values, hidden panels not receiving focus, no text overlap at 125–150% zoom.
+
+**Acceptance for implementation:** During a 50–75 frame SDXL test, start the render and see both accurate progress bars and the latest frame without scrolling; switch Editor/Media/Outputs/Monitor and back while render runs without losing job state; demonstrate skipped cadence frames, model loading, cancel/resume, finished preview, video export, and phone viewport; do not regress legacy Deforum import or B6.2 extraction.
+
+**Scope:** UI/telemetry polish on `dev-ui` only. No B6.3 hybrid synthesis, no changes to stable render behavior. Capture the rest of the backlog before coding.
+
 ## Next entries
 
-Append items #2, #3, etc. as supplied by the user. Collect the list before changing Image Generation behavior.
+Append items #3, #4, etc. as supplied by the user. Collect the list before implementing the UI pass.
