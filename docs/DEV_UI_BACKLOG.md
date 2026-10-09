@@ -119,6 +119,49 @@ Retain a responsive **Library + Details** layout on desktop and a single-column/
 
 **Scope:** Backlog only, implement during the consolidated `dev-ui` pass after collecting the full list. Leave B6 branches and renderer untouched.
 
+## 4. Shared Morphorum modal dialogs for alerts, warnings, confirmations and input
+
+**Status:** Planned, not implemented.
+
+**Requested:** Replace default browser-native alert/confirm/prompt boxes with one reusable, consistently styled, accessible Morphorum modal system. It must support safety warnings, confirmations, informative messages and text entry, without breaking existing flows.
+
+**Verified source findings (dev-ui baseline):**
+- `frontend/dist/assets/app.js` currently implements lightweight nonblocking `MorphorumToast` notifications, but there is no reusable interactive dialog API.
+- `frontend/dist/assets/animation.js` uses `window.confirm` for high-resolution render advisories, discarding dirty project changes during Deforum import and project switching; `window.prompt` is used when creating a new animation project.
+- `frontend/dist/index.html` already uses a native `<dialog>` for Deforum settings import. That complex feature-specific dialog should remain; the shared alert/confirm/prompt service complements it, not replaces its importer workflow.
+- JavaScript loads `app.js` (global UI services) before `models.js`, `image.js`, `loras.js` and `animation.js`.
+
+### Proposed reusable dialog service
+
+Implement a centralized frontend `MorphorumDialog` service (separate `modal.js` module or `app.js` with a single shared `<dialog>` host) and uniform CSS, with promise-based calls that can be `await`ed by existing asynchronous handlers:
+
+- `MorphorumDialog.alert({ title, message, variant: 'info'|'warning'|'error', confirmText })` -> resolves after acknowledgment.
+- `MorphorumDialog.confirm({ title, message, variant: 'normal'|'warning'|'danger', confirmText, cancelText, details })` -> resolves `true` only on an explicit affirmative action, `false` on cancel/Escape/backdrop.
+- `MorphorumDialog.prompt({ title, message, initialValue, placeholder, maxLength, validate, confirmText })` -> resolves a string only on validated submission and `null` on dismissal; do not coerce cancellation into an empty value.
+- Optional details/expandable diagnostics for long GPU memory advisories; keep summary short and readable.
+- Support a compact warning icon or header accent for severity, but avoid huge colorful confirmation cards and use **danger** styling only for genuinely destructive actions.
+
+### Interaction and safety requirements
+
+1. A consistent, centered, mobile-friendly native `<dialog>` with overlay, spacing, typography and scrolling that does not reproduce the former Deforum popup overlap issue. Keep long text inside the modal, action buttons in visible normal flow, and provide mobile-sized touch controls.
+2. Full keyboard behavior: move focus into modal, trap focus, restore focus to originating control on close, Enter submits the expected action, Escape cancels (never confirms), accessible dialog title/message, descriptive button labels, reasonable `aria-labelledby`/`aria-describedby`, and sensible handling for screen readers.
+3. **Default-to-cancel** for destructive or render-costly confirmations. Never let backdrop/Escape accept an operation. Await a positive response before any side effect such as discarding edits, submitting a costly render, or replacing a source video.
+4. Use `textContent`/text nodes for plain strings, never interpolate arbitrary user-supplied prompts, paths, filenames, imported settings, or backend errors as `innerHTML`. Treat all modal input as untrusted.
+5. Serialize requests or otherwise handle simultaneous modal calls deterministically; every returned Promise must settle exactly once even if closed by escape, navigation, or error.
+6. Keep `MorphorumToast` for transient nonblocking status updates; reserve blocking dialogs for actual acknowledgment, confirmation or required input. Avoid modal spam on normal routine generation telemetry.
+7. If `showModal()` is unsupported, fail safely and visibly; do not silently auto-confirm. Avoid relying on native `window.confirm` except a consciously chosen last-resort fallback.
+8. Migrate all existing `window.confirm` and `window.prompt` calls after setting up the service: high-res warnings; unsaved project changes (project change and Deforum import); new project naming. Integrate later with UI #1 reset draft and any future destructive actions, with clear labels.
+9. Preserve existing `<dialog>` Deforum importer lifecycle; ensure shared dialogs do not trap focus behind it or conflict with it. In particular, dirty-state confirmation triggered **from inside** the Deforum importer needs correct topmost dialog focus/stacking, or an equivalent safe close/reopen sequence that does not lose import form data.
+10. No backend API changes or changes to B5/B6 generation behavior are needed; this is frontend user-experience infrastructure.
+
+### Acceptance for implementation
+
+- Confirm from browser on Windows, Android and over LAN: high-resolution render advisory; discard unsaved animation edits from project switching; Deforum import discard confirmation while importer is open; create new project (valid, invalid, Escape).
+- Test warning/info acknowledgment; safe defaults; backdrop/Escape cancellation; keyboard and screen-reader semantics; mobile sizing and 125–150% zoom; long warning content with optional diagnostics; concurrent dialog calls and correct Promise resolution.
+- Ensure the user cannot accidentally start a render or lose edits because a dialog is dismissed. Verify the existing toast system and importer still work.
+
+**Scope:** Add to the `dev-ui` planning backlog only. No app code changes until the user requests the consolidated implementation pass.
+
 ## Next entries
 
-Append items #4, #5, etc. as supplied by the user. Collect the list before implementing the UI pass.
+Append items #5, #6, etc. as supplied by the user. Collect the list before implementing the UI pass.
