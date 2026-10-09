@@ -1421,7 +1421,18 @@ class GenerationManager:
                     f"No {task} pipeline wrapper is registered for model family '{family}'."
                 )
 
-            converted = pipeline_class.from_pipe(pipe)
+            # Diffusers 0.40.0 from_pipe() defaults to float32 when no dtype
+            # is passed, even if the source models are already float16. Since
+            # from_pipe() shares modules, that silently upcasts the resident
+            # SDXL UNet/text encoders and nearly doubles live CUDA allocations
+            # on the txt2img -> img2img switch. Preserve source precision.
+            if family == "sdxl":
+                source_dtype = getattr(getattr(pipe, "unet", None), "dtype", None)
+                if source_dtype is None:
+                    raise GenerationError("Cannot determine the loaded SDXL UNet precision.")
+                converted = pipeline_class.from_pipe(pipe, dtype=source_dtype)
+            else:
+                converted = pipeline_class.from_pipe(pipe)
             converted.set_progress_bar_config(disable=True)
             return converted
         except GenerationError:
