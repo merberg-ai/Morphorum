@@ -59,7 +59,7 @@ Both pipeline wrappers identify the exact same UNet, VAE and two text encoder ob
 ### Acceptance test after applying the fix
 
 1. Update `dev-ui`, restart the runtime (a browser refresh alone does not reload Python), and **unload/reload SDXL** before the test.
-2. Repeat **13 frames, 512×512**, same sampler and two LoRAs as original, cadence 4, VAE tiling unchanged.
+2. Repeat **13 frames at the same actual project output resolution used in the earlier benchmark** (verify Width/Height in the project or render manifest; the 512×512 depth log only reports depth-estimator input), with the same sampler, two LoRAs, cadence 4, and unchanged VAE tiling.
 3. In Console and `performance.jsonl`, check that `before_conversion` and `after_from_pipe` allocated GiB are nearly identical, with UNet/VAE/encoders shared and both model precisions still FP16.
 4. Compare anchor diffusion times with the old **~29–37 second** values, noting other GPU activity. Peak allocated/reserved should remain significantly lower and available VRAM should increase substantially.
 5. If step 3 succeeds, repeat at **1024×1024** using the same controlled setup; treat runtime and image quality as physical acceptance criteria. Benchmark with and without the additional third LoRA only after the core precision issue is resolved.
