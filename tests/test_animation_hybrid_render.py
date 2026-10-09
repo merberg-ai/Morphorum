@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 
 import morphorum.animation_hybrid_render as hybrid
+import morphorum.animation_hybrid_source as hybrid_source
 from morphorum.animation_hybrid_render import (
     HybridRenderError, freeze_hybrid_source, frozen_hybrid_frame,
     normalize_hybrid_settings, source_index,
@@ -27,6 +28,7 @@ def _sequence(tmp_path: Path, monkeypatch, count: int = 4, fps: float = 12) -> P
         "fps": fps, "filenames": names, "start": 0, "end": count / fps,
     }), encoding="utf-8")
     monkeypatch.setattr(hybrid, "animation_project_directory", lambda _id: tmp_path / "project")
+    monkeypatch.setattr(hybrid_source, "animation_project_directory", lambda _id: tmp_path / "project")
     return root
 
 
