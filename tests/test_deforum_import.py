@@ -307,7 +307,7 @@ def test_golden_2d_round_trip_timeline_and_resolved_frame_agree(tmp_path, monkey
     assert frame["motion"]["angle"] == pytest.approx(3.0)
     assert frame["motion"]["translation_x"] == pytest.approx(4.0)
     assert frame["generation"]["strength"] == pytest.approx(0.60)
-    assert frame["generation"]["seed"]["value"] == 424254
+    assert frame["generation"]["seed"]["resolved"] == 424254
     assert frame["prompts"]["positive"]["from_frame"] == 0
     assert frame["prompts"]["positive"]["to_frame"] == 12
     assert frame["prompts"]["positive"]["to_weight"] == pytest.approx(0.5)
