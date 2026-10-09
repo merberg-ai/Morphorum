@@ -9,7 +9,7 @@ Image Generation and Animation now use a shared resolution menu:
 - **Portrait (video formats):** matching 9:16 choices for 480p through 1440p.
 - **Custom:** width and height remain directly editable. Typing a supported preset size reselects it; other values display Custom.
 
-The image generator accepts widths/heights divisible by **8 for SDXL** or **16 for Flux / Z-Image**. This is a model constraint, not a stylistic preference. The common 854×480 frame isn't divisible by 8, so 480p uses **848×480** (or 480×848). For Flux/Z-Image, 1080p uses **1920×1088** (or 1088×1920) to remain divisible by 16; SDXL supports exact 1920×1080. The UI labels model-aligned variants and warns that large outputs demand more VRAM. Higher resolutions are options, not promises of memory availability or successful rendering.
+The image generator accepts widths/heights divisible by **8 for SDXL** or **16 for Flux / Z-Image**. This is a model constraint, not a stylistic preference. The common 854×480 frame isn't divisible by 8, so 480p uses **856×480** for SDXL and **848×480** for Flux/Z-Image (portrait choices swap width and height). For Flux/Z-Image, 1080p uses **1920×1088** (or 1088×1920) to remain divisible by 16; SDXL supports exact 1920×1080. The UI labels model-aligned variants and warns that large outputs demand more VRAM. Higher resolutions are options, not promises of memory availability or successful rendering.
 
 The dropdown does not change the model itself, the Image draft key, Animation project schema, rendering code, or saved project dimensions. Switching models refreshes recommendations without destroying a custom animation size.
 
