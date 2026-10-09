@@ -35,8 +35,8 @@ const model={supported:true,default_resolution:{width:1024,height:1024},resoluti
 test('preset catalog includes model recommendations, square previews and landscape/portrait 480p through 1440p',()=>{
   const sizes=r.optionsFor(model,'sdxl');
   const lookup=label=>sizes.find(item=>item.label.startsWith(label));
-  assert.equal(lookup('480p landscape').value,'848x480');
-  assert.equal(lookup('480p portrait').value,'480x848');
+  assert.equal(lookup('480p landscape').value,'856x480');
+  assert.equal(lookup('480p portrait').value,'480x856');
   assert.equal(lookup('720p landscape').value,'1280x720');
   assert.equal(lookup('720p portrait').value,'720x1280');
   assert.equal(lookup('1080p landscape').value,'1920x1080');
@@ -54,6 +54,7 @@ test('model-aware 1080p presets use divisible-by-16 dimensions on Flux and Z-Ima
     const horizontal=sizes.find(p=>p.label.startsWith('1080p landscape'));
     const vertical=sizes.find(p=>p.label.startsWith('1080p portrait'));
     assert.equal(horizontal.value,'1920x1088');
+    assert.equal(sizes.find(p=>p.label.startsWith('480p landscape')).value,'848x480');
     assert.equal(vertical.value,'1088x1920');
     assert.match(horizontal.label,/model-aligned/);
     assert.match(horizontal.label,/high VRAM/);
