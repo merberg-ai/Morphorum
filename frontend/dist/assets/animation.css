@@ -1521,3 +1521,65 @@
     width: 100%;
   }
 }
+
+/* B5.4: self-contained video encoding section below the animation GIF. */
+.animation-video-export {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(3,5,8,.42);
+}
+.animation-video-export-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.animation-video-export-heading h3 { margin: 0 0 4px; font-size: 1rem; }
+.animation-video-export-heading p { margin: 0; font-size: .78rem; }
+.animation-video-status {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .75rem;
+}
+.animation-video-export-controls {
+  display: grid;
+  grid-template-columns: minmax(180px,1.5fr) minmax(150px,1fr) minmax(100px,.6fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+.animation-video-export-controls label { min-width: 0; }
+.animation-video-job-status {
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: .76rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.animation-video-result { margin-top: 16px; }
+.animation-video-result video {
+  display: block;
+  width: 100%;
+  max-height: 480px;
+  background: #050505;
+  border-radius: var(--radius-sm);
+}
+.animation-video-result-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  font-size: .78rem;
+}
+@media (max-width: 920px) {
+  .animation-video-export-controls { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .animation-video-export { padding: 12px; }
+  .animation-video-export-controls { grid-template-columns: 1fr; }
+  #animation-export-video { width: 100%; min-height: 44px; }
+}
