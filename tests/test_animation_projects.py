@@ -52,6 +52,8 @@ def test_create_animation_project_defaults(tmp_path, monkeypatch) -> None:
     assert project["tracks"]["camera_3d"]["fov"]["schedule"] == "0:(40)"
     assert project["cadence"]["diffusion"] == "0:(1)"
     assert project["camera_3d"]["depth_resolution"] == "auto"
+    assert project["camera_3d"]["projection_mode"] == "legacy"
+    assert project["camera_3d"]["hole_fill"] == "nearest"
     assert project["tracks"]["cadence"]["diffusion"]["schedule"] == "0:(1)"
     assert project["tracks"]["loras"] == {}
     assert project["id"].startswith("my-first-morph-")
@@ -360,3 +362,42 @@ def test_project_normalizes_depth_resolution_and_cadence() -> None:
         project_id="bad-depth",
     )
     assert invalid["camera_3d"]["depth_resolution"] == "auto"
+
+
+def test_b51_projection_options_round_trip_and_invalid_values_fallback(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "B5 Warp Quality"})
+    payload = deepcopy(created)
+    payload["camera_3d"]["projection_mode"] = "splat"
+    payload["camera_3d"]["hole_fill"] = "background"
+
+    saved = save_animation_project(created["id"], payload)
+    assert saved["camera_3d"]["projection_mode"] == "splat"
+    assert saved["camera_3d"]["hole_fill"] == "background"
+    loaded = load_animation_project(created["id"])
+    assert loaded["camera_3d"]["projection_mode"] == "splat"
+    assert loaded["camera_3d"]["hole_fill"] == "background"
+
+    payload = deepcopy(loaded)
+    payload["camera_3d"]["projection_mode"] = "nonsense"
+    payload["camera_3d"]["hole_fill"] = "unknown"
+    saved = save_animation_project(created["id"], payload)
+    assert saved["camera_3d"]["projection_mode"] == "legacy"
+    assert saved["camera_3d"]["hole_fill"] == "nearest"
+
+
+def test_b51_existing_project_without_quality_fields_defaults_to_legacy(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "Previous B5 Project"})
+    path = tmp_path / created["id"] / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["camera_3d"].pop("projection_mode")
+    payload["camera_3d"].pop("hole_fill")
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    loaded = load_animation_project(created["id"])
+    assert loaded["camera_3d"]["projection_mode"] == "legacy"
+    assert loaded["camera_3d"]["hole_fill"] == "nearest"
