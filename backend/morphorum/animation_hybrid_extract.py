@@ -94,6 +94,7 @@ class HybridExtractionManager:
                 raise HybridSourceError("FFmpeg is unavailable.")
             staging.mkdir(parents=True, exist_ok=False)
             source = managed_video_path(project_id, filename)
+            source_stat = source.stat()
             command = [binary, "-hide_banner", "-loglevel", "error", "-nostdin",
                        "-ss", str(start), "-i", str(source), "-t", str(end - start),
                        "-vf", "fps=" + str(fps), "-frames:v", str(MAX_EXTRACT_FRAMES),
@@ -115,8 +116,15 @@ class HybridExtractionManager:
                 raise HybridSourceError("No frames were extracted.")
             if len(frames) > MAX_EXTRACT_FRAMES:
                 raise HybridSourceError("Extracted frames exceed the safety limit.")
+            # A new upload with the same filename must not silently reuse
+            # extracted frames from the previous video.
+            source_after = source.stat()
+            if (source_after.st_size, source_after.st_mtime_ns) != (source_stat.st_size, source_stat.st_mtime_ns):
+                raise HybridSourceError("Source video changed during extraction; please extract again.")
             manifest = {"source": filename, "start": start, "end": end, "fps": fps,
-                        "frames": len(frames), "filenames": [p.name for p in frames]}
+                        "frames": len(frames), "filenames": [p.name for p in frames],
+                        "source_size_bytes": source_stat.st_size,
+                        "source_mtime_ns": source_stat.st_mtime_ns}
             (staging / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
             previous = root / (".previous-" + job_id)
             if destination.exists():
