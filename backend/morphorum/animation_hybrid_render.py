@@ -81,6 +81,22 @@ def freeze_hybrid_source(project: dict[str, Any], render_dir: Path) -> dict[str,
         raise HybridRenderError("Extracted frame manifest contains duplicate filenames.")
     if settings["offset_frames"] >= count:
         raise HybridRenderError("Hybrid source offset exceeds the extracted frame sequence.")
+    if "source_mtime_ns" in manifest or "source_size_bytes" in manifest:
+        # Prevent stale frames following a new video upload with the same name.
+        from .animation_hybrid_source import managed_video_path
+        filename = manifest.get("source")
+        try:
+            video = managed_video_path(project_id, filename)
+            stat = video.stat()
+            if (stat.st_size != int(manifest["source_size_bytes"])
+                    or stat.st_mtime_ns != int(manifest["source_mtime_ns"])):
+                raise HybridRenderError(
+                    "The uploaded source video changed after extraction. Extract frames again."
+                )
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise HybridRenderError(
+                "The extracted video revision cannot be verified. Extract frames again."
+            ) from exc
 
     indices = [
         source_index(frame, render_fps, source_fps, count, settings["offset_frames"])
