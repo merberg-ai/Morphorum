@@ -771,6 +771,7 @@ def api_animation_render_video_exports(project_id: str, render_id: str) -> dict[
 @app.get("/api/animation/renders/{project_id}/{render_id}/video/{format}/{quality}/{fps}")
 def api_download_animation_video(
     project_id: str, render_id: str, format: str, quality: str, fps: int,
+    inline: bool = False,
 ):
     try:
         path = video_export_manager.file(project_id, render_id, format, quality, fps)
@@ -778,7 +779,7 @@ def api_download_animation_video(
             path,
             media_type="video/mp4" if format == "mp4" else "video/webm",
             filename=path.name,
-            content_disposition_type="attachment",
+            content_disposition_type="inline" if inline else "attachment",
         )
     except VideoExportError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
