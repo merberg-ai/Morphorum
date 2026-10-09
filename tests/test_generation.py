@@ -1154,6 +1154,8 @@ def test_sdxl_rank_bug_restores_both_text_encoders_and_alphas(
 def test_sdxl_namespace_normalizer_rejects_unsupported_clip_modules() -> None:
     pipe = FakeSDXLFullRankRepairPipe()
     state = {
+        "text_encoder.text_model.unknown.layers.0.q_proj.lora_A.weight":
+            torch.ones(2, 2),
         "text_encoder.text_model.unknown.layers.0.q_proj.lora_B.weight":
             torch.ones(2, 2),
     }
