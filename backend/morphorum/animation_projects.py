@@ -35,6 +35,7 @@ _KNOWN_TOP_LEVEL = {
     "camera_3d",
     "generation",
     "cadence",
+    "temporal",
     "tracks",
     "notes",
 }
