@@ -1,0 +1,46 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const base = path.join(__dirname, '..');
+const read = filename => fs.readFileSync(path.join(base, filename), 'utf8');
+const html = read('frontend/dist/index.html');
+const animation = read('frontend/dist/assets/animation.js');
+const app = read('frontend/dist/assets/app.js');
+
+test('user-facing HTML has no internal development milestones or phase numbers', () => {
+  assert.doesNotMatch(html, /\bB[0-9](?:\.[0-9]+)*(?:-[a-zA-Z0-9]+)?\b/);
+  assert.doesNotMatch(html, /FIRST IMAGE MILESTONE|future frame renderer|future repair|B5\.5 Performance Diagnostics/);
+  assert.match(html, /Animation Studio|ANIMATION STUDIO/);
+  assert.match(html, /Source Video/);
+  assert.match(html, /Performance & Memory/);
+});
+test('the wording-only pass preserves controls for previously implemented features', () => {
+  const kept = [
+    'image-prompt', 'image-negative-prompt', 'image-model-select', 'image-reset-draft',
+    'animation-temporal-mode', 'animation-3d-projection-mode', 'animation-3d-preset',
+    'animation-render-progress', 'animation-step-progress-fill',
+    'animation-hybrid-source', 'animation-hybrid-file', 'animation-hybrid-extract',
+    'animation-video-export', 'animation-export-video', 'animation-deforum-dialog',
+    'animation-deforum-create', 'lora-manager-copy', 'lora-manager-insert',
+    'model-list', 'console-window', 'model-path-cards',
+  ];
+  for (const id of kept) assert.ok(html.includes('id="' + id + '"'), id + ' must remain available');
+});
+test('render cautions and UI status are customer-facing without changing safety guards', () => {
+  assert.match(animation, /not a VRAM prediction or a hardware limit/);
+  assert.match(animation, /return window\.MorphorumDialog\.confirm/);
+  assert.doesNotMatch(animation, /physically verified 512|B6\.1 accepts/);
+  assert.match(app, /text\.textContent = 'Connected'/);
+  assert.match(app, /text\.textContent = 'Disconnected'/);
+  assert.doesNotMatch(app, /text\.textContent = `v\$\{health\.version\}/);
+});
+test('import and LoRA warnings retain useful meaning without branch milestones', () => {
+  const importer = read('backend/morphorum/deforum_import.py');
+  const inspector = read('backend/morphorum/lora_inspector.py');
+  assert.match(importer, /does not affect rendering/);
+  assert.match(inspector, /Some SDXL loading modes may not apply those weights/);
+  assert.doesNotMatch(importer, /no B6\.1 runtime effect/);
+  assert.doesNotMatch(inspector, /B4 SDXL compatibility fallback/);
+});
