@@ -1098,6 +1098,37 @@ class AnimationRenderManager:
             raise AnimationRenderError("Rendered animation frame not found.")
         return path
 
+    def performance_report(self, project_id: str, render_id: str) -> dict[str, Any]:
+        """Diagnostics for existing renders, including interrupted runs."""
+        import re
+
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", project_id) or not re.fullmatch(
+            r"[A-Za-z0-9_-]{1,100}", render_id
+        ):
+            raise AnimationRenderError("Invalid project or render identifier.")
+        path = _manifest_path(project_id, render_id)
+        if not path.is_file():
+            raise AnimationRenderError("Animation render manifest not found.")
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise AnimationRenderError("Animation render manifest is unreadable.") from exc
+        if manifest.get("project_id") != project_id or manifest.get("id") != render_id:
+            raise AnimationRenderError("Render identity mismatch.")
+        try:
+            records = load_performance_records(
+                _render_dir(project_id, render_id) / "performance.jsonl"
+            )
+        except OSError as exc:
+            raise AnimationRenderError(f"Could not read performance records: {exc}") from exc
+        return {
+            "project_id": project_id,
+            "render_id": render_id,
+            "status": manifest.get("status"),
+            "summary": summarize_records(records),
+            "frames": records,
+        }
+
     def preview_path(self, project_id: str, render_id: str) -> Path:
         path = _render_dir(project_id, render_id) / "preview.gif"
         if not path.is_file():
