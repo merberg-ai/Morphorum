@@ -40,8 +40,12 @@ def test_windows_gpu_process_memory_parses_dedicated_and_shared_bytes(monkeypatc
     assert result["process_instances_found"] is True
     assert result["diagnostic_only"] is True
     assert captured["timeout"] == 5
-    assert "GPU Process Memory" in captured["command"][-1]
-    assert "pid_' + $targetPid" in captured["command"][-1]
+    script = captured["command"][-1]
+    assert "GPU Process Memory" in script
+    assert r"'\GPU Process Memory(*)\Dedicated Usage'" in script
+    assert r"'\GPU Process Memory(*)\Shared Usage'" in script
+    assert r"'\\GPU Process Memory(*)\\Dedicated Usage'" not in script
+    assert "pid_' + $targetPid" in script
 
 
 def test_windows_gpu_process_memory_handles_counter_failure(monkeypatch) -> None:
