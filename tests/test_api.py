@@ -759,3 +759,41 @@ def test_lora_manager_server_audit_logs_and_validation(monkeypatch) -> None:
     assert any("insertion succeeded" in event["message"] for event in lora_lines)
     assert any("insertion rejected" in event["message"] for event in lora_lines)
     assert any("DonMCr33pyD0115XL" in event["message"] for event in lora_lines)
+
+
+def test_b53_3d_preview_api_forwards_red_overlay_to_manager(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path / "projects")
+    seen = []
+
+    def fake_start(*, project, source_path, highlight_holes=False):
+        seen.append((project, source_path, highlight_holes))
+        return {"id": "b53-preview-test", "status": "queued"}
+
+    monkeypatch.setattr(animation_motion.motion_preview_manager, "start", fake_start)
+
+    with TestClient(app) as client:
+        created = client.post("/api/animation/projects", json={"name": "B5.3 API"})
+        assert created.status_code == 201
+        project_id = created.json()["project"]["id"]
+        image_bytes = io.BytesIO()
+        Image.new("RGB", (48, 32), "teal").save(image_bytes, format="PNG")
+        uploaded = client.post(
+            f"/api/animation/projects/{project_id}/source-image",
+            content=image_bytes.getvalue(),
+            headers={"content-type": "image/png", "x-filename": "ref.png"},
+        )
+        assert uploaded.status_code == 201
+        project = uploaded.json()["project"]
+        project["animation"]["mode"] = "3d"
+        project["animation"]["max_frames"] = 12
+        response = client.post(
+            "/api/animation/motion-preview",
+            json={"project": project, "options": {"highlight_holes": True}},
+        )
+        assert response.status_code == 202, response.text
+        assert len(seen) == 1
+        assert seen[0][0]["animation"]["mode"] == "3d"
+        assert seen[0][2] is True
+        assert seen[0][1].is_file()
