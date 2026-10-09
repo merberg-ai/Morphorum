@@ -132,3 +132,65 @@ test('B5.5 displays bounded render summary and read-only JSON report link', () =
   assert.equal(dom['#animation-performance-summary'].hidden, true);
   assert.equal(attrs.href, true);
 });
+
+
+test('B6.0-P high-resolution render guard is advisory and uses live memory snapshot', async () => {
+  const begin = script.indexOf('  function higherResolutionRenderRisk(project) {');
+  const end = script.indexOf('  async function startAnimationRender()', begin);
+  assert.ok(begin > 0 && end > begin);
+
+  const messages = [];
+  let requests = 0;
+  const context = {
+    api: async url => {
+      requests += 1;
+      assert.equal(url, '/api/system/gpu-memory');
+      return {
+        cuda: {
+          free_gib: 3.25,
+          allocated_gib: 11.5,
+          reserved_gib: 12.0,
+          allocator_backend: 'native',
+        },
+        windows_wddm: {
+          available: true,
+          dedicated_gib: 12.25,
+          shared_gib: 0.5,
+        },
+      };
+    },
+    window: {
+      confirm(message) {
+        messages.push(message);
+        return false;
+      },
+    },
+  };
+
+  vm.runInNewContext(
+    script.slice(begin, end) +
+      '\nthis.risk = higherResolutionRenderRisk;' +
+      '\nthis.confirmRisk = confirmHigherResolutionRender;',
+    context,
+  );
+
+  assert.equal(context.risk({ animation: { width: 512, height: 512 } }), null);
+  assert.equal(
+    await context.confirmRisk({ animation: { width: 512, height: 512 } }),
+    true,
+  );
+  assert.equal(requests, 0, 'verified baseline should not query diagnostic counters');
+
+  const risk = context.risk({ animation: { width: 1024, height: 1024 } });
+  assert.equal(risk.pixel_ratio, 4);
+  assert.equal(
+    await context.confirmRisk({ animation: { width: 1024, height: 1024 } }),
+    false,
+  );
+  assert.equal(requests, 1);
+  assert.match(messages[0], /4\.00× the pixel count/);
+  assert.match(messages[0], /advisory warning, not a VRAM estimate/);
+  assert.match(messages[0], /3\.25 GiB free/);
+  assert.match(messages[0], /12\.25 GiB dedicated/);
+  assert.match(messages[0], /0\.50 GiB shared/);
+});
