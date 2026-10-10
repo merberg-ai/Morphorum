@@ -4181,6 +4181,75 @@
   }
   let motionLabAudioAnalysis = null;
   let motionLabAudioProjectId = null;
+  function motionLabAudioPreview() {
+    const preview = qs('#animation-motion-lab-audio-preview');
+    const plot = qs('#animation-motion-lab-audio-plot');
+    const analysis = motionLabAudioAnalysis;
+    if (!preview || !plot) return;
+    if (!analysis || motionLabAudioProjectId !== state.project?.id ||
+        Number(analysis.fps) !== Number(state.project?.animation?.fps) ||
+        analysis.values.length !== Number(state.project?.animation?.max_frames)) {
+      preview.hidden = true;
+      plot.replaceChildren();
+      return;
+    }
+    preview.hidden = false;
+    const values = analysis.values;
+    const threshold = Number(qs('#animation-motion-lab-audio-threshold')?.value);
+    const gate = Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : .1;
+    const attack = Number(qs('#animation-motion-lab-audio-attack')?.value);
+    const release = Number(qs('#animation-motion-lab-audio-release')?.value);
+    const pulseLength = Number.isInteger(attack) && Number.isInteger(release) &&
+      attack > 0 && release > 0 ? attack + release : 4;
+    const peak = Math.max(0, ...values);
+    const ceiling = Math.max(.05, peak * 1.08, gate * 1.08);
+    const width = 800, bottom = 196, top = 12, height = bottom - top;
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const make = (tag, attrs) => {
+      const el = document.createElementNS(svgNS, tag);
+      for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, String(value));
+      return el;
+    };
+    plot.replaceChildren();
+    const grid = make('path', {
+      d: [0, .25, .5, .75, 1].map(f => 'M0 ' + (bottom - f * height).toFixed(2) +
+        ' H' + width).join(' '),
+      stroke:'currentColor','stroke-opacity':'.13',fill:'none'
+    });
+    plot.appendChild(grid);
+    const points = [];
+    let onsets = 0, valid = 0, available = 1, prior = false;
+    for (let i = 0; i < values.length; i++) {
+      const x = ((i + .5) * width / values.length);
+      const y = bottom - values[i] / ceiling * height;
+      points.push((i ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2));
+      const above = values[i] >= gate && values[i] > 0;
+      if (above && !prior) {
+        onsets++;
+        if (i >= available && i >= 1 && i + pulseLength <= values.length) {
+          valid++;
+          plot.appendChild(make('circle', {cx:x.toFixed(2),cy:y.toFixed(2),
+            r:3.6,fill:'#ffbd69',stroke:'#fff','stroke-width':'.65'}));
+          available = i + pulseLength + 3;
+        }
+      }
+      prior = above;
+    }
+    plot.appendChild(make('path', {d:points.join(' '),fill:'none',
+      stroke:'#73d5ed','stroke-width':'2','vector-effect':'non-scaling-stroke'}));
+    const thresholdY = bottom - gate / ceiling * height;
+    plot.appendChild(make('line', {x1:0,y1:thresholdY,x2:width,y2:thresholdY,
+      stroke:'#ff857c','stroke-width':2,'stroke-dasharray':'7 5',
+      'vector-effect':'non-scaling-stroke'}));
+    const summary = qs('#animation-motion-lab-audio-summary');
+    if (summary) summary.textContent = 'Peak RMS ' + peak.toFixed(3) +
+      ' · threshold ' + gate.toFixed(3) + ' · ' + values.length + ' frames';
+    const prediction = qs('#animation-motion-lab-audio-prediction');
+    if (prediction) prediction.textContent = valid
+      ? valid + ' predicted complete motion pulse(s) from ' + onsets +
+        ' upward threshold crossing(s). Move the threshold to preview changes before adding.'
+      : 'No complete motion pulses at this threshold. Lower it or choose a file with stronger volume changes.';
+  }
   function motionLabAudioUi() {
     const ready = Boolean(state.project?.id && animationMode() === '3d' && !motionLabBusy);
     const analyze = qs('#animation-motion-lab-analyze-audio');
@@ -4204,6 +4273,7 @@
     }
     motionLabAudioAnalysis = null;
     motionLabAudioProjectId = null;
+    motionLabAudioPreview();
     if (status) status.textContent = 'Analyzing WAV on host…';
     motionLabAudioUi();
     try {
@@ -4223,6 +4293,14 @@
       }
       motionLabAudioAnalysis = analysis;
       motionLabAudioProjectId = projectId;
+      const peak = Math.max(0, ...analysis.values);
+      const thresholdField = qs('#animation-motion-lab-audio-threshold');
+      if (thresholdField && peak > 0) {
+        // File-specific starting point. Never require the user to guess the
+        // analysis scale without seeing the envelope.
+        thresholdField.value = Math.min(.1, peak * .55).toFixed(3);
+      }
+      motionLabAudioPreview();
       if (status) status.textContent = 'Analyzed ' + file.name + ': ' +
         analysis.values.length + ' frames · ' + analysis.duration_seconds.toFixed(2) +
         ' seconds · frame-aligned full-band RMS.';
@@ -4233,6 +4311,7 @@
       motionLabNotify('Audio import failed: ' + (error?.message || error));
     }
     motionLabAudioUi();
+    motionLabAudioPreview();
   }
   function motionLabAddAudio() {
     const analysis = motionLabAudioAnalysis;
@@ -5355,6 +5434,9 @@
     qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
     qs('#animation-motion-lab-analyze-audio')?.addEventListener('click', () => void motionLabAnalyzeAudio());
     qs('#animation-motion-lab-add-audio')?.addEventListener('click', motionLabAddAudio);
+    for (const id of ['threshold','attack','release','distance']) {
+      qs('#animation-motion-lab-audio-' + id)?.addEventListener('input', motionLabAudioPreview);
+    }
     qs('#animation-motion-lab-record-mode')?.addEventListener('change', motionLabRecordingUi);
     qs('#animation-motion-lab-stop-recording')?.addEventListener('click',
       () => motionLabStopRecording('manual'));
