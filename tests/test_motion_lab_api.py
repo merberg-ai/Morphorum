@@ -37,6 +37,11 @@ def test_motion_lab_preview_apply_persists_real_native_camera_tracks(tmp_path, m
         assert preview.status_code == 200, preview.text
         assert preview.json()["status"] == "preview"
         assert preview.json()["diagnostics"]["layer_count"] == 1
+        series = preview.json()["diagnostics"]["series"]
+        assert len(series["translation_z"]) == 24
+        assert len(series["rotation_z"]) == 24
+        assert series["translation_z"][0] == 0
+        assert series["translation_z"][12] > 0
         assert "translation_z" in preview.json()["project"]["camera_3d"]
         untouched = client.get("/api/animation/projects/" + project["id"]).json()["project"]
         assert untouched["camera_3d"]["translation_z"] == "0:(0)"
