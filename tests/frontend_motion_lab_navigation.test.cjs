@@ -100,3 +100,30 @@ test('ML0 exposes draft motion layer presets with preview and explicit timeline 
   assert.match(js, /const needsLayers = id !== 'animation-motion-lab-add'/);
   assert.match(css, /\.animation-motion-lab-fields \{display:grid;/);
 });
+
+
+test('Camera Motion Composer lives in Motion Lab alongside its preview, never Editor', () => {
+  assert.match(js, /const composer = qs\('#animation-motion-lab-composer'\)/);
+  assert.match(js, /if \(composer\) panels\.motion\.appendChild\(composer\)/);
+  const intro = js.indexOf('panels.motion.appendChild(motionIntro)');
+  const composer = js.indexOf('panels.motion.appendChild(composer)');
+  const preview = js.indexOf('panels.motion.appendChild(motionPreview)');
+  assert.ok(intro > 0 && intro < composer && composer < preview);
+  assert.match(html, /id="animation-motion-lab-enable-3d"/);
+  assert.match(html, /id="animation-motion-lab-cycle"[^>]*value="2"/);
+  assert.match(html, /id="animation-motion-lab-fade"[^>]*value="\.1"/);
+});
+
+test('Manual Editor motion edits do not block draft previews, apply needs explicit rebase', () => {
+  const start = js.indexOf('  async function motionLabPreviewOrApply(apply) {');
+  const end = js.indexOf('  // Motion Lab is first-class;', start);
+  const workflow = js.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(workflow, /if \(!apply\) payload\.project = collectProject\(\)/);
+  assert.match(workflow, /Camera schedules changed since Motion Lab/);
+  assert.match(workflow, /payload\.rebase_current = true/);
+  assert.match(workflow, /window\.MorphorumDialog\.confirm/);
+  assert.match(workflow, /Save Editor changes before applying Motion Lab/);
+  assert.doesNotMatch(workflow, /if \(state\.dirty\)\s*\{\s*motionLabNotify\('Save current Editor changes/);
+  assert.match(js, /animation-motion-lab-enable-3d'\)\?\.addEventListener\('click'/);
+});
