@@ -260,7 +260,8 @@ def _normalize_audio_layer(
     offset = _integer(raw.get("offset_frames", 0), "Audio offset frames", -3000, 3000)
     try:
         pulses = balanced_pulses(
-            onset_strength(envelope, sensitivity) if detection == "transient" else envelope,\n            threshold=threshold, distance=distance,
+            onset_strength(envelope, sensitivity) if detection == "transient" else envelope,
+            threshold=threshold, distance=distance,
             attack_frames=attack, release_frames=release,
             cooldown_frames=cooldown, offset_frames=offset,
         )
