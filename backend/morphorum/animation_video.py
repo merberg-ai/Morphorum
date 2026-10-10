@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .animation_render import _render_dir
+from .animation_projects import animation_project_directory
 from .console import emit_console
 
 FORMATS = {"mp4", "webm"}
