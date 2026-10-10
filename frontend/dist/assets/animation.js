@@ -4051,15 +4051,28 @@
       const item = document.createElement('div');
       item.className = 'animation-motion-lab-layer';
       const desc = document.createElement('span');
-      desc.textContent = (index + 1) + '. ' + String(layer.preset).replaceAll('-', ' ') +
-        ' · ' + layer.blend + ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
-        ' · strength ' + layer.strength;
+      desc.textContent = layer.type === 'keyframes'
+        ? (index + 1) + '. Custom ' + layer.axis.replaceAll('_', ' ') +
+          ' · ' + layer.blend + ' · ' + layer.interpolation +
+          ' · ' + layer.keys.length + ' keyframe(s)'
+        : (index + 1) + '. ' + String(layer.preset).replaceAll('-', ' ') +
+          ' · ' + layer.blend + ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
+          ' · strength ' + layer.strength;
       const edit = document.createElement('button');
       edit.type = 'button';
       edit.className = 'secondary-button compact';
       edit.textContent = 'Edit';
       edit.disabled = !ready;
       edit.addEventListener('click', () => {
+        if (layer.type === 'keyframes') {
+          motionLabEditingIndex = -1;
+          const axisField = qs('#animation-motion-lab-key-axis');
+          if (axisField) axisField.value = layer.axis;
+          motionLabCurveSyncAxis();
+          motionLabNotify('Selected custom keyframes on ' + layer.axis.replaceAll('_', ' ') + '.');
+          renderMotionLabDraft();
+          return;
+        }
         motionLabEditingIndex = index;
         for (const [id, value] of Object.entries({
           preset: layer.preset, strength: layer.strength,
@@ -4127,6 +4140,7 @@
       item.append(desc, actions);
       list.appendChild(item);
     });
+    motionLabCurveRender();
   }
   function motionLabNotify(message) {
     const target = qs('#animation-motion-lab-diagnostics');
@@ -4171,6 +4185,180 @@
     motionLabNotify('Draft updated. Update Curves for instant feedback, then Apply to Animation to save.');
     commitMotionLabDraft();
   }
+  // ML1b: manual camera-velocity keyframes live in the same ordered,
+  // undoable layer stack as presets, never in an independent render pipeline.
+  const MOTION_LAB_AXES = [
+    'translation_x','translation_y','translation_z',
+    'rotation_x','rotation_y','rotation_z',
+  ];
+  function motionLabCurveAxis() {
+    const value = qs('#animation-motion-lab-key-axis')?.value;
+    return MOTION_LAB_AXES.includes(value) ? value : 'translation_x';
+  }
+  function motionLabCurveLayerIndex(axis = motionLabCurveAxis()) {
+    return motionLabDraftLayers.findIndex(layer =>
+      layer.type === 'keyframes' && layer.axis === axis);
+  }
+  function motionLabCurveLayer(axis = motionLabCurveAxis()) {
+    const index = motionLabCurveLayerIndex(axis);
+    return index < 0 ? null : motionLabDraftLayers[index];
+  }
+  function motionLabCurveSyncAxis() {
+    const layer = motionLabCurveLayer();
+    if (layer) {
+      const interp = qs('#animation-motion-lab-key-interpolation');
+      const blend = qs('#animation-motion-lab-key-blend');
+      if (interp) interp.value = layer.interpolation;
+      if (blend) blend.value = layer.blend;
+    }
+    motionLabCurveRender();
+  }
+  function motionLabCurveFrameSync(frame) {
+    const input = qs('#animation-motion-lab-key-frame');
+    if (input && document.activeElement !== input) input.value = String(frame);
+    const value = qs('#animation-motion-lab-key-value');
+    if (value && document.activeElement !== value) {
+      const existing = motionLabCurveLayer()?.keys?.find(key => key.frame === frame);
+      if (existing) value.value = String(existing.value);
+    }
+  }
+  function motionLabCurveRender() {
+    const axis = motionLabCurveAxis();
+    const layer = motionLabCurveLayer(axis);
+    const list = qs('#animation-motion-lab-key-list');
+    if (list) {
+      list.replaceChildren();
+      if (!layer) {
+        list.textContent = 'No custom keyframes on this axis. Add one or drag on the curve graph.';
+      } else {
+        for (const key of layer.keys) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'secondary-button compact';
+          button.textContent = 'Frame ' + key.frame + ': ' + Number(key.value).toFixed(4);
+          button.disabled = motionLabBusy;
+          button.addEventListener('click', () => {
+            const frame = qs('#animation-motion-lab-key-frame');
+            const value = qs('#animation-motion-lab-key-value');
+            if (frame) frame.value = String(key.frame);
+            if (value) value.value = String(key.value);
+            motionLabVisual?.setFrame(key.frame);
+          });
+          list.appendChild(button);
+        }
+      }
+    }
+    const count = Number(state.project?.animation?.max_frames || 120);
+    const frame = qs('#animation-motion-lab-key-frame');
+    if (frame) frame.max = String(count - 1);
+    const eligible = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
+    for (const id of ['animation-motion-lab-key-save','animation-motion-lab-key-delete',
+      'animation-motion-lab-key-clear']) {
+      const control = qs('#' + id);
+      if (control) control.disabled = !eligible || (id !== 'animation-motion-lab-key-save' && !layer);
+    }
+    motionLabVisual?.configureEditor({
+      axis,
+      keys: layer?.keys || [],
+      enabled: Boolean(qs('#animation-motion-lab-key-drag')?.checked) && eligible,
+      onEdit: motionLabCurvePointerEdit,
+      onFrameChange: motionLabCurveFrameSync,
+      onPointerDraft: ({frame, value}) => {
+        const f = qs('#animation-motion-lab-key-frame');
+        const v = qs('#animation-motion-lab-key-value');
+        if (f) f.value = String(frame);
+        if (v) v.value = String(value);
+      },
+    });
+  }
+  function motionLabCurveModify({frame, value, replaceFrame = null}) {
+    const axis = motionLabCurveAxis();
+    const count = Number(state.project?.animation?.max_frames || 120);
+    if (!state.project || animationMode() !== '3d' || motionLabBusy ||
+        !Number.isInteger(frame) || frame < 0 || frame >= count ||
+        !Number.isFinite(value) || Math.abs(value) > 30 ||
+        (frame === 0 && value !== 0)) {
+      motionLabNotify('Invalid curve point: frame must be in range, movement finite within ±30, and frame 0 must stay at zero.');
+      return false;
+    }
+    const index = motionLabCurveLayerIndex(axis);
+    let target = index >= 0 ? structuredClone(motionLabDraftLayers[index]) : {
+      id: 'manual-' + axis,
+      type: 'keyframes',
+      axis, enabled: true, blend: qs('#animation-motion-lab-key-blend')?.value || 'add',
+      interpolation: qs('#animation-motion-lab-key-interpolation')?.value || 'linear',
+      start_frame: 0, end_frame: count,
+      keys: [{frame: 0, value: 0}],
+    };
+    if (index < 0 && motionLabDraftLayers.length >= 24) {
+      motionLabNotify('Motion Lab supports at most 24 layers.');
+      return false;
+    }
+    target.blend = qs('#animation-motion-lab-key-blend')?.value || target.blend;
+    target.interpolation = qs('#animation-motion-lab-key-interpolation')?.value || target.interpolation;
+    if (replaceFrame !== null && replaceFrame !== 0 && replaceFrame !== frame) {
+      target.keys = target.keys.filter(key => key.frame !== replaceFrame);
+    }
+    const existing = target.keys.find(key => key.frame === frame);
+    if (existing) existing.value = value;
+    else target.keys.push({frame, value});
+    target.keys.sort((a,b) => a.frame - b.frame);
+    if (target.keys.length > 128) {
+      motionLabNotify('Curve layers support at most 128 keyframes.');
+      return false;
+    }
+    if (index < 0) motionLabDraftLayers.push(target);
+    else motionLabDraftLayers[index] = target;
+    motionLabEditingIndex = -1;
+    commitMotionLabDraft();
+    motionLabNotify('Manual ' + axis.replaceAll('_',' ') +
+      ' curve changed. Update Curves to inspect the new camera movement.');
+    return true;
+  }
+  function motionLabCurvePointerEdit(point) {
+    if (motionLabCurveModify(point)) {
+      // Compose the new visual sample series on the existing CPU-free path.
+      void motionLabPreviewOrApply(false, {curvesOnly:true});
+    }
+  }
+  function motionLabCurveSave() {
+    const frame = Number(qs('#animation-motion-lab-key-frame')?.value);
+    const value = Number(qs('#animation-motion-lab-key-value')?.value);
+    if (motionLabCurveModify({frame, value})) {
+      void motionLabPreviewOrApply(false, {curvesOnly:true});
+    }
+  }
+  function motionLabCurveDelete() {
+    const axis = motionLabCurveAxis();
+    const index = motionLabCurveLayerIndex(axis);
+    if (index < 0) return;
+    const frame = Number(qs('#animation-motion-lab-key-frame')?.value);
+    if (!Number.isInteger(frame) || frame === 0) {
+      motionLabNotify('Frame 0 is the fixed motion anchor; select another keyframe to delete.');
+      return;
+    }
+    const layer = structuredClone(motionLabDraftLayers[index]);
+    const original = layer.keys.length;
+    layer.keys = layer.keys.filter(key => key.frame !== frame);
+    if (layer.keys.length === original) {
+      motionLabNotify('No keyframe at frame ' + frame + '.');
+      return;
+    }
+    if (!layer.keys.length) motionLabDraftLayers.splice(index, 1);
+    else motionLabDraftLayers[index] = layer;
+    commitMotionLabDraft();
+    void motionLabPreviewOrApply(false, {curvesOnly:true});
+  }
+  function motionLabCurveClear() {
+    const index = motionLabCurveLayerIndex();
+    if (index < 0) return;
+    motionLabDraftLayers.splice(index, 1);
+    commitMotionLabDraft();
+    motionLabNotify('Custom curve removed from draft; saved animation is unchanged.');
+    if (motionLabDraftLayers.length) void motionLabPreviewOrApply(false, {curvesOnly:true});
+    else motionLabVisual?.clear();
+  }
+
   async function motionLabPreviewOrApply(apply, { curvesOnly = false } = {}) {
     if (!state.project?.id || !motionLabDraftLayers.length || motionLabBusy) return;
     const projectId = state.project.id;
@@ -4471,6 +4659,23 @@
     qs('#animation-motion-lab-redo')?.addEventListener('click', () => restoreMotionLabDraft(1));
     qs('#animation-motion-lab-update-curves')?.addEventListener('click',
       () => motionLabPreviewOrApply(false, { curvesOnly: true }));
+    qs('#animation-motion-lab-key-axis')?.addEventListener('change', motionLabCurveSyncAxis);
+    qs('#animation-motion-lab-key-drag')?.addEventListener('change', motionLabCurveRender);
+    for (const id of ['animation-motion-lab-key-blend','animation-motion-lab-key-interpolation']) {
+      qs('#' + id)?.addEventListener('change', () => {
+        const index = motionLabCurveLayerIndex();
+        if (index < 0) return;
+        const key = id.endsWith('blend') ? 'blend' : 'interpolation';
+        const value = qs('#' + id)?.value;
+        if (motionLabDraftLayers[index][key] === value) return;
+        motionLabDraftLayers[index] = {...motionLabDraftLayers[index], [key]:value};
+        commitMotionLabDraft();
+        void motionLabPreviewOrApply(false, {curvesOnly:true});
+      });
+    }
+    qs('#animation-motion-lab-key-save')?.addEventListener('click', motionLabCurveSave);
+    qs('#animation-motion-lab-key-delete')?.addEventListener('click', motionLabCurveDelete);
+    qs('#animation-motion-lab-key-clear')?.addEventListener('click', motionLabCurveClear);
     qs('#animation-motion-lab-preview-draft')?.addEventListener('click',
       () => motionLabPreviewOrApply(false));
     qs('#animation-motion-lab-apply')?.addEventListener('click',
