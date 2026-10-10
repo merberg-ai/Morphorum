@@ -47,6 +47,7 @@ MAX_LAYERS = 24
 MAX_COMPOSE_FRAMES = 3000
 MAX_KEYFRAMES_PER_LAYER = 128
 MAX_RECORDING_SAMPLES = MAX_COMPOSE_FRAMES
+# Dense ML2 rows are device-neutral replay data; source is provenance only.
 RECORDING_SOURCES = ("keyboard", "touch", "gamepad", "mixed", "unknown")
 
 
