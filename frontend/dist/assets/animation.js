@@ -4179,6 +4179,92 @@
       end.max = String(Number(state.project?.animation?.max_frames || 120));
     }
   }
+  let motionLabAudioAnalysis = null;
+  let motionLabAudioProjectId = null;
+  function motionLabAudioUi() {
+    const ready = Boolean(state.project?.id && animationMode() === '3d' && !motionLabBusy);
+    const analyze = qs('#animation-motion-lab-analyze-audio');
+    const add = qs('#animation-motion-lab-add-audio');
+    if (analyze) analyze.disabled = !ready;
+    if (add) add.disabled = !ready || motionLabDraftLayers.length >= 24 ||
+      !motionLabAudioAnalysis || motionLabAudioProjectId !== state.project?.id ||
+      Number(motionLabAudioAnalysis.fps) !== Number(state.project?.animation?.fps);
+  }
+  async function motionLabAnalyzeAudio() {
+    const file = qs('#animation-motion-lab-audio-file')?.files?.[0];
+    const projectId = state.project?.id;
+    const status = qs('#animation-motion-lab-audio-info');
+    if (!projectId || animationMode() !== '3d' || !file) {
+      motionLabNotify('Choose a 3D project and PCM WAV audio file.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      motionLabNotify('WAV exceeds 20 MiB.');
+      return;
+    }
+    motionLabAudioAnalysis = null;
+    motionLabAudioProjectId = null;
+    if (status) status.textContent = 'Analyzing WAV on host…';
+    motionLabAudioUi();
+    try {
+      const response = await fetch('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/audio-analyze', {
+        method:'POST',headers:{'Content-Type':'audio/wav'},body:file,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(typeof result.detail === 'string' ?
+        result.detail : 'Audio analysis failed (HTTP ' + response.status + ')');
+      if (state.project?.id !== projectId) return;
+      const analysis = result.analysis;
+      if (!Array.isArray(analysis?.values) ||
+          analysis.values.length !== Number(state.project.animation.max_frames) ||
+          Number(analysis.fps) !== Number(state.project.animation.fps)) {
+        throw new Error('Audio frame alignment changed; analyze again.');
+      }
+      motionLabAudioAnalysis = analysis;
+      motionLabAudioProjectId = projectId;
+      if (status) status.textContent = 'Analyzed ' + file.name + ': ' +
+        analysis.values.length + ' frames · ' + analysis.duration_seconds.toFixed(2) +
+        ' seconds · frame-aligned full-band RMS.';
+      const badge = qs('#animation-motion-lab-audio-status');
+      if (badge) badge.textContent = 'WAV ready';
+    } catch (error) {
+      if (status) status.textContent = 'Audio import failed: ' + (error?.message || error);
+      motionLabNotify('Audio import failed: ' + (error?.message || error));
+    }
+    motionLabAudioUi();
+  }
+  function motionLabAddAudio() {
+    const analysis = motionLabAudioAnalysis;
+    if (!analysis || !state.project || motionLabAudioProjectId !== state.project.id ||
+        animationMode() !== '3d' || motionLabDraftLayers.length >= 24) return;
+    const read = (id) => Number(qs('#animation-motion-lab-audio-' + id)?.value);
+    const threshold = read('threshold');
+    const distance = read('distance');
+    const attack = read('attack');
+    const release = read('release');
+    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1 ||
+        !Number.isFinite(distance) || distance < 0 || distance > 1 ||
+        !Number.isInteger(attack) || attack < 1 || attack > 120 ||
+        !Number.isInteger(release) || release < 1 || release > 120) {
+      motionLabNotify('Check audio threshold, pulse amount, attack and release.');
+      return;
+    }
+    const layer = {
+      id:'audio-' + Date.now().toString(36), type:'audio',
+      name:'Audio ' + analysis.filename.slice(0, 12), enabled:true, blend:'add',
+      axis:qs('#animation-motion-lab-audio-axis')?.value || 'translation_z',
+      start_frame:0,end_frame:analysis.values.length,
+      fps:Number(analysis.fps),sha256:analysis.source_sha256,
+      envelope:analysis.values.slice(),threshold,distance,
+      attack_frames:attack,release_frames:release,cooldown_frames:3,offset_frames:0,
+    };
+    motionLabDraftLayers.push(layer);
+    motionLabEditingIndex = -1;
+    commitMotionLabDraft();
+    motionLabNotify('Audio motion draft layer added. Preview Curves before Apply.');
+    void motionLabPreviewOrApply(false,{curvesOnly:true});
+  }
   function motionLabRecordingUi() {
     const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
     const active = Boolean(motionLabRecorder?.active);
@@ -4496,6 +4582,7 @@
     const ready = Boolean(project && is3d && !motionLabBusy);
     const count = Number(project?.animation?.max_frames || 120);
     motionLabRecordingUi();
+    motionLabAudioUi();
     const stage = qs('#animation-motion-lab-compose-status');
     if (stage) stage.textContent = !project ? 'Select a project' :
       !is3d ? '2D project (switch to 3D here)' : motionLabDraftLayers.length +
@@ -4536,7 +4623,11 @@
       const item = document.createElement('div');
       item.className = 'animation-motion-lab-layer';
       const desc = document.createElement('span');
-      desc.textContent = layer.type === 'keyframes'
+      desc.textContent = layer.type === 'audio'
+        ? (index + 1) + '. Audio ' + layer.axis.replaceAll('_',' ') +
+          ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
+          ' · threshold ' + layer.threshold
+        : layer.type === 'keyframes'
         ? (index + 1) + '. Custom ' + layer.axis.replaceAll('_', ' ') +
           ' · ' + layer.blend + ' · ' + layer.interpolation +
           ' · ' + layer.keys.length + ' keyframe(s)'
@@ -5150,6 +5241,8 @@
     if (composer) panels.motion.appendChild(composer);
     const recording = qs('#animation-motion-lab-recording');
     if (recording) panels.motion.appendChild(recording);
+    const audio = qs('#animation-motion-lab-audio');
+    if (audio) panels.motion.appendChild(audio);
     const visual = qs('#animation-motion-lab-visual');
     if (visual) panels.motion.appendChild(visual);
     const motionPreview = qs('.animation-motion-preview-card');
@@ -5260,6 +5353,8 @@
     });
     qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
     qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
+    qs('#animation-motion-lab-analyze-audio')?.addEventListener('click', () => void motionLabAnalyzeAudio());
+    qs('#animation-motion-lab-add-audio')?.addEventListener('click', motionLabAddAudio);
     qs('#animation-motion-lab-record-mode')?.addEventListener('change', motionLabRecordingUi);
     qs('#animation-motion-lab-stop-recording')?.addEventListener('click',
       () => motionLabStopRecording('manual'));
