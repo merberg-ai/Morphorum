@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageOps, ImageSequence
 from scipy.ndimage import map_coordinates
 
 from .animation_resolution import resolve_project_frame
@@ -572,6 +572,15 @@ class MotionPreviewManager:
                 raise MotionPreviewError("Motion preview job not found.")
             return job.public()
 
+    def frame_path(self, job_id: str, index: int) -> Path:
+        if not isinstance(index, int) or not 0 <= index < PREVIEW_MAX_CAPTURE_FRAMES:
+            raise MotionPreviewError("Preview frame index out of range.")
+        self.result_path(job_id)
+        frame = OUTPUTS_DIR / "motion-previews" / job_id / "frames" / f"{index:04d}.png"
+        if not frame.is_file():
+            raise MotionPreviewError("Preview sample frame not found.")
+        return frame
+
     def result_path(self, job_id: str) -> Path:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -636,6 +645,15 @@ class MotionPreviewManager:
                 progress_callback=progress,
                 highlight_holes=highlight_holes,
             )
+            # Expose the existing bounded preview samples as seekable frames.
+            samples_dir = output.parent / "frames"
+            samples_dir.mkdir(parents=True, exist_ok=True)
+            with Image.open(output) as gif:
+                for index, sample in enumerate(ImageSequence.Iterator(gif)):
+                    if index >= PREVIEW_MAX_CAPTURE_FRAMES:
+                        break
+                    sample.convert("RGB").save(samples_dir / f"{index:04d}.png", "PNG")
+            result["frame_player_samples"] = min(result["captured_frames"], PREVIEW_MAX_CAPTURE_FRAMES)
             result["source_kind"] = source_kind
             with self._lock:
                 job = self._jobs[job_id]
