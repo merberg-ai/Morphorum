@@ -770,7 +770,18 @@
                 <label><input type="checkbox" id="animation-motion-gif-auto-audio" checked> Start analyzed WAV when preview becomes ready</label>
                 <span class="muted" id="animation-motion-gif-sync-status" role="status">Analyze WAV to enable synchronized preview audio.</span>
               </div>
-              <img id="animation-motion-preview-image" alt="Motion-only animation preview">
+              <div id="animation-motion-frame-player" class="animation-motion-frame-player" hidden>
+                <img id="animation-motion-frame-image" alt="Frame-controlled camera preview">
+                <div class="animation-motion-player-actions">
+                  <button id="animation-motion-frame-play" type="button" class="secondary-button compact">▶ Play</button>
+                  <button id="animation-motion-frame-reset" type="button" class="secondary-button compact">↺ Start</button>
+                  <label><input id="animation-motion-frame-loop" type="checkbox" checked> Loop</label>
+                  <span id="animation-motion-frame-time" class="muted">0.00s</span>
+                </div>
+                <input id="animation-motion-frame-scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Seek camera preview project frame">
+                <p class="muted" id="animation-motion-frame-note">Frames are drawn from up to 72 CPU preview samples. Playback follows the project frame clock.</p>
+              </div>
+              <img id="animation-motion-preview-image" alt="Motion-only animation GIF fallback" hidden>
               <div class="animation-motion-result-meta" id="animation-motion-result-meta"></div>
               <div class="animation-camera-coverage" id="animation-camera-coverage" hidden></div>
             </div>
@@ -1243,6 +1254,7 @@
   <script src="/assets/loras.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-visual.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-recording.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/motion-lab-frame-player.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>
