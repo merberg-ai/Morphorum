@@ -218,3 +218,16 @@ test('ML3.1 WAV analysis has a live pre-layer envelope and threshold preview', (
   assert.match(css, /#animation-motion-lab-audio-plot \{/);
   assert.match(css, /@media\(max-width:540px\) \{#animation-motion-lab-audio-plot/);
 });
+
+test('ML3 WAV audio transport follows visual play pause frame seek and source lifecycle', () => {
+  assert.match(html, /id="animation-motion-lab-audio-sync"/);
+  assert.match(html, /id="animation-motion-lab-audio-sync-status"/);
+  assert.match(animation, /function motionLabBindAudioTransport\(\)/);
+  assert.match(animation, /motionLabVisual\.onPlay = \(frame, fps\)/);
+  assert.match(animation, /motionLabVisual\.onPause = \(\) => motionLabAudioElement\?\.pause\(\)/);
+  assert.match(animation, /motionLabVisual\.onFrameChange = frame =>/);
+  assert.match(animation, /Math\.abs\(audio\.currentTime - position\) > \.18/);
+  assert.match(animation, /URL\.revokeObjectURL\(motionLabAudioUrl\)/);
+  assert.match(animation, /motionLabBindAudioTransport\(\);/);
+  assert.match(css, /\.animation-motion-audio-playback/);
+});
