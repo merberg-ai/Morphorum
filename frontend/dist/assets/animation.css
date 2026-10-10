@@ -1938,6 +1938,9 @@ dialog#animation-deforum-dialog {
 .animation-motion-lab-layer {display:flex;gap:12px;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:9px;padding:8px 10px;min-width:0;}
 .animation-motion-lab-layer span {min-width:0;overflow-wrap:anywhere;text-transform:capitalize;}
 .animation-motion-lab-layer button {flex:0 0 auto;}
+.animation-motion-lab-layer-actions {display:flex;gap:6px;align-items:center;flex:0 0 auto;flex-wrap:wrap;}
+.animation-motion-lab-head-actions {display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;}
+.animation-motion-lab-head-actions button {min-height:36px;}
 .animation-motion-lab-diagnostics {font-size:.8rem;line-height:1.5;margin-top:12px;}
 @media(max-width:850px) {.animation-motion-lab-fields {grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:540px) {.animation-motion-lab-composer {padding:12px;} .animation-motion-lab-fields {grid-template-columns:minmax(0,1fr);} .animation-motion-lab-actions button {flex:1 1 140px;} .animation-motion-lab-layer {align-items:flex-start;}}
