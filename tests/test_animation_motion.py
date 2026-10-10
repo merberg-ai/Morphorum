@@ -364,3 +364,18 @@ def test_long_preview_capture_is_bounded_but_includes_endpoints():
     assert len(positions) <= 72
     assert positions[0] == 0
     assert positions[-1] == 195
+
+
+def test_ml34_preview_quality_settings_are_bounded_and_default_preserved(tmp_path, monkeypatch):
+    import morphorum.animation_motion as motion
+    assert motion.PREVIEW_QUALITY["fast"] == (192, 36)
+    assert motion.PREVIEW_QUALITY["balanced"] == (320, 72)
+    assert motion.PREVIEW_QUALITY["detailed"] == (320, 144)
+    assert motion.PREVIEW_MAX_CAPTURE_FRAMES == 144
+    project = sample_project(max_frames=196)
+    project["animation"]["mode"] = "3d"
+    manager = motion.MotionPreviewManager()
+    with pytest.raises(MotionPreviewError, match="quality"):
+        manager.start(project=project, source_path=None, quality="ultra")
+    assert len(capture_frames(196, motion.PREVIEW_QUALITY["detailed"][1])) == 144
+    assert len(capture_frames(196, motion.PREVIEW_QUALITY["fast"][1])) == 36
