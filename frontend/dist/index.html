@@ -550,6 +550,69 @@
             <div class="animation-motion-lab-diagnostics muted" id="animation-motion-lab-diagnostics" role="status">Draft motion is not applied to the animation timeline until you select Apply.</div>
           </article>
 
+          <article class="card glass animation-motion-lab-recording" id="animation-motion-lab-recording">
+            <div class="card-header">
+              <div>
+                <h2>Live Motion Recording <small class="muted">ML2</small></h2>
+                <p class="muted">Fly the native six-axis camera with keyboard, touch, or an optional browser-visible gamepad. Recording is sampled on the project frame clock and becomes another editable Motion Lab layer. It never steers a running diffusion render.</p>
+              </div>
+              <span class="animation-motion-lab-stage" id="animation-motion-lab-record-status">Ready</span>
+            </div>
+
+            <div class="animation-motion-recording-controls">
+              <label><span>Start frame</span><input id="animation-motion-lab-record-start" type="number" min="0" step="1" value="0"></label>
+              <label><span>Blend</span><select id="animation-motion-lab-record-blend"><option value="add">Add to existing motion</option><option value="replace">Replace armed axes</option></select></label>
+              <label><span>Translation sensitivity <small class="muted">units/frame</small></span><input id="animation-motion-lab-record-translation" type="number" min="0.0001" max="0.12" step="0.001" value="0.025"></label>
+              <label><span>Rotation sensitivity <small class="muted">deg/frame</small></span><input id="animation-motion-lab-record-rotation" type="number" min="0.01" max="2" step="0.05" value="0.5"></label>
+              <label><span>Deadzone</span><input id="animation-motion-lab-record-deadzone" type="number" min="0" max="0.5" step="0.01" value="0.08"></label>
+              <label><span>Response / return</span><input id="animation-motion-lab-record-response" type="number" min="0.05" max="1" step="0.05" value="0.55"></label>
+              <label><span>Release tail <small class="muted">frames</small></span><input id="animation-motion-lab-record-tail" type="number" min="0" max="12" step="1" value="3"></label>
+              <label class="animation-motion-record-gamepad"><input id="animation-motion-lab-record-gamepad" type="checkbox"> Use browser gamepad when available</label>
+            </div>
+
+            <fieldset class="animation-motion-axis-arms">
+              <legend>Armed axes</legend>
+              <label><input type="checkbox" data-motion-record-axis="translation_x" checked> Strafe X</label>
+              <label><input type="checkbox" data-motion-record-axis="translation_y" checked> Lift Y</label>
+              <label><input type="checkbox" data-motion-record-axis="translation_z" checked> Dolly Z</label>
+              <label><input type="checkbox" data-motion-record-axis="rotation_x" checked> Pitch</label>
+              <label><input type="checkbox" data-motion-record-axis="rotation_y" checked> Yaw</label>
+              <label><input type="checkbox" data-motion-record-axis="rotation_z" checked> Roll</label>
+            </fieldset>
+
+            <div class="animation-motion-recording-actions">
+              <button class="primary-button compact" id="animation-motion-lab-record" type="button" disabled>● Record Take</button>
+              <button class="secondary-button compact" id="animation-motion-lab-stop-recording" type="button" disabled>■ Stop</button>
+              <span class="muted" id="animation-motion-lab-record-frame">No take in progress.</span>
+            </div>
+
+            <div class="animation-motion-controller-grid">
+              <div class="animation-motion-stick-wrap">
+                <strong>Translate X / Y</strong>
+                <div class="animation-motion-stick" id="animation-motion-lab-stick-translate" role="application" aria-label="Translation touch joystick" tabindex="0"><span class="animation-motion-stick-knob"></span></div>
+              </div>
+              <div class="animation-motion-stick-wrap">
+                <strong>Pitch / Yaw</strong>
+                <div class="animation-motion-stick" id="animation-motion-lab-stick-rotate" role="application" aria-label="Rotation touch joystick" tabindex="0"><span class="animation-motion-stick-knob"></span></div>
+              </div>
+              <div class="animation-motion-hold-controls" aria-label="Depth and roll controls">
+                <strong>Depth / Roll</strong>
+                <div>
+                  <button type="button" class="secondary-button compact" data-motion-hold-axis="translation_z" data-motion-hold-value="1">Z +</button>
+                  <button type="button" class="secondary-button compact" data-motion-hold-axis="translation_z" data-motion-hold-value="-1">Z −</button>
+                  <button type="button" class="secondary-button compact" data-motion-hold-axis="rotation_z" data-motion-hold-value="-1">Roll ⟲</button>
+                  <button type="button" class="secondary-button compact" data-motion-hold-axis="rotation_z" data-motion-hold-value="1">Roll ⟳</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="notice subtle animation-motion-recording-help">
+              <strong>Keyboard</strong>
+              <span><b>A/D</b> strafe X · <b>R/F</b> lift Y · <b>W/S</b> dolly Z · <b>↑/↓</b> pitch · <b>←/→</b> yaw · <b>Q/E</b> roll. Inputs are neutralized on release, pointer cancel, window blur, or tab hiding. Gamepads are read by the client browser only and may be unavailable on a plain HTTP LAN origin.</span>
+            </div>
+            <p class="muted animation-motion-gamepad-status" id="animation-motion-lab-gamepad-status">Gamepad input off. Keyboard and touch are always available.</p>
+          </article>
+
           <article class="card glass animation-motion-lab-visual" id="animation-motion-lab-visual">
             <div class="card-header">
               <div>
@@ -1120,6 +1183,7 @@
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/loras.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-visual.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/motion-lab-recording.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>
