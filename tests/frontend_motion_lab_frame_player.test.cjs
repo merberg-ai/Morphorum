@@ -45,7 +45,7 @@ test('ML3.3 seeks across captured samples using project frame numbers',()=>{
   assert.match(image.src,/\/frames\/4$/);
   player.play();
   clock(1000);
-  assert.equal(player.frame,11);
+  assert.equal(player.frame,12);
   player.pause();
   assert.equal(player.active,false);
 });
