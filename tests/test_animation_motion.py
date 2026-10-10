@@ -326,3 +326,34 @@ def test_motion_lab_preview_without_uploaded_source_uses_grid(
     assert manager.result_path(started["id"]).is_file()
     with Image.open(manager.result_path(started["id"])) as preview:
         assert getattr(preview, "is_animated", False)
+
+
+def test_long_3d_preview_is_accepted_without_running_heavy_depth_work(tmp_path, monkeypatch):
+    import morphorum.animation_motion as motion
+
+    monkeypatch.setattr(motion, "OUTPUTS_DIR", tmp_path)
+    spawned = []
+    class NoStartThread:
+        def __init__(self, **kwargs):
+            spawned.append(kwargs)
+        def start(self):
+            pass
+    monkeypatch.setattr(motion.threading, "Thread", NoStartThread)
+    manager = motion.MotionPreviewManager()
+    project = sample_project(max_frames=196)
+    project["animation"]["mode"] = "3d"
+    accepted = manager.start(project=project, source_path=None)
+    assert accepted["id"]
+    assert spawned
+    project["animation"]["max_frames"] = motion.PREVIEW_MAX_3D_SOURCE_FRAMES
+    assert manager.start(project=project, source_path=None)["id"]
+    project["animation"]["max_frames"] = motion.PREVIEW_MAX_3D_SOURCE_FRAMES + 1
+    with pytest.raises(MotionPreviewError, match="3000 frames"):
+        manager.start(project=project, source_path=None)
+
+
+def test_long_preview_capture_is_bounded_but_includes_endpoints():
+    positions = capture_frames(196, 72)
+    assert len(positions) <= 72
+    assert positions[0] == 0
+    assert positions[-1] == 195
