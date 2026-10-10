@@ -154,3 +154,50 @@ def test_hybrid_compositing_opt_in_invalid_schedule_and_bounds():
     project["hybrid"]["composite_enabled"] = False
     validate_hybrid_composite(project)
     assert composite_opacity_for_frame(project, 3) == 0
+
+
+def test_post_temporal_composite_is_resume_idempotent_and_preserves_sources(
+    tmp_path, monkeypatch,
+):
+    import morphorum.animation_render as renderer
+    from morphorum.animation_render import AnimationRenderJob, AnimationRenderManager
+    _sequence(tmp_path, monkeypatch, count=4, fps=12)
+    monkeypatch.setattr(renderer, "OUTPUTS_DIR", tmp_path / "output")
+    project = _project(composite_enabled=True,
+                       composite_opacity="0:(0), 1:(0.5), 2:(1)")
+    render_dir = tmp_path / "output" / "animations" / "hybrid-test" / "test-post"
+    render_dir.mkdir(parents=True)
+    snapshot = freeze_hybrid_source(project, render_dir)
+    project["_hybrid_snapshot"] = snapshot
+    job = AnimationRenderJob(
+        id="test-post", project_id="hybrid-test", project=project,
+        seed_plan=[1, 2, 3], total_frames=3,
+        results=[{"frame": i, "filename": f"frame_{i:06d}.png"}
+                 for i in range(3)],
+    )
+    for index in range(3):
+        renderer._save_frame(
+            Image.new("RGB", (24, 24), "blue"),
+            render_dir / "frames" / f"frame_{index:06d}.png",
+            metadata={"frame": index, "render_state": {
+                "temporal": {"mode": "future-anchor"}
+            }},
+        )
+    manager = AnimationRenderManager()
+    assert manager._apply_hybrid_compositing(job) is True
+    expected = [(0, 0, 255), (25, 0, 128), (50, 0, 0)]
+    for frame, pixel in enumerate(expected):
+        path = render_dir / "frames" / f"frame_{frame:06d}.png"
+        with Image.open(path) as result:
+            assert result.getpixel((0, 0)) == pixel
+            meta = json.loads(result.info["Morphorum"])
+        assert meta["render_state"]["temporal"]["mode"] == "future-anchor"
+        assert meta["hybrid_composite"]["applied"] is True
+        assert job.results[frame]["hybrid_composite"]["source_frame"] == snapshot["frame_indices"][frame]
+    # A second pass, as after a crash/restart, cannot double the source layer.
+    assert manager._apply_hybrid_compositing(job) is True
+    with Image.open(render_dir / "frames" / "frame_000001.png") as result:
+        assert result.getpixel((0, 0)) == expected[1]
+    frozen_path, _ = frozen_hybrid_frame(snapshot, render_dir, 1)
+    with Image.open(frozen_path) as frozen:
+        assert frozen.getpixel((0, 0)) == (50, 0, 0)
