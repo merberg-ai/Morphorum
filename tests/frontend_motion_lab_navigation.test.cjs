@@ -94,7 +94,7 @@ test('ML0 exposes draft motion layer presets with preview and explicit timeline 
   }
   assert.match(js, /async function motionLabPreviewOrApply\(apply\)/);
   assert.match(js, /state\.project\.motion_lab\?\.layers/);
-  assert.match(js, /body: JSON\.stringify\(\{ layers: motionLabDraftLayers \}\)/);
+  assert.match(js, /body: JSON\.stringify\(payload\)/);
   assert.match(js, /await generateMotionPreview\(result\.project\)/);
   assert.match(js, /await loadTimeline\(\)/);
   assert.match(js, /const needsLayers = id !== 'animation-motion-lab-add'/);
@@ -137,4 +137,38 @@ test('Motion Lab can edit previously saved preset layers without destructive rem
   assert.match(js, /motionLabDraftLayers\[motionLabEditingIndex\] = entry/);
   assert.match(js, /motionLabEditingIndex < 0 \? '\+ Add Preset Layer' : 'Update Selected Layer'/);
   assert.match(css, /\.animation-motion-lab-layer-actions \{display:flex;/);
+});
+
+
+test('ML1 curves and path stay entirely within Motion Lab, never Editor', () => {
+  for (const id of [
+    'animation-motion-lab-visual', 'animation-motion-lab-curves',
+    'animation-motion-lab-path', 'animation-motion-lab-play',
+    'animation-motion-lab-loop', 'animation-motion-lab-frame',
+    'animation-motion-lab-frame-value', 'animation-motion-lab-axis-readout',
+    'animation-motion-lab-undo', 'animation-motion-lab-redo',
+    'animation-motion-lab-update-curves',
+  ]) {
+    assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
+  }
+  assert.match(html, /src="\/assets\/motion-lab-visual\.js\?v=/);
+  assert.match(js, /new window\.MorphorumMotionLabVisualizer\(\)/);
+  assert.match(js, /motionLabVisual\?\.setData\(result\.diagnostics\)/);
+  assert.match(js, /motionLabVisual\?\.invalidate\(\)/);
+  assert.match(js, /if \(!apply\) payload\.project = collectProject\(\)/);
+  assert.match(js, /motionLabPreviewOrApply\(false, \{ curvesOnly: true \}\)/);
+  assert.match(js, /panels\.motion\.appendChild\(composer\)/);
+  assert.match(css, /\.animation-motion-lab-visual-grid \{display:grid;/);
+  assert.match(css, /@media\(max-width:980px\)/);
+});
+
+test('ML1 draft layers support undo, redo, enable/disable and reordering', () => {
+  assert.match(js, /function commitMotionLabDraft\(\)/);
+  assert.match(js, /function restoreMotionLabDraft\(direction\)/);
+  assert.match(js, /motionLabDraftLayers\[index\]\.enabled = enabled\.checked/);
+  assert.match(js, /Move layer earlier/);
+  assert.match(js, /Move layer later/);
+  assert.match(js, /motionLabHistory\.slice\(0, motionLabHistoryIndex \+ 1\)/);
+  assert.match(js, /motionLabHistoryIndex = motionLabHistory\.length - 1/);
+  assert.match(js, /input\.id\.startsWith\('animation-motion-lab-'\)/);
 });
