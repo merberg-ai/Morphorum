@@ -4555,7 +4555,71 @@
       });
       const actions = document.createElement('div');
       actions.className = 'animation-motion-lab-layer-actions';
-      actions.append(toggle, up, down, edit, remove);
+      actions.append(toggle, up, down, edit);
+      if (layer.type === 'recording') {
+        const rename = document.createElement('button');
+        rename.type = 'button';
+        rename.className = 'secondary-button compact';
+        rename.textContent = 'Rename';
+        rename.disabled = !ready;
+        rename.addEventListener('click', () => {
+          if (item.querySelector('.animation-motion-take-rename')) return;
+          const form = document.createElement('form');
+          form.className = 'animation-motion-take-rename';
+          const field = document.createElement('input');
+          field.type = 'text';
+          field.maxLength = 80;
+          field.value = layer.name || 'Recorded take';
+          field.setAttribute('aria-label', 'Recording take name');
+          const save = document.createElement('button');
+          save.type = 'submit';
+          save.className = 'primary-button compact';
+          save.textContent = 'Save name';
+          const cancel = document.createElement('button');
+          cancel.type = 'button';
+          cancel.className = 'secondary-button compact';
+          cancel.textContent = 'Cancel';
+          cancel.addEventListener('click', () => form.remove());
+          form.addEventListener('submit', event => {
+            event.preventDefault();
+            const value = field.value.trim();
+            if (!value) {
+              motionLabNotify('Take name cannot be empty.');
+              field.focus();
+              return;
+            }
+            motionLabDraftLayers[index].name = value;
+            commitMotionLabDraft();
+            motionLabNotify('Renamed recording take to ' + value + '.');
+          });
+          form.append(field, save, cancel);
+          item.appendChild(form);
+          field.focus();
+          field.select();
+        });
+        const duplicate = document.createElement('button');
+        duplicate.type = 'button';
+        duplicate.className = 'secondary-button compact';
+        duplicate.textContent = 'Duplicate';
+        duplicate.disabled = !ready || motionLabDraftLayers.length >= 24;
+        duplicate.addEventListener('click', () => {
+          if (motionLabDraftLayers.length >= 24) return;
+          const copy = JSON.parse(JSON.stringify(motionLabDraftLayers[index]));
+          copy.id = 'take-copy-' + Date.now().toString(36) + '-' +
+            Math.random().toString(36).slice(2, 8);
+          copy.name = (copy.name || 'Recorded take').slice(0, 73) + ' copy';
+          // A duplicate is a separately editable take, not a second motion
+          // contribution until the author intentionally enables it.
+          copy.enabled = false;
+          motionLabDraftLayers.splice(index + 1, 0, copy);
+          motionLabEditingIndex = -1;
+          commitMotionLabDraft();
+          motionLabNotify('Duplicated take as a disabled layer. Enable it when ready.');
+          void motionLabPreviewOrApply(false, {curvesOnly:true});
+        });
+        actions.append(rename, duplicate);
+      }
+      actions.append(remove);
       item.append(desc, actions);
       list.appendChild(item);
     });
