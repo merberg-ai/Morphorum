@@ -14,6 +14,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from PIL import Image, ImageOps
+
+from .schedules import ScheduleError, resolve_numeric_schedule, validate_numeric_schedule
 from .animation_projects import animation_project_directory
 
 _FILENAME = re.compile(r"frame_[0-9]{6}\.png\Z")
@@ -37,7 +40,19 @@ def normalize_hybrid_settings(raw: Any) -> dict[str, Any]:
     enabled = data.get("enabled", False)
     if not isinstance(enabled, bool):
         raise HybridRenderError("Hybrid source enabled setting must be a boolean.")
-    return {"enabled": enabled, "offset_frames": offset, "end_policy": "hold-last"}
+    composite_enabled = data.get("composite_enabled", False)
+    if not isinstance(composite_enabled, bool):
+        raise HybridRenderError("Hybrid compositing enabled setting must be a boolean.")
+    opacity_schedule = str(data.get("composite_opacity", "0:(0.35)") or "").strip()
+    if len(opacity_schedule) > 1024:
+        raise HybridRenderError("Hybrid opacity schedule exceeds 1024 characters.")
+    if composite_enabled and not enabled:
+        raise HybridRenderError("Enable hybrid video source input before enabling compositing.")
+    return {
+        "enabled": enabled, "offset_frames": offset, "end_policy": "hold-last",
+        "composite_enabled": composite_enabled,
+        "composite_opacity": opacity_schedule,
+    }
 
 
 def source_index(frame: int, render_fps: float, source_fps: float, count: int, offset: int = 0) -> int:
@@ -171,3 +186,74 @@ def frozen_hybrid_frame(
         "policy": snapshot["end_policy"],
         "mode": snapshot["mode"],
     }
+
+
+def composite_opacity_for_frame(
+    project: dict[str, Any],
+    frame: int,
+) -> float:
+    """Resolve frame opacity from Deforum-style numeric expression schedules."""
+    data = project.get("hybrid") or {}
+    if not data.get("composite_enabled", False):
+        return 0.0
+    settings = project.get("animation") or {}
+    total = int(settings.get("max_frames", 1))
+    fps = float(settings.get("fps", 24))
+    seed = max(0, int((project.get("generation") or {}).get("seed", 0)))
+    schedule = str(data.get("composite_opacity") or "0:(0.35)")
+    try:
+        opacity = float(resolve_numeric_schedule(
+            schedule, frame=frame, max_frames=total, seed=seed,
+            fps=fps, interpolation="linear",
+        ))
+    except (ScheduleError, TypeError, ValueError, OverflowError) as exc:
+        raise HybridRenderError(f"Invalid hybrid opacity schedule at frame {frame}: {exc}") from exc
+    if not math.isfinite(opacity) or not 0.0 <= opacity <= 1.0:
+        raise HybridRenderError(
+            f"Hybrid video opacity at frame {frame} is {opacity:g}; allowed range is 0 to 1."
+        )
+    return opacity
+
+
+def validate_hybrid_composite(project: dict[str, Any]) -> None:
+    """Reject invalid hybrid schedules before a potentially expensive GPU run."""
+    config = normalize_hybrid_settings(project.get("hybrid"))
+    if not config["composite_enabled"]:
+        return
+    animation = project.get("animation") or {}
+    total = int(animation.get("max_frames", 1))
+    fps = float(animation.get("fps", 24))
+    seed = max(0, int((project.get("generation") or {}).get("seed", 0)))
+    try:
+        result = validate_numeric_schedule(
+            config["composite_opacity"], max_frames=total, fps=fps,
+            seed=seed, interpolation="linear",
+        )
+    except (ScheduleError, TypeError, ValueError) as exc:
+        raise HybridRenderError(f"Invalid hybrid opacity schedule: {exc}") from exc
+    if not result.get("valid"):
+        issues = result.get("issues", [])
+        message = str(issues[0].get("message", "Invalid expression")) if issues else "Invalid expression"
+        raise HybridRenderError("Invalid hybrid opacity schedule: " + message)
+    for frame in range(total):
+        composite_opacity_for_frame(project, frame)
+
+
+def blend_hybrid_video(
+    generated: Image.Image,
+    source: Image.Image,
+    opacity: float,
+) -> Image.Image:
+    """Composite source video over the completed diffusion/temporal frame."""
+    if not 0.0 <= opacity <= 1.0 or not math.isfinite(opacity):
+        raise HybridRenderError("Hybrid compositing opacity must be between 0 and 1.")
+    base = generated.convert("RGB")
+    if opacity == 0.0:
+        return base
+    overlay = ImageOps.fit(
+        ImageOps.exif_transpose(source).convert("RGB"),
+        base.size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5),
+    )
+    if opacity == 1.0:
+        return overlay
+    return Image.blend(base, overlay, opacity)

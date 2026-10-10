@@ -53,12 +53,18 @@ async def test_video_upload_atomic_and_bounded(tmp_path, monkeypatch):
         "width": 320, "height": 240, "fps": 24, "duration_seconds": 1,
         "estimated_frames": 24,
     })
+    # A replacement video must not keep the previous extraction visible.
+    old_frames = tmp_path / "assets" / "hybrid" / "frames"
+    old_frames.mkdir(parents=True)
+    (old_frames / "manifest.json").write_text('{"frames": 1}')
+    (old_frames / "frame_000001.png").write_bytes(b"stale")
     async def chunks():
         yield b"video-"
         yield b"contents"
     result = await source.store_managed_video("test", "clip.mp4", chunks())
     assert result["size_bytes"] == 14
     assert (tmp_path / "assets" / "hybrid" / "source.mp4").read_bytes() == b"video-contents"
+    assert not old_frames.exists(), "Replacing the video must retire the previous extraction"
 
     monkeypatch.setattr(source, "MAX_UPLOAD_BYTES", 3)
     async def oversized():
@@ -75,6 +81,9 @@ async def test_invalid_probe_keeps_previous_video(tmp_path, monkeypatch):
     path = source.managed_video_path("test", "clip.mp4")
     path.parent.mkdir(parents=True)
     path.write_bytes(b"previous")
+    frames = path.parent / "frames"
+    frames.mkdir()
+    (frames / "manifest.json").write_text('{"frames": 2}')
     monkeypatch.setattr(source, "_probe_file", lambda _path: (_ for _ in ()).throw(
         HybridSourceError("Bad video")))
     async def chunks():
@@ -82,6 +91,7 @@ async def test_invalid_probe_keeps_previous_video(tmp_path, monkeypatch):
     with pytest.raises(HybridSourceError):
         await source.store_managed_video("test", "clip.mp4", chunks())
     assert path.read_bytes() == b"previous"
+    assert (frames / "manifest.json").exists(), "Failed uploads must preserve existing frames"
 
 @pytest.fixture
 def anyio_backend():

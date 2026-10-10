@@ -1927,6 +1927,8 @@
       qs('#animation-notes').value = project.notes || '';
       qs('#animation-hybrid-render-enabled').checked = project.hybrid?.enabled === true;
       qs('#animation-hybrid-offset').value = project.hybrid?.offset_frames ?? 0;
+      qs('#animation-hybrid-composite-enabled').checked = project.hybrid?.composite_enabled === true;
+      qs('#animation-hybrid-composite-opacity').value = project.hybrid?.composite_opacity ?? '0:(0.35)';
       qs('#animation-schema-badge').textContent = 'Project loaded';
 
       const projectFile = qs('#animation-project-path');
@@ -2047,6 +2049,8 @@
         enabled: Boolean(qs('#animation-hybrid-render-enabled')?.checked),
         offset_frames: Number(qs('#animation-hybrid-offset')?.value ?? 0),
         end_policy: 'hold-last',
+        composite_enabled: Boolean(qs('#animation-hybrid-composite-enabled')?.checked),
+        composite_opacity: qs('#animation-hybrid-composite-opacity')?.value ?? '0:(0.35)',
       },
       notes: qs('#animation-notes')?.value || '',
     };
@@ -3760,7 +3764,17 @@
 
 
   // B6.2: independent managed-source lab. Never modifies animation project settings.
-  const hybrid = { filename: '', info: null, jobId: '', timer: null, frames: null };
+  const hybrid = {
+    filename: '', info: null, jobId: '', timer: null, frames: null,
+    requestToken: 0, previewRevision: 0,
+  };
+  function hybridClearPreview() {
+    hybrid.frames = null;
+    const preview = qs('#animation-hybrid-preview');
+    const image = qs('#animation-hybrid-frame');
+    if (preview) preview.hidden = true;
+    if (image) image.removeAttribute('src');
+  }
   function hybridProjectId() { return state.project?.id || ''; }
   function hybridBase() {
     return '/api/animation/projects/' + encodeURIComponent(hybridProjectId());
@@ -3782,8 +3796,9 @@
   }
   async function hybridLoadFrames() {
     const projectId = hybridProjectId();
-    const manifest = await api(hybridBase() + '/hybrid-frames');
-    if (hybridProjectId() !== projectId) return;
+    const token = hybrid.requestToken;
+    const manifest = await api(hybridBase() + '/hybrid-frames?refresh=' + (++hybrid.previewRevision));
+    if (hybridProjectId() !== projectId || hybrid.requestToken !== token) return;
     hybrid.frames = manifest;
     const slider = qs('#animation-hybrid-frame-slider');
     slider.max = String(manifest.frames);
@@ -3797,7 +3812,7 @@
     if (!projectId) return;
     try {
       await hybridLoadFrames();
-      if (hybridProjectId() === projectId) {
+      if (hybridProjectId() === projectId && hybrid.frames) {
         hybridMessage(hybrid.frames.frames + ' extracted source frames ready. Enable anchor input to use them in rendering.');
       }
     } catch (_) {
@@ -3807,7 +3822,9 @@
   function hybridDisplayFrame() {
     if (!hybrid.frames || !hybridProjectId()) return;
     const index = Math.max(1, Math.min(hybrid.frames.frames, Number(qs('#animation-hybrid-frame-slider').value) || 1));
-    qs('#animation-hybrid-frame').src = hybridBase() + '/hybrid-frames/' + index;
+    const revision = encodeURIComponent(String(hybrid.frames.extraction_id || hybrid.frames.source_mtime_ns || 'legacy'));
+    qs('#animation-hybrid-frame').src = hybridBase() + '/hybrid-frames/' + index +
+      '?revision=' + revision + '&refresh=' + hybrid.previewRevision;
     qs('#animation-hybrid-frame-caption').textContent = 'Frame ' + index + ' of ' + hybrid.frames.frames;
   }
   async function hybridUpload() {
@@ -3815,22 +3832,32 @@
     if (!hybridProjectId()) return hybridMessage('Save or select a project first.');
     if (!file) return hybridMessage('Select a video file.');
     if (file.size > 512 * 1024 * 1024) return hybridMessage('Video exceeds 512 MiB limit.');
+    const projectId = hybridProjectId();
+    const token = ++hybrid.requestToken;
+    hybrid.info = null;
+    hybrid.filename = '';
+    hybridClearPreview();
+    hybridButtons();
     hybridMessage('Uploading and inspecting ' + file.name + '…');
     try {
       const reply = await api(hybridBase() + '/hybrid-video', {
         method: 'PUT', headers: { 'Content-Type': 'application/octet-stream', 'x-filename': file.name }, body: file,
       });
+      if (hybridProjectId() !== projectId || hybrid.requestToken !== token) return;
       hybrid.filename = reply.video.storage_name;
       hybrid.info = reply.video;
-      // Uploading a different video does not make previously extracted
-      // PNGs correspond to it. Require a fresh extraction before enabling.
-      hybrid.frames = null;
-      qs('#animation-hybrid-preview').hidden = true;
+      // The successful upload invalidates old extraction on the server.
+      hybridClearPreview();
       qs('#animation-hybrid-end').value = String(Math.min(10, hybrid.info.duration_seconds));
-      hybridMessage('Accepted ' + reply.video.width + '×' + reply.video.height + ', ' +
-        reply.video.duration_seconds + 's, ' + reply.video.fps + ' FPS, codec ' + reply.video.codec + '.');
-    } catch (error) { hybridMessage('Upload failed: ' + error.message); }
-    hybridButtons();
+      hybridMessage('Accepted ' + file.name + ': ' + reply.video.width + '×' + reply.video.height +
+        ', ' + reply.video.duration_seconds + 's, ' + reply.video.fps +
+        ' FPS. Previous extraction cleared; extract this video to continue.');
+    } catch (error) {
+      if (hybridProjectId() === projectId && hybrid.requestToken === token) {
+        hybridMessage('Upload failed: ' + error.message + '. Previous source was not replaced.');
+      }
+    }
+    if (hybridProjectId() === projectId && hybrid.requestToken === token) hybridButtons();
   }
   async function hybridPoll() {
     if (!hybrid.jobId) return;
@@ -3855,6 +3882,9 @@
   }
   async function hybridExtract() {
     if (!hybrid.info || !hybridProjectId()) return;
+    hybrid.requestToken++;
+    hybridClearPreview();
+    hybridMessage('Extracting new frames. Previous preview hidden…');
     try {
       const job = await api(hybridBase() + '/hybrid-extraction', {
         method: 'POST',
@@ -3881,9 +3911,8 @@
     hybrid.info = null;
     hybrid.jobId = '';
     hybrid.timer = null;
-    hybrid.frames = null;
-    const preview = qs('#animation-hybrid-preview');
-    if (preview) preview.hidden = true;
+    hybrid.requestToken++;
+    hybridClearPreview();
     const fileInput = qs('#animation-hybrid-file');
     if (fileInput) fileInput.value = '';
     hybridMessage('Checking for previously extracted frames…');
@@ -3892,7 +3921,15 @@
   }
   function bindHybrid() {
     qs('#animation-hybrid-upload')?.addEventListener('click', hybridUpload);
-    qs('#animation-hybrid-file')?.addEventListener('change', hybridButtons);
+    qs('#animation-hybrid-file')?.addEventListener('change', () => {
+      // A selected replacement must never display the previous extraction.
+      ++hybrid.requestToken;
+      hybrid.filename = '';
+      hybrid.info = null;
+      hybridClearPreview();
+      hybridMessage('New video selected. Upload & inspect, then extract its frames.');
+      hybridButtons();
+    });
     qs('#animation-hybrid-extract')?.addEventListener('click', hybridExtract);
     qs('#animation-hybrid-cancel')?.addEventListener('click', hybridCancel);
     qs('#animation-hybrid-frame-slider')?.addEventListener('input', hybridDisplayFrame);
@@ -3903,6 +3940,20 @@
       }
     });
     qs('#animation-hybrid-offset')?.addEventListener('change', () => markDirty());
+    qs('#animation-hybrid-composite-enabled')?.addEventListener('change', () => {
+      if (qs('#animation-hybrid-composite-enabled')?.checked) {
+        const hybridEnabled = qs('#animation-hybrid-render-enabled');
+        if (hybridEnabled && !hybridEnabled.checked) hybridEnabled.checked = true;
+      }
+      markDirty();
+    });
+    qs('#animation-hybrid-render-enabled')?.addEventListener('change', () => {
+      if (!qs('#animation-hybrid-render-enabled')?.checked) {
+        const composite = qs('#animation-hybrid-composite-enabled');
+        if (composite) composite.checked = false;
+      }
+    });
+    qs('#animation-hybrid-composite-opacity')?.addEventListener('input', () => markDirty());
     hybridButtons();
   }
 

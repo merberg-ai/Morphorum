@@ -43,6 +43,7 @@ def _project(**settings) -> dict:
 def test_hybrid_defaults_are_disabled_and_offset_validated():
     assert normalize_hybrid_settings(None) == {
         "enabled": False, "offset_frames": 0, "end_policy": "hold-last",
+        "composite_enabled": False, "composite_opacity": "0:(0.35)",
     }
     with pytest.raises(HybridRenderError):
         normalize_hybrid_settings({"enabled": "false"})
@@ -116,3 +117,87 @@ def test_hybrid_source_revision_guard_detects_replaced_upload(tmp_path, monkeypa
     original_video.write_bytes(b"new-source-is-different")
     with pytest.raises(HybridRenderError, match="changed"):
         freeze_hybrid_source(_project(), tmp_path / "next")
+
+
+def test_hybrid_compositing_opacity_schedule_and_blend():
+    from morphorum.animation_hybrid_render import (
+        blend_hybrid_video, composite_opacity_for_frame, validate_hybrid_composite,
+    )
+    project = _project(
+        composite_enabled=True,
+        composite_opacity="0:(0), 4:(1)",
+    )
+    validate_hybrid_composite(project)
+    assert composite_opacity_for_frame(project, 0) == pytest.approx(0)
+    assert composite_opacity_for_frame(project, 2) == pytest.approx(0.5)
+    assert composite_opacity_for_frame(project, 4) == pytest.approx(1)
+    generated = Image.new("RGB", (2, 2), (0, 0, 255))
+    source = Image.new("RGB", (2, 2), (255, 0, 0))
+    assert blend_hybrid_video(generated, source, 0).getpixel((0, 0)) == (0, 0, 255)
+    assert blend_hybrid_video(generated, source, 1).getpixel((0, 0)) == (255, 0, 0)
+    assert blend_hybrid_video(generated, source, .5).getpixel((0, 0)) == (127, 0, 127)
+
+
+def test_hybrid_compositing_opt_in_invalid_schedule_and_bounds():
+    from morphorum.animation_hybrid_render import (
+        validate_hybrid_composite, composite_opacity_for_frame,
+    )
+    with pytest.raises(HybridRenderError, match="Enable hybrid"):
+        normalize_hybrid_settings({"enabled": False, "composite_enabled": True})
+    project = _project(composite_enabled=True, composite_opacity="0:(1.2)")
+    with pytest.raises(HybridRenderError, match="allowed range"):
+        validate_hybrid_composite(project)
+    project["hybrid"]["composite_opacity"] = "0:(bad(expression)"
+    with pytest.raises(HybridRenderError, match="Invalid hybrid opacity schedule"):
+        validate_hybrid_composite(project)
+    project["hybrid"]["composite_opacity"] = "0:(0.3)"
+    project["hybrid"]["composite_enabled"] = False
+    validate_hybrid_composite(project)
+    assert composite_opacity_for_frame(project, 3) == 0
+
+
+def test_post_temporal_composite_is_resume_idempotent_and_preserves_sources(
+    tmp_path, monkeypatch,
+):
+    import morphorum.animation_render as renderer
+    from morphorum.animation_render import AnimationRenderJob, AnimationRenderManager
+    _sequence(tmp_path, monkeypatch, count=4, fps=12)
+    monkeypatch.setattr(renderer, "OUTPUTS_DIR", tmp_path / "output")
+    project = _project(composite_enabled=True,
+                       composite_opacity="0:(0), 1:(0.5), 2:(1)")
+    render_dir = tmp_path / "output" / "animations" / "hybrid-test" / "test-post"
+    render_dir.mkdir(parents=True)
+    snapshot = freeze_hybrid_source(project, render_dir)
+    project["_hybrid_snapshot"] = snapshot
+    job = AnimationRenderJob(
+        id="test-post", project_id="hybrid-test", project=project,
+        seed_plan=[1, 2, 3], total_frames=3,
+        results=[{"frame": i, "filename": f"frame_{i:06d}.png"}
+                 for i in range(3)],
+    )
+    for index in range(3):
+        renderer._save_frame(
+            Image.new("RGB", (24, 24), "blue"),
+            render_dir / "frames" / f"frame_{index:06d}.png",
+            metadata={"frame": index, "render_state": {
+                "temporal": {"mode": "future-anchor"}
+            }},
+        )
+    manager = AnimationRenderManager()
+    assert manager._apply_hybrid_compositing(job) is True
+    expected = [(0, 0, 255), (25, 0, 127), (50, 0, 0)]
+    for frame, pixel in enumerate(expected):
+        path = render_dir / "frames" / f"frame_{frame:06d}.png"
+        with Image.open(path) as result:
+            assert result.getpixel((0, 0)) == pixel
+            meta = json.loads(result.info["Morphorum"])
+        assert meta["render_state"]["temporal"]["mode"] == "future-anchor"
+        assert meta["hybrid_composite"]["applied"] is True
+        assert job.results[frame]["hybrid_composite"]["source_frame"] == snapshot["frame_indices"][frame]
+    # A second pass, as after a crash/restart, cannot double the source layer.
+    assert manager._apply_hybrid_compositing(job) is True
+    with Image.open(render_dir / "frames" / "frame_000001.png") as result:
+        assert result.getpixel((0, 0)) == expected[1]
+    frozen_path, _ = frozen_hybrid_frame(snapshot, render_dir, 1)
+    with Image.open(frozen_path) as frozen:
+        assert frozen.getpixel((0, 0)) == (50, 0, 0)
