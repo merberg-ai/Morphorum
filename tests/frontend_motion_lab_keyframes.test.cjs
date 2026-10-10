@@ -155,3 +155,19 @@ test('ML1b path editing keeps X/Y velocities an atomic single undoable draft edi
   assert.match(animation, /commitMotionLabDraft\(\);/);
   assert.match(html, /Edit path X\/Y by dragging/);
 });
+
+
+test('ML1b smooth interpolation options and compact desktop checkboxes are available', () => {
+  for (const mode of ['linear', 'hold', 'smoothstep', 'smootherstep', 'cubic']) {
+    assert.match(html, new RegExp('<option value="' + mode + '">'));
+  }
+  assert.match(html, /Ease In \/ Out \(smooth\)/);
+  assert.match(html, /Smooth Cubic \(through keyframes\)/);
+  assert.match(css, /#animation-panel-motion \.animation-motion-lab-edit-toggle input\[type="checkbox"\]/);
+  assert.match(css, /#animation-panel-motion \.animation-motion-lab-loop input\[type="checkbox"\]/);
+  assert.match(css, /#animation-panel-motion \.animation-motion-lab-layer-toggle input\[type="checkbox"\]/);
+  assert.match(css, /width:16px;/);
+  assert.match(css, /height:16px;/);
+  assert.match(css, /flex:0 0 16px;/);
+  assert.match(animation, /motionLabDraftLayers\[index\] = \{\.\.\.motionLabDraftLayers\[index\], \[key\]:value\}/);
+});
