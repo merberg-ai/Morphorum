@@ -160,3 +160,7 @@ test('ML2 quick actions stay available during scrolling and use the canonical co
   assert.match(css, /\.animation-motion-lab-quick-actions\s*\{[^}]*position:sticky;bottom:8px/s);
   assert.match(css, /@media\(max-width:640px\)[\s\S]*animation-motion-lab-quick-actions/s);
 });
+
+test('sticky Motion Lab toolbar is desktop-only and cannot overlay mobile navigation', () => {
+  assert.match(css, /@media \(max-width: 767px\), \(hover: none\) and \(pointer: coarse\)\s*\{\s*\.animation-motion-lab-quick-actions\s*\{\s*display: none !important;/);
+});
