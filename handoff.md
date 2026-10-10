@@ -1,3 +1,11 @@
+# 2026-10-10 ML3.1 candidate: project-owned PCM WAV audio motion
+
+Current `feature/motion-lab` contains first **end-to-end ML3.1** candidate, not yet Windows-accepted. `backend/morphorum/audio_motion_upload.py` validates and decodes bounded mono/stereo PCM WAV (<=20 MiB, <=3 min), stores content-addressed source under the validated project directory, analyzes full-band frame RMS via ML3.0 module and returns frame-aligned envelope at `/api/animation/projects/{project_id}/motion-lab/audio-analyze`. Existing `motion_lab.py` now normalizes `type:"audio"` draft layers, FPS-locks analysis, recomputes balanced pulse values and compiles to the native 3D camera axis, with existing idempotent Apply and conflict protection. The Motion Lab tab has Audio-Reactive Motion card (Analyze WAV then Add Audio Motion Layer); desktop/mobile responsive controls and non-destructive curves preview. Tests include malformed audio and native track compilation.
+
+**Gate on Windows:** Update `feature/motion-lab`, hard refresh, saved 3D project 12 FPS / 48+ frames. Upload a short PCM WAV with loud/quiet beat crossings, inspect Add Audio layer and six-axis curves. Test disable, Undo/Redo, Preview Draft Motion, Apply twice (no doubling), save/reopen, bad file handling and phone layout. This gate has **not** been physically passed. Compressed audio decode, dedicated bass filter, live audio synchronization and export/mux are NOT implemented. PR #19 remains draft, unchanged target `dev-ui`. Keep `main`, `dev-ui`, B6.3.3 untouched.
+
+---
+
 # 2026-10-10 ML2.3 accepted / ML3.0 CPU foundation
 
 User physically accepted punch-in on Windows. Immutable GitHub checkpoint: `checkpoint/motion-lab-ml2-3-punch-in-verified-20261010` @ `6ffc24bb9bac60e0be298b020833df176a7d0a10` (both CI workflows green). PR #19 stays draft targeting `dev-ui`. No merge or edits to main/dev-ui/B6.3.3. Optional browser gamepad not physically verified.
