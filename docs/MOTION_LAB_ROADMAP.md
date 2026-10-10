@@ -277,6 +277,16 @@ ML3.3 frame player was physically accepted October 10, 2026, frozen as `checkpoi
 
 **Physical gate:** 196 frames at 12 FPS with the test WAV; generate Fast, Balanced, Detailed; verify frames reported are 36/72/144, scrubbing/loop/audio playback work unchanged, progress reaches completion and disk usage remains acceptable. Confirm mobile selector; compare visually visible differences. Stop before ML3.4 is called accepted, and before merging PR #19. Further CPU frame caching, cancellation and deeper performance optimizations are future work.
 
+### ML4.1: Real animation pipeline fidelity and Windows GPU gate
+
+ML3.4 was physically accepted October 10, 2026 and frozen at `checkpoint/motion-lab-ml3-4-preview-quality-verified-20261010` @ `e951d5c72c6ce094cf2bca1c91f3eac9ca3489aa`. Do not modify that checkpoint.
+
+**Audited integration:** `compile_motion_lab` creates canonical frame-indexed `tracks.camera_3d` schedules and updates the editor's matching legacy camera fields; `animation_render` resolves each actual render frame with `resolve_project_frame(project, frame, lora_records=...)`, then writes `camera_3d` from that resolved state into per-frame telemetry. `tests/test_motion_lab_render_integration.py` checks that a mixed preset + keyboard recording + transient kick layer resolves to precisely the same six-axis values that the real render's `_frame_state_for_frame` metadata serializer records, including cadence-anchor and intermediate frames, and that re-Apply is idempotent. These tests do **not** replace a physical diffusion run or validate image quality.
+
+**Required ML4.1 Windows GPU gate (pause before merge):** on `feature/motion-lab` with RTX 4080 SUPER, create a saved SDXL project in 3D mode at 512×512, 12 FPS, 48 frames, cadence 3. Add gentle Wave (0.35–0.45), a small keyboard-recorded X/yaw take, and a controlled kick-transient Z pulse layer from a short PCM WAV. Preview curves and camera movement, then explicitly **Apply to Animation**, save and render 48 frames. Check completed render frame PNGs, per-frame telemetry (especially frames 0, 2, 3, 4, 6, 9, 23, 24, 47) against the compiled six-axis curves; verify prompt change at frame 24, anchor vs intermediate camera movement, and that no unexpected repeated Z pushes occur. Rerender without re-applying; compare frame metadata/schedules and VRAM usage. Test cancel/resume only after the first short render passes. Do not merge PR #19 until the user physically verifies GPU output.
+
+**Still beyond ML4.1:** long-animation stress, multi-LoRA + hybrid source conflicts, audio soundtrack mux/export, perf telemetry, mobile final polish, and ML4 integration PR review. Preserve `main`, `dev-ui` and paused B6.3.3.
+
 ### ML4: Final integration and physical acceptance
 
 - Optional custom presets/import-export, compatibility test against Deforum `translation_x/y/z` and `rotation_3d_x/y/z`, field mapping.
