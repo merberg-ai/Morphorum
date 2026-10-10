@@ -178,10 +178,13 @@ def _preset_frame(layer: dict[str, Any], frame: int, fps: float) -> dict[str, fl
                       translation_y=amp["translation_y"] * .5 * math.cos(phase),
                       rotation_y=amp["rotation_y"] * .6 * math.sin(phase))
     elif name == "spiral":
-        values.update(translation_x=amp["translation_x"] * .55 * math.cos(phase),
-                      translation_y=amp["translation_y"] * .55 * math.sin(phase),
-                      translation_z=amp["translation_z"] * .3,
-                      rotation_z=amp["rotation_z"] * .55)
+        # A real helical move: circular X/Y velocity + continuous forward
+        # travel and roll. Use the full axis amplitudes rather than the old
+        # 0.55/0.3 multipliers that were barely visible in short previews.
+        values.update(translation_x=amp["translation_x"] * 1.6 * math.cos(phase),
+                      translation_y=amp["translation_y"] * 1.6 * math.sin(phase),
+                      translation_z=amp["translation_z"] * .9,
+                      rotation_z=amp["rotation_z"] * 1.4)
     elif name == "figure-eight":
         values.update(translation_x=amp["translation_x"] * math.sin(phase),
                       translation_y=amp["translation_y"] * math.sin(phase * 2))
@@ -211,12 +214,15 @@ def compile_motion_lab(
     project: dict[str, Any],
     *,
     layers: list[dict[str, Any]] | None = None,
+    conflict_policy: str = "reject",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Compile draft layers to real camera_3d tracks, without saving anything.
 
-    A prior applied snapshot protects hand-edited timeline tracks from overwrite.
-    Re-application always starts from the original stored base, never from a
-    prior composite. The returned copy is safe to pass to save_animation_project.
+    A prior applied snapshot protects hand-edited timeline tracks from
+    accidental overwrite. Re-application starts from the original base.
+    Preview can opt in to using newly edited camera tracks as a temporary
+    base, and Apply requires a separate explicit rebase confirmation.
+    The returned copy is safe to pass to save_animation_project.
     """
     project = deepcopy(project)
     if str(project.get("animation", {}).get("mode") or "2d").lower() != "3d":
@@ -226,14 +232,19 @@ def compile_motion_lab(
     if layers is not None:
         data["layers"] = layers
     lab = normalize_motion_lab(data, project)
+    if conflict_policy not in {"reject", "use-current"}:
+        raise MotionLabError("Unknown Motion Lab camera conflict policy.")
     current = _camera_snapshot(project)
     last = lab["last_applied_tracks"]
-    if last is not None and current != last:
+    camera_changed = last is not None and current != last
+    if camera_changed and conflict_policy == "reject":
         raise MotionLabError(
             "Camera schedules changed since Motion Lab last applied them. "
-            "Review the Editor timeline before applying new layers."
+            "Confirm 'Use current camera as base' before replacing existing motion."
         )
-    base = lab["base_tracks"] or current
+    # A rebase treats the user's CURRENT hand-edited timeline as the new base.
+    # Preview never saves it; explicit Apply can persist the rebased result.
+    base = current if camera_changed else (lab["base_tracks"] or current)
     if not lab["layers"]:
         raise MotionLabError("Add at least one Motion Lab preset layer.")
     seed = max(0, int((project.get("generation") or {}).get("seed", -1)))
@@ -280,6 +291,8 @@ def compile_motion_lab(
     project["motion_lab"] = lab
     result = {
         "frames": count, "fps": fps, "layer_count": len(lab["layers"]),
+        "camera_changed": camera_changed,
+        "rebased": camera_changed and conflict_policy == "use-current",
         "limited": {axis: count for axis, count in limited.items() if count},
         "samples": [
             {"frame": frame, **{axis: signals[axis][frame] for axis in AXES}}
