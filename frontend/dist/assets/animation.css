@@ -2124,3 +2124,8 @@ dialog#animation-deforum-dialog {
   .animation-motion-lab-quick-actions button {flex:1 1 auto;min-height:42px;padding:8px 6px;font-size:.78rem;}
   .animation-motion-lab-quick-actions #animation-motion-lab-quick-status {width:100%;text-align:center;}
 }
+
+/* Mobile bottom navigation owns the viewport footer; desktop alone gets the sticky dock. */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  .animation-motion-lab-quick-actions { display: none !important; }
+}
