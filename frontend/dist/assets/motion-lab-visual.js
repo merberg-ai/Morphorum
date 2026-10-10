@@ -101,6 +101,8 @@
       this.graphScales = [0.04, 0.5];
       this.onKeyframeEdit = null;
       this.onFrameChange = null;
+      this.onPlay = null;
+      this.onPause = null;
       this.onPointerDraft = null;
       this.boundTick = stamp => this.tick(stamp);
       this.slider?.addEventListener('input', () => this.setFrame(Number(this.slider.value)));
@@ -416,6 +418,7 @@
       if (!this.series || this.stale || this.count <= 1) return;
       this.pause();
       this.playing = true;
+      this.onPlay?.(this.frame, this.fps);
       this.lastTick = null;
       this.carry = 0;
       if (this.button) this.button.textContent = 'Pause';
@@ -439,6 +442,7 @@
     }
     pause() {
       this.playing = false;
+      this.onPause?.();
       if (this.tickId) cancelAnimationFrame(this.tickId);
       this.tickId = 0;
       this.lastTick = null;
