@@ -159,6 +159,8 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "enabled": False,
             "offset_frames": 0,
             "end_policy": "hold-last",
+            "composite_enabled": False,
+            "composite_opacity": "0:(0.35)",
         },
         "notes": "",
     }
