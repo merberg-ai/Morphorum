@@ -204,3 +204,17 @@ test('ML2.3 punch-in requires explicit mode target end boundary and guards incom
   assert.match(animation,/snapshot:JSON\.stringify\(target\)/);
   assert.match(animation,/maxFrames: remainingFrames/);
 });
+
+test('ML3.1 WAV analysis has a live pre-layer envelope and threshold preview', () => {
+  for (const id of ['animation-motion-lab-audio-preview','animation-motion-lab-audio-plot',
+    'animation-motion-lab-audio-summary','animation-motion-lab-audio-prediction']) {
+    assert.ok(html.includes('id="' + id + '"'), 'missing ' + id);
+  }
+  assert.match(animation, /function motionLabAudioPreview\(\)/);
+  assert.match(animation, /motionLabAudioPreview\(\);/);
+  assert.match(animation, /thresholdField\.value = Math\.min\(\.1, peak \* \.55\)\.toFixed\(3\)/);
+  assert.match(animation, /i \+ pulseLength <= values\.length/);
+  assert.match(animation, /for \(const id of \['threshold','attack','release','distance'\]\)/);
+  assert.match(css, /#animation-motion-lab-audio-plot \{/);
+  assert.match(css, /@media\(max-width:540px\) \{#animation-motion-lab-audio-plot/);
+});
