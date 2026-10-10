@@ -263,6 +263,14 @@ Physical testing accepted ML2.3 punch-in, preserving original axes and untouched
 
 **3D preview length fix (pending Windows physical test):** Removed the legacy 180-frame CPU diagnostic preview restriction. 3D motion preview now accepts up to 3000 project frames, consistent with Motion Lab's composition guard; the preview still sequentially depth-warps every source frame on CPU, while GIF output captures at most 72 representative frames including endpoints. A 196-frame/12 FPS soundtrack-aligned test is now permitted, but can take noticeably longer to generate and the resulting GIF is not frame-controllable or exactly audio-synchronized. Tests assert 196 and 3000 are accepted, 3001 rejected and capture selection remains bounded. No renderer changes, no protected branch merge.
 
+### ML3.3: Frame-controlled Camera Motion Preview (first slice, physical gate pending)
+
+The user physically accepted newer audio frequency bands, audio-length matching, synchronized audio and the longer 3000-frame diagnostic preview as working; further tuning and experimentation remain welcome. ML3.2 checkpoint remains `checkpoint/motion-lab-ml3-2-long-preview-verified-20261010` at `ea1239a3e28b322bddc239ae5c9bec3432cbe011`. Do not modify earlier checkpoints or merge PR #19 without approval.
+
+ML3.3 replaces uncontrolled GIF playback **in the Camera Motion Preview display** with a bounded frame-addressable PNG player. The same CPU renderer generates its legacy GIF, then publishes its up-to-72 captured samples as individually seekable job-scoped PNGs. The browser uses the project's FPS and full source-frame count for a Play/Pause, Start, Seek, Loop and frame/time readout; when synchronized audio is enabled, browser audio currentTime acts as playback master during active playback. This is a true controllable timeline **over sampled preview frames**, not a 3000-fully-rendered-frame video or sample-accurate film player. Seek shows the most recent captured preview sample (zero-order hold), and full project motion and schedules remain unchanged. Legacy GIF remains a fallback if a preview lacks sampled-frame metadata.
+
+**Physical gate on Windows:** update feature/motion-lab, hard refresh; generate CPU Camera Motion Preview for 196 frames @ 12 FPS with analyzed `TEST1_metal.wav`; verify Play/Pause resumes from current frame, seek to frame 100 jumps immediately, Start returns to frame 0, Loop returns to start, audio ON follows the same transport, and audio OFF stays silent. Verify completion, switching away from Motion Lab pauses audio, and repeated project changes invalidate the previous player. Test phone slider/buttons and a shorter preview. Separate quality/performance presets and source-frame-exact output remain future work.
+
 ### ML4: Final integration and physical acceptance
 
 - Optional custom presets/import-export, compatibility test against Deforum `translation_x/y/z` and `rotation_3d_x/y/z`, field mapping.
