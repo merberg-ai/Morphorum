@@ -4184,7 +4184,8 @@
     const active = Boolean(motionLabRecorder?.active);
     const record = qs('#animation-motion-lab-record');
     const stop = qs('#animation-motion-lab-stop-recording');
-    if (record) record.disabled = !ready || active || motionLabDraftLayers.length >= 24;
+    if (record) record.disabled = !ready || active ||
+      (motionLabDraftLayers.length >= 24 && qs('#animation-motion-lab-record-mode')?.value !== 'punch');
     if (stop) stop.disabled = !active;
     const start = qs('#animation-motion-lab-record-start');
     const count = Number(state.project?.animation?.max_frames || 120);
