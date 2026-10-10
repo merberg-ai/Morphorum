@@ -2915,6 +2915,19 @@
       stats.textContent += ' · slow anchors ' +
         perf.slow_anchor_frames.join(', ');
     }
+    const stability = perf.stability || {};
+    if (Number.isFinite(stability.memory_delta_gib)) {
+      stats.textContent += ' · GPU allocation drift ' +
+        (stability.memory_delta_gib >= 0 ? '+' : '') +
+        stability.memory_delta_gib.toFixed(2) + ' GiB';
+    }
+    if (Number.isFinite(stability.anchor_diffusion_slowdown_ratio)) {
+      stats.textContent += ' · late/early anchor timing ' +
+        stability.anchor_diffusion_slowdown_ratio.toFixed(2) + '×';
+    }
+    if (Array.isArray(stability.warnings) && stability.warnings.length) {
+      stats.textContent += ' · stability advisory: ' + stability.warnings.join(' ');
+    }
   }
 
   function renderVideoExportState() {
