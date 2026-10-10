@@ -4049,6 +4049,8 @@
       wrapper.appendChild(video);
       panels.outputs.appendChild(wrapper);
     }
+    const motionIntro = qs('#animation-motion-lab-intro');
+    if (motionIntro) panels.motion.appendChild(motionIntro);
     const motionPreview = qs('.animation-motion-preview-card');
     if (motionPreview) panels.motion.appendChild(motionPreview);
     const history = qs('.animation-render-history-row');
