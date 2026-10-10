@@ -2129,3 +2129,9 @@ dialog#animation-deforum-dialog {
 @media (max-width: 767px), (hover: none) and (pointer: coarse) {
   .animation-motion-lab-quick-actions { display: none !important; }
 }
+
+/* ML2.3 recording-take management: inline, nonmodal rename. */
+.animation-motion-take-rename {display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;width:100%;}
+.animation-motion-take-rename input {flex:1 1 180px;min-width:0;max-width:360px;padding:8px;}
+.animation-motion-take-rename button {min-height:34px;}
+@media(max-width:540px) {.animation-motion-take-rename input {flex-basis:100%;max-width:none;}}
