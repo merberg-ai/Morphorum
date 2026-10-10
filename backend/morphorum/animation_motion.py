@@ -22,6 +22,7 @@ from .paths import OUTPUTS_DIR
 
 PREVIEW_MAX_DIMENSION = 512
 PREVIEW_MAX_CAPTURE_FRAMES = 72
+PREVIEW_MAX_3D_SOURCE_FRAMES = 3000
 SOURCE_MAX_BYTES = 32 * 1024 * 1024
 SUPPORTED_BORDER_MODES = {"replicate", "wrap"}
 
@@ -251,10 +252,10 @@ def _render_3d_motion_preview(
     """
     animation = project.get("animation", {})
     max_frames = max(1, int(animation.get("max_frames", 120)))
-    if max_frames > 180:
+    if max_frames > PREVIEW_MAX_3D_SOURCE_FRAMES:
         raise MotionPreviewError(
-            "3D camera preview supports up to 180 frames. "
-            "Reduce the frame count to preview the camera movement."
+            f"3D camera preview supports up to {PREVIEW_MAX_3D_SOURCE_FRAMES} "
+            "project frames. Reduce the frame count for this diagnostic preview."
         )
     fps = max(1.0, float(animation.get("fps", 24.0)))
     base = prepare_preview_source(
@@ -539,10 +540,10 @@ class MotionPreviewManager:
             raise MotionPreviewError("Selected preview source image is missing.")
         if (
             str(project.get("animation", {}).get("mode") or "2d").strip().lower() == "3d"
-            and int(project.get("animation", {}).get("max_frames", 120)) > 180
+            and int(project.get("animation", {}).get("max_frames", 120)) > PREVIEW_MAX_3D_SOURCE_FRAMES
         ):
             raise MotionPreviewError(
-                "3D camera previews support up to 180 frames. "
+                f"3D camera previews support up to {PREVIEW_MAX_3D_SOURCE_FRAMES} frames. "
                 "Shorten the project for this diagnostic preview."
             )
 
