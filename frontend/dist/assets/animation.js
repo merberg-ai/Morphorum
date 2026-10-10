@@ -5003,11 +5003,11 @@
     if (composer) panels.motion.appendChild(composer);
     const recording = qs('#animation-motion-lab-recording');
     if (recording) panels.motion.appendChild(recording);
-    motionLabSetupQuickActions(panels.motion);
     const visual = qs('#animation-motion-lab-visual');
     if (visual) panels.motion.appendChild(visual);
     const motionPreview = qs('.animation-motion-preview-card');
     if (motionPreview) panels.motion.appendChild(motionPreview);
+    motionLabSetupQuickActions(panels.motion);
     const history = qs('.animation-render-history-row');
     if (history) panels.outputs.prepend(history);
     const completedPreview = qs('.animation-render-preview-wrap');
