@@ -63,3 +63,28 @@ test('LoRA quick actions and shared clipboard use the same formatter', () => {
   assert.match(html, /id="lora-manager-copy"/);
   assert.match(html, /id="lora-manager-snippet"/);
 });
+
+test('Desktop has an independent wide-screen layout without replacing mobile styles', () => {
+  const html = read('index.html');
+  const desktop = read('assets/desktop.css');
+  const mobile = read('assets/app.css');
+  assert.match(html, /href="\/assets\/desktop\.css\?v=__MORPHORUM_ASSET_VERSION__" media="\(min-width: 1181px\) and \(hover: hover\) and \(pointer: fine\)"/);
+  assert.match(desktop, /grid-template-areas:\s*"top top"\s*"nav main"/);
+  assert.match(desktop, /\.main-nav\s*\{[^}]*flex-direction:\s*column/);
+  assert.match(desktop, /#animation-panel-motion\s*\{[^}]*grid-template-areas:/);
+  assert.match(desktop, /"composer visual"/);
+  assert.match(desktop, /"recording preview"/);
+  assert.match(desktop, /\.animation-motion-preview-card\s*\{[^}]*position:\s*sticky/);
+  assert.match(mobile, /@media \(max-width: 640px\)/);
+  assert.match(mobile, /\.main-nav\s*\{\s*position: fixed/);
+});
+
+test('Motion Lab explains its workflow without displaying internal milestone names', () => {
+  const html = read('index.html');
+  assert.match(html, /New to Motion Lab\? Start here/);
+  assert.match(html, /What do Strength, Cycle, Fade, and Blend mean\?/);
+  assert.match(html, /Apply to Animation/);
+  assert.doesNotMatch(html, /<h2>[^<]+\s+<small class="muted">ML\d/);
+  assert.doesNotMatch(html, /Controller recording and audio-reactive movement are coming later/);
+  assert.doesNotMatch(html, /Full-band RMS in this first release/);
+});
