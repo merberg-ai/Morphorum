@@ -127,14 +127,15 @@
       if (this.path) this.path.replaceChildren();
       if (this.slider) { this.slider.value = '0'; this.slider.disabled = true; this.slider.max = '1'; }
       if (this.status) this.status.textContent = 'Curves not compiled';
+      if (this.button) this.button.disabled = true;
       if (this.value) this.value.textContent = '0 / 0';
       if (this.time) this.time.textContent = '0.00s';
       if (this.readout) this.readout.textContent = 'Add a layer and select Update Curves.';
     }
     invalidate() {
       if (!this.series) return;
-      this.pause();
       this.stale = true;
+      this.pause();
       if (this.status) this.status.textContent = 'Draft changed · Update Curves';
       if (this.curves) this.curves.dataset.stale = 'true';
       if (this.path) this.path.dataset.stale = 'true';
