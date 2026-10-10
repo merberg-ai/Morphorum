@@ -1,6 +1,6 @@
 # Morphorum Motion Lab — implementation roadmap
 
-**Status:** ML0 camera composer and source-free CPU preview physically accepted on Windows (2026-10-09); checkpoint `checkpoint/motion-lab-ml0-windows-verified-20261009` at `f75bdf6`. ML1a browser motion curves, geometric path, frame playback and layer controls implemented on the feature branch; physical test pending. ML1b direct path/keyframe editing, ML2 recording and ML3 audio remain upcoming.
+**Status:** ML0 and ML1a physically accepted on Windows (2026-10-09); ML1a checkpoint `checkpoint/motion-lab-ml1a-windows-verified-20261009` at `b2bc351`. ML1b direct six-axis keyframe curve editing and X/Y geometric path handle editing implemented on `feature/motion-lab`, automated checks and Windows physical testing pending. ML2 controller/touch recording and ML3 audio-reactivity remain future work.
 **Branch:** `feature/motion-lab`
 **Branch base:** `dev-ui` at `bc40d18d4f5968904afedc798ecd3efdef71761a` (B6.3.2 physical acceptance)
 **Existing paused separate work:** `feature/b6-3-3-hybrid-masks` at `c0e9be0aa03472747ba4c2594c128bdcd80318ef`. Do not touch that branch.
@@ -117,11 +117,23 @@ For 2D projects: start with a 3D camera lab and a clearly disabled/limited 2D mo
 - ML1a physical gate: on Windows 24/60 frames at 12 FPS, layer Spiral + Wave and select Update Curves; confirm two motion-curve panels (translations and degrees/frame), visible normalized path, correct frame readout on drag/touch, smooth 12-FPS playback with Loop off/on. Disable/reorder layers, Undo/Redo and update curves again; verify displayed motion changes, then Preview Draft Motion and Apply to Animation with no lost settings. Repeat on portrait phone. Switch projects and ensure stale plots do not persist.
 - CI contract: Python per-frame resolver parity, API sample counts, Node runtime playback/scrub/stale handling and browser structural placement tests.
 
-### ML1b: Direct motion-path/keyframe editing (future)
+### ML1b: Direct curve/keyframe and geometric path editing (implemented; Windows acceptance pending)
 
-- Draggable curve keyframes and path handles, if added, must compile back through the existing native 3D schedule resolver. Do not treat the current auto-fit plot as physically scaled or writable motion coordinates.
-- Add robust undo/redo for authored keyframe edits and resolution/FPS retiming checks.
-- Preserve ML0 layer precedence and manual timeline conflict handling.
+- Add versioned, native camera-velocity `keyframes` layers to `motion_lab.py`. Each is bound to one of the six native axes with linear or hold interpolation, Add/Replace blend, enable state, bounded range, ordered sparse keyframes (max 128 per layer), strict duplicate/frame/value validation, and an unwarped frame-zero anchor. Existing preset layers and projects remain compatible.
+- ML1b curve editor is entirely inside Motion Lab → Motion Curves & Camera Path. Select one axis, enter precise frame and per-frame velocity, add/update/delete keyframes, or select **Edit curve by dragging** to create/drag the selected axis keyframes directly in the SVG curve. Full keyboard/numeric fallback supports browsers without pointer dragging. Keyframe layers appear alongside presets and use ML1a reorder/toggle/undo/redo.
+- Select **Edit path X/Y by dragging** to grab a point on the auto-fit geometric path. Its pixel displacement is converted to native X/Y *per-frame velocity* offsets at that frame, saved as an atomic pair of ordinary manual curve layers. Because camera travel is an integral, later path positions will also change; this does not assert absolute spatial positioning, calibrated physical units, or depth-aware occlusion. The existing CPU depth motion preview remains the authoritative visual check for warping.
+- Editing a curve or a path automatically recomputes curves through the non-mutating existing preview API (no new GPU models); the user explicitly selects Apply to Animation to persist the compiled tracks. Manual Editor schedule edits continue to use ML0 conflict protection and explicit camera rebase authorization.
+- Safety: no frame-zero movement, no arbitrary expression execution, finite values, max 24 layers / 128 keyframes each / 3000-frame preview, existing native per-axis clipping diagnostics, project save/reopen, stable frame mapping and interpolation after reload. Changing project stops and resets the visualizer; avoid editing while a compose request is pending.
+- **Windows ML1b physical gate:**
+  1. Update `feature/motion-lab`, choose a saved 3D project, 48 frames / 12 FPS, use the default calibration grid.
+  2. In Motion Lab → Motion Curves & Camera Path (not Editor), select Translation X. Add keys `0→0`, `12→0.06`, `24→-0.04`; Update Curves, scrub to frames 6, 12, 18, 24 and inspect linear slopes. Switch interpolation to Hold, confirm staircase steps, and undo/redo.
+  3. Enable **Edit curve by dragging**, drag frame-12 keyframe to frame 18 and a different value. Confirm the keyframe list and curve update; drag a new keyframe. Frame 0 must remain fixed.
+  4. Add Spiral and Push In presets; reorder the manual X keyframe layer around them, compare Add vs Replace. Confirm RGB/geometry CPU Preview Draft Motion still works, and saved animation is untouched until Apply.
+  5. Enable **Edit path X/Y by dragging** and drag a highlighted geometric path point (not start frame). Confirm X/Y manual curve changes, undo once to reverse the paired edit, and recompute the projected path. This is incremental velocity editing, not absolute XYZ point placement.
+  6. Apply to Animation, save/reopen, verify keyframe layers and resulting native camera schedules persisted; reapply to ensure no duplicated motion. Check 2D guard, malformed inputs, desktop/portrait phone touch controls, and a short SDXL render only after the CPU preview looks right.
+- CI gates: backend normalization, interpolation, precedence, persistence and path clipping; REST preview and Apply integration; Node pointer drag of keyframe and path handles; browser UI/aria/mount and responsive tests. Gate on all green CI and above physical check before checkpoint/merge.
+
+**Deferred beyond ML1b:** true absolute-camera control points/Bezier 3D path editing, physical-world units, FOV-/depth-aware path handles, inverse kinematics, axis constraints with spatial solvers. Those would need a distinct calibrated editor rather than repurposing the auto-fit display.
 
 ### ML2: Interactive recording and live controllers
 
