@@ -2135,3 +2135,10 @@ dialog#animation-deforum-dialog {
 .animation-motion-take-rename input {flex:1 1 180px;min-width:0;max-width:360px;padding:8px;}
 .animation-motion-take-rename button {min-height:34px;}
 @media(max-width:540px) {.animation-motion-take-rename input {flex-basis:100%;max-width:none;}}
+
+/* ML3.1 audio analysis card: compact on desktop, thumb-friendly on mobile. */
+.animation-motion-lab-audio {padding:18px;min-width:0;}
+.animation-motion-audio-controls {display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0;}
+.animation-motion-audio-controls label {display:flex;flex-direction:column;gap:5px;min-width:0;}
+.animation-motion-audio-controls input,.animation-motion-audio-controls select {width:100%;min-width:0;}
+@media(max-width:540px) {.animation-motion-lab-audio {padding:12px;}.animation-motion-audio-controls {grid-template-columns:minmax(0,1fr);}}
