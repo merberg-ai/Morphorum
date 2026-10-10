@@ -231,7 +231,7 @@ def _normalize_audio_layer(
     Audio analysis must happen through the managed project upload endpoint.
     An embedded bounded envelope makes the layer deterministic after reload.
     """
-    from .audio_motion import balanced_pulses, AudioMotionError
+    from .audio_motion import balanced_pulses, AudioMotionError, onset_strength
     axis = str(raw.get("axis") or "translation_z").lower()
     if axis not in AXES:
         raise MotionLabError("Audio layer must select a native camera axis.")
@@ -245,6 +245,13 @@ def _normalize_audio_layer(
     if not isinstance(values, list) or len(values) != end - start:
         raise MotionLabError("Audio envelope must provide one sample per layer frame.")
     envelope = [_number(v, "Audio envelope sample", 0, 1) for v in values]
+    detection = str(raw.get("detection", "level")).lower()
+    if detection not in ("level", "transient"):
+        raise MotionLabError("Audio detection must be level or transient.")
+    band = str(raw.get("band", "fullband")).lower()
+    if band not in ("fullband", "kick", "bass", "snare", "highs"):
+        raise MotionLabError("Unsupported audio frequency band.")
+    sensitivity = _number(raw.get("sensitivity", .35), "Transient sensitivity", 0, 1)
     threshold = _number(raw.get("threshold", .25), "Audio threshold", 0, 1)
     distance = _number(raw.get("distance", .04), "Audio pulse distance", 0, 1)
     attack = _integer(raw.get("attack_frames", 1), "Audio attack frames", 1, 120)
@@ -253,7 +260,7 @@ def _normalize_audio_layer(
     offset = _integer(raw.get("offset_frames", 0), "Audio offset frames", -3000, 3000)
     try:
         pulses = balanced_pulses(
-            envelope, threshold=threshold, distance=distance,
+            onset_strength(envelope, sensitivity) if detection == "transient" else envelope,\n            threshold=threshold, distance=distance,
             attack_frames=attack, release_frames=release,
             cooldown_frames=cooldown, offset_frames=offset,
         )
@@ -265,7 +272,7 @@ def _normalize_audio_layer(
         "blend": mode, "start_frame": start, "end_frame": end,
         "name": str(raw.get("name") or "Audio pulses")[:96],
         "axis": axis, "fps": audio_fps, "sha256": source_hash,
-        "envelope": envelope, "threshold": threshold, "distance": distance,
+        "envelope": envelope, "threshold": threshold, "distance": distance,\n        "band": band, "detection": detection, "sensitivity": sensitivity,
         "attack_frames": attack, "release_frames": release,
         "cooldown_frames": cooldown, "offset_frames": offset,
         "pulses": pulses,
