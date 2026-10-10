@@ -4104,6 +4104,53 @@
     if (input) input.textContent =
       'Draft recording added to layer stack. Review curves; Apply to Animation to save.';
   }
+  function motionLabSyncQuickActions() {
+    const active = Boolean(motionLabRecorder?.active);
+    for (const button of qsa('[data-motion-quick-target]')) {
+      const original = qs('#' + button.dataset.motionQuickTarget);
+      button.disabled = active || !original || original.disabled;
+      button.setAttribute('aria-busy', String(Boolean(motionLabBusy)));
+    }
+    const status = qs('#animation-motion-lab-quick-status');
+    if (status) status.textContent = active ? '● Recording' :
+      motionLabBusy ? 'Updating motion…' :
+      motionLabDraftLayers.length + ' draft layer(s)';
+  }
+  function motionLabSetupQuickActions(panel) {
+    const dock = document.createElement('div');
+    dock.id = 'animation-motion-lab-quick-actions';
+    dock.className = 'animation-motion-lab-quick-actions';
+    dock.setAttribute('role', 'toolbar');
+    dock.setAttribute('aria-label', 'Motion Lab quick actions');
+    const specs = [
+      ['animation-motion-lab-record', '● Record'],
+      ['animation-motion-lab-stop-recording', '■ Stop'],
+      ['animation-motion-lab-update-curves', '↻ Curves'],
+      ['animation-motion-lab-preview-draft', '▶ Preview'],
+      ['animation-motion-lab-apply', 'Apply'],
+    ];
+    for (const [id, label] of specs) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.dataset.motionQuickTarget = id;
+      button.className = id.endsWith('-apply') ? 'primary-button compact' : 'secondary-button compact';
+      button.disabled = true;
+      button.addEventListener('click', () => {
+        const original = qs('#' + id);
+        if (!original || original.disabled) return;
+        original.click();
+      });
+      dock.appendChild(button);
+    }
+    const status = document.createElement('span');
+    status.id = 'animation-motion-lab-quick-status';
+    status.className = 'muted';
+    status.setAttribute('aria-live', 'polite');
+    dock.appendChild(status);
+    panel.appendChild(dock);
+    motionLabSyncQuickActions();
+  }
   function motionLabRecordingUi() {
     const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
     const active = Boolean(motionLabRecorder?.active);
@@ -4132,6 +4179,7 @@
     if (!state.project) motionLabRecordStatus('Select a project');
     else if (animationMode() !== '3d') motionLabRecordStatus('3D Motion required');
     else if (!active) motionLabRecordStatus('Ready');
+    motionLabSyncQuickActions();
   }
   function motionLabFinalizeRecording(take) {
     if (!take || take.reason === 'discard' || !state.project) {
@@ -4382,6 +4430,7 @@
       const needsLayers = id !== 'animation-motion-lab-add';
       button.disabled = !ready || (needsLayers && !motionLabDraftLayers.length);
     }
+    motionLabSyncQuickActions();
     const end = qs('#animation-motion-lab-end');
     if (end) end.max = String(count);
     const start = qs('#animation-motion-lab-start');
@@ -4954,6 +5003,7 @@
     if (composer) panels.motion.appendChild(composer);
     const recording = qs('#animation-motion-lab-recording');
     if (recording) panels.motion.appendChild(recording);
+    motionLabSetupQuickActions(panels.motion);
     const visual = qs('#animation-motion-lab-visual');
     if (visual) panels.motion.appendChild(visual);
     const motionPreview = qs('.animation-motion-preview-card');
