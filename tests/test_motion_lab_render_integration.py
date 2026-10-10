@@ -17,7 +17,7 @@ def project():
     return normalize_animation_project({
         "name": "ML4 mixed render contract",
         "animation": {"mode": "3d", "max_frames": 48, "fps": 12},
-        "cadence": {"diffusion": 3},
+        "cadence": {"diffusion": "0:(3)"},
         "prompts": {"0": "cold forest", "24": "abandoned factory"},
     }, project_id="ml4-render-contract")
 
