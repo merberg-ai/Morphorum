@@ -540,11 +540,44 @@
             <div class="animation-motion-lab-actions">
               <button class="secondary-button compact" id="animation-motion-lab-add" type="button" disabled>+ Add Preset Layer</button>
               <button class="secondary-button compact" id="animation-motion-lab-clear" type="button" disabled>Clear Draft</button>
+              <button class="secondary-button compact" id="animation-motion-lab-undo" type="button" disabled>Undo</button>
+              <button class="secondary-button compact" id="animation-motion-lab-redo" type="button" disabled>Redo</button>
+              <button class="secondary-button compact busy-button" id="animation-motion-lab-update-curves" type="button" disabled><span class="spinner"></span><span class="button-label">Update Curves</span></button>
               <button class="secondary-button compact busy-button" id="animation-motion-lab-preview-draft" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Draft Motion</span></button>
               <button class="primary-button compact busy-button" id="animation-motion-lab-apply" type="button" disabled><span class="spinner"></span><span class="button-label">Apply to Animation</span></button>
             </div>
             <div class="animation-motion-lab-layer-list" id="animation-motion-lab-layer-list" aria-live="polite">Add a preset layer to begin.</div>
             <div class="animation-motion-lab-diagnostics muted" id="animation-motion-lab-diagnostics" role="status">Draft motion is not applied to the animation timeline until you select Apply.</div>
+          </article>
+
+          <article class="card glass animation-motion-lab-visual" id="animation-motion-lab-visual">
+            <div class="card-header">
+              <div>
+                <h2>Motion Curves & Camera Path <small class="muted">ML1</small></h2>
+                <p class="muted">Frame-accurate native camera increments and an integrated geometric path. This visualization does not load a depth model or run diffusion.</p>
+              </div>
+              <span class="animation-motion-lab-stage" id="animation-motion-lab-curve-state">Curves not compiled</span>
+            </div>
+            <div class="animation-motion-lab-playbar">
+              <button id="animation-motion-lab-play" class="secondary-button compact" type="button" disabled>Play</button>
+              <label class="animation-motion-lab-loop"><input id="animation-motion-lab-loop" type="checkbox" checked> Loop</label>
+              <label class="animation-motion-lab-scrubber"><span>Frame</span><input id="animation-motion-lab-frame" type="range" min="0" max="1" step="1" value="0" disabled></label>
+              <output id="animation-motion-lab-frame-value" for="animation-motion-lab-frame">0 / 0</output>
+              <span id="animation-motion-lab-time-value" class="muted">0.00s</span>
+            </div>
+            <div class="animation-motion-lab-visual-grid">
+              <div class="animation-motion-lab-svg-wrap">
+                <h3>Translation and rotation velocity</h3>
+                <svg id="animation-motion-lab-curves" class="animation-motion-lab-svg animation-motion-lab-curves" viewBox="0 0 800 300" role="img" aria-label="Six axis motion curves, scrub or drag to seek" tabindex="0"></svg>
+                <p class="animation-motion-lab-legend">Translation <span class="ml1-tx">X</span> <span class="ml1-ty">Y</span> <span class="ml1-tz">Z</span> · Rotation <span class="ml1-rx">Pitch</span> <span class="ml1-ry">Yaw</span> <span class="ml1-rz">Roll</span></p>
+              </div>
+              <div class="animation-motion-lab-svg-wrap">
+                <h3>Camera travel (geometric)</h3>
+                <svg id="animation-motion-lab-path" class="animation-motion-lab-svg animation-motion-lab-path" viewBox="0 0 440 300" role="img" aria-label="Normalized projected camera path, not depth-aware"></svg>
+                <p class="muted animation-motion-lab-visual-note">Integrated X/Y/Z increments, auto-fit to the plot. Path shape is illustrative, not depth-aware or drawn to physical scale.</p>
+              </div>
+            </div>
+            <div class="animation-motion-lab-readout" id="animation-motion-lab-axis-readout" aria-live="off">Add a motion layer and select Update Curves to inspect per-frame values.</div>
           </article>
 
           <article class="card glass animation-motion-preview-card">
@@ -1042,6 +1075,7 @@
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/loras.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/motion-lab-visual.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>
