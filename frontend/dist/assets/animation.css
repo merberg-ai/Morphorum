@@ -2106,3 +2106,21 @@ dialog#animation-deforum-dialog {
 }
 
 @media(max-width:640px) { .animation-workspace-nav {position:static;} }
+
+/* ML2: persistent, viewport-local actions without separating the take from review. */
+#animation-panel-motion {position:relative;}
+.animation-motion-lab-quick-actions {
+  position:sticky;bottom:8px;z-index:16;
+  display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px;
+  margin:12px auto 8px;padding:10px 12px;width:max-content;max-width:calc(100% - 16px);
+  border:1px solid rgba(110,195,225,.48);border-radius:12px;
+  background:rgba(15,22,34,.96);box-shadow:0 5px 22px rgba(0,0,0,.38);
+  backdrop-filter:blur(12px);
+}
+.animation-motion-lab-quick-actions button {white-space:nowrap;min-height:36px;padding:7px 12px;}
+.animation-motion-lab-quick-actions #animation-motion-lab-quick-status {font-size:.73rem;white-space:nowrap;}
+@media(max-width:640px) {
+  .animation-motion-lab-quick-actions {bottom:4px;gap:5px;padding:8px;width:calc(100% - 8px);}
+  .animation-motion-lab-quick-actions button {flex:1 1 auto;min-height:42px;padding:8px 6px;font-size:.78rem;}
+  .animation-motion-lab-quick-actions #animation-motion-lab-quick-status {width:100%;text-align:center;}
+}
