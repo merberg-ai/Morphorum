@@ -287,6 +287,12 @@ ML3.4 was physically accepted October 10, 2026 and frozen at `checkpoint/motion-
 
 **Still beyond ML4.1:** long-animation stress, multi-LoRA + hybrid source conflicts, audio soundtrack mux/export, perf telemetry, mobile final polish, and ML4 integration PR review. Preserve `main`, `dev-ui` and paused B6.3.3.
 
+### ML4.1 soundtrack export follow-up (Windows acceptance pending)
+
+The user physically accepted ML4.1 SDXL integration, but reported that the finished exported video lacked the analyzed WAV. The browser-only audio sync was never part of final media encoding. The FFmpeg video exporter now selects the single enabled audio-layer WAV by frozen render manifest SHA256 from project-owned `motion_lab_audio` storage, adds it as AAC audio to MP4 or Opus audio to WebM, pads short WAVs with silence and bounds the soundtrack to exact video duration. Video-only exports remain silent. Distinct active audio hashes or a missing referenced WAV cause explicit errors, not a silently wrong track. The FPS override is rejected when it differs from a soundtrack render's FPS to avoid breaking sync. Existing frame PNGs, diffusion rendering and GIFs are unchanged. Video export metadata exposes `audio_included` for UI feedback and cache-busting after re-export. Tests cover source selection and FFmpeg stream muxing (real encoder when available).
+
+**Windows gate:** Open the same completed SDXL audio-reactive 3D render whose frozen manifest contains the applied Audio Motion layer. Re-export it as MP4 via **Video Export**; confirm the resulting downloadable MP4 includes audible kick/bass sound aligned with Z pulses and the export label says "Soundtrack included". Check that short tracks are padded, overlong audio is trimmed to the animation duration, playback on Windows and Android has sound, and WebM export also contains audio. Test no-audio projects still export silently; check that a user-provided FPS override different from the render FPS gives an explicit sync warning. This cannot add sound to standalone PNGs or a GIF. If the older render's frozen manifest does not contain the audio layer, Apply the layer, save, and start a new render first. Stop before another checkpoint/PR merge until Windows physical acceptance.
+
 ### ML4: Final integration and physical acceptance
 
 - Optional custom presets/import-export, compatibility test against Deforum `translation_x/y/z` and `rotation_3d_x/y/z`, field mapping.
