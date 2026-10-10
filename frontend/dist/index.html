@@ -645,6 +645,10 @@
               <label><span>Attack frames</span><input id="animation-motion-lab-audio-attack" type="number" min="1" max="120" step="1" value="1"></label>
               <label><span>Release frames</span><input id="animation-motion-lab-audio-release" type="number" min="1" max="120" step="1" value="3"></label>
             </div>
+            <div class="animation-motion-audio-playback">
+              <label><input type="checkbox" id="animation-motion-lab-audio-sync" checked> Play analyzed WAV during Motion Curves playback</label>
+              <span class="muted" id="animation-motion-lab-audio-sync-status" role="status">Analyze a WAV to enable synchronized playback.</span>
+            </div>
             <div class="animation-motion-audio-preview" id="animation-motion-lab-audio-preview" hidden>
               <div class="animation-motion-audio-preview-header"><strong>Analyzed audio envelope</strong><span class="muted" id="animation-motion-lab-audio-summary"></span></div>
               <svg id="animation-motion-lab-audio-plot" viewBox="0 0 800 230" preserveAspectRatio="none" role="img" aria-label="Audio RMS over project frames, onset threshold, and predicted beat triggers"></svg>
