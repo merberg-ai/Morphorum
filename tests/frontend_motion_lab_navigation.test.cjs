@@ -67,3 +67,14 @@ test('Motion Lab preserves original CPU camera preview and gives functional navi
   assert.match(css, /#animation-panel-motion \{display:grid;gap:14px;/);
   assert.match(css, /@media\(max-width:640px\)\s*\{[^}]*\.animation-motion-lab-intro/);
 });
+
+
+test('Motion Lab preview is usable without a separately uploaded image', () => {
+  assert.match(js, /if \(preview\) preview\.disabled = !state\.project \|\| Boolean\(state\.motionJobId\)/);
+  assert.match(js, /if \(!state\.project \|\| state\.motionJobId\) return;/);
+  assert.match(js, /animationMode\(\) !== '3d'/);
+  assert.match(js, /job\.result\.source_kind === 'calibration-grid'/);
+  assert.match(html, /built-in calibration grid immediately/);
+  assert.match(html, /An uploaded reference is optional/);
+  assert.doesNotMatch(js, /if \(preview\) preview\.disabled = [^;]*!hasSource/);
+});
