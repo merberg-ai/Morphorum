@@ -772,6 +772,10 @@ def api_start_motion_preview(payload: dict[str, Any]) -> dict[str, Any]:
             )
         source_path = animation_project_directory(project_id) / "assets" / "source.png"
         options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+        # Motion Lab can preview a built-in calibration grid even when the
+        # animation has no uploaded starting/reference image.
+        if not source_path.is_file():
+            source_path = None
         return motion_preview_manager.start(
             project=normalized,
             source_path=source_path,
