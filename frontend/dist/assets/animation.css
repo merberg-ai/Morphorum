@@ -1951,6 +1951,24 @@ dialog#animation-deforum-dialog {
 .animation-motion-lab-curve-actions {display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0;}
 .animation-motion-lab-curve-actions button {min-height:39px;}
 .animation-motion-lab-edit-toggle {display:flex;align-items:center;gap:7px;font-size:.81rem;cursor:pointer;}
+/* Global form input rules were inflating native checkboxes to oversized
+   desktop controls. Scope a fixed native checkbox size to Motion Lab only. */
+#animation-panel-motion .animation-motion-lab-edit-toggle input[type="checkbox"],
+#animation-panel-motion .animation-motion-lab-loop input[type="checkbox"],
+#animation-panel-motion .animation-motion-lab-layer-toggle input[type="checkbox"] {
+  appearance:auto;
+  width:16px;
+  height:16px;
+  min-width:16px;
+  min-height:16px;
+  max-width:16px;
+  max-height:16px;
+  padding:0;
+  margin:0;
+  flex:0 0 16px;
+  box-sizing:border-box;
+  accent-color:var(--accent);
+}
 .animation-motion-lab-edit-toggle input {accent-color:var(--accent);}
 .animation-motion-lab-key-list {display:flex;flex-wrap:wrap;gap:6px;max-height:92px;overflow-y:auto;padding:5px 0;}
 .animation-motion-lab-key-list button {font-variant-numeric:tabular-nums;font-size:.74rem;min-height:32px;}
