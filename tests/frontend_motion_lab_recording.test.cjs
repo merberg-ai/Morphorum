@@ -174,3 +174,33 @@ test('ML2.3 take rename and duplication are safe and undoable', () => {
   assert.match(animation, /motionLabDraftLayers\.length >= 24/);
   assert.match(css, /\.animation-motion-take-rename \{/);
 });
+
+test('ML2.3 punch-in splices only armed axes and selected frames, without mutating source', () => {
+  const context = {window:{},performance:{now:()=>0},requestAnimationFrame:()=>1,cancelAnimationFrame:()=>{}};
+  vm.runInNewContext(source,context);
+  const splice = context.window.MorphorumMotionLabSplicePunchIn;
+  const original = {id:'one',type:'recording',enabled:true,source:'keyboard',fps:12,
+    start_frame:0,end_frame:6,axes:['translation_x','rotation_y'],
+    samples:Array.from({length:6},(_,i)=>[i,0,0,0,i*2,0])};
+  const take={fps:12,startFrame:2,endFrame:4,armedAxes:['translation_x'],
+    sources:['keyboard'],samples:[[77,0,0,0,0,0],[88,0,0,0,0,0]]};
+  const edited=splice(original,take);
+  assert.deepEqual(JSON.parse(JSON.stringify(edited.samples)),[
+    [0,0,0,0,0,0],[1,0,0,0,2,0],[77,0,0,0,4,0],
+    [88,0,0,0,6,0],[4,0,0,0,8,0],[5,0,0,0,10,0]]);
+  assert.equal(original.samples[2][0],2);
+  assert.throws(()=>splice(original,{...take,fps:24}),/FPS/);
+  assert.throws(()=>splice(original,{...take,endFrame:7}),/range/);
+  assert.throws(()=>splice(original,{...take,armedAxes:['rotation_z']}),/axes/);
+  assert.throws(()=>splice(original,{...take,samples:[[1,2,3,4,5,6]]}),/range/);
+});
+
+test('ML2.3 punch-in requires explicit mode target end boundary and guards incomplete takes', () => {
+  for(const id of ['animation-motion-lab-record-mode','animation-motion-lab-punch-target','animation-motion-lab-punch-end'])
+    assert.ok(html.includes('id="'+id+'"'));
+  assert.match(animation,/function motionLabPunchUi\(\)/);
+  assert.match(animation,/take\.endFrame !== context\.endFrame/);
+  assert.match(animation,/window\.MorphorumMotionLabSplicePunchIn\(existing, take\)/);
+  assert.match(animation,/snapshot:JSON\.stringify\(target\)/);
+  assert.match(animation,/maxFrames: remainingFrames/);
+});
