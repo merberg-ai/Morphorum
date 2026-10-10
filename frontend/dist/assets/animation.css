@@ -1904,6 +1904,8 @@ dialog#animation-deforum-dialog {
 .animation-hybrid-render-settings .animation-hybrid-enable {display:flex;gap:9px;align-items:center;line-height:1.4;font-weight:600;}
 .animation-hybrid-render-settings .animation-hybrid-enable input[type="checkbox"] {width:18px;height:18px;min-height:18px;padding:0;margin:0;flex:0 0 18px;}
 .animation-hybrid-render-settings .animation-hybrid-offset input {max-width:180px;}
+.animation-hybrid-render-settings .animation-hybrid-opacity {display:grid;gap:5px;align-content:start;font-size:.78rem;}
+.animation-hybrid-render-settings .animation-hybrid-opacity input {width:100%;min-width:0;font-family:var(--font-mono);font-size:.78rem;}
 .animation-hybrid-render-settings > p {grid-column:1/-1;margin:0;font-size:.77rem;line-height:1.45;}
 @media(max-width:540px){.animation-hybrid-render-settings {grid-template-columns:minmax(0,1fr);}.animation-hybrid-render-settings > p {grid-column:1;}}
 
