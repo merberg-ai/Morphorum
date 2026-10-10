@@ -1,6 +1,6 @@
 # Morphorum Motion Lab — implementation roadmap
 
-**Status:** Motion Lab UI and source-free CPU preview physically accepted on Windows (2026-10-09); ML0 deterministic preset composer and draft/apply UI implemented and undergoing Windows acceptance. Interactive recording ML2 and audio-reactivity ML3 remain future work.
+**Status:** ML0 camera composer and source-free CPU preview physically accepted on Windows (2026-10-09); checkpoint `checkpoint/motion-lab-ml0-windows-verified-20261009` at `f75bdf6`. ML1a browser motion curves, geometric path, frame playback and layer controls implemented on the feature branch; physical test pending. ML1b direct path/keyframe editing, ML2 recording and ML3 audio remain upcoming.
 **Branch:** `feature/motion-lab`
 **Branch base:** `dev-ui` at `bc40d18d4f5968904afedc798ecd3efdef71761a` (B6.3.2 physical acceptance)
 **Existing paused separate work:** `feature/b6-3-3-hybrid-masks` at `c0e9be0aa03472747ba4c2594c128bdcd80318ef`. Do not touch that branch.
@@ -106,6 +106,22 @@ For 2D projects: start with a 3D camera lab and a clearly disabled/limited 2D mo
 - Reuse existing CPU depth-aware Motion Preview when user explicitly requests an image/depth-based test. Do not block every slider change on CPU depth estimation.
 - Show uncommitted draft vs committed timeline; apply and return to Visual Timeline.
 - **Gate:** desktop and phone acceptance of presets, preview, save/reopen, stable existing UI. Validate resolution/FOV/coordinate behavior.
+
+### ML1a: Frame-accurate curves, geometric path and editable layers (implemented; physical test pending)
+
+- New `motion-lab-visual.js` uses the existing ML0 draft preview API to draw six native camera-velocity curves and integrated geometric translation path in the browser. The path is **auto-fitted and approximate**, not a diffusion/depth/FOV preview.
+- `compile_motion_lab(include_series=True)` returns full bounded `[0..max_frames-1]` six-axis samples, matching the native `resolve_project_frame` output and preserving the same clipping/seed behavior. Only draft preview requests the series; Apply remains light.
+- In-workspace **Update Curves** compiles the current draft without starting expensive CPU depth estimation; **Preview Draft Motion** still invokes the existing real CPU depth-aware Motion Preview as needed.
+- Frame scrubber, pointer/keyboard scrubbing, play/pause and loop at project FPS update six-axis values and path marker. No independent render engine and no GPU model load.
+- Draft stack supports enable/disable, order Up/Down, inline Edit, remove, Clear, undo/redo (50 history entries). Every edit marks the curves stale and pauses playback until refreshed.
+- ML1a physical gate: on Windows 24/60 frames at 12 FPS, layer Spiral + Wave and select Update Curves; confirm two motion-curve panels (translations and degrees/frame), visible normalized path, correct frame readout on drag/touch, smooth 12-FPS playback with Loop off/on. Disable/reorder layers, Undo/Redo and update curves again; verify displayed motion changes, then Preview Draft Motion and Apply to Animation with no lost settings. Repeat on portrait phone. Switch projects and ensure stale plots do not persist.
+- CI contract: Python per-frame resolver parity, API sample counts, Node runtime playback/scrub/stale handling and browser structural placement tests.
+
+### ML1b: Direct motion-path/keyframe editing (future)
+
+- Draggable curve keyframes and path handles, if added, must compile back through the existing native 3D schedule resolver. Do not treat the current auto-fit plot as physically scaled or writable motion coordinates.
+- Add robust undo/redo for authored keyframe edits and resolution/FPS retiming checks.
+- Preserve ML0 layer precedence and manual timeline conflict handling.
 
 ### ML2: Interactive recording and live controllers
 
