@@ -324,6 +324,7 @@ def api_motion_lab_compose_preview(project_id: str, payload: dict[str, Any]) -> 
             "status": "preview",
             "diagnostics": diagnostics,
             "layers": compiled["motion_lab"]["layers"],
+            "project": compiled,
         }
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
