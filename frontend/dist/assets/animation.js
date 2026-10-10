@@ -4433,8 +4433,32 @@
             ' frames at ' + fps + ' FPS. Motion Lab supports at most 3000 frames; choose a shorter WAV or lower FPS manually.');
         }
         if (targetFrames !== Number(state.project.animation.max_frames)) {
-          if (motionLabDraftLayers.length || state.project.motion_lab?.layers?.length) {
-            throw new Error('Cannot automatically resize a project with Motion Lab layers. Preserve or clear those layers first, then reanalyze. No project settings were changed.');
+          // The UI reports DRAFT layers. Saved Motion Lab authoring metadata
+          // can still exist after all visible draft layers were cleared.
+          // Never discard that invisible saved history without explicit consent.
+          if (motionLabDraftLayers.length) {
+            throw new Error('Cannot resize with ' + motionLabDraftLayers.length +
+              ' draft Motion Lab layer(s). Clear the draft first. No settings were changed.');
+          }
+          const storedLayerCount = Array.isArray(state.project.motion_lab?.layers)
+            ? state.project.motion_lab.layers.length : 0;
+          let discardStoredMotionLab = false;
+          if (storedLayerCount) {
+            discardStoredMotionLab = await window.MorphorumDialog.confirm({
+              title: 'Clear saved Motion Lab history?',
+              message: 'The composer shows 0 draft layers, but this project still has ' +
+                storedLayerCount + ' saved Motion Lab layer(s). Matching audio length requires ' +
+                'clearing that saved authoring history. Existing camera schedules are preserved. ' +
+                'Cancel to keep the stored layers and project duration unchanged.',
+              confirmText: 'Clear Saved Layers',
+              cancelText: 'Keep Layers',
+              variant: 'danger',
+            });
+            if (!discardStoredMotionLab) {
+              if (lengthStatus) lengthStatus.textContent =
+                'Duration unchanged. Saved Motion Lab layers preserved.';
+              return;
+            }
           }
           const approved = await window.MorphorumDialog.confirm({
             title: 'Match project length to WAV?',
@@ -4453,8 +4477,17 @@
             const previous = editorFrames.value;
             editorFrames.value = String(targetFrames);
             try {
+              const draft = collectProject();
+              if (discardStoredMotionLab) {
+                draft.motion_lab = {
+                  ...(draft.motion_lab || {}),
+                  layers: [],
+                  base_tracks: null,
+                  last_applied_tracks: null,
+                };
+              }
               const payload = await api('/api/animation/projects/' + encodeURIComponent(projectId), {
-                method:'PUT',body:JSON.stringify(collectProject()),
+                method:'PUT',body:JSON.stringify(draft),
               });
               if (state.project?.id !== projectId) return;
               state.project = payload.project;
