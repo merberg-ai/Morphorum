@@ -4350,6 +4350,8 @@
     if (motionIntro) panels.motion.appendChild(motionIntro);
     const composer = qs('#animation-motion-lab-composer');
     if (composer) panels.motion.appendChild(composer);
+    const visual = qs('#animation-motion-lab-visual');
+    if (visual) panels.motion.appendChild(visual);
     const motionPreview = qs('.animation-motion-preview-card');
     if (motionPreview) panels.motion.appendChild(motionPreview);
     const history = qs('.animation-render-history-row');
