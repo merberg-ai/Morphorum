@@ -78,3 +78,25 @@ test('Motion Lab preview is usable without a separately uploaded image', () => {
   assert.match(html, /An uploaded reference is optional/);
   assert.doesNotMatch(js, /if \(preview\) preview\.disabled = [^;]*!hasSource/);
 });
+
+
+test('ML0 exposes draft motion layer presets with preview and explicit timeline apply', () => {
+  for (const id of [
+    'animation-motion-lab-composer', 'animation-motion-lab-preset',
+    'animation-motion-lab-strength', 'animation-motion-lab-cycle',
+    'animation-motion-lab-fade', 'animation-motion-lab-start',
+    'animation-motion-lab-end', 'animation-motion-lab-blend',
+    'animation-motion-lab-add', 'animation-motion-lab-clear',
+    'animation-motion-lab-layer-list', 'animation-motion-lab-apply',
+    'animation-motion-lab-preview-draft',
+  ]) {
+    assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
+  }
+  assert.match(js, /async function motionLabPreviewOrApply\(apply\)/);
+  assert.match(js, /state\.project\.motion_lab\?\.layers/);
+  assert.match(js, /body: JSON\.stringify\(\{ layers: motionLabDraftLayers \}\)/);
+  assert.match(js, /await generateMotionPreview\(result\.project\)/);
+  assert.match(js, /await loadTimeline\(\)/);
+  assert.match(js, /const needsLayers = id !== 'animation-motion-lab-add'/);
+  assert.match(css, /\.animation-motion-lab-fields \{display:grid;/);
+});
