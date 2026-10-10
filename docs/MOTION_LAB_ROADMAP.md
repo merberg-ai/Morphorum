@@ -1,6 +1,6 @@
 # Morphorum Motion Lab — implementation roadmap
 
-**Status:** ML0, ML1a, ML1b and the ML1b smoothing/checkbox polish physically accepted on Windows (2026-10-09). Latest protected checkpoint: `checkpoint/motion-lab-ml1b-smoothing-windows-verified-20261009` at `c0e5f90a692e14e32b48155f71d0a8afc923c6ae` (Syntax and Backend CI green). **Paused before ML2.** Keyboard/touch/controller motion recording and ML3 audio are not implemented.
+**Status:** ML0, ML1a, ML1b and the ML1b smoothing/checkbox polish physically accepted on Windows (2026-10-09). Latest protected checkpoint remains `checkpoint/motion-lab-ml1b-smoothing-windows-verified-20261009` at `c0e5f90a692e14e32b48155f71d0a8afc923c6ae`. **ML2.0–ML2.2 are now implemented on `feature/motion-lab` and awaiting Windows/phone physical acceptance; they are not checkpointed or merged.** The ML2 code candidate before documentation updates is `47b614f10993cfae0eb249b94ee94b932d693149`, with Syntax and Backend CI green. ML3 audio is not implemented.
 **Branch:** `feature/motion-lab`
 **Branch base:** `dev-ui` at `bc40d18d4f5968904afedc798ecd3efdef71761a` (B6.3.2 physical acceptance)
 **Existing paused separate work:** `feature/b6-3-3-hybrid-masks` at `c0e9be0aa03472747ba4c2594c128bdcd80318ef`. Do not touch that branch.
@@ -142,13 +142,82 @@ For 2D projects: start with a 3D camera lab and a clearly disabled/limited 2D mo
 
 **Deferred beyond ML1b:** true absolute-camera control points/Bezier 3D path editing, physical-world units, FOV-/depth-aware path handles, inverse kinematics, axis constraints with spatial solvers. Those would need a distinct calibrated editor rather than repurposing the auto-fit display.
 
-### ML2: Interactive recording and live controllers
+### ML2: Interactive recording and live controllers (implemented; physical acceptance pending)
 
-- Implement on-screen touch joysticks and keyboard/mouse control, record/play/seek/stop, smoothing/deadzone/sensitivity, axis arming, punch-in replacement, deceleration tail and undo.
-- Offline record results mapped against **project frame clock**, not wall-clock diffusion speed. Do not steer running diffusion.
-- Optional browser Gamepad API input when available in the page's security context; test actual Windows/LAN browser behavior. Cross-device gamepads depend on connection to the **client** browser, not automatically to host PC.
-- LAN HTTP may restrict Gamepad API in some browsers: provide touch/keyboard fallback, and consider HTTPS or an explicitly designed host-side XInput bridge only later. Never silently promise raw browser controller access on all LAN clients.
-- **Gate:** phone touch recording, Windows browser controller where supported, determinism/replay, no render-thread interaction.
+ML2 keeps the existing Motion Lab authoring/render boundary intact. Live input is sampled into an ordinary `type:"recording"` layer; preview and Apply still compile through `motion_lab.py` into native camera tracks, then the existing resolver/CPU preview/renderer takes over.
+
+#### ML2.0: deterministic recording layer contract
+
+Implemented backend format, still under `motion_lab.schema_version:1` because it is backward-compatible with existing preset/keyframe layers:
+
+```json
+{
+  "id": "take-001",
+  "type": "recording",
+  "name": "Recorded keyboard take",
+  "enabled": true,
+  "blend": "add",
+  "start_frame": 4,
+  "end_frame": 28,
+  "fps": 12,
+  "source": "keyboard",
+  "capture_version": 1,
+  "axes": ["translation_x", "translation_z", "rotation_y"],
+  "samples": [
+    [0, 0, 0, 0, 0, 0],
+    [0.012, 0, 0.01, 0, 0.2, 0]
+  ]
+}
+```
+
+Contract:
+- Exactly one dense six-value row per frame in canonical axis order: X/Y/Z translation then X/Y/Z rotation.
+- `axes` explicitly declares armed axes. Nonzero values on unarmed axes are rejected, and Replace only replaces armed axes.
+- Values are native Morphorum **per-frame** scene-unit/degree deltas. They are not positions.
+- Frame 0 must remain stationary.
+- Recording length is bounded by the project/layer range and existing 3000-frame project limit; it does **not** consume the 128-keyframe manual-curve budget.
+- `capture_version` is currently exactly 1. `source` is provenance only: keyboard, touch, gamepad, mixed, or unknown.
+- Capture FPS must exactly match current project FPS. ML2 intentionally **rejects implicit FPS retiming** because changing FPS changes the meaning of native per-frame deltas. Explicit retime/preserve-time tooling belongs in later polish rather than silently changing travel.
+- Existing Add/Replace ordering, per-axis clipping diagnostics, base/last-applied snapshots, conflict confirmation, idempotent repeated Apply, save/reopen and REST preview/apply all include recording layers.
+
+Automated coverage: malformed rows, sample counts, NaN/Inf, duplicate/bad axes, hidden unarmed motion, frame-zero motion, FPS mismatch, preset + cubic-keyframe composition, Add/Replace behavior, resolver parity, idempotence and REST preview/apply/save-reopen.
+
+#### ML2.1: keyboard, mouse/pointer and mobile touch recording
+
+Implemented first-class **Live Motion Recording** card inside `panels.motion`, between Composer and Curves. Controls include:
+- Record/Stop from the current/selected start frame.
+- Six independently armed axes plus per-axis inversion.
+- Native translation sensitivity (scene units/frame) and rotation sensitivity (degrees/frame).
+- Deadzone, deterministic frame-based response/return smoothing, and a short explicit release tail.
+- Keyboard: A/D strafe, R/F lift, W/S dolly, arrows pitch/yaw, Q/E roll.
+- Two pointer/touch joysticks: translation X/Y and pitch/yaw, plus Z and roll hold buttons.
+- Portrait-phone layout, large touch targets, `touch-action:none` on joysticks/buttons, pointer capture/release safety.
+- Key-up, pointer-up, `pointercancel`, lost pointer capture, window blur and document hiding neutralize input. Leaving Motion Lab ends the take rather than allowing a hidden held input to keep accumulating.
+- The browser recorder maps monotonic elapsed time to discrete project frames. Duplicate animation callbacks do not duplicate samples; dropped callbacks fill the missing **project frame indices** using the latest live input state. Browser rendering cadence is therefore not the stored timeline.
+- Stop produces a normal draft recording layer, enters existing Undo/Redo history, automatically refreshes Motion Curves, and still requires explicit **Apply to Animation** before canonical project camera tracks are persisted.
+
+#### ML2.2: optional browser Gamepad API
+
+Implemented opt-in client-side Gamepad API support with honest fallback behavior:
+- Reads the first controller visible to the **client browser**, not a controller merely attached to the Morphorum host.
+- Left stick maps translation X/Y; right stick yaw/pitch; triggers map Z; bumpers map roll. Existing deadzone, sensitivity, arming and inversion apply.
+- UI reports unavailable/blocked API, no visible controller, connected controller, and disconnect state.
+- Keyboard/touch remain usable regardless of controller availability.
+- No host XInput bridge and no claim that plain HTTP LAN origins will expose Gamepad API. Physical controller acceptance is conditional on the test browser/security context.
+
+**ML2.0–ML2.2 automated gate:** code candidate `47b614f10993cfae0eb249b94ee94b932d693149` passed GitHub Syntax checks (including Node/browser regressions) and Backend tests/self-test. This is **not** a physical checkpoint.
+
+**Physical gate before any ML2 checkpoint/merge:**
+1. Windows desktop, saved 3D project, 48 frames at 12 FPS. Hard refresh. Confirm Live Motion Recording is in Motion Lab between Composer and Curves.
+2. Record a keyboard take from frame 0 for roughly 24–36 frames. Use D/W plus arrow input, release controls, then Stop. Confirm frame 0 is still, the take appears in the layer list, Curves refresh, playback replays the take, and no input remains stuck.
+3. Undo and Redo the take. Reorder it against Spiral and a cubic manual curve; test Add and Replace on armed axes. Confirm unrelated axes survive Replace.
+4. Apply, inspect Editor native camera tracks, Apply again without doubled travel, save/reopen and confirm the recording samples/timing persist.
+5. Run CPU calibration-grid Motion Preview and verify direction/signs. No GPU render is required for this initial ML2.0–2.2 gate.
+6. Phone portrait browser: record using both touch sticks plus Z/roll buttons. Verify the page does not scroll while dragging a stick, pointer release/cancel returns cleanly, controls fit portrait, and switching tabs or backgrounding the page ends/neutralizes the take.
+7. Change sensitivity, deadzone, response/return and per-axis inversion and verify visible differences.
+8. Optional controller: enable Gamepad. If the browser exposes a controller, verify sticks/triggers/bumpers and disconnect behavior. If HTTP/browser security blocks it, confirm the explicit unavailable status and that keyboard/touch still work; this is an acceptable fallback result.
+9. FPS rule: a persisted 12-FPS take must never be silently reinterpreted at another FPS. A mismatch should be rejected until explicitly retimed/re-recorded.
+10. Confirm `main`, `dev-ui`, and `feature/b6-3-3-hybrid-masks` remain untouched. Only after physical acceptance create an ML2 checkpoint and proceed to ML2.3/punch-in polish or merge planning.
 
 ### ML3: Audio-reactive motion
 
@@ -166,9 +235,9 @@ For 2D projects: start with a 3D camera lab and a clearly disabled/limited 2D mo
 - Confirm mobile/browser usability, export fidelity, cancellation/resume, migrated project fidelity.
 - **Gate:** checkpoint + reviewed PR → `dev-ui`. Keep B6.3.3 separately paused.
 
-## First implementation target / next action
+## Current next action
 
-Begin ML0 with a small backend-focused PR on this branch. Define the versioned layer schema, pure preset math and six-axis composer, and a minimal compile-to-native-tracks adapter. Write tests **before** adding a UI or live controller. The first physical test should be a 60-frame 3D spiral or figure-eight, 512x512, cadence 1, with CPU motion preview then SDXL render only after the compiled tracks match the resolved frames.
+Perform the ML2.0–ML2.2 Windows/phone physical gate above on `feature/motion-lab`. Do not create a verified checkpoint or merge PR #19 until that gate is accepted. After acceptance, checkpoint ML2 and decide whether to continue directly into ML2.3 punch-in/take-management polish before the first recorded-motion GPU render.
 
 ## Architecture and legal notes
 
