@@ -54,6 +54,7 @@ from .animation_render import (
     AnimationRenderError,
     animation_render_manager,
 )
+from .motion_lab import MotionLabError, PRESETS as MOTION_LAB_PRESETS, compile_motion_lab
 from .animation_hybrid_extract import hybrid_extraction_manager
 from .animation_hybrid_source import (
     HybridSourceError, managed_video_path, probe_managed_video, store_managed_video,
@@ -304,6 +305,49 @@ def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
         raise HTTPException(status_code=status, detail=message) from exc
+
+
+@app.get("/api/animation/motion-lab/presets")
+def api_motion_lab_presets() -> dict[str, Any]:
+    return {"presets": list(MOTION_LAB_PRESETS)}
+
+
+@app.post("/api/animation/projects/{project_id}/motion-lab/preview")
+def api_motion_lab_compose_preview(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        layers = payload.get("layers")
+        if not isinstance(layers, list):
+            raise MotionLabError("Motion Lab preview requires a list of layers.")
+        compiled, diagnostics = compile_motion_lab(project, layers=layers)
+        return {
+            "status": "preview",
+            "diagnostics": diagnostics,
+            "layers": compiled["motion_lab"]["layers"],
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (MotionLabError, ScheduleError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-lab/apply")
+def api_motion_lab_apply(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        layers = payload.get("layers")
+        if not isinstance(layers, list):
+            raise MotionLabError("Motion Lab apply requires a list of layers.")
+        compiled, diagnostics = compile_motion_lab(project, layers=layers)
+        saved = save_animation_project(project_id, compiled, prefer_tracks=True)
+        return {
+            "status": "applied", "project": saved, "diagnostics": diagnostics,
+        }
+    except AnimationProjectError as exc:
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    except (MotionLabError, ScheduleError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/animation/timeline/descriptors")
