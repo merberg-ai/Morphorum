@@ -213,6 +213,7 @@ class VideoExportJob:
     quality: str
     fps: int
     total_frames: int
+    audio_included: bool = False
     created_at: str = field(default_factory=_timestamp)
     status: str = "queued"
     progress: float = 0.0
@@ -255,11 +256,18 @@ class VideoExportManager:
         if ffmpeg is None:
             raise VideoExportError(export_availability()["message"])
         soundtrack = _render_audio_source(project_id, manifest)
+        if soundtrack is not None:
+            original_fps = float((manifest.get("project") or {}).get("animation", {}).get("fps") or 0)
+            if abs(fps - original_fps) > 1e-6:
+                raise VideoExportError(
+                    "Audio-synchronized video must use the original render FPS. "
+                    "Clear the export FPS override to preserve soundtrack timing.")
         output = _export_path(project_id, render_id, fmt, quality, fps)
         job = VideoExportJob(
             id="video-" + uuid.uuid4().hex[:12],
             project_id=project_id, render_id=render_id,
             format=fmt, quality=quality, fps=fps, total_frames=count,
+            audio_included=soundtrack is not None,
         )
         with self._lock:
             if output in self._active_outputs:
