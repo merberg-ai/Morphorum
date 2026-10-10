@@ -640,10 +640,16 @@
             <div class="animation-motion-audio-controls">
               <label><span>PCM WAV file (up to 20 MiB / 3 minutes)</span><input id="animation-motion-lab-audio-file" type="file" accept=".wav,audio/wav,audio/x-wav"></label>
               <label><span>Motion axis</span><select id="animation-motion-lab-audio-axis"><option value="translation_z">Depth Z</option><option value="translation_x">Translation X</option><option value="translation_y">Translation Y</option><option value="rotation_x">Pitch</option><option value="rotation_y">Yaw</option><option value="rotation_z">Roll</option></select></label>
-              <label><span>Onset threshold (0–1)</span><input id="animation-motion-lab-audio-threshold" type="number" min="0" max="1" step=".05" value=".25"></label>
+              <label><span>Onset threshold (0–1)</span><input id="animation-motion-lab-audio-threshold" type="number" min="0" max="1" step=".01" value=".10"></label>
               <label><span>Motion pulse (native units)</span><input id="animation-motion-lab-audio-distance" type="number" min="0" max="1" step=".01" value=".04"></label>
               <label><span>Attack frames</span><input id="animation-motion-lab-audio-attack" type="number" min="1" max="120" step="1" value="1"></label>
               <label><span>Release frames</span><input id="animation-motion-lab-audio-release" type="number" min="1" max="120" step="1" value="3"></label>
+            </div>
+            <div class="animation-motion-audio-preview" id="animation-motion-lab-audio-preview" hidden>
+              <div class="animation-motion-audio-preview-header"><strong>Analyzed audio envelope</strong><span class="muted" id="animation-motion-lab-audio-summary"></span></div>
+              <svg id="animation-motion-lab-audio-plot" viewBox="0 0 800 230" preserveAspectRatio="none" role="img" aria-label="Audio RMS over project frames, onset threshold, and predicted beat triggers"></svg>
+              <div class="animation-motion-audio-legend"><span>▥ Audio RMS</span><span>━ Trigger threshold</span><span>● Predicted pulses</span></div>
+              <p id="animation-motion-lab-audio-prediction" class="muted" aria-live="polite"></p>
             </div>
             <div class="animation-motion-recording-actions">
               <button id="animation-motion-lab-analyze-audio" type="button" class="secondary-button compact">Analyze WAV</button>
