@@ -760,6 +760,11 @@
             </div>
 
             <div class="animation-motion-result" id="animation-motion-result" hidden>
+              <div class="animation-motion-gif-sync">
+                <button class="secondary-button compact" id="animation-motion-gif-replay" type="button">↻ Replay Preview + Audio</button>
+                <label><input type="checkbox" id="animation-motion-gif-auto-audio" checked> Start analyzed WAV when preview becomes ready</label>
+                <span class="muted" id="animation-motion-gif-sync-status" role="status">Analyze WAV to enable synchronized preview audio.</span>
+              </div>
               <img id="animation-motion-preview-image" alt="Motion-only animation preview">
               <div class="animation-motion-result-meta" id="animation-motion-result-meta"></div>
               <div class="animation-camera-coverage" id="animation-camera-coverage" hidden></div>
