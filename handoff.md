@@ -1,3 +1,13 @@
+# October 10, 2026 addendum: verified ML2 / ML2.3
+
+ML2 keyboard recording, live feedback, curves/preview UX and desktop-only sticky quick toolbar passed physical Windows/mobile review. Verified CI and immutable checkpoint: `checkpoint/motion-lab-ml2-recording-ux-verified-20261010` @ `1245055f043519e9aab0a46cf8a5fa3310d31619`. Optional Gamepad API not physically tested. **Do not revise or reset this checkpoint.**
+
+ML2.3 first slice on `feature/motion-lab`: recording layer inline Rename and disabled-by-default Duplicate. The duplicate is an independent layer with the same six-axis frame-aligned samples, unique ID and safe enabled=false default. Rename is inline, editable on mobile, limited to 80 characters. Both use the existing draft history. Physical verification is still pending. Scoped punch-in and range-replacement are not yet built and need a separately tested change.
+
+Run `./update.bat feature/motion-lab` on Windows, hard refresh. Record a take, rename it, undo/redo, duplicate, observe disabled copy does not modify curves, toggle it on deliberately, Apply and save/reopen. Do not merge draft PR #19 or touch `main`, `dev-ui`, or paused B6.3.3 until authorized.
+
+---
+
 # Morphorum — Complete Motion Lab Handoff
 ## Verified ML1b checkpoint; ML2 code complete and awaiting physical acceptance
 
