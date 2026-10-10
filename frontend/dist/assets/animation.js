@@ -3972,6 +3972,308 @@
   let motionLabVisual = null;
   let motionLabHistory = [[]];
   let motionLabHistoryIndex = 0;
+  let motionLabRecorder = null;
+  const motionLabRecordKeys = new Set();
+  const motionLabRecordTouch = {
+    translate: {x: 0, y: 0, pointerId: null},
+    rotate: {x: 0, y: 0, pointerId: null},
+    hold: {},
+  };
+  const MOTION_RECORD_KEYMAP = {
+    KeyA: ['translation_x', -1], KeyD: ['translation_x', 1],
+    KeyR: ['translation_y', 1], KeyF: ['translation_y', -1],
+    KeyW: ['translation_z', 1], KeyS: ['translation_z', -1],
+    ArrowUp: ['rotation_x', 1], ArrowDown: ['rotation_x', -1],
+    ArrowLeft: ['rotation_y', -1], ArrowRight: ['rotation_y', 1],
+    KeyQ: ['rotation_z', -1], KeyE: ['rotation_z', 1],
+  };
+  function motionLabRecordStatus(message, gamepad = false) {
+    const target = qs(gamepad ? '#animation-motion-lab-gamepad-status' : '#animation-motion-lab-record-status');
+    if (target) target.textContent = message;
+  }
+  function motionLabRecordClamp(value) {
+    return Math.max(-1, Math.min(1, Number(value) || 0));
+  }
+  function motionLabRecordArmedAxes() {
+    return qsa('[data-motion-record-axis]:checked').map(input => input.dataset.motionRecordAxis);
+  }
+  function motionLabRecordInverted(axis) {
+    return Boolean(qs('[data-motion-record-invert="' + axis + '"]')?.checked);
+  }
+  function motionLabReadGamepad(values, sources) {
+    if (!qs('#animation-motion-lab-record-gamepad')?.checked) return;
+    if (typeof navigator.getGamepads !== 'function') {
+      motionLabRecordStatus('Gamepad API unavailable in this browser/security context. Keyboard and touch still work.', true);
+      return;
+    }
+    let pads = [];
+    try {
+      pads = Array.from(navigator.getGamepads() || []).filter(Boolean);
+    } catch (_) {
+      motionLabRecordStatus('Gamepad access was blocked by this browser/security context. Keyboard and touch still work.', true);
+      return;
+    }
+    const pad = pads.find(item => item.connected !== false);
+    if (!pad) {
+      motionLabRecordStatus('No client-browser gamepad detected. Keyboard and touch still work.', true);
+      return;
+    }
+    const axis = index => Number.isFinite(Number(pad.axes?.[index])) ? Number(pad.axes[index]) : 0;
+    const button = index => Number.isFinite(Number(pad.buttons?.[index]?.value))
+      ? Number(pad.buttons[index].value) : 0;
+    values.translation_x += axis(0);
+    values.translation_y += -axis(1);
+    values.rotation_y += axis(2);
+    values.rotation_x += -axis(3);
+    values.translation_z += button(7) - button(6);
+    values.rotation_z += button(5) - button(4);
+    if ([...pad.axes || [], button(4),button(5),button(6),button(7)]
+        .some(value => Math.abs(Number(value) || 0) > .001)) sources.push('gamepad');
+    motionLabRecordStatus('Gamepad visible to this browser: ' + (pad.id || 'controller') + '.', true);
+  }
+  function motionLabRecordSampleInput() {
+    const values = Object.fromEntries(MOTION_LAB_AXES.map(axis => [axis, 0]));
+    const sources = [];
+    for (const code of motionLabRecordKeys) {
+      const mapping = MOTION_RECORD_KEYMAP[code];
+      if (!mapping) continue;
+      values[mapping[0]] += mapping[1];
+    }
+    if (motionLabRecordKeys.size) sources.push('keyboard');
+    values.translation_x += motionLabRecordTouch.translate.x;
+    values.translation_y += motionLabRecordTouch.translate.y;
+    values.rotation_y += motionLabRecordTouch.rotate.x;
+    values.rotation_x += motionLabRecordTouch.rotate.y;
+    for (const [axis, value] of Object.entries(motionLabRecordTouch.hold)) {
+      if (MOTION_LAB_AXES.includes(axis)) values[axis] += value;
+    }
+    if (Math.abs(motionLabRecordTouch.translate.x) > .001 ||
+        Math.abs(motionLabRecordTouch.translate.y) > .001 ||
+        Math.abs(motionLabRecordTouch.rotate.x) > .001 ||
+        Math.abs(motionLabRecordTouch.rotate.y) > .001 ||
+        Object.values(motionLabRecordTouch.hold).some(value => Math.abs(value) > .001)) {
+      sources.push('touch');
+    }
+    motionLabReadGamepad(values, sources);
+    for (const axis of MOTION_LAB_AXES) {
+      values[axis] = motionLabRecordClamp(values[axis]);
+      if (motionLabRecordInverted(axis)) values[axis] *= -1;
+    }
+    return {values, sources:[...new Set(sources)]};
+  }
+  function motionLabNeutralizeRecordInput() {
+    motionLabRecordKeys.clear();
+    motionLabRecordTouch.translate.x = motionLabRecordTouch.translate.y = 0;
+    motionLabRecordTouch.rotate.x = motionLabRecordTouch.rotate.y = 0;
+    motionLabRecordTouch.translate.pointerId = null;
+    motionLabRecordTouch.rotate.pointerId = null;
+    motionLabRecordTouch.hold = {};
+    for (const id of ['animation-motion-lab-stick-translate','animation-motion-lab-stick-rotate']) {
+      const knob = qs('#' + id + ' .animation-motion-stick-knob');
+      if (knob) knob.style.transform = 'translate(0px, 0px)';
+    }
+  }
+  function motionLabRecordingUi() {
+    const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
+    const active = Boolean(motionLabRecorder?.active);
+    const record = qs('#animation-motion-lab-record');
+    const stop = qs('#animation-motion-lab-stop-recording');
+    if (record) record.disabled = !ready || active || motionLabDraftLayers.length >= 24;
+    if (stop) stop.disabled = !active;
+    const start = qs('#animation-motion-lab-record-start');
+    const count = Number(state.project?.animation?.max_frames || 120);
+    if (start) {
+      start.max = String(Math.max(0, count - 1));
+      start.disabled = !ready || active;
+    }
+    qsa('#animation-motion-lab-recording input, #animation-motion-lab-recording select')
+      .forEach(control => {
+        if (control.id === 'animation-motion-lab-record-start') return;
+        if (control.id === 'animation-motion-lab-record-gamepad') {
+          control.disabled = !ready || active;
+          return;
+        }
+        if (control.matches('[data-motion-record-axis], [data-motion-record-invert]') ||
+            control.closest('.animation-motion-recording-controls')) {
+          control.disabled = !ready || active;
+        }
+      });
+    if (!state.project) motionLabRecordStatus('Select a project');
+    else if (animationMode() !== '3d') motionLabRecordStatus('3D Motion required');
+    else if (!active) motionLabRecordStatus('Ready');
+  }
+  function motionLabFinalizeRecording(take) {
+    if (!take || take.reason === 'discard' || !state.project) {
+      motionLabRecordingUi();
+      return;
+    }
+    const count = Number(state.project.animation.max_frames || 120);
+    if (!take.samples?.length || take.startFrame < 0 || take.endFrame > count) {
+      motionLabNotify('Recorded take was empty or outside the current project and was not added.');
+      motionLabRecordingUi();
+      return;
+    }
+    if (motionLabDraftLayers.length >= 24) {
+      motionLabNotify('Motion Lab supports at most 24 layers; the take was not added.');
+      motionLabRecordingUi();
+      return;
+    }
+    const source = take.sources.length === 1 ? take.sources[0] :
+      take.sources.length > 1 ? 'mixed' : 'unknown';
+    const layer = {
+      id: 'take-' + Date.now().toString(36),
+      type: 'recording',
+      name: 'Recorded ' + source + ' take',
+      enabled: true,
+      blend: qs('#animation-motion-lab-record-blend')?.value || 'add',
+      start_frame: take.startFrame,
+      end_frame: take.endFrame,
+      fps: Number(take.fps),
+      source,
+      capture_version: 1,
+      axes: take.armedAxes.slice(),
+      samples: take.samples.map(row => row.slice()),
+    };
+    motionLabDraftLayers.push(layer);
+    motionLabRecorder = null;
+    motionLabNeutralizeRecordInput();
+    motionLabNotify(
+      'Recorded ' + layer.samples.length + ' frame(s) from ' + layer.start_frame +
+      '–' + (layer.end_frame - 1) + '. Take added as a draft layer; Update Curves or Apply when ready.'
+    );
+    commitMotionLabDraft();
+    const start = qs('#animation-motion-lab-record-start');
+    if (start) start.value = String(Math.min(count - 1, layer.end_frame));
+    void motionLabPreviewOrApply(false, {curvesOnly:true});
+    motionLabRecordingUi();
+  }
+  function motionLabStartRecording() {
+    if (!state.project || animationMode() !== '3d' || motionLabBusy) {
+      motionLabNotify('Choose a 3D project before recording camera motion.');
+      return;
+    }
+    if (!window.MorphorumMotionLabFrameRecorder) {
+      motionLabNotify('Motion recorder asset is unavailable. Hard-refresh the browser and try again.');
+      return;
+    }
+    if (motionLabDraftLayers.length >= 24) {
+      motionLabNotify('Motion Lab supports at most 24 layers.');
+      return;
+    }
+    const axes = motionLabRecordArmedAxes();
+    if (!axes.length) {
+      motionLabNotify('Arm at least one camera axis before recording.');
+      return;
+    }
+    const count = Number(state.project.animation.max_frames || 120);
+    const fps = Number(state.project.animation.fps || 12);
+    const startFrame = Number(qs('#animation-motion-lab-record-start')?.value || 0);
+    const translationScale = Number(qs('#animation-motion-lab-record-translation')?.value);
+    const rotationScale = Number(qs('#animation-motion-lab-record-rotation')?.value);
+    const deadzone = Number(qs('#animation-motion-lab-record-deadzone')?.value);
+    const response = Number(qs('#animation-motion-lab-record-response')?.value);
+    const tailFrames = Number(qs('#animation-motion-lab-record-tail')?.value);
+    if (!Number.isInteger(startFrame) || startFrame < 0 || startFrame >= count ||
+        !Number.isFinite(translationScale) || translationScale <= 0 ||
+        !Number.isFinite(rotationScale) || rotationScale <= 0 ||
+        !Number.isFinite(deadzone) || deadzone < 0 || deadzone > .5 ||
+        !Number.isFinite(response) || response < .05 || response > 1 ||
+        !Number.isInteger(tailFrames) || tailFrames < 0 || tailFrames > 12) {
+      motionLabNotify('Check recording start, sensitivity, deadzone, response and release-tail settings.');
+      return;
+    }
+    motionLabNeutralizeRecordInput();
+    motionLabVisual?.pause();
+    motionLabRecorder = new window.MorphorumMotionLabFrameRecorder();
+    motionLabRecorder.start({
+      fps, startFrame, maxFrames: count - startFrame, armedAxes: axes,
+      translationScale, rotationScale, deadzone, response, tailFrames,
+      sampleInput: motionLabRecordSampleInput,
+      onFrame: ({frame, count: captured}) => {
+        const target = qs('#animation-motion-lab-record-frame');
+        if (target) target.textContent =
+          'Recording frame ' + frame + ' · ' + captured + ' captured · ' + fps + ' FPS project clock';
+        motionLabVisual?.setFrame(frame);
+      },
+      onComplete: take => motionLabFinalizeRecording(take),
+    });
+    motionLabRecordStatus('Recording');
+    motionLabNotify('Recording live camera input on the project frame clock. Stop to create a draft recording layer.');
+    motionLabRecordingUi();
+  }
+  function motionLabStopRecording(reason = 'manual') {
+    if (!motionLabRecorder?.active) return;
+    motionLabNeutralizeRecordInput();
+    motionLabRecorder.stop(reason);
+  }
+  function motionLabDiscardRecording() {
+    if (!motionLabRecorder?.active) return;
+    motionLabNeutralizeRecordInput();
+    motionLabRecorder.finish('discard');
+    motionLabRecorder = null;
+    motionLabRecordingUi();
+  }
+  function motionLabBindStick(id, targetName) {
+    const stick = qs('#' + id);
+    if (!stick) return;
+    const stateTarget = motionLabRecordTouch[targetName];
+    const update = event => {
+      const rect = stick.getBoundingClientRect();
+      const radius = Math.max(1, Math.min(rect.width, rect.height) * .38);
+      let x = (event.clientX - (rect.left + rect.width / 2)) / radius;
+      let y = (event.clientY - (rect.top + rect.height / 2)) / radius;
+      const length = Math.hypot(x, y);
+      if (length > 1) { x /= length; y /= length; }
+      stateTarget.x = x;
+      stateTarget.y = -y;
+      const knob = stick.querySelector('.animation-motion-stick-knob');
+      if (knob) knob.style.transform =
+        'translate(' + (x * radius * .58).toFixed(1) + 'px, ' + (y * radius * .58).toFixed(1) + 'px)';
+    };
+    const release = event => {
+      if (stateTarget.pointerId !== null && event?.pointerId !== undefined &&
+          event.pointerId !== stateTarget.pointerId) return;
+      stateTarget.x = stateTarget.y = 0;
+      stateTarget.pointerId = null;
+      const knob = stick.querySelector('.animation-motion-stick-knob');
+      if (knob) knob.style.transform = 'translate(0px, 0px)';
+    };
+    stick.addEventListener('pointerdown', event => {
+      if (!motionLabRecorder?.active) return;
+      event.preventDefault();
+      stateTarget.pointerId = event.pointerId;
+      stick.setPointerCapture?.(event.pointerId);
+      update(event);
+    });
+    stick.addEventListener('pointermove', event => {
+      if (!motionLabRecorder?.active || stateTarget.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      update(event);
+    });
+    stick.addEventListener('pointerup', release);
+    stick.addEventListener('pointercancel', release);
+    stick.addEventListener('lostpointercapture', release);
+  }
+  function motionLabBindHoldControls() {
+    qsa('[data-motion-hold-axis]').forEach(button => {
+      const axis = button.dataset.motionHoldAxis;
+      const value = Number(button.dataset.motionHoldValue);
+      const release = () => {
+        if (motionLabRecordTouch.hold[axis] === value) delete motionLabRecordTouch.hold[axis];
+        button.classList.remove('active');
+      };
+      button.addEventListener('pointerdown', event => {
+        if (!motionLabRecorder?.active || !MOTION_LAB_AXES.includes(axis)) return;
+        event.preventDefault();
+        motionLabRecordTouch.hold[axis] = motionLabRecordClamp(value);
+        button.classList.add('active');
+        button.setPointerCapture?.(event.pointerId);
+      });
+      button.addEventListener('pointerup', release);
+      button.addEventListener('pointercancel', release);
+      button.addEventListener('lostpointercapture', release);
+    });
+  }
   function commitMotionLabDraft() {
     const snapshot = JSON.stringify(motionLabDraftLayers);
     if (JSON.stringify(motionLabHistory[motionLabHistoryIndex]) === snapshot) {
@@ -3999,6 +4301,7 @@
   function syncMotionLabDraft() {
     const projectId = state.project?.id || '';
     if (projectId === motionLabProjectId) return;
+    if (motionLabRecorder?.active && projectId !== motionLabProjectId) motionLabDiscardRecording();
     motionLabProjectId = projectId;
     motionLabEditingIndex = -1;
     motionLabDraftLayers = Array.isArray(state.project?.motion_lab?.layers)
@@ -4013,6 +4316,7 @@
     const is3d = animationMode() === '3d';
     const ready = Boolean(project && is3d && !motionLabBusy);
     const count = Number(project?.animation?.max_frames || 120);
+    motionLabRecordingUi();
     const stage = qs('#animation-motion-lab-compose-status');
     if (stage) stage.textContent = !project ? 'Select a project' :
       !is3d ? '2D project (switch to 3D here)' : motionLabDraftLayers.length +
@@ -4056,9 +4360,13 @@
         ? (index + 1) + '. Custom ' + layer.axis.replaceAll('_', ' ') +
           ' · ' + layer.blend + ' · ' + layer.interpolation +
           ' · ' + layer.keys.length + ' keyframe(s)'
-        : (index + 1) + '. ' + String(layer.preset).replaceAll('-', ' ') +
-          ' · ' + layer.blend + ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
-          ' · strength ' + layer.strength;
+        : layer.type === 'recording'
+          ? (index + 1) + '. ' + (layer.name || 'Recorded take') +
+            ' · ' + layer.blend + ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
+            ' · ' + layer.samples.length + ' frame(s) · ' + (layer.source || 'unknown')
+          : (index + 1) + '. ' + String(layer.preset).replaceAll('-', ' ') +
+            ' · ' + layer.blend + ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
+            ' · strength ' + layer.strength;
       const edit = document.createElement('button');
       edit.type = 'button';
       edit.className = 'secondary-button compact';
@@ -4071,6 +4379,19 @@
           if (axisField) axisField.value = layer.axis;
           motionLabCurveSyncAxis();
           motionLabNotify('Selected custom keyframes on ' + layer.axis.replaceAll('_', ' ') + '.');
+          renderMotionLabDraft();
+          return;
+        }
+        if (layer.type === 'recording') {
+          motionLabEditingIndex = -1;
+          const start = qs('#animation-motion-lab-record-start');
+          if (start) start.value = String(layer.start_frame);
+          motionLabVisual?.setFrame(layer.start_frame);
+          motionLabNotify(
+            (layer.name || 'Recorded take') + ' selected: ' + layer.samples.length +
+            ' frame(s), ' + layer.axes.join(', ').replaceAll('_',' ') +
+            '. Record a new take to replace or layer additional movement.'
+          );
           renderMotionLabDraft();
           return;
         }
@@ -4217,6 +4538,10 @@
   function motionLabCurveFrameSync(frame) {
     const input = qs('#animation-motion-lab-key-frame');
     if (input && document.activeElement !== input) input.value = String(frame);
+    const recordStart = qs('#animation-motion-lab-record-start');
+    if (recordStart && !motionLabRecorder?.active && document.activeElement !== recordStart) {
+      recordStart.value = String(frame);
+    }
     const value = qs('#animation-motion-lab-key-value');
     if (value && document.activeElement !== value) {
       const existing = motionLabCurveLayer()?.keys?.find(key => key.frame === frame);
@@ -4488,7 +4813,10 @@
   let animationTab = 'editor';
   function showAnimationTab(name, { persist = true } = {}) {
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'editor';
-    if (name !== 'motion') motionLabVisual?.pause();
+    if (name !== 'motion') {
+      motionLabVisual?.pause();
+      if (motionLabRecorder?.active) motionLabStopRecording('tab-change');
+    }
     animationTab = name;
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
@@ -4577,6 +4905,8 @@
     if (motionIntro) panels.motion.appendChild(motionIntro);
     const composer = qs('#animation-motion-lab-composer');
     if (composer) panels.motion.appendChild(composer);
+    const recording = qs('#animation-motion-lab-recording');
+    if (recording) panels.motion.appendChild(recording);
     const visual = qs('#animation-motion-lab-visual');
     if (visual) panels.motion.appendChild(visual);
     const motionPreview = qs('.animation-motion-preview-card');
@@ -4685,6 +5015,21 @@
       motionLabNotify('3D Motion enabled. Preview a draft now, or Apply to save the 3D setting and camera tracks.');
     });
     qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
+    qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
+    qs('#animation-motion-lab-stop-recording')?.addEventListener('click',
+      () => motionLabStopRecording('manual'));
+    qs('#animation-motion-lab-record-gamepad')?.addEventListener('change', event => {
+      if (!event.target.checked) {
+        motionLabRecordStatus('Gamepad input off. Keyboard and touch are always available.', true);
+      } else if (typeof navigator.getGamepads !== 'function') {
+        motionLabRecordStatus('Gamepad API unavailable in this browser/security context. Keyboard and touch still work.', true);
+      } else {
+        motionLabRecordStatus('Gamepad enabled. Move a controller control while recording to verify client-browser visibility.', true);
+      }
+    });
+    motionLabBindStick('animation-motion-lab-stick-translate', 'translate');
+    motionLabBindStick('animation-motion-lab-stick-rotate', 'rotate');
+    motionLabBindHoldControls();
     qs('#animation-motion-lab-clear')?.addEventListener('click', () => {
       motionLabDraftLayers = [];
       motionLabEditingIndex = -1;
@@ -4724,6 +5069,37 @@
     qs('#animation-resume-render')?.addEventListener('click', resumeAnimationRender);
     qs('#animation-render-select')?.addEventListener('change', event => {
       showRender(event.target.value);
+    });
+
+    window.addEventListener('keydown', event => {
+      if (!motionLabRecorder?.active || !MOTION_RECORD_KEYMAP[event.code]) return;
+      if (event.repeat) return;
+      event.preventDefault();
+      motionLabRecordKeys.add(event.code);
+    });
+    window.addEventListener('keyup', event => {
+      if (!MOTION_RECORD_KEYMAP[event.code]) return;
+      if (motionLabRecorder?.active) event.preventDefault();
+      motionLabRecordKeys.delete(event.code);
+    });
+    window.addEventListener('blur', () => {
+      if (!motionLabRecorder?.active) {
+        motionLabNeutralizeRecordInput();
+        return;
+      }
+      motionLabStopRecording('blur');
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && motionLabRecorder?.active) motionLabStopRecording('hidden');
+      else if (document.hidden) motionLabNeutralizeRecordInput();
+    });
+    window.addEventListener('gamepadconnected', event => {
+      if (qs('#animation-motion-lab-record-gamepad')?.checked) {
+        motionLabRecordStatus('Gamepad connected to this browser: ' + (event.gamepad?.id || 'controller') + '.', true);
+      }
+    });
+    window.addEventListener('gamepaddisconnected', () => {
+      motionLabRecordStatus('Gamepad disconnected. Keyboard and touch remain available.', true);
     });
 
     qs('#animation-project-select')?.addEventListener('change', event => {
