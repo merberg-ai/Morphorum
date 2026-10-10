@@ -2153,3 +2153,8 @@ dialog#animation-deforum-dialog {
 .animation-motion-audio-legend span:nth-child(3) {color:#ffbd69;}
 #animation-motion-lab-audio-prediction {margin:8px 0 0;}
 @media(max-width:540px) {#animation-motion-lab-audio-plot {height:155px;}.animation-motion-audio-preview {padding:8px;}}
+
+.animation-motion-audio-playback {display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0;font-size:.86rem;}
+.animation-motion-audio-playback label {display:inline-flex;align-items:center;gap:8px;}
+.animation-motion-audio-playback input[type=checkbox] {width:16px;height:16px;}
+@media(max-width:540px) {.animation-motion-audio-playback {align-items:flex-start;flex-direction:column;}}
