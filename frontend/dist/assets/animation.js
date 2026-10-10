@@ -4144,7 +4144,9 @@
       id: motionLabEditingIndex >= 0
         ? motionLabDraftLayers[motionLabEditingIndex].id
         : 'layer-' + Date.now().toString(36) + '-' + motionLabDraftLayers.length,
-      preset: read('preset'), blend: read('blend'), enabled: true,
+      preset: read('preset'), blend: read('blend'),
+      enabled: motionLabEditingIndex >= 0
+        ? motionLabDraftLayers[motionLabEditingIndex].enabled !== false : true,
       strength: Number(read('strength')),
       cycle_seconds: Number(read('cycle')), fade_seconds: Number(read('fade')),
       start_frame: Number(read('start')),
@@ -4262,6 +4264,7 @@
   let animationTab = 'editor';
   function showAnimationTab(name, { persist = true } = {}) {
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'editor';
+    if (name !== 'motion') motionLabVisual?.pause();
     animationTab = name;
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
