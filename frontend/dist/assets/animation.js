@@ -496,6 +496,7 @@
     renderTimeline();
     renderDepthState();
     renderSourceState();
+    renderMotionLabDraft();
   }
 
   function timelineStatus(text, kind = '') {
@@ -1872,6 +1873,7 @@
 
   function fillForm() {
     const project = state.project;
+    syncMotionLabDraft();
     state.loading = true;
     try {
       renderProjectSelect();
@@ -2532,7 +2534,7 @@
     }
   }
 
-  async function generateMotionPreview() {
+  async function generateMotionPreview(projectOverride = null) {
     if (!state.project || state.motionJobId) return;
     const button = qs('#animation-generate-motion-preview');
     if (button) {
@@ -2551,7 +2553,8 @@
       const job = await api('/api/animation/motion-preview', {
         method: 'POST',
         body: JSON.stringify({
-          project: collectProject(),
+          project: projectOverride?.animation && projectOverride?.tracks
+            ? projectOverride : collectProject(),
           options: {
             highlight_holes: animationMode() === '3d' &&
               Boolean(qs('#animation-preview-highlight-holes')?.checked),
@@ -3960,6 +3963,144 @@
     hybridButtons();
   }
 
+  // ML0: draft preset layers exist separately from the applied animation
+  // timeline. Only the Apply endpoint writes camera schedules or project.json.
+  let motionLabProjectId = '';
+  let motionLabDraftLayers = [];
+  let motionLabBusy = false;
+  function syncMotionLabDraft() {
+    const projectId = state.project?.id || '';
+    if (projectId === motionLabProjectId) return;
+    motionLabProjectId = projectId;
+    motionLabDraftLayers = Array.isArray(state.project?.motion_lab?.layers)
+      ? state.project.motion_lab.layers.map(layer => ({ ...layer })) : [];
+    renderMotionLabDraft();
+  }
+  function renderMotionLabDraft() {
+    const project = state.project;
+    const is3d = animationMode() === '3d';
+    const ready = Boolean(project && is3d && !motionLabBusy);
+    const count = Number(project?.animation?.max_frames || 120);
+    const stage = qs('#animation-motion-lab-compose-status');
+    if (stage) stage.textContent = !project ? 'Select a project' :
+      !is3d ? 'Select 3D in Editor' : motionLabDraftLayers.length +
+      ' draft layer' + (motionLabDraftLayers.length === 1 ? '' : 's');
+    for (const id of ['animation-motion-lab-add','animation-motion-lab-clear',
+      'animation-motion-lab-preview-draft','animation-motion-lab-apply']) {
+      const button = qs('#' + id);
+      if (!button) continue;
+      const needsLayers = id !== 'animation-motion-lab-add';
+      button.disabled = !ready || (needsLayers && !motionLabDraftLayers.length);
+    }
+    const end = qs('#animation-motion-lab-end');
+    if (end) end.max = String(count);
+    const start = qs('#animation-motion-lab-start');
+    if (start) start.max = String(Math.max(0, count - 1));
+    const list = qs('#animation-motion-lab-layer-list');
+    if (!list) return;
+    list.replaceChildren();
+    if (!motionLabDraftLayers.length) {
+      list.textContent = 'No layers. Add a Wave, Spiral, Figure Eight, or another preset to begin.';
+      return;
+    }
+    motionLabDraftLayers.forEach((layer, index) => {
+      const item = document.createElement('div');
+      item.className = 'animation-motion-lab-layer';
+      const desc = document.createElement('span');
+      desc.textContent = (index + 1) + '. ' + String(layer.preset).replaceAll('-', ' ') +
+        ' · ' + layer.blend + ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
+        ' · strength ' + layer.strength;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'secondary-button compact';
+      remove.textContent = 'Remove';
+      remove.disabled = !ready;
+      remove.addEventListener('click', () => {
+        motionLabDraftLayers.splice(index, 1);
+        renderMotionLabDraft();
+      });
+      item.append(desc, remove);
+      list.appendChild(item);
+    });
+  }
+  function motionLabNotify(message) {
+    const target = qs('#animation-motion-lab-diagnostics');
+    if (target) target.textContent = message;
+  }
+  function motionLabAddPreset() {
+    if (!state.project || animationMode() !== '3d') {
+      motionLabNotify('Select a saved 3D animation project in Editor first.');
+      return;
+    }
+    const frames = Number(state.project.animation.max_frames || 120);
+    const read = key => qs('#animation-motion-lab-' + key)?.value;
+    const rawEnd = Number(read('end'));
+    const entry = {
+      id: 'layer-' + Date.now().toString(36) + '-' + motionLabDraftLayers.length,
+      preset: read('preset'), blend: read('blend'), enabled: true,
+      strength: Number(read('strength')),
+      cycle_seconds: Number(read('cycle')), fade_seconds: Number(read('fade')),
+      start_frame: Number(read('start')),
+      end_frame: rawEnd === 0 ? frames : rawEnd,
+    };
+    if (!Number.isInteger(entry.start_frame) || !Number.isInteger(entry.end_frame) ||
+        entry.start_frame < 0 || entry.end_frame > frames ||
+        entry.end_frame <= entry.start_frame || !Number.isFinite(entry.strength) ||
+        entry.strength < 0 || entry.strength > 1 ||
+        !Number.isFinite(entry.cycle_seconds) || entry.cycle_seconds < .2 ||
+        !Number.isFinite(entry.fade_seconds) || entry.fade_seconds < 0) {
+      motionLabNotify('Check the preset range, strength, cycle and fade settings.');
+      return;
+    }
+    if (motionLabDraftLayers.length >= 24) {
+      motionLabNotify('Motion Lab supports up to 24 layers.');
+      return;
+    }
+    motionLabDraftLayers.push(entry);
+    motionLabNotify('Draft updated. Preview the motion, then Apply to Animation to save.');
+    renderMotionLabDraft();
+  }
+  async function motionLabPreviewOrApply(apply) {
+    if (!state.project?.id || !motionLabDraftLayers.length || motionLabBusy) return;
+    if (state.dirty) {
+      motionLabNotify('Save current Editor changes before composing Motion Lab presets.');
+      return;
+    }
+    const projectId = state.project.id;
+    motionLabBusy = true;
+    renderMotionLabDraft();
+    try {
+      const result = await api('/api/animation/projects/' +
+        encodeURIComponent(projectId) + '/motion-lab/' + (apply ? 'apply' : 'preview'), {
+          method: 'POST', body: JSON.stringify({ layers: motionLabDraftLayers }),
+        });
+      if (state.project?.id !== projectId) return;
+      const limited = Object.entries(result.diagnostics?.limited || {});
+      motionLabNotify((apply ? 'Applied ' : 'Previewing ') +
+        result.diagnostics.layer_count + ' motion layer(s) across ' +
+        result.diagnostics.frames + ' frames.' +
+        (limited.length ? ' Limited axes: ' + limited.map(([axis,n])=>axis+' ('+n+')').join(', ') : ' No clipping.'));
+      if (apply) {
+        state.project = result.project;
+        motionLabDraftLayers = result.project.motion_lab.layers.map(l => ({ ...l }));
+        clearMotionPreviewResult();
+        fillForm();
+        await loadTimeline();
+        await loadProjectList();
+        toast('Motion Lab applied', 'Camera schedules updated in the existing 3D timeline.', 'success');
+      } else {
+        await generateMotionPreview(result.project);
+      }
+    } catch (error) {
+      motionLabNotify('Motion Lab: ' + error.message);
+      toast('Motion Lab ' + (apply ? 'apply' : 'preview') + ' failed',
+        error.message, 'error', 7000);
+    } finally {
+      motionLabBusy = false;
+      renderMotionLabDraft();
+    }
+  }
+
   // Motion Lab is first-class; unfinished hybrid Media controls remain mounted
   // in a non-navigable vault so existing project and API semantics stay intact.
   // Four visible views share the existing render controls and poller.
@@ -4150,6 +4291,16 @@
     qs('#animation-cadence')?.addEventListener('input', syncCadencePreset);
     qs('#animation-cadence')?.addEventListener('change', syncCadencePreset);
     qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
+    qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
+    qs('#animation-motion-lab-clear')?.addEventListener('click', () => {
+      motionLabDraftLayers = [];
+      motionLabNotify('Draft cleared. The currently saved camera timeline is unchanged.');
+      renderMotionLabDraft();
+    });
+    qs('#animation-motion-lab-preview-draft')?.addEventListener('click',
+      () => motionLabPreviewOrApply(false));
+    qs('#animation-motion-lab-apply')?.addEventListener('click',
+      () => motionLabPreviewOrApply(true));
     qs('#animation-export-video')?.addEventListener('click', startVideoExport);
 
     qs('#animation-start-render')?.addEventListener('click', startAnimationRender);
