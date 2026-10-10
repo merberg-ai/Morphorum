@@ -129,3 +129,55 @@ def balanced_pulses(
             output[i] = -amount / release
         available = start + attack + release + cooldown
     return output
+
+# Bands are intended as practical targeting filters, not source separation.
+AUDIO_BANDS = {"kick": (35, 140), "bass": (40, 250),
+               "snare": (150, 2400), "highs": (2500, 10000)}
+
+
+def spectral_band_envelopes(samples: Sequence[float], *, sample_rate: int,
+                            fps: float, max_frames: int) -> dict[str, list[float]]:
+    """Windowed FFT band power, normalized per-band for UI thresholding."""
+    import numpy as np
+    rate = int(_finite(sample_rate, "Sample rate", 8000, 192000))
+    clock = _finite(fps, "Project FPS", 1, 240)
+    if not 1 <= max_frames <= 3000:
+        raise AudioMotionError("Invalid analysis frame count.")
+    y = np.asarray(samples, dtype=np.float32)
+    if not y.size or not np.all(np.isfinite(y)):
+        raise AudioMotionError("Invalid audio samples.")
+    window_size = 4096 if rate >= 16000 else 2048
+    window = np.hanning(window_size).astype(np.float32)
+    freqs = np.fft.rfftfreq(window_size, 1 / rate)
+    masks = {name: (freqs >= low) & (freqs < high)
+             for name, (low, high) in AUDIO_BANDS.items()}
+    powers = {name: [] for name in AUDIO_BANDS}
+    for frame in range(max_frames):
+        center = int((frame + .5) * rate / clock)
+        start = center - window_size // 2
+        a, b = max(0, start), min(len(y), start + window_size)
+        segment = np.zeros(window_size, dtype=np.float32)
+        if b > a:
+            segment[a - start:a - start + b - a] = y[a:b]
+        power = np.abs(np.fft.rfft(segment * window)) ** 2
+        for name, mask in masks.items():
+            powers[name].append(float(np.sqrt(np.sum(power[mask]))))
+    return {name: [round(min(1., v / max(peak, 1e-12)), 7) for v in vals]
+            for name, vals in powers.items()
+            for peak in [max(vals, default=0.)]}
+
+
+def onset_strength(envelope: Sequence[float], sensitivity: float = .35) -> list[float]:
+    """Positive spectral-energy change, smoothed against very short changes.
+
+    Output is a 0..1 onset signal that can be used by the same deterministic
+    threshold/pulse compiler as full-band RMS. Sensitivity is relative to the
+    peak positive difference, so the controls scale across recordings.
+    """
+    level = _finite(sensitivity, "Transient sensitivity", 0, 1)
+    vals = [_finite(v, "Envelope", 0, 1) for v in envelope]
+    rise = [0.] + [max(0., vals[i] - vals[i - 1]) for i in range(1, len(vals))]
+    peak = max(rise, default=0)
+    if peak <= 1e-12:
+        return [0.] * len(vals)
+    return [round(max(0., min(1., v / peak - level * .5)), 7) for v in rise]
