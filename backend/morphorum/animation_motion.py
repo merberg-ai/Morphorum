@@ -21,7 +21,12 @@ from .console import emit_console
 from .paths import OUTPUTS_DIR
 
 PREVIEW_MAX_DIMENSION = 512
-PREVIEW_MAX_CAPTURE_FRAMES = 72
+PREVIEW_MAX_CAPTURE_FRAMES = 144
+PREVIEW_QUALITY = {
+    'fast': (192, 36),
+    'balanced': (320, 72),
+    'detailed': (320, 144),
+}
 PREVIEW_MAX_3D_SOURCE_FRAMES = 3000
 SOURCE_MAX_BYTES = 32 * 1024 * 1024
 SUPPORTED_BORDER_MODES = {"replicate", "wrap"}
@@ -546,7 +551,10 @@ class MotionPreviewManager:
         project: dict[str, Any],
         source_path: Path | None,
         highlight_holes: bool = False,
+        quality: str = 'balanced',
     ) -> dict[str, Any]:
+        if quality not in PREVIEW_QUALITY:
+            raise MotionPreviewError('Preview quality must be fast, balanced or detailed.')
         project_id = str(project.get("id") or "").strip()
         if not project_id:
             raise MotionPreviewError("Animation project id is required.")
@@ -571,7 +579,7 @@ class MotionPreviewManager:
 
         thread = threading.Thread(
             target=self._run,
-            args=(job.id, deepcopy(project), source_path, highlight_holes),
+            args=(job.id, deepcopy(project), source_path, highlight_holes, quality),
             daemon=True,
             name=f"Morphorum-{job.id}",
         )
@@ -610,9 +618,10 @@ class MotionPreviewManager:
         project: dict[str, Any],
         source_path: Path | None,
         highlight_holes: bool = False,
+        quality: str = 'balanced',
     ) -> None:
         with self._render_lock:
-            self._run_serialized(job_id, project, source_path, highlight_holes)
+            self._run_serialized(job_id, project, source_path, highlight_holes, quality)
 
     def _run_serialized(
         self,
@@ -620,6 +629,7 @@ class MotionPreviewManager:
         project: dict[str, Any],
         source_path: Path | None,
         highlight_holes: bool = False,
+        quality: str = 'balanced',
     ) -> None:
         with self._lock:
             job = self._jobs[job_id]
@@ -658,7 +668,10 @@ class MotionPreviewManager:
                 output,
                 progress_callback=progress,
                 highlight_holes=highlight_holes,
+                max_dimension=PREVIEW_QUALITY[quality][0],
+                max_capture_frames=PREVIEW_QUALITY[quality][1],
             )
+            result['preview_quality'] = quality
             # Expose the existing bounded preview samples as seekable frames.
             result["frame_player_samples"] = result["captured_frames"]
             result["source_kind"] = source_kind
