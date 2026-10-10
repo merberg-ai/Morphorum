@@ -784,7 +784,7 @@ def test_motion_lab_source_free_api_selects_reference_grid(tmp_path, monkeypatch
     monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path / "projects")
     seen = []
 
-    def fake_start(*, project, source_path, highlight_holes=False):
+    def fake_start(*, project, source_path, highlight_holes=False, quality='balanced'):
         seen.append((project, source_path, highlight_holes))
         return {"id": "motion-grid", "status": "queued"}
 
@@ -809,7 +809,7 @@ def test_b53_3d_preview_api_forwards_red_overlay_to_manager(
     monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path / "projects")
     seen = []
 
-    def fake_start(*, project, source_path, highlight_holes=False):
+    def fake_start(*, project, source_path, highlight_holes=False, quality='balanced'):
         seen.append((project, source_path, highlight_holes))
         return {"id": "b53-preview-test", "status": "queued"}
 
