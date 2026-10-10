@@ -168,15 +168,20 @@ def _command(
         ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
         "-y", "-framerate", str(fps), "-start_number", "0",
         "-i", str(input_pattern),
+    ]
+    if audio_path is not None:
+        command += ["-i", str(audio_path)]
+    command += [
+        "-map", "0:v:0",
         "-frames:v", str(frame_count),
         "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
         "-pix_fmt", "yuv420p",
     ]
     if audio_path is not None:
-        command += ["-i", str(audio_path), "-map", "0:v:0", "-map", "1:a:0",
-                    "-af", "apad", "-t", f"{frame_count / fps:.6f}"]
+        command += ["-map", "1:a:0", "-af", "apad",
+                    "-t", f"{frame_count / fps:.6f}"]
     else:
-        command += ["-map", "0:v:0", "-an"]
+        command += ["-an"]
     if format == "mp4":
         command += [
             "-c:v", "libx264", "-preset", "medium",
