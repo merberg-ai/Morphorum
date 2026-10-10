@@ -2375,9 +2375,11 @@
       : (requiresSource ? 'No starting image uploaded.' : 'No image uploaded. Prompt mode does not require one.');
     if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
-    if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    // A source photo is optional: Motion Lab falls back to a calibration grid.
+    if (preview) preview.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     const overlay = qs('#animation-preview-highlight-holes');
-    if (overlay) overlay.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    if (overlay) overlay.disabled = !state.project || animationMode() !== '3d' ||
+      Boolean(state.motionJobId) || renderActive || state.depthBusy;
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
@@ -2496,7 +2498,8 @@
         job.result.preview_width + ' × ' + job.result.preview_height + ' · ' +
         job.result.captured_frames + ' preview frames from ' + job.result.source_frames +
         ' project frames · ' + Number(job.result.duration_seconds || 0).toFixed(2) +
-        's · ' + (job.result.mode === '3d' ? '3D depth on CPU' : job.result.border_mode);
+        's · ' + (job.result.source_kind === 'calibration-grid' ? 'Calibration grid' : 'Uploaded image') +
+        ' · ' + (job.result.mode === '3d' ? '3D depth on CPU' : job.result.border_mode);
       const coverage = qs('#animation-camera-coverage');
       if (coverage) {
         coverage.hidden = job.result?.mode !== '3d';
@@ -2530,7 +2533,7 @@
   }
 
   async function generateMotionPreview() {
-    if (!state.project?.animation?.source_image || state.motionJobId) return;
+    if (!state.project || state.motionJobId) return;
     const button = qs('#animation-generate-motion-preview');
     if (button) {
       button.classList.add('busy');
