@@ -6,7 +6,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -544,9 +544,10 @@ def api_cancel_hybrid_extraction(project_id: str, job_id: str) -> dict[str, Any]
 
 
 @app.get("/api/animation/projects/{project_id}/hybrid-frames")
-def api_hybrid_frames(project_id: str) -> dict[str, Any]:
+def api_hybrid_frames(project_id: str, response: Response) -> dict[str, Any]:
     try:
         load_animation_project(project_id)
+        response.headers["Cache-Control"] = "no-store, max-age=0"
         return hybrid_extraction_manager.manifest(project_id)
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -563,7 +564,10 @@ def api_hybrid_frame_file(project_id: str, frame_number: int):
             raise HybridSourceError("Frame number out of bounds.")
         filename = manifest["filenames"][frame_number - 1]
         path = animation_project_directory(project_id) / "assets" / "hybrid" / "frames" / filename
-        return FileResponse(path, media_type="image/png")
+        return FileResponse(
+            path, media_type="image/png",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except HybridSourceError as exc:
