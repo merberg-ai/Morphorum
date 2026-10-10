@@ -55,6 +55,8 @@ from .animation_render import (
     animation_render_manager,
 )
 from .motion_lab import MotionLabError, PRESETS as MOTION_LAB_PRESETS, compile_motion_lab
+from .audio_motion import AudioMotionError
+from .audio_motion_upload import MAX_AUDIO_BYTES, analyze_managed_wav
 from .animation_hybrid_extract import hybrid_extraction_manager
 from .animation_hybrid_source import (
     HybridSourceError, managed_video_path, probe_managed_video, store_managed_video,
@@ -310,6 +312,31 @@ def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict
 @app.get("/api/animation/motion-lab/presets")
 def api_motion_lab_presets() -> dict[str, Any]:
     return {"presets": list(MOTION_LAB_PRESETS)}
+
+
+@app.post("/api/animation/projects/{project_id}/motion-lab/audio-analyze")
+async def api_motion_lab_audio_analyze(project_id: str, request: Request) -> dict[str, Any]:
+    """Decode and retain bounded project-owned WAV, without modifying camera tracks."""
+    try:
+        project = load_animation_project(project_id)
+        if request.headers.get("content-length"):
+            if int(request.headers["content-length"]) > MAX_AUDIO_BYTES:
+                raise AudioMotionError("Audio file exceeds 20 MiB.")
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > MAX_AUDIO_BYTES:
+                raise AudioMotionError("Audio file exceeds 20 MiB.")
+        animation = project.get("animation") or {}
+        analysis = analyze_managed_wav(
+            project_id, bytes(data), fps=float(animation.get("fps", 12)),
+            frames=int(animation.get("max_frames", 120)),
+        )
+        return {"status": "analyzed", "analysis": analysis}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (AudioMotionError, ValueError, OverflowError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/animation/projects/{project_id}/motion-lab/preview")
