@@ -231,7 +231,15 @@ Current ML2.3 feature-branch changes implement **inline rename** for recording l
 
 **Physical gate:** choose a six-axis 12 FPS take; punch into frames [12, 24), arm only translation_x, hold D until automatic stop. Confirm only frames 12–23 X values change, the other five axes and frames 0–11/24+ remain identical. Undo restores exact original; Redo reapplies. Try an invalid range, arm an axis absent from target, and stop midway, all of which must preserve the original. Save/reopen, verify idempotent Apply and retry on mobile. Gamepad still optional. Do not merge without acceptance.
 
+### ML2.3 acceptance checkpoint (2026-10-10)
+
+Physical testing accepted ML2.3 punch-in, preserving original axes and untouched ranges. Frozen at `checkpoint/motion-lab-ml2-3-punch-in-verified-20261010` / `6ffc24bb9bac60e0be298b020833df176a7d0a10`. GitHub Syntax and Backend tests passed on the exact head. Optional browser gamepad remains untested. No merge.
+
 ### ML3: Audio-reactive motion
+
+**ML3.0 foundation implemented on feature branch (not integrated, not yet physically accepted):** `backend/morphorum/audio_motion.py` offers CPU-only full-band RMS extraction from *already decoded* mono PCM, immutable SHA256 content identity, exact project-frame windows and symmetric positive/negative camera-velocity pulses from threshold-crossing onsets. Incomplete tails are skipped, not clipped, ensuring zero net displacement per pulse. Tests use known synthetic PCM and beat patterns. This module intentionally does not claim bass-band analysis, media upload, FFmpeg decode, project persistence, UI or GPU animation support. Those are later ML3 increments.
+
+**ML3 next increments:** project-local audio upload/FFmpeg decode and bass-band extraction; persisted hashed envelope; validated independent audio layer with threshold, attack/release, direction and offset; preview/compiler wiring; desktop/mobile controls; synchronized browser preview; real SDXL export gate. Preserve source-free recording/renderer and prior checkpoints.
 
 - Upload audio to project-managed asset storage, decode once with existing FFmpeg; analyze bass-band intensity and transient peaks on CPU. No model/GPU allocation.
 - Adjustable band, threshold, attack/release, pulse distance, offset and direction.
