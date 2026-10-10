@@ -244,3 +244,15 @@ test('ML3.1 GIF camera preview has separate best-effort synchronized audio repla
   assert.match(animation, /animation-motion-gif-replay'\)\?\.addEventListener/);
   assert.match(css, /\.animation-motion-gif-sync/);
 });
+
+test('ML3 audio duration match is opt-in and preserves project FPS', () => {
+  assert.match(html, /id="animation-motion-lab-audio-match-length"/);
+  assert.match(html, /id="animation-motion-lab-audio-length-status"/);
+  assert.match(animation, /Math\.ceil\(Number\(analysis\.duration_seconds\) \* fps - 1e-9\)/);
+  assert.match(animation, /targetFrames > 3000/);
+  assert.match(animation, /motionLabDraftLayers\.length \|\| state\.project\.motion_lab\?\.layers\?\.length/);
+  assert.match(animation, /window\.confirm\(/);
+  assert.match(animation, /editorFrames\.value = String\(targetFrames\)/);
+  assert.match(animation, /await motionLabAnalyzeAudio\(\);/);
+  assert.match(animation, /matchLength\.checked = false/);
+});
