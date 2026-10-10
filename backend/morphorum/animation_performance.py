@@ -8,6 +8,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 import math
+from statistics import median
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -73,6 +74,11 @@ class AnimationPerformance:
     last_device: str | None = None
     last_optimization: str | None = None
     slow_anchor_frames: list[int] = field(default_factory=list)
+    # Keep a bounded baseline and recent window; never retain tensors.
+    _initial_allocated: list[float] = field(default_factory=list, repr=False)
+    _recent_allocated: list[float] = field(default_factory=list, repr=False)
+    _initial_anchor_times: list[float] = field(default_factory=list, repr=False)
+    _recent_anchor_times: list[float] = field(default_factory=list, repr=False)
 
     def observe(self, record: dict[str, Any]) -> None:
         self.frames += 1
@@ -127,9 +133,45 @@ class AnimationPerformance:
 
         # Local, observational warning only; not a hard-coded baseline speed.
         # Keep bounded data and report it instead of silently changing devices.
+        if record.get("diffused") and diffusion > 0:
+            if len(self._initial_anchor_times) < 8:
+                self._initial_anchor_times.append(diffusion)
+            self._recent_anchor_times.append(diffusion)
+            self._recent_anchor_times = self._recent_anchor_times[-8:]
+        if memory and "allocated_gib" in memory:
+            allocation = memory["allocated_gib"]
+            if len(self._initial_allocated) < 12:
+                self._initial_allocated.append(allocation)
+            self._recent_allocated.append(allocation)
+            self._recent_allocated = self._recent_allocated[-12:]
         if record.get("diffused") and diffusion >= 30.0:
             self.slow_anchor_frames.append(self.latest_frame)
             self.slow_anchor_frames = self.slow_anchor_frames[-24:]
+
+    def _stability(self) -> dict[str, Any]:
+        # Avoid interpreting warmup or PyTorch reserved caching as a memory leak.
+        memory_ready = self.frames >= 36 and len(self._initial_allocated) == 12 and len(self._recent_allocated) == 12
+        baseline = median(self._initial_allocated) if memory_ready else None
+        recent = median(self._recent_allocated) if memory_ready else None
+        delta = round(recent - baseline, 3) if memory_ready else None
+        time_ready = self.anchors >= 24 and len(self._initial_anchor_times) == 8 and len(self._recent_anchor_times) == 8
+        first_time = median(self._initial_anchor_times) if time_ready else None
+        latest_time = median(self._recent_anchor_times) if time_ready else None
+        ratio = round(latest_time / first_time, 3) if time_ready and first_time > 0 else None
+        warnings = []
+        if delta is not None and delta >= 1.0:
+            warnings.append("GPU allocated memory increased across the render; inspect frame telemetry for possible retained allocations.")
+        if ratio is not None and ratio >= 1.8:
+            warnings.append("Recent diffusion anchors are substantially slower than initial anchors; inspect timing and VRAM records.")
+        if self.oom_count:
+            warnings.append("GPU out-of-memory events were observed.")
+        return {
+            "memory_delta_gib": delta,
+            "initial_allocated_median_gib": round(baseline, 3) if baseline is not None else None,
+            "recent_allocated_median_gib": round(recent, 3) if recent is not None else None,
+            "anchor_diffusion_slowdown_ratio": ratio,
+            "warnings": warnings,
+        }
 
     def public(self) -> dict[str, Any]:
         return {
@@ -163,6 +205,7 @@ class AnimationPerformance:
             "pipeline_device": self.last_device,
             "optimization": self.last_optimization,
             "slow_anchor_frames": list(self.slow_anchor_frames),
+            "stability": self._stability(),
         }
 
 
