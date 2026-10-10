@@ -868,6 +868,7 @@ def api_start_motion_preview(payload: dict[str, Any]) -> dict[str, Any]:
             project=normalized,
             source_path=source_path,
             highlight_holes=bool(options.get("highlight_holes", False)),
+            quality=str(options.get("quality", "balanced")),
         )
     except (AnimationProjectError, MotionPreviewError, ScheduleError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
