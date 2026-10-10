@@ -595,9 +595,14 @@
             <div class="animation-motion-recording-actions">
               <button class="primary-button compact" id="animation-motion-lab-record" type="button" disabled>● Record Take</button>
               <button class="secondary-button compact" id="animation-motion-lab-stop-recording" type="button" disabled>■ Stop</button>
-              <span class="muted" id="animation-motion-lab-record-frame">No take in progress.</span>
+              <span class="muted" id="animation-motion-lab-record-frame" role="status" aria-live="polite">No take in progress.</span>
             </div>
 
+            <div class="animation-motion-live-monitor" id="animation-motion-lab-live-monitor" aria-live="off">
+              <strong id="animation-motion-lab-live-indicator">● Idle</strong>
+              <div id="animation-motion-lab-live-axes">X 0.0000 · Y 0.0000 · Z 0.0000 · Pitch 0.000° · Yaw 0.000° · Roll 0.000°</div>
+              <p id="animation-motion-lab-live-input" class="muted">No recording active.</p>
+            </div>
             <div class="animation-motion-controller-grid">
               <div class="animation-motion-stick-wrap">
                 <strong>Translate X / Y</strong>
