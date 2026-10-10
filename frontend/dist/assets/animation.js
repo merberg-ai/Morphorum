@@ -3968,10 +3968,12 @@
   let motionLabProjectId = '';
   let motionLabDraftLayers = [];
   let motionLabBusy = false;
+  let motionLabEditingIndex = -1;
   function syncMotionLabDraft() {
     const projectId = state.project?.id || '';
     if (projectId === motionLabProjectId) return;
     motionLabProjectId = projectId;
+    motionLabEditingIndex = -1;
     motionLabDraftLayers = Array.isArray(state.project?.motion_lab?.layers)
       ? state.project.motion_lab.layers.map(layer => ({ ...layer })) : [];
     renderMotionLabDraft();
@@ -4001,6 +4003,8 @@
     if (end) end.max = String(count);
     const start = qs('#animation-motion-lab-start');
     if (start) start.max = String(Math.max(0, count - 1));
+    const addButton = qs('#animation-motion-lab-add');
+    if (addButton) addButton.textContent = motionLabEditingIndex < 0 ? '+ Add Preset Layer' : 'Update Selected Layer';
     const list = qs('#animation-motion-lab-layer-list');
     if (!list) return;
     list.replaceChildren();
@@ -4015,6 +4019,25 @@
       desc.textContent = (index + 1) + '. ' + String(layer.preset).replaceAll('-', ' ') +
         ' · ' + layer.blend + ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
         ' · strength ' + layer.strength;
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'secondary-button compact';
+      edit.textContent = 'Edit';
+      edit.disabled = !ready;
+      edit.addEventListener('click', () => {
+        motionLabEditingIndex = index;
+        for (const [id, value] of Object.entries({
+          preset: layer.preset, strength: layer.strength,
+          cycle: layer.cycle_seconds, fade: layer.fade_seconds,
+          start: layer.start_frame, end: layer.end_frame,
+          blend: layer.blend,
+        })) {
+          const field = qs('#animation-motion-lab-' + id);
+          if (field) field.value = String(value);
+        }
+        motionLabNotify('Editing layer ' + (index + 1) + '. Adjust controls and select Update Selected Layer.');
+        renderMotionLabDraft();
+      });
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'secondary-button compact';
@@ -4022,9 +4045,13 @@
       remove.disabled = !ready;
       remove.addEventListener('click', () => {
         motionLabDraftLayers.splice(index, 1);
+        motionLabEditingIndex = -1;
         renderMotionLabDraft();
       });
-      item.append(desc, remove);
+      const actions = document.createElement('div');
+      actions.className = 'animation-motion-lab-layer-actions';
+      actions.append(edit, remove);
+      item.append(desc, actions);
       list.appendChild(item);
     });
   }
@@ -4041,7 +4068,9 @@
     const read = key => qs('#animation-motion-lab-' + key)?.value;
     const rawEnd = Number(read('end'));
     const entry = {
-      id: 'layer-' + Date.now().toString(36) + '-' + motionLabDraftLayers.length,
+      id: motionLabEditingIndex >= 0
+        ? motionLabDraftLayers[motionLabEditingIndex].id
+        : 'layer-' + Date.now().toString(36) + '-' + motionLabDraftLayers.length,
       preset: read('preset'), blend: read('blend'), enabled: true,
       strength: Number(read('strength')),
       cycle_seconds: Number(read('cycle')), fade_seconds: Number(read('fade')),
@@ -4057,11 +4086,13 @@
       motionLabNotify('Check the preset range, strength, cycle and fade settings.');
       return;
     }
-    if (motionLabDraftLayers.length >= 24) {
+    if (motionLabDraftLayers.length >= 24 && motionLabEditingIndex < 0) {
       motionLabNotify('Motion Lab supports up to 24 layers.');
       return;
     }
-    motionLabDraftLayers.push(entry);
+    if (motionLabEditingIndex >= 0) motionLabDraftLayers[motionLabEditingIndex] = entry;
+    else motionLabDraftLayers.push(entry);
+    motionLabEditingIndex = -1;
     motionLabNotify('Draft updated. Preview the motion, then Apply to Animation to save.');
     renderMotionLabDraft();
   }
@@ -4351,6 +4382,7 @@
     qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
     qs('#animation-motion-lab-clear')?.addEventListener('click', () => {
       motionLabDraftLayers = [];
+      motionLabEditingIndex = -1;
       motionLabNotify('Draft cleared. The currently saved camera timeline is unchanged.');
       renderMotionLabDraft();
     });
