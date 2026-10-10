@@ -1919,6 +1919,28 @@ dialog#animation-deforum-dialog {
 .animation-workspace-nav {max-width:1260px;margin:0 auto 15px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;position:sticky;top:90px;z-index:15;padding:6px;border:1px solid var(--border);border-radius:13px;background:var(--panel-strong);}
 .animation-workspace-nav button {min-width:0;min-height:43px;padding:9px 11px;background:transparent;border:0;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:600;}
 .animation-workspace-nav button.active {color:#091016;background:linear-gradient(135deg,var(--accent),#85e5ff);}
+.animation-workspace-nav button[data-animation-tab="motion"]:not(.active) {color:var(--accent);background:rgba(40,185,218,.08);border:1px solid rgba(40,185,218,.22);}
+.animation-workspace-nav button[data-animation-tab="motion"].active {font-weight:800;}
+#animation-media-vault {display:none!important;}
+#animation-panel-motion {display:grid;gap:14px;}
+#animation-panel-motion .animation-motion-preview-card {min-width:0;}
+#animation-panel-motion .animation-motion-preview-card .card-header {gap:12px;flex-wrap:wrap;}
+.animation-motion-lab-intro {padding:21px;min-width:0;}
+.animation-motion-lab-heading {display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+.animation-motion-lab-heading > div {min-width:0;}
+.animation-motion-lab-heading h2 {font-size:clamp(1.15rem,2.5vw,1.65rem);margin:5px 0 8px;}
+.animation-motion-lab-heading .muted {max-width:750px;line-height:1.55;}
+.animation-motion-lab-stage {flex:0 0 auto;align-self:flex-start;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.72rem;color:var(--muted);}
+.animation-motion-lab-quick-actions {display:flex;gap:9px;flex-wrap:wrap;margin:15px 0 8px;}
+.animation-motion-lab-quick-actions button {min-height:42px;}
+.animation-motion-lab-note {font-size:.78rem;margin-top:7px;}
+#animation-timeline-card,#animation-3d-camera-card {scroll-margin-top:160px;}
+@media(max-width:640px) {
+  .animation-motion-lab-intro {padding:14px;}
+  .animation-motion-lab-heading {flex-direction:column;gap:8px;}
+  .animation-motion-lab-quick-actions button {flex:1 1 160px;}
+  #animation-timeline-card,#animation-3d-camera-card {scroll-margin-top:32px;}
+}
 .animation-workspace-panel {max-width:1260px;margin:0 auto;min-width:0;}
 .animation-workspace-panel[hidden] {display:none!important;}
 .animation-monitor-panel {display:block;}
