@@ -594,7 +594,7 @@ class MotionPreviewManager:
         self,
         job_id: str,
         project: dict[str, Any],
-        source_path: Path,
+        source_path: Path | None,
         highlight_holes: bool = False,
     ) -> None:
         with self._lock:
