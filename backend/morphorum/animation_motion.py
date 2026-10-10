@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 from scipy.ndimage import map_coordinates
 
 from .animation_resolution import resolve_project_frame
@@ -104,6 +104,35 @@ def prepare_preview_source(
         method=Image.Resampling.LANCZOS,
         centering=(0.5, 0.5),
     )
+
+
+def create_motion_reference_grid(width: int, height: int) -> Image.Image:
+    """Small, visible calibration pattern for source-free Motion Lab previews.
+
+    Build directly at bounded preview resolution rather than allocating a
+    full-resolution image on large animation projects.
+    """
+    width, height = _preview_dimensions(width, height, max_dimension=320)
+    image = Image.new("RGB", (width, height), (13, 20, 32))
+    draw = ImageDraw.Draw(image)
+    spacing = max(12, min(width, height) // 12)
+    for x in range(spacing // 2, width, spacing):
+        draw.line((x, 0, x, height - 1), fill=(40, 87, 105), width=1)
+    for y in range(spacing // 2, height, spacing):
+        draw.line((0, y, width - 1, y), fill=(40, 87, 105), width=1)
+    cx, cy = width // 2, height // 2
+    for radius in (min(width, height) // 6, min(width, height) // 3):
+        if radius > 1:
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius),
+                         outline=(100, 213, 218), width=2)
+    draw.line((max(0, cx - spacing), cy, min(width - 1, cx + spacing), cy),
+              fill=(245, 181, 92), width=2)
+    draw.line((cx, max(0, cy - spacing), cx, min(height - 1, cy + spacing)),
+              fill=(245, 181, 92), width=2)
+    if width >= 48 and height >= 48:
+        draw.rectangle((6, 6, width - 7, height - 7),
+                       outline=(184, 110, 229), width=2)
+    return image
 
 
 def _frame_transform_matrix(
@@ -500,14 +529,14 @@ class MotionPreviewManager:
         self,
         *,
         project: dict[str, Any],
-        source_path: Path,
+        source_path: Path | None,
         highlight_holes: bool = False,
     ) -> dict[str, Any]:
         project_id = str(project.get("id") or "").strip()
         if not project_id:
             raise MotionPreviewError("Animation project id is required.")
-        if not source_path.is_file():
-            raise MotionPreviewError("Upload a source image before creating a motion preview.")
+        if source_path is not None and not source_path.is_file():
+            raise MotionPreviewError("Selected preview source image is missing.")
         if (
             str(project.get("animation", {}).get("mode") or "2d").strip().lower() == "3d"
             and int(project.get("animation", {}).get("max_frames", 120)) > 180
@@ -555,7 +584,7 @@ class MotionPreviewManager:
         self,
         job_id: str,
         project: dict[str, Any],
-        source_path: Path,
+        source_path: Path | None,
         highlight_holes: bool = False,
     ) -> None:
         with self._render_lock:
@@ -574,8 +603,17 @@ class MotionPreviewManager:
             job.message = "Preparing source image"
 
         try:
-            with Image.open(source_path) as opened:
-                source = ImageOps.exif_transpose(opened).convert("RGB").copy()
+            if source_path is None:
+                animation = project.get("animation") or {}
+                source = create_motion_reference_grid(
+                    int(animation.get("width", 1024)),
+                    int(animation.get("height", 1024)),
+                )
+                source_kind = "calibration-grid"
+            else:
+                with Image.open(source_path) as opened:
+                    source = ImageOps.exif_transpose(opened).convert("RGB").copy()
+                source_kind = "uploaded-image"
 
             output = OUTPUTS_DIR / "motion-previews" / job_id / "preview.gif"
 
@@ -597,6 +635,7 @@ class MotionPreviewManager:
                 progress_callback=progress,
                 highlight_holes=highlight_holes,
             )
+            result["source_kind"] = source_kind
             with self._lock:
                 job = self._jobs[job_id]
                 job.status = "completed"
