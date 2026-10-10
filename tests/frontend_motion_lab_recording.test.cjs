@@ -231,3 +231,16 @@ test('ML3 WAV audio transport follows visual play pause frame seek and source li
   assert.match(animation, /motionLabBindAudioTransport\(\);/);
   assert.match(css, /\.animation-motion-audio-playback/);
 });
+
+test('ML3.1 GIF camera preview has separate best-effort synchronized audio replay', () => {
+  assert.match(html, /id="animation-motion-gif-replay"/);
+  assert.match(html, /id="animation-motion-gif-auto-audio"/);
+  assert.match(html, /id="animation-motion-gif-sync-status"/);
+  assert.match(animation, /async function replayMotionGifWithAudio\(\)/);
+  assert.match(animation, /image\.removeAttribute\('src'\)/);
+  assert.match(animation, /motionGifPreviewUrl = job\.url/);
+  assert.match(animation, /await audio\.play\(\)/);
+  assert.match(animation, /motionGifSyncRun\+\+/);
+  assert.match(animation, /animation-motion-gif-replay'\)\?\.addEventListener/);
+  assert.match(css, /\.animation-motion-gif-sync/);
+});
