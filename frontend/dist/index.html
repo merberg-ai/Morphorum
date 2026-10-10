@@ -505,14 +505,14 @@
               <button class="secondary-button compact" id="animation-motion-lab-edit-3d" type="button">Edit 3D Camera Schedules</button>
               <button class="secondary-button compact" id="animation-motion-lab-edit-timeline" type="button">Open Visual Timeline</button>
             </div>
-            <p class="muted animation-motion-lab-note">Choose a project and upload a reference image in Editor to preview camera motion here. Geometric previews do not run diffusion. Your current render pipeline and settings are unchanged.</p>
+            <p class="muted animation-motion-lab-note">Choose a project and preview with the built-in calibration grid immediately. You can optionally upload your own reference image in Editor. Geometric previews do not run diffusion; your render pipeline remains unchanged.</p>
           </article>
 
           <article class="card glass animation-motion-preview-card">
             <div class="card-header">
               <div>
                 <h2>Camera Motion Preview</h2>
-                <p class="muted">CPU-only 2D or 3D camera-motion preview from your uploaded image. No diffusion and no GPU model load.</p>
+                <p class="muted">CPU-only 2D or 3D camera-motion preview using the calibration grid or an uploaded reference image. No diffusion and no GPU model load.</p>
               </div>
               <button class="primary-button compact busy-button" id="animation-generate-motion-preview" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Camera Motion</span></button>
             </div>
@@ -520,7 +520,7 @@
             <label class="animation-preview-hole-toggle" data-animation-mode="3d"><input id="animation-preview-highlight-holes" type="checkbox" disabled> Highlight exposed pixels in red</label>
             <div class="notice subtle animation-motion-preview-note">
               <strong>Geometry only</strong>
-              <span>3D mode simulates sequential depth warps and reports projected coverage and newly exposed pixels. The red overlay is only a preview aid. The uploaded reference does not change your real starting-frame mode or model.</span>
+              <span>3D mode simulates sequential depth warps and reports projected coverage and newly exposed pixels. The red overlay is only a preview aid. An uploaded reference is optional; previews never change your real starting-frame mode or model.</span>
             </div>
 
             <div class="animation-motion-progress" id="animation-motion-progress" hidden>
