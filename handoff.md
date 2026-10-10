@@ -1,3 +1,11 @@
+# 2026-10-10 ML2.3 accepted / ML3.0 CPU foundation
+
+User physically accepted punch-in on Windows. Immutable GitHub checkpoint: `checkpoint/motion-lab-ml2-3-punch-in-verified-20261010` @ `6ffc24bb9bac60e0be298b020833df176a7d0a10` (both CI workflows green). PR #19 stays draft targeting `dev-ui`. No merge or edits to main/dev-ui/B6.3.3. Optional browser gamepad not physically verified.
+
+ML3.0 first code slice now on `feature/motion-lab`: `backend/morphorum/audio_motion.py` implements validated deterministic full-band RMS on predecoded mono PCM at project-frame alignment and balanced, nontruncated onset-to-camera-velocity pulses, with `tests/test_audio_motion.py` synthetic verification. **Not yet a user-facing feature.** No upload endpoint, FFmpeg decode, bass band, audio layer persistence, browser controls or animation export wiring. Next: integrate project-owned media pipeline, bass-envelope versioning and hashed analysis; wire a validated audio-driven layer to existing six-axis compiler, native tracks and UI. Keep CPU-only analysis and no additional renderer. Await CI and physical gate for subsequent integrated slice.
+
+---
+
 # October 10, 2026 follow-up: ML2.3 punch-in candidate
 
 Verified take-management ML2.3 was checkpointed unchanged as `checkpoint/motion-lab-ml2-3-take-management-verified-20261010` at `108ed61d207a083b0e081a3ce9f822fb7a313fbd`. Rename/duplicate were physically accepted.
