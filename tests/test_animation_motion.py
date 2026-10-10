@@ -291,3 +291,38 @@ def test_b53_legacy_2d_preview_result_unchanged(
     assert result["border_mode"] == "replicate"
     assert result["source_frames"] == 4
     assert "average_coverage" not in result
+
+
+def test_motion_lab_calibration_grid_is_visible_and_bounded() -> None:
+    from morphorum.animation_motion import create_motion_reference_grid
+    grid = create_motion_reference_grid(1024, 1536)
+    assert grid.size == (213, 320)
+    assert grid.mode == "RGB"
+    colors = grid.getcolors(maxcolors=100_000)
+    assert colors is not None and len(colors) >= 4
+
+
+def test_motion_lab_preview_without_uploaded_source_uses_grid(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import time
+    import morphorum.animation_motion as motion
+    from morphorum.animation_motion import MotionPreviewManager
+
+    monkeypatch.setattr(motion, "OUTPUTS_DIR", tmp_path)
+    manager = MotionPreviewManager()
+    project = sample_project(max_frames=6)
+    project["animation"]["mode"] = "2d"
+    started = manager.start(project=project, source_path=None)
+    job = manager.get(started["id"])
+    for _ in range(150):
+        if job["status"] in {"completed", "failed"}:
+            break
+        time.sleep(.02)
+        job = manager.get(started["id"])
+    assert job["status"] == "completed", job
+    assert job["result"]["source_kind"] == "calibration-grid"
+    assert job["result"]["source_frames"] == 6
+    assert manager.result_path(started["id"]).is_file()
+    with Image.open(manager.result_path(started["id"])) as preview:
+        assert getattr(preview, "is_animated", False)
