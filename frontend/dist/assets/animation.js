@@ -4181,6 +4181,58 @@
   }
   let motionLabAudioAnalysis = null;
   let motionLabAudioProjectId = null;
+  let motionLabAudioElement = null;
+  let motionLabAudioUrl = null;
+  function motionLabReleaseAudio() {
+    motionLabAudioElement?.pause();
+    if (motionLabAudioElement) motionLabAudioElement.removeAttribute('src');
+    if (motionLabAudioUrl) URL.revokeObjectURL(motionLabAudioUrl);
+    motionLabAudioElement = null;
+    motionLabAudioUrl = null;
+  }
+  function motionLabAudioSyncStatus(message) {
+    const output = qs('#animation-motion-lab-audio-sync-status');
+    if (output) output.textContent = message;
+  }
+  function motionLabAudioTime(frame, fps) {
+    return Math.max(0, frame / Math.max(1, fps));
+  }
+  function motionLabSyncAudioFrame(frame) {
+    const audio = motionLabAudioElement;
+    if (!audio || !motionLabVisual ||
+        motionLabAudioProjectId !== state.project?.id ||
+        !qs('#animation-motion-lab-audio-sync')?.checked) return;
+    const goal = motionLabAudioTime(frame, motionLabVisual.fps);
+    if (audio.readyState >= 1 && Number.isFinite(audio.duration)) {
+      const position = Math.min(goal, Math.max(0, audio.duration - .001));
+      if (!motionLabVisual.playing || Math.abs(audio.currentTime - position) > .18) {
+        audio.currentTime = position;
+      }
+      if (goal >= audio.duration && !audio.paused) audio.pause();
+    }
+  }
+  function motionLabBindAudioTransport() {
+    if (!motionLabVisual) return;
+    const previousFrame = motionLabVisual.onFrameChange;
+    motionLabVisual.onFrameChange = frame => {
+      previousFrame?.(frame);
+      motionLabSyncAudioFrame(frame);
+    };
+    motionLabVisual.onPlay = (frame, fps) => {
+      const audio = motionLabAudioElement;
+      if (!audio || !qs('#animation-motion-lab-audio-sync')?.checked ||
+          motionLabAudioProjectId !== state.project?.id) return;
+      const seek = motionLabAudioTime(frame, fps);
+      if (audio.readyState >= 1 && seek < audio.duration) {
+        audio.currentTime = seek;
+        const promise = audio.play();
+        promise?.catch(error => motionLabAudioSyncStatus(
+          'Audio playback blocked by browser: ' + (error?.message || error)));
+      }
+    };
+    motionLabVisual.onPause = () => motionLabAudioElement?.pause();
+  }
+
   function motionLabAudioPreview() {
     const preview = qs('#animation-motion-lab-audio-preview');
     const plot = qs('#animation-motion-lab-audio-plot');
@@ -4273,6 +4325,7 @@
     }
     motionLabAudioAnalysis = null;
     motionLabAudioProjectId = null;
+    motionLabReleaseAudio();
     motionLabAudioPreview();
     if (status) status.textContent = 'Analyzing WAV on host…';
     motionLabAudioUi();
@@ -4293,6 +4346,11 @@
       }
       motionLabAudioAnalysis = analysis;
       motionLabAudioProjectId = projectId;
+      motionLabAudioUrl = URL.createObjectURL(file);
+      motionLabAudioElement = new Audio(motionLabAudioUrl);
+      motionLabAudioElement.preload = 'auto';
+      motionLabAudioElement.load();
+      motionLabAudioSyncStatus('Ready to play with Motion Curves playback.');
       const peak = Math.max(0, ...analysis.values);
       const thresholdField = qs('#animation-motion-lab-audio-threshold');
       if (thresholdField && peak > 0) {
@@ -5434,6 +5492,12 @@
     qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
     qs('#animation-motion-lab-analyze-audio')?.addEventListener('click', () => void motionLabAnalyzeAudio());
     qs('#animation-motion-lab-add-audio')?.addEventListener('click', motionLabAddAudio);
+    qs('#animation-motion-lab-audio-sync')?.addEventListener('change', event => {
+      if (!event.target.checked) motionLabAudioElement?.pause();
+      motionLabAudioSyncStatus(event.target.checked
+        ? 'Audio will follow Motion Curves playback and seeking.'
+        : 'Synchronized audio playback disabled.');
+    });
     for (const id of ['threshold','attack','release','distance']) {
       qs('#animation-motion-lab-audio-' + id)?.addEventListener('input', motionLabAudioPreview);
     }
@@ -5606,6 +5670,7 @@
     setupAnimationWorkspaceTabs();
     if (window.MorphorumMotionLabVisualizer) {
       motionLabVisual = new window.MorphorumMotionLabVisualizer();
+      motionLabBindAudioTransport();
     }
     bind();
     setEditorEnabled(false);
