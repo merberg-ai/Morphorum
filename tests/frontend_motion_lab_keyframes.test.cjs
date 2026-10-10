@@ -136,3 +136,22 @@ test('ML1b camera path handle adjusts per-frame native X and Y velocities', () =
   assert.match(animation, /function motionLabCurvePathEdit\(\{frame, deltaX, deltaY\}\)/);
   assert.match(animation, /deferCommit:true/);
 });
+
+
+test('ML1b manual curve editor initializes even when no preset layers exist', () => {
+  assert.match(animation,
+    /if \(!motionLabDraftLayers\.length\) \{\s*list\.textContent[^;]*;\s*motionLabCurveRender\(\);\s*return;/);
+  assert.match(animation, /function motionLabCurveModify\(/);
+  assert.match(animation, /keys: \[\{frame: 0, value: 0\}\]/);
+  assert.match(animation, /if \(index < 0\) motionLabDraftLayers\.push\(target\)/);
+  assert.match(animation, /motionLabEditingIndex = -1/);
+});
+
+test('ML1b path editing keeps X/Y velocities an atomic single undoable draft edit', () => {
+  assert.match(animation, /const snapshot = structuredClone\(motionLabDraftLayers\)/);
+  assert.match(animation, /axes = \[\['translation_x', deltaX\], \['translation_y', deltaY\]\]/);
+  assert.match(animation, /motionLabCurveModify\(\{axis, frame, value, deferCommit:true\}\)/);
+  assert.match(animation, /motionLabDraftLayers = snapshot/);
+  assert.match(animation, /commitMotionLabDraft\(\);/);
+  assert.match(html, /Edit path X\/Y by dragging/);
+});
