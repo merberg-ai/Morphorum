@@ -330,6 +330,7 @@ def api_motion_lab_compose_preview(project_id: str, payload: dict[str, Any]) -> 
             raise MotionLabError("Motion Lab preview requires a list of layers.")
         compiled, diagnostics = compile_motion_lab(
             project, layers=layers, conflict_policy="use-current",
+            include_series=True,
         )
         return {
             "status": "preview",
