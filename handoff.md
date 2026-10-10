@@ -1,3 +1,11 @@
+# October 10, 2026 follow-up: ML2.3 punch-in candidate
+
+Verified take-management ML2.3 was checkpointed unchanged as `checkpoint/motion-lab-ml2-3-take-management-verified-20261010` at `108ed61d207a083b0e081a3ce9f822fb7a313fbd`. Rename/duplicate were physically accepted.
+
+New punch-in code on `feature/motion-lab` is NOT physically accepted. It introduces Take mode (New / Punch), target selection, exclusive end frame, and a pure deterministic splice of only armed axes in the selected existing recording's interval, with FPS/range/axis guards, exact full-length capture requirement, Undo/Redo and no automatic Apply. Early Stop discards the incomplete punch. Windows test at 12 FPS: record an initial >30-frame take, select Punch on it with range [12,24), arm only X, hold D until auto-stop; compare other axes/outside interval, Undo/Redo, save/reopen, try invalid/incomplete cases. See `docs/MOTION_LAB_ROADMAP.md`. Keep PR #19 draft; do not touch main/dev-ui/B6.3.3.
+
+---
+
 # October 10, 2026 addendum: verified ML2 / ML2.3
 
 ML2 keyboard recording, live feedback, curves/preview UX and desktop-only sticky quick toolbar passed physical Windows/mobile review. Verified CI and immutable checkpoint: `checkpoint/motion-lab-ml2-recording-ux-verified-20261010` @ `1245055f043519e9aab0a46cf8a5fa3310d31619`. Optional Gamepad API not physically tested. **Do not revise or reset this checkpoint.**
