@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/assets/models.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/image.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/animation.css?v=__MORPHORUM_ASSET_VERSION__">
+  <link rel="stylesheet" href="/assets/desktop.css?v=__MORPHORUM_ASSET_VERSION__" media="(min-width: 1181px) and (hover: hover) and (pointer: fine)">
 </head>
 <body>
   <div class="app-shell">
@@ -85,7 +86,7 @@
           <div>
             <p class="eyebrow">IMAGE STUDIO</p>
             <h1>Image Generation</h1>
-            <p class="muted">Generate locally with SDXL, Flux, and managed Z-Image Turbo models.</p>
+            <p class="muted">Choose a model, describe your image, and generate locally. Finished images appear in Results.</p>
           </div>
         </div>
 
@@ -162,7 +163,7 @@
           <div>
             <p class="eyebrow">ANIMATION STUDIO</p>
             <h1>Animation</h1>
-            <p class="muted">Build projects, resolve keyframed schedules, inspect exact frame state, and preview motion curves before rendering.</p>
+            <p class="muted">Create a project in Editor, design camera motion in Motion Lab, and follow your render in Monitor.</p>
           </div>
           <div class="button-row animation-project-actions">
             <button class="secondary-button compact" id="animation-collapse-all" type="button">Collapse Sections</button>
@@ -478,7 +479,7 @@
 
           <article class="card glass">
             <div class="card-header">
-              <div><h2>Generation State</h2><p class="muted">Model-independent animation controls. Adapter-specific interpretation comes later.</p></div>
+              <div><h2>Generation State</h2><p class="muted">Set how strongly each frame changes, plus noise, steps, guidance, and seed behavior.</p></div>
             </div>
             <div class="field-grid">
               <label><span>Strength schedule <small class="muted">(1 = preserve, 0 = redraw)</small></span><input id="animation-strength" class="animation-schedule" type="text" value="0:(0.65)" disabled></label>
@@ -497,10 +498,20 @@
               <div>
                 <p class="eyebrow">MOTION LAB / CAMERA AUTHORING</p>
                 <h2>Design the movement before the render</h2>
-                <p class="muted">Compose native six-axis 3D camera movement with presets and layers, preview the results without diffusion, and apply them directly to your existing animation timeline. Controller recording and audio-reactive movement are coming later.</p>
+                <p class="muted">Create camera movement with presets, live recording, hand-edited curves, or music. Preview your movement, then apply it to the animation timeline.</p>
               </div>
               <span class="animation-motion-lab-stage">Camera preview available</span>
             </div>
+            <details class="motion-workflow-help">
+              <summary>New to Motion Lab? Start here</summary>
+              <ol>
+                <li>Create or open a project in Editor and choose 3D motion.</li>
+                <li>Add a preset, record camera movement, or create a motion curve.</li>
+                <li>Select Update Curves to inspect movement; select Preview to see how the camera travels.</li>
+                <li>Select Apply to Animation when you are happy with the draft. Rendering is a separate step in Monitor.</li>
+              </ol>
+              <p>Preview and curve edits do not change your saved animation until you select Apply.</p>
+            </details>
             <div class="animation-motion-lab-quick-actions">
               <button class="secondary-button compact" id="animation-motion-lab-edit-3d" type="button">Edit 3D Camera Schedules</button>
               <button class="secondary-button compact" id="animation-motion-lab-edit-timeline" type="button">Open Visual Timeline</button>
@@ -511,8 +522,8 @@
           <article class="card glass animation-motion-lab-composer" id="animation-motion-lab-composer">
             <div class="card-header">
               <div>
-                <h2>Camera Motion Composer <small class="muted">ML0</small></h2>
-                <p class="muted">Design and layer native 3D camera movement. Preview directly here, even with unsaved Editor camera changes. Apply saves it to your existing animation timeline.</p>
+                <h2>Camera Motion Composer</h2>
+                <p class="muted">Choose a movement preset, adjust its timing, and add it to your draft. Preview without rendering; Apply sends the draft to the animation timeline.</p>
               </div>
               <div class="animation-motion-lab-head-actions">
                 <span class="animation-motion-lab-stage" id="animation-motion-lab-compose-status">Select a 3D project</span>
@@ -537,6 +548,10 @@
               <label><span>End frame (0 = full)</span><input id="animation-motion-lab-end" type="number" min="0" step="1" value="0"></label>
               <label><span>Blend</span><select id="animation-motion-lab-blend"><option value="add">Add to base</option><option value="replace">Replace affected axes</option></select></label>
             </div>
+            <details class="motion-field-help">
+              <summary>What do Strength, Cycle, Fade, and Blend mean?</summary>
+              <p><strong>Strength</strong> controls how much the camera moves. <strong>Cycle</strong> sets how long a repeating movement takes. <strong>Fade</strong> softens its start and end. <strong>Blend</strong> adds the motion to existing movement or replaces selected axes. End frame 0 means the project end.</p>
+            </details>
             <div class="animation-motion-lab-actions">
               <button class="secondary-button compact" id="animation-motion-lab-add" type="button" disabled>+ Add Preset Layer</button>
               <button class="secondary-button compact" id="animation-motion-lab-clear" type="button" disabled>Clear Draft</button>
@@ -553,8 +568,8 @@
           <article class="card glass animation-motion-lab-recording" id="animation-motion-lab-recording">
             <div class="card-header">
               <div>
-                <h2>Live Motion Recording <small class="muted">ML2</small></h2>
-                <p class="muted">Fly the native six-axis camera with keyboard, touch, or an optional browser-visible gamepad. Recording is sampled on the project frame clock and becomes another editable Motion Lab layer. It never steers a running diffusion render.</p>
+                <h2>Live Motion Recording</h2>
+                <p class="muted">Record your camera movements with the keyboard, touch controls, or an optional gamepad. Each take becomes an editable layer, and recording does not affect a render already in progress.</p>
               </div>
               <span class="animation-motion-lab-stage" id="animation-motion-lab-record-status">Ready</span>
             </div>
@@ -634,8 +649,8 @@
           </article>
 
           <article class="card glass animation-motion-lab-audio" id="animation-motion-lab-audio">
-            <div class="card-header"><div><h2>Audio-Reactive Motion <span class="muted">ML3.1</span></h2>
-              <p class="muted">Analyze a mono/stereo PCM WAV and add deterministic beat pulses to the existing six-axis camera timeline. Full-band RMS in this first release; bass filtering and compressed audio follow later.</p>
+            <div class="card-header"><div><h2>Audio-Reactive Motion</h2>
+              <p class="muted">Import a WAV file, choose a frequency range, and turn detected beats into editable camera movement. Review the detected pulses before adding a layer.</p>
             </div><span class="animation-motion-lab-stage" id="animation-motion-lab-audio-status">No audio analyzed</span></div>
             <div class="animation-motion-audio-controls">
               <label><span>PCM WAV file (up to 20 MiB / 3 minutes)</span><input id="animation-motion-lab-audio-file" type="file" accept=".wav,audio/wav,audio/x-wav"></label>
@@ -666,8 +681,8 @@
           <article class="card glass animation-motion-lab-visual" id="animation-motion-lab-visual">
             <div class="card-header">
               <div>
-                <h2>Motion Curves & Camera Path <small class="muted">ML1</small></h2>
-                <p class="muted">Frame-accurate native camera increments and an integrated geometric path. This visualization does not load a depth model or run diffusion.</p>
+                <h2>Motion Curves & Camera Path</h2>
+                <p class="muted">Edit movement at exact frames, choose smooth transitions, and see how the camera travels. Updating curves does not start an image render.</p>
               </div>
               <span class="animation-motion-lab-stage" id="animation-motion-lab-curve-state">Curves not compiled</span>
             </div>
@@ -1071,7 +1086,7 @@
 
       <section class="view" id="view-models">
         <div class="page-heading models-heading">
-          <div><p class="eyebrow">MODEL MANAGER</p><h1>Models</h1><p class="muted">Use external SDXL/Flux libraries in place, and let Morphorum download managed model packages such as Z-Image.</p></div>
+          <div><p class="eyebrow">MODEL MANAGER</p><h1>Models</h1><p class="muted">Find installed models, scan your folders, or download supported managed models. Select a model in Image or Animation to use it.</p></div>
           <button class="primary-button busy-button" id="scan-models"><span class="spinner"></span><span class="button-label">Scan Models</span></button>
         </div>
 
@@ -1120,7 +1135,7 @@
 
       <section class="view" id="view-loras">
         <div class="page-heading">
-          <div><p class="eyebrow">LORA LABORATORY</p><h1>LoRA Manager</h1><p class="muted">Browse LoRAs, copy prompt tags, and inspect their details.</p></div>
+          <div><p class="eyebrow">LORA LABORATORY</p><h1>LoRA Manager</h1><p class="muted">Choose a compatible LoRA, review its trigger words, and copy or insert its prompt tag.</p></div>
           <button class="primary-button busy-button" id="lora-manager-scan" type="button"><span class="spinner"></span><span class="button-label">Scan Directories</span></button>
         </div>
         <div class="lora-manager-grid">
@@ -1198,7 +1213,7 @@
 
       <section class="view" id="view-console">
         <div class="page-heading console-heading">
-          <div><p class="eyebrow">LIVE SERVER ACTIVITY</p><h1>Console</h1><p class="muted">A filtered view of what Morphorum is doing behind the UI.</p></div>
+          <div><p class="eyebrow">LIVE SERVER ACTIVITY</p><h1>Console</h1><p class="muted">See generation activity and errors. Use the filters to find a message or copy logs for troubleshooting.</p></div>
           <div class="console-status"><span class="status-dot" id="console-dot"></span><span id="console-status">Connecting…</span></div>
         </div>
 
