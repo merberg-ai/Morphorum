@@ -4151,6 +4151,34 @@
     panel.appendChild(dock);
     motionLabSyncQuickActions();
   }
+  let motionLabPunchContext = null;
+  function motionLabPunchUi() {
+    const mode = qs('#animation-motion-lab-record-mode')?.value || 'new';
+    const target = qs('#animation-motion-lab-punch-target');
+    const end = qs('#animation-motion-lab-punch-end');
+    if (target) {
+      const selected = target.value;
+      target.replaceChildren();
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = 'Select a recorded take';
+      target.appendChild(blank);
+      motionLabDraftLayers.forEach((layer, index) => {
+        if (layer.type !== 'recording') return;
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = (index + 1) + '. ' + (layer.name || 'Recorded take') +
+          ' (' + layer.start_frame + '–' + (layer.end_frame - 1) + ')';
+        target.appendChild(option);
+      });
+      if ([...target.options].some(o => o.value === selected)) target.value = selected;
+      target.disabled = mode !== 'punch' || Boolean(motionLabRecorder?.active);
+    }
+    if (end) {
+      end.disabled = mode !== 'punch' || Boolean(motionLabRecorder?.active);
+      end.max = String(Number(state.project?.animation?.max_frames || 120));
+    }
+  }
   function motionLabRecordingUi() {
     const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
     const active = Boolean(motionLabRecorder?.active);
@@ -4176,6 +4204,7 @@
           control.disabled = !ready || active;
         }
       });
+    motionLabPunchUi();
     if (!state.project) motionLabRecordStatus('Select a project');
     else if (animationMode() !== '3d') motionLabRecordStatus('3D Motion required');
     else if (!active) motionLabRecordStatus('Ready');
@@ -4192,7 +4221,7 @@
       motionLabRecordingUi();
       return;
     }
-    if (motionLabDraftLayers.length >= 24) {
+    if (!motionLabPunchContext && motionLabDraftLayers.length >= 24) {
       motionLabNotify('Motion Lab supports at most 24 layers; the take was not added.');
       motionLabRecordingUi();
       return;
@@ -4213,6 +4242,39 @@
       axes: take.armedAxes.slice(),
       samples: take.samples.map(row => row.slice()),
     };
+    if (motionLabPunchContext) {
+      const context = motionLabPunchContext;
+      motionLabPunchContext = null;
+      if (take.endFrame !== context.endFrame) {
+        motionLabRecorder = null;
+        motionLabNotify('Incomplete punch-in discarded. Capture the full selected frame range.');
+        motionLabRecordingUi();
+        return;
+      }
+      try {
+        const existing = motionLabDraftLayers[context.index];
+        if (!existing || existing.id !== context.id ||
+            JSON.stringify(existing) !== context.snapshot) {
+          throw new Error('Target take changed during recording. No edits were applied.');
+        }
+        motionLabDraftLayers[context.index] =
+          window.MorphorumMotionLabSplicePunchIn(existing, take);
+      } catch (error) {
+        motionLabRecorder = null;
+        motionLabNotify('Punch-in canceled: ' + (error?.message || String(error)));
+        motionLabRecordingUi();
+        return;
+      }
+      motionLabRecorder = null;
+      motionLabNeutralizeRecordInput();
+      commitMotionLabDraft();
+      motionLabRecordFinishedFeedback(take);
+      motionLabNotify('Punch-in replaced frames ' + take.startFrame + '–' +
+        (take.endFrame - 1) + ' on armed axes only. Undo restores the original take.');
+      void motionLabPreviewOrApply(false, {curvesOnly:true});
+      motionLabRecordingUi();
+      return;
+    }
     motionLabDraftLayers.push(layer);
     motionLabRecordFinishedFeedback(take);
     motionLabRecorder = null;
@@ -4237,7 +4299,8 @@
       motionLabNotify('Motion recorder asset is unavailable. Hard-refresh the browser and try again.');
       return;
     }
-    if (motionLabDraftLayers.length >= 24) {
+    const isPunch = qs('#animation-motion-lab-record-mode')?.value === 'punch';
+    if (!isPunch && motionLabDraftLayers.length >= 24) {
       motionLabNotify('Motion Lab supports at most 24 layers.');
       return;
     }
@@ -4254,6 +4317,22 @@
     const deadzone = Number(qs('#animation-motion-lab-record-deadzone')?.value);
     const response = Number(qs('#animation-motion-lab-record-response')?.value);
     const tailFrames = Number(qs('#animation-motion-lab-record-tail')?.value);
+    let punch = null;
+    if (isPunch) {
+      const raw = qs('#animation-motion-lab-punch-target')?.value;
+      const index = raw === '' || raw == null ? -1 : Number(raw);
+      const target = motionLabDraftLayers[index];
+      const endFrame = Number(qs('#animation-motion-lab-punch-end')?.value);
+      if (!target || target.type !== 'recording' ||
+          !Number.isInteger(endFrame) || endFrame <= startFrame ||
+          startFrame < target.start_frame || endFrame > target.end_frame ||
+          Number(target.fps) !== fps || axes.some(axis => !target.axes.includes(axis))) {
+        motionLabNotify('Punch-in requires a recorded target, matching FPS, an interval inside it and axes armed on that take.');
+        return;
+      }
+      punch = {index, id:target.id, snapshot:JSON.stringify(target), endFrame};
+    }
+
     if (!Number.isInteger(startFrame) || startFrame < 0 || startFrame >= count ||
         !Number.isFinite(translationScale) || translationScale <= 0 ||
         !Number.isFinite(rotationScale) || rotationScale <= 0 ||
@@ -4265,7 +4344,7 @@
     }
     motionLabNeutralizeRecordInput();
     motionLabVisual?.pause();
-    const remainingFrames = count - startFrame;
+    const remainingFrames = punch ? punch.endFrame - startFrame : count - startFrame;
     const startStatus = qs('#animation-motion-lab-record-frame');
     if (startStatus) startStatus.textContent =
       '● Starting capture at frame ' + startFrame + ' · ' + remainingFrames +
@@ -4274,10 +4353,11 @@
     if (indicator) indicator.textContent = '● RECORDING';
     motionLabRecordStatus('● Recording ' + fps + ' FPS');
     motionLabNotify('Recording active: keyboard, joysticks, Z/roll buttons and optional gamepad. Stop creates a draft layer.');
+    motionLabPunchContext = punch;
     motionLabRecorder = new window.MorphorumMotionLabFrameRecorder();
     try {
       motionLabRecorder.start({
-      fps, startFrame, maxFrames: count - startFrame, armedAxes: axes,
+      fps, startFrame, maxFrames: remainingFrames, armedAxes: axes,
       translationScale, rotationScale, deadzone, response, tailFrames,
       sampleInput: motionLabRecordSampleInput,
       onFrame: ({frame, count: captured, sample}) => {
@@ -4290,6 +4370,7 @@
       });
     } catch (error) {
       motionLabRecorder = null;
+      motionLabPunchContext = null;
       motionLabRecordStatus('Recording failed');
       motionLabNotify('Unable to start recording: ' + (error?.message || String(error)));
       const failed = qs('#animation-motion-lab-live-indicator');
@@ -4306,6 +4387,7 @@
     if (!motionLabRecorder?.active) return;
     motionLabNeutralizeRecordInput();
     motionLabRecorder.finish('discard');
+    motionLabPunchContext = null;
     motionLabRecorder = null;
     motionLabRecordingUi();
   }
@@ -5177,6 +5259,7 @@
     });
     qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
     qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
+    qs('#animation-motion-lab-record-mode')?.addEventListener('change', motionLabRecordingUi);
     qs('#animation-motion-lab-stop-recording')?.addEventListener('click',
       () => motionLabStopRecording('manual'));
     qs('#animation-motion-lab-record-gamepad')?.addEventListener('change', event => {
