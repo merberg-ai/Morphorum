@@ -32,6 +32,20 @@ test('Global progress and compact mobile navigation are interactive', () => {
   assert.match(html, /id="global-job-status"/);
   assert.match(html, /id="nav-more-toggle"/);
 });
+
+test('Active job progress reserves a dedicated desktop header row', () => {
+  const css = read('assets/app.css');
+  const html = read('index.html');
+  assert.match(css, /\.topbar\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:/s);
+  assert.match(css, /\.global-job-status\s*\{[^}]*grid-column:\s*1\/-1;grid-row:\s*2;/s);
+  assert.doesNotMatch(css, /\.global-job-status\s*\{[^}]*flex:\s*0\s+0\s+100%/s);
+  assert.match(css, /@media\s*\(max-width:\s*1180px\)\s*\{[^}]*\.topbar\s*\{[^}]*grid-template-columns:/s);
+  assert.match(css, /\.global-job-status\s*\{\s*grid-row:\s*3;\s*\}/);
+  assert.match(css, /@media\(max-width:640px\)\s*\{[\s\S]*?\.topbar-right\s*\{display:contents;\}/);
+  assert.match(css, /\.global-job-status\s*\{grid-column:1\/-1;grid-row:3;/);
+  assert.ok(html.indexOf('class="brand-block"') < html.indexOf('class="topbar-right"'));
+  assert.ok(html.indexOf('id="runtime-build"') < html.indexOf('id="global-job-status"'));
+});
 test('Settings and Console provide guarded, grouped controls', () => {
   const src = read('assets/app.js');
   assert.match(src, /function markSettingsDirty\(/);
