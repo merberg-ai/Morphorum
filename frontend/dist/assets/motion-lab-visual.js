@@ -34,13 +34,17 @@
     const maxY = Math.max(...raw.map(p => p[1]));
     const sx = Math.max(0.001, maxX - minX);
     const sy = Math.max(0.001, maxY - minY);
-    const scale = Math.min(352 / sx, 228 / sy);
+    // Guard against a nearly stationary trajectory producing unusably tiny
+    // per-frame velocity changes when a path handle is dragged.
+    const scale = Math.min(2500, 352 / sx, 228 / sy);
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
-    return raw.map(([x, y]) => [
+    const points = raw.map(([x, y]) => [
       220 + (x - centerX) * scale,
       148 + (y - centerY) * scale,
     ]);
+    points.nativeToPixelScale = scale;
+    return points;
   }
 
   function validateSeries(payload) {
@@ -91,6 +95,9 @@
       this.readout = find('animation-motion-lab-axis-readout');
       this.editor = {axis: 'translation_x', keys: [], enabled: false};
       this.dragKey = null;
+      this.pathDrag = null;
+      this.pathEditEnabled = false;
+      this.onPathEdit = null;
       this.graphScales = [0.04, 0.5];
       this.onKeyframeEdit = null;
       this.onFrameChange = null;
@@ -166,8 +173,72 @@
             this.frame + (event.key === 'ArrowRight' ? 1 : -1));
         });
       }
+      if (this.path) {
+        const coords = event => {
+          const rect = this.path.getBoundingClientRect();
+          if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+          return {
+            x: (event.clientX - rect.left) * 440 / rect.width,
+            y: (event.clientY - rect.top) * 300 / rect.height,
+          };
+        };
+        this.path.addEventListener('pointerdown', event => {
+          if (!this.series || this.stale || !this.pathEditEnabled || !this.points) return;
+          const point = coords(event);
+          if (!point) return;
+          let closest = null;
+          for (let frame = 1; frame < this.points.length; frame++) {
+            const [x,y] = this.points[frame];
+            const distance = Math.hypot(point.x - x, point.y - y);
+            if (!closest || distance < closest.distance) closest = {frame, distance};
+          }
+          if (!closest || closest.distance > 22) return;
+          event.preventDefault();
+          this.pause();
+          this.setFrame(closest.frame);
+          this.pathDrag = {
+            frame: closest.frame, pointerId: event.pointerId,
+            start: point, original: this.points[closest.frame],
+          };
+          this.path.setPointerCapture?.(event.pointerId);
+        });
+        this.path.addEventListener('pointermove', event => {
+          if (!this.pathDrag || event.pointerId !== this.pathDrag.pointerId) return;
+          const point = coords(event);
+          const ghost = this.path.querySelector('#ml1-path-ghost');
+          if (point && ghost) {
+            ghost.setAttribute('cx', String(this.pathDrag.original[0] + point.x - this.pathDrag.start.x));
+            ghost.setAttribute('cy', String(this.pathDrag.original[1] + point.y - this.pathDrag.start.y));
+            ghost.setAttribute('visibility', 'visible');
+          }
+        });
+        this.path.addEventListener('pointerup', event => {
+          if (!this.pathDrag || event.pointerId !== this.pathDrag.pointerId) return;
+          const point = coords(event);
+          const drag = this.pathDrag;
+          this.pathDrag = null;
+          const ghost = this.path.querySelector('#ml1-path-ghost');
+          if (ghost) ghost.setAttribute('visibility', 'hidden');
+          if (!point) return;
+          const scale = this.points.nativeToPixelScale;
+          const deltaX = (point.x - drag.start.x) / scale;
+          const deltaY = -(point.y - drag.start.y) / scale;
+          if (Number.isFinite(deltaX) && Number.isFinite(deltaY) &&
+              (Math.abs(deltaX) > 1e-7 || Math.abs(deltaY) > 1e-7)) {
+            this.onPathEdit?.({frame:drag.frame, deltaX, deltaY});
+          }
+        });
+        this.path.addEventListener('pointercancel', () => {
+          this.pathDrag = null;
+          const ghost = this.path.querySelector('#ml1-path-ghost');
+          if (ghost) ghost.setAttribute('visibility', 'hidden');
+        });
+      }
     }
-    configureEditor({axis, keys = [], enabled = false, onEdit, onFrameChange, onPointerDraft} = {}) {
+    configureEditor({
+      axis, keys = [], enabled = false, pathEnabled = false,
+      onEdit, onPathEdit, onFrameChange, onPointerDraft,
+    } = {}) {
       if (!AXES.includes(axis)) return;
       this.editor = {
         axis,
@@ -175,6 +246,8 @@
         enabled: Boolean(enabled),
       };
       this.onKeyframeEdit = onEdit || this.onKeyframeEdit;
+      this.onPathEdit = onPathEdit || this.onPathEdit;
+      this.pathEditEnabled = Boolean(pathEnabled);
       this.onFrameChange = onFrameChange || this.onFrameChange;
       this.onPointerDraft = onPointerDraft || this.onPointerDraft;
       if (this.series) { this.draw(); this.setFrame(this.frame); }
@@ -216,6 +289,8 @@
       this.count = 0;
       this.frame = 0;
       this.stale = false;
+      this.pathDrag = null;
+      this.dragKey = null;
       if (this.curves) this.curves.replaceChildren();
       if (this.path) this.path.replaceChildren();
       if (this.slider) { this.slider.value = '0'; this.slider.disabled = true; this.slider.max = '1'; }
@@ -306,7 +381,8 @@
         '<line x1="20" y1="148" x2="420" y2="148" stroke="currentColor" opacity=".1"/>',
         '<polyline points="' + pts + '" fill="none" stroke="#41c9d4" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>',
         '<circle cx="' + this.points[0][0] + '" cy="' + this.points[0][1] + '" r="4" fill="#87dfb3"/>',
-        '<circle id="ml1-path-marker" cx="' + this.points[0][0] + '" cy="' + this.points[0][1] + '" r="7" fill="#f7c265" stroke="#101922" stroke-width="2"/>'
+        '<circle id="ml1-path-marker" cx="' + this.points[0][0] + '" cy="' + this.points[0][1] + '" r="7" fill="#f7c265" stroke="#101922" stroke-width="2"/>',
+        '<circle id="ml1-path-ghost" r="8" fill="#e596d7" stroke="white" stroke-width="2" visibility="hidden"/>'
       ];
       if (this.path) this.path.innerHTML = path.join('');
     }
