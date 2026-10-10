@@ -46,6 +46,8 @@ DEFAULT_LIMITS = {
 MAX_LAYERS = 24
 MAX_COMPOSE_FRAMES = 3000
 MAX_KEYFRAMES_PER_LAYER = 128
+MAX_RECORDING_SAMPLES = MAX_COMPOSE_FRAMES
+RECORDING_SOURCES = ("keyboard", "touch", "gamepad", "mixed", "unknown")
 
 
 class MotionLabError(ValueError):
@@ -130,8 +132,97 @@ def _normalize_keyframe_layer(
     }
 
 
+def _normalize_recording_layer(
+    raw: dict[str, Any],
+    *,
+    index: int,
+    count: int,
+    start: int,
+    end: int,
+    mode: str,
+    fps: float,
+) -> dict[str, Any]:
+    """Validate a dense, frame-aligned six-axis recording take.
+
+    Samples are always stored in canonical AXES order. The axes list controls
+    which values participate in composition, so Replace never zeros unrelated
+    authored camera axes. Recording FPS is intentionally locked to project FPS:
+    native Motion Lab values are per-frame deltas, and silent resampling would
+    change travel distance and rotation semantics.
+    """
+    capture_version = _integer(
+        raw.get("capture_version", 1), "Recording capture version", 1, 1,
+    )
+    capture_fps = _number(raw.get("fps", fps), "Recording FPS", 1, 240)
+    if not math.isclose(capture_fps, fps, rel_tol=0.0, abs_tol=1e-9):
+        raise MotionLabError(
+            f"Recording FPS {capture_fps:g} does not match project FPS {fps:g}; "
+            "retime the take explicitly or re-record it."
+        )
+    source = str(raw.get("source") or "unknown").strip().lower()
+    if source not in RECORDING_SOURCES:
+        raise MotionLabError(
+            "Recording source must be keyboard, touch, gamepad, mixed or unknown."
+        )
+    raw_axes = raw.get("axes", list(AXES))
+    if not isinstance(raw_axes, list) or not 1 <= len(raw_axes) <= len(AXES):
+        raise MotionLabError("Recording must arm at least one axis.")
+    axes = [str(axis).strip().lower() for axis in raw_axes]
+    if any(axis not in AXES for axis in axes):
+        raise MotionLabError("Recording axes must use the six camera axes.")
+    if len(set(axes)) != len(axes):
+        raise MotionLabError("Recording axes must be unique.")
+
+    raw_samples = raw.get("samples")
+    expected = end - start
+    if not isinstance(raw_samples, list):
+        raise MotionLabError("Recording sample rows must be a list.")
+    if len(raw_samples) != expected or len(raw_samples) > MAX_RECORDING_SAMPLES:
+        raise MotionLabError(
+            f"Recording must contain exactly one sample per frame "
+            f"({expected} sample rows for frames {start}–{end - 1})."
+        )
+    armed = set(axes)
+    samples: list[list[float]] = []
+    for offset, row in enumerate(raw_samples):
+        if not isinstance(row, list) or len(row) != len(AXES):
+            raise MotionLabError(
+                f"Recording sample {offset + 1} must contain six numeric values."
+            )
+        values = [
+            _number(value, f"Recording sample {offset + 1} {AXES[n]}", -30, 30)
+            for n, value in enumerate(row)
+        ]
+        frame = start + offset
+        if frame == 0 and any(value != 0 for value in values):
+            raise MotionLabError("Frame 0 must have zero camera movement.")
+        for n, axis in enumerate(AXES):
+            if axis not in armed and values[n] != 0:
+                raise MotionLabError(
+                    f"Recording sample {offset + 1} has movement on unarmed axis {axis}."
+                )
+        samples.append(values)
+    name = str(raw.get("name") or f"Recorded take {index + 1}").strip()[:96]
+    if not name:
+        name = f"Recorded take {index + 1}"
+    return {
+        "id": str(raw.get("id") or f"layer-{index + 1}")[:64],
+        "type": "recording",
+        "name": name,
+        "enabled": raw.get("enabled", True) is True,
+        "blend": mode,
+        "start_frame": start,
+        "end_frame": end,
+        "fps": capture_fps,
+        "source": source,
+        "capture_version": capture_version,
+        "axes": axes,
+        "samples": samples,
+    }
+
+
 def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any]]:
-    count, _fps = _frames(project)
+    count, fps = _frames(project)
     if not isinstance(layers, list) or len(layers) > MAX_LAYERS:
         raise MotionLabError(f"Motion layers must be a list of at most {MAX_LAYERS} items.")
     output: list[dict[str, Any]] = []
@@ -147,6 +238,11 @@ def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any
         if kind == "keyframes":
             output.append(_normalize_keyframe_layer(
                 raw, index=index, count=count, start=start, end=end, mode=mode,
+            ))
+            continue
+        if kind == "recording":
+            output.append(_normalize_recording_layer(
+                raw, index=index, count=count, start=start, end=end, mode=mode, fps=fps,
             ))
             continue
         if kind != "preset":
@@ -365,6 +461,14 @@ def _keyframe_value(layer: dict[str, Any], frame: int) -> float:
     return left_value + factor * (right_value - left_value)
 
 
+def _recording_frame(layer: dict[str, Any], frame: int) -> dict[str, float]:
+    """Return armed native per-frame deltas from a validated recording layer."""
+    if frame == 0 or frame < layer["start_frame"] or frame >= layer["end_frame"]:
+        return {}
+    row = layer["samples"][frame - layer["start_frame"]]
+    return {axis: float(row[AXES.index(axis)]) for axis in layer["axes"]}
+
+
 def compile_motion_lab(
     project: dict[str, Any],
     *,
@@ -402,7 +506,7 @@ def compile_motion_lab(
     # Preview never saves it; explicit Apply can persist the rebased result.
     base = current if camera_changed else (lab["base_tracks"] or current)
     if not lab["layers"]:
-        raise MotionLabError("Add at least one Motion Lab preset layer.")
+        raise MotionLabError("Add at least one Motion Lab layer.")
     seed = max(0, int((project.get("generation") or {}).get("seed", -1)))
     signals: dict[str, list[float]] = {}
     for axis, track in base.items():
@@ -423,6 +527,8 @@ def compile_motion_lab(
         for frame in range(layer["start_frame"], layer["end_frame"]):
             if layer["type"] == "keyframes":
                 values = {layer["axis"]: _keyframe_value(layer, frame)}
+            elif layer["type"] == "recording":
+                values = _recording_frame(layer, frame)
             else:
                 values = _preset_frame(layer, frame, fps)
             for axis, delta in values.items():
