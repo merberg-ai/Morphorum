@@ -1,0 +1,179 @@
+'use strict';
+
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const dist = path.join(__dirname, '..', 'frontend', 'dist');
+const js = fs.readFileSync(path.join(dist, 'assets', 'animation.js'), 'utf8');
+const css = fs.readFileSync(path.join(dist, 'assets', 'animation.css'), 'utf8');
+const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
+
+test('Motion Lab is first-class; unfinished Media is absent from visible navigation', () => {
+  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['editor', 'motion', 'monitor', 'outputs'\]/);
+  assert.match(js, /const names = \{ editor: 'Editor', motion: 'Motion Lab', monitor: 'Monitor', outputs: 'Outputs' \}/);
+  assert.doesNotMatch(js, /const names = \{[^}]*media:\s*'Media'/);
+  assert.match(js, /mediaVault\.hidden = true/);
+  assert.match(js, /mediaVault\.inert = true/);
+  assert.match(js, /mediaVault\.setAttribute\('aria-hidden', 'true'\)/);
+  assert.match(js, /if \(hybrid\) mediaVault\.appendChild\(hybrid\)/);
+  assert.match(css, /#animation-media-vault\s*\{display:none!important;\}/);
+  assert.match(js, /panels\.outputs\.appendChild\(video\)/);
+  assert.match(js, /panels\.motion\.appendChild\(motionPreview\)/);
+  assert.match(js, /panels\.motion\.appendChild\(motionIntro\)/);
+});
+
+test('Old persisted Media tab safely routes to Editor; Motion Lab selection persists', () => {
+  const start = js.indexOf('  const ANIMATION_TAB_KEY = ');
+  const end = js.indexOf('  function bind() {', start);
+  assert.ok(start >= 0 && end > start);
+  const buttons = ['editor', 'motion', 'monitor', 'outputs'].map(name => ({
+    dataset: { animationTab: name }, tabIndex: -1, attrs: {},
+    classList: { active: false, toggle(_, value) { this.active = value; } },
+    setAttribute(k, v) { this.attrs[k] = v; },
+  }));
+  const panels = buttons.map(item => ({
+    dataset: { animationPanel: item.dataset.animationTab }, hidden: true,
+    classList: { active: false, toggle(_, value) { this.active = value; } },
+  }));
+  const stored = [];
+  const context = {
+    qsa: selector => selector.includes('[data-animation-tab]') ? buttons : panels,
+    localStorage: { setItem: (k, v) => stored.push([k, v]) },
+  };
+  vm.runInNewContext(js.slice(start, end) +
+    '\nthis.selectTab = showAnimationTab;', context);
+  context.selectTab('motion');
+  assert.equal(buttons[1].classList.active, true);
+  assert.equal(panels[1].hidden, false);
+  assert.equal(stored.at(-1)[1], 'motion');
+  context.selectTab('media');
+  assert.equal(buttons[0].classList.active, true);
+  assert.equal(panels[0].hidden, false);
+  assert.equal(buttons[1].classList.active, false);
+  assert.equal(stored.at(-1)[1], 'editor');
+});
+
+test('Motion Lab preserves original CPU camera preview and gives functional navigation', () => {
+  assert.match(html, /id="animation-motion-lab-intro"/);
+  assert.match(html, /id="animation-motion-lab-edit-3d"/);
+  assert.match(html, /id="animation-motion-lab-edit-timeline"/);
+  assert.equal((html.match(/class="card glass animation-motion-preview-card"/g) || []).length, 1);
+  assert.equal((html.match(/id="animation-generate-motion-preview"/g) || []).length, 1);
+  assert.match(js, /showAnimationTab\('editor'\);\s*qs\('#animation-3d-camera-card'\)\?\.scrollIntoView/);
+  assert.match(js, /showAnimationTab\('editor'\);\s*qs\('#animation-timeline-card'\)\?\.scrollIntoView/);
+  assert.match(css, /#animation-panel-motion \{display:grid;gap:14px;/);
+  assert.match(css, /@media\(max-width:640px\)\s*\{[^}]*\.animation-motion-lab-intro/);
+});
+
+
+test('Motion Lab preview is usable without a separately uploaded image', () => {
+  assert.match(js, /if \(preview\) preview\.disabled = !state\.project \|\| Boolean\(state\.motionJobId\)/);
+  assert.match(js, /if \(!state\.project \|\| state\.motionJobId\) return;/);
+  assert.match(js, /animationMode\(\) !== '3d'/);
+  assert.match(js, /job\.result\.source_kind === 'calibration-grid'/);
+  assert.match(html, /built-in calibration grid immediately/);
+  assert.match(html, /An uploaded reference is optional/);
+  assert.doesNotMatch(js, /if \(preview\) preview\.disabled = [^;]*!hasSource/);
+});
+
+
+test('ML0 exposes draft motion layer presets with preview and explicit timeline apply', () => {
+  for (const id of [
+    'animation-motion-lab-composer', 'animation-motion-lab-preset',
+    'animation-motion-lab-strength', 'animation-motion-lab-cycle',
+    'animation-motion-lab-fade', 'animation-motion-lab-start',
+    'animation-motion-lab-end', 'animation-motion-lab-blend',
+    'animation-motion-lab-add', 'animation-motion-lab-clear',
+    'animation-motion-lab-layer-list', 'animation-motion-lab-apply',
+    'animation-motion-lab-preview-draft',
+  ]) {
+    assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
+  }
+  assert.match(js, /async function motionLabPreviewOrApply\(apply\)/);
+  assert.match(js, /state\.project\.motion_lab\?\.layers/);
+  assert.match(js, /body: JSON\.stringify\(payload\)/);
+  assert.match(js, /await generateMotionPreview\(result\.project\)/);
+  assert.match(js, /await loadTimeline\(\)/);
+  assert.match(js, /const needsLayers = id !== 'animation-motion-lab-add'/);
+  assert.match(css, /\.animation-motion-lab-fields \{display:grid;/);
+});
+
+
+test('Camera Motion Composer lives in Motion Lab alongside its preview, never Editor', () => {
+  assert.match(js, /const composer = qs\('#animation-motion-lab-composer'\)/);
+  assert.match(js, /if \(composer\) panels\.motion\.appendChild\(composer\)/);
+  const intro = js.indexOf('panels.motion.appendChild(motionIntro)');
+  const composer = js.indexOf('panels.motion.appendChild(composer)');
+  const preview = js.indexOf('panels.motion.appendChild(motionPreview)');
+  assert.ok(intro > 0 && intro < composer && composer < preview);
+  assert.match(html, /id="animation-motion-lab-enable-3d"/);
+  assert.match(html, /id="animation-motion-lab-cycle"[^>]*value="2"/);
+  assert.match(html, /id="animation-motion-lab-fade"[^>]*value="\.1"/);
+});
+
+test('Manual Editor motion edits do not block draft previews, apply needs explicit rebase', () => {
+  const start = js.indexOf('  async function motionLabPreviewOrApply(apply) {');
+  const end = js.indexOf('  // Motion Lab is first-class;', start);
+  const workflow = js.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(workflow, /if \(!apply\) payload\.project = collectProject\(\)/);
+  assert.match(workflow, /Camera schedules changed since Motion Lab/);
+  assert.match(workflow, /payload\.rebase_current = true/);
+  assert.match(workflow, /window\.MorphorumDialog\.confirm/);
+  assert.match(workflow, /Save Editor changes before applying Motion Lab/);
+  assert.doesNotMatch(workflow, /if \(state\.dirty\)\s*\{\s*motionLabNotify\('Save current Editor changes/);
+  assert.match(js, /animation-motion-lab-enable-3d'\)\?\.addEventListener\('click'/);
+});
+
+
+test('Motion Lab can edit previously saved preset layers without destructive remove/readd', () => {
+  assert.match(js, /let motionLabEditingIndex = -1/);
+  assert.match(js, /edit\.textContent = 'Edit'/);
+  assert.match(js, /motionLabEditingIndex = index/);
+  assert.match(js, /cycle: layer\.cycle_seconds/);
+  assert.match(js, /motionLabDraftLayers\[motionLabEditingIndex\] = entry/);
+  assert.match(js, /motionLabEditingIndex < 0 \? '\+ Add Preset Layer' : 'Update Selected Layer'/);
+  assert.match(css, /\.animation-motion-lab-layer-actions \{display:flex;/);
+});
+
+
+test('ML1 curves and path stay entirely within Motion Lab, never Editor', () => {
+  for (const id of [
+    'animation-motion-lab-visual', 'animation-motion-lab-curves',
+    'animation-motion-lab-path', 'animation-motion-lab-play',
+    'animation-motion-lab-loop', 'animation-motion-lab-frame',
+    'animation-motion-lab-frame-value', 'animation-motion-lab-axis-readout',
+    'animation-motion-lab-undo', 'animation-motion-lab-redo',
+    'animation-motion-lab-update-curves',
+  ]) {
+    assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
+  }
+  assert.match(html, /src="\/assets\/motion-lab-visual\.js\?v=/);
+  assert.match(js, /new window\.MorphorumMotionLabVisualizer\(\)/);
+  assert.match(js, /motionLabVisual\?\.setData\(result\.diagnostics\)/);
+  assert.match(js, /motionLabVisual\?\.invalidate\(\)/);
+  assert.match(js, /if \(!apply\) payload\.project = collectProject\(\)/);
+  assert.match(js, /motionLabPreviewOrApply\(false, \{ curvesOnly: true \}\)/);
+  assert.match(js, /panels\.motion\.appendChild\(composer\)/);
+  assert.match(js, /if \(visual\) panels\.motion\.appendChild\(visual\)/);
+  const composerAt = js.indexOf('panels.motion.appendChild(composer)');
+  const visualAt = js.indexOf('panels.motion.appendChild(visual)');
+  const previewAt = js.indexOf('panels.motion.appendChild(motionPreview)');
+  assert.ok(composerAt > 0 && composerAt < visualAt && visualAt < previewAt);
+  assert.match(css, /\.animation-motion-lab-visual-grid \{display:grid;/);
+  assert.match(css, /@media\(max-width:980px\)/);
+});
+
+test('ML1 draft layers support undo, redo, enable/disable and reordering', () => {
+  assert.match(js, /function commitMotionLabDraft\(\)/);
+  assert.match(js, /function restoreMotionLabDraft\(direction\)/);
+  assert.match(js, /motionLabDraftLayers\[index\]\.enabled = enabled\.checked/);
+  assert.match(js, /Move layer earlier/);
+  assert.match(js, /Move layer later/);
+  assert.match(js, /motionLabHistory\.slice\(0, motionLabHistoryIndex \+ 1\)/);
+  assert.match(js, /motionLabHistoryIndex = motionLabHistory\.length - 1/);
+  assert.match(js, /input\.id\.startsWith\('animation-motion-lab-'\)/);
+});

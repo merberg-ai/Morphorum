@@ -37,6 +37,7 @@ _KNOWN_TOP_LEVEL = {
     "cadence",
     "temporal",
     "hybrid",
+    "motion_lab",
     "tracks",
     "notes",
 }
@@ -526,6 +527,13 @@ def normalize_animation_project(
         sync_legacy_from_tracks(project, project["tracks"])
     else:
         project["tracks"] = build_tracks_from_legacy(project)
+
+    # Motion Lab authoring state is inert until explicitly compiled/applied
+    # to canonical native tracks. Older projects default to empty layers.
+    from .motion_lab import normalize_motion_lab
+    project["motion_lab"] = normalize_motion_lab(
+        payload.get("motion_lab", project.get("motion_lab")), project,
+    )
 
     # Native projects are forward-compatible: unknown top-level fields survive
     # a load/edit/save round trip just like future imported compatibility data.

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .animation_render import _render_dir
+from .animation_projects import animation_project_directory
 from .console import emit_console
 
 FORMATS = {"mp4", "webm"}
@@ -122,6 +123,26 @@ def _validate_options(
     return format, quality, chosen_fps
 
 
+def _render_audio_source(project_id: str, manifest: dict[str, Any]) -> Path | None:
+    """Select project-owned WAV pinned by the completed render's frozen layers."""
+    layers = ((manifest.get("project") or {}).get("motion_lab") or {}).get("layers") or []
+    hashes = {str(layer.get("sha256") or "") for layer in layers
+              if isinstance(layer, dict) and layer.get("type") == "audio"
+              and layer.get("enabled", True)}
+    if not hashes:
+        return None
+    if len(hashes) != 1:
+        raise VideoExportError(
+            "Multiple audio sources in this render. A single soundtrack is required for export.")
+    digest = hashes.pop()
+    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise VideoExportError("Render soundtrack hash is invalid.")
+    source = animation_project_directory(project_id) / "motion_lab_audio" / (digest + ".wav")
+    if not source.is_file():
+        raise VideoExportError("Analyzed WAV for this render is missing. Restore the project WAV.")
+    return source
+
+
 def _export_path(project_id: str, render_id: str, format: str, quality: str, fps: int) -> Path:
     return _render_dir(project_id, render_id) / "exports" / (
         f"animation-{fps}fps-{quality}.{format}"
@@ -140,6 +161,7 @@ def _command(
     format: str,
     quality: str,
     fps: int,
+    audio_path: Path | None = None,
 ) -> list[str]:
     # x264 and VP9 yuv420p need even dimensions. The adjustment is applied
     # in FFmpeg, leaving original PNGs untouched.
@@ -147,10 +169,20 @@ def _command(
         ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
         "-y", "-framerate", str(fps), "-start_number", "0",
         "-i", str(input_pattern),
+    ]
+    if audio_path is not None:
+        command += ["-i", str(audio_path)]
+    command += [
+        "-map", "0:v:0",
         "-frames:v", str(frame_count),
         "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-        "-an", "-pix_fmt", "yuv420p",
+        "-pix_fmt", "yuv420p",
     ]
+    if audio_path is not None:
+        command += ["-map", "1:a:0", "-af", "apad",
+                    "-t", f"{frame_count / fps:.6f}"]
+    else:
+        command += ["-an"]
     if format == "mp4":
         command += [
             "-c:v", "libx264", "-preset", "medium",
@@ -165,6 +197,9 @@ def _command(
             "-crf", str({"high": 24, "balanced": 32, "compact": 38}[quality]),
             "-f", "webm",
         ]
+    if audio_path is not None:
+        command += ["-c:a", "aac" if format == "mp4" else "libopus",
+                    "-b:a", "192k" if format == "mp4" else "128k"]
     # Write to .part, atomically rename on success. Explicit -f ensures
     # FFmpeg can encode despite the temporary file extension.
     return command + ["-progress", "pipe:1", str(destination)]
@@ -179,6 +214,7 @@ class VideoExportJob:
     quality: str
     fps: int
     total_frames: int
+    audio_included: bool = False
     created_at: str = field(default_factory=_timestamp)
     status: str = "queued"
     progress: float = 0.0
@@ -220,11 +256,19 @@ class VideoExportManager:
         ffmpeg = ffmpeg_executable()
         if ffmpeg is None:
             raise VideoExportError(export_availability()["message"])
+        soundtrack = _render_audio_source(project_id, manifest)
+        if soundtrack is not None:
+            original_fps = float((manifest.get("project") or {}).get("animation", {}).get("fps") or 0)
+            if abs(fps - original_fps) > 1e-6:
+                raise VideoExportError(
+                    "Audio-synchronized video must use the original render FPS. "
+                    "Clear the export FPS override to preserve soundtrack timing.")
         output = _export_path(project_id, render_id, fmt, quality, fps)
         job = VideoExportJob(
             id="video-" + uuid.uuid4().hex[:12],
             project_id=project_id, render_id=render_id,
             format=fmt, quality=quality, fps=fps, total_frames=count,
+            audio_included=soundtrack is not None,
         )
         with self._lock:
             if output in self._active_outputs:
@@ -232,7 +276,7 @@ class VideoExportManager:
             self._active_outputs.add(output)
             self._jobs[job.id] = job
         thread = threading.Thread(
-            target=self._run, args=(job, ffmpeg, output),
+            target=self._run, args=(job, ffmpeg, output, soundtrack),
             daemon=True, name=f"morphorum-{job.id}",
         )
         thread.start()
@@ -310,7 +354,7 @@ class VideoExportManager:
             raise VideoExportError("Video export is not complete.")
         return output
 
-    def _run(self, job: VideoExportJob, ffmpeg: str, output: Path) -> None:
+    def _run(self, job: VideoExportJob, ffmpeg: str, output: Path, soundtrack: Path | None = None) -> None:
         temp = output.with_name(output.name + ".part")
         log_path = output.with_name(output.name + ".ffmpeg.log")
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -323,7 +367,7 @@ class VideoExportManager:
             command = _command(
                 ffmpeg, input_pattern=output.parent.parent / "frames" / "frame_%06d.png",
                 destination=temp, frame_count=job.total_frames, format=job.format,
-                quality=job.quality, fps=job.fps,
+                quality=job.quality, fps=job.fps, audio_path=soundtrack,
             )
             # Only use argv, never a shell command. FFmpeg stderr is written
             # to a file, preventing the classic full-pipe deadlock.

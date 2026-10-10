@@ -212,3 +212,10 @@ test('replacing a video clears stale previews and busts extracted frame cache', 
   assert.match(script, /Previous extraction cleared; extract this video to continue/);
   assert.match(script, /Extracting new frames\. Previous preview hidden/);
 });
+
+test('ML4.2 existing performance panel reports bounded stability advisories', () => {
+  assert.ok(script.includes("const stability = perf.stability || {}"));
+  assert.ok(script.includes("stability.memory_delta_gib"));
+  assert.ok(script.includes("stability.anchor_diffusion_slowdown_ratio"));
+  assert.ok(script.includes("stability.warnings.join(' ')"));
+});

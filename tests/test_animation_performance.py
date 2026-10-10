@@ -174,3 +174,44 @@ def test_b60p_phase_memory_preserves_allocator_context() -> None:
     assert phases["frame_start"]["allocator_backend"] == "native"
     assert phases["post_diffusion_decode"]["peak_allocated_gib"] == 13.0
     assert "prompt" not in json.dumps(phases)
+
+
+def test_ml42_stable_memory_and_cadence_does_not_warn():
+    tracker = AnimationPerformance()
+    for frame in range(72):
+        tracker.observe(_record(frame, diffused=frame % 3 == 0,
+                                seconds=5.0, allocation=8.0 + (frame % 3) * .05))
+    stability = tracker.public()["stability"]
+    assert stability["memory_delta_gib"] == pytest.approx(0, abs=.1)
+    assert stability["warnings"] == []
+    assert stability["anchor_diffusion_slowdown_ratio"] == 1.0
+
+
+def test_ml42_sustained_drift_and_slow_anchors_get_observational_warnings():
+    tracker = AnimationPerformance()
+    for frame in range(90):
+        tracker.observe(_record(frame, seconds=4.0 if frame < 45 else 9.0,
+                                allocation=8.0 + frame * .03))
+    result = tracker.public()["stability"]
+    assert result["memory_delta_gib"] > 1
+    assert result["anchor_diffusion_slowdown_ratio"] >= 1.8
+    assert len(result["warnings"]) == 2
+    assert len(tracker._recent_allocated) == 12
+    assert len(tracker._recent_anchor_times) == 8
+    restored = summarize_records([_record(frame, allocation=8 + frame * .03,
+                                          seconds=4 if frame < 45 else 9)
+                                  for frame in range(90)])
+    assert restored["stability"] == result
+
+
+def test_ml42_short_or_cpu_only_runs_do_not_invent_gpu_drift():
+    tracker = AnimationPerformance()
+    for frame in range(11):
+        tracker.observe(_record(frame, allocation=11 + frame * .4))
+    assert tracker.public()["stability"]["memory_delta_gib"] is None
+    no_cuda = summarize_records([performance_record(
+        frame=n, diffused=False, timings={"total":1},
+        cuda_before=None, cuda_after=None, model_status=None,
+        conditioning_cache_entries=0) for n in range(50)])
+    assert no_cuda["stability"]["memory_delta_gib"] is None
+    assert no_cuda["stability"]["warnings"] == []
