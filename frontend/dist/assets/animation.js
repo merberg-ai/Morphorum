@@ -4417,6 +4417,62 @@
         result.detail : 'Audio analysis failed (HTTP ' + response.status + ')');
       if (state.project?.id !== projectId) return;
       const analysis = result.analysis;
+      const matchLength = qs('#animation-motion-lab-audio-match-length');
+      const lengthStatus = qs('#animation-motion-lab-audio-length-status');
+      if (lengthStatus) lengthStatus.textContent =
+        'Audio ' + Number(analysis.duration_seconds).toFixed(2) + 's · project ' +
+        (Number(state.project.animation.max_frames) / Number(state.project.animation.fps)).toFixed(2) +
+        's at ' + state.project.animation.fps + ' FPS.';
+      if (matchLength?.checked) {
+        // Never silently retime recorded per-frame camera velocities.
+        // Change only frame count; leave FPS untouched.
+        const fps = Number(state.project.animation.fps);
+        const targetFrames = Math.ceil(Number(analysis.duration_seconds) * fps - 1e-9);
+        if (!Number.isInteger(targetFrames) || targetFrames < 1 || targetFrames > 3000) {
+          throw new Error('Audio needs ' + targetFrames +
+            ' frames at ' + fps + ' FPS. Motion Lab supports at most 3000 frames; choose a shorter WAV or lower FPS manually.');
+        }
+        if (targetFrames !== Number(state.project.animation.max_frames)) {
+          if (motionLabDraftLayers.length || state.project.motion_lab?.layers?.length) {
+            throw new Error('Cannot automatically resize a project with Motion Lab layers. Preserve or clear those layers first, then reanalyze. No project settings were changed.');
+          }
+          const approved = window.confirm(
+            'Match project duration to WAV?\\n\\nAudio: ' +
+            Number(analysis.duration_seconds).toFixed(2) + 's\\n' +
+            'Current: ' + state.project.animation.max_frames + ' frames at ' + fps + ' FPS\\n' +
+            'New: ' + targetFrames + ' frames at ' + fps + ' FPS\\n\\n' +
+            'This saves current project settings and reanalyzes the WAV. FPS will not change.'
+          );
+          if (!approved) {
+            if (lengthStatus) lengthStatus.textContent = 'Length matching canceled. Project unchanged.';
+          } else {
+            const editorFrames = qs('#animation-max-frames');
+            if (!editorFrames) throw new Error('Cannot locate the Editor frame-count field.');
+            const previous = editorFrames.value;
+            editorFrames.value = String(targetFrames);
+            try {
+              const payload = await api('/api/animation/projects/' + encodeURIComponent(projectId), {
+                method:'PUT',body:JSON.stringify(collectProject()),
+              });
+              if (state.project?.id !== projectId) return;
+              state.project = payload.project;
+              fillForm();
+              clearDirty();
+              if (Number(state.project.animation.max_frames) !== targetFrames) {
+                throw new Error('Saved project frame count differs from requested audio length.');
+              }
+              matchLength.checked = false;
+              if (lengthStatus) lengthStatus.textContent = 'Matched ' + targetFrames +
+                ' frames at ' + fps + ' FPS. WAV reanalysis in progress.';
+              await motionLabAnalyzeAudio();
+              return;
+            } catch (error) {
+              editorFrames.value = previous;
+              throw error;
+            }
+          }
+        }
+      }
       if (!Array.isArray(analysis?.values) ||
           analysis.values.length !== Number(state.project.animation.max_frames) ||
           Number(analysis.fps) !== Number(state.project.animation.fps)) {
