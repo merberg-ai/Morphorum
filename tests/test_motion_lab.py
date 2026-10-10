@@ -163,3 +163,26 @@ def test_manual_camera_edits_are_safe_in_draft_and_require_apply_confirmation():
     repeated, repeated_diag = compile_motion_lab(preview, layers=[layer("spiral")])
     assert repeated_diag["camera_changed"] is False
     assert repeated["camera_3d"] == preview["camera_3d"]
+
+
+def test_ml1_full_frame_series_matches_native_resolved_tracks():
+    p = project(frames=48)
+    layers = [
+        layer("spiral", id="spiral", end_frame=48, cycle_seconds=2, fade_seconds=.1),
+        layer("rocking", id="rock", end_frame=48, strength=.3),
+    ]
+    project_out, diagnostics = compile_motion_lab(
+        p, layers=layers, include_series=True,
+    )
+    assert set(diagnostics["series"]) == set(AXES)
+    assert diagnostics["frames"] == 48
+    for axis in AXES:
+        values = diagnostics["series"][axis]
+        assert len(values) == 48
+        for frame, value in enumerate(values):
+            resolved = resolve_project_frame(project_out, frame)["camera_3d"][axis]
+            assert value == pytest.approx(float(resolved), abs=1e-8)
+    assert diagnostics["series"]["translation_z"][0] == 0
+    # The opt-in data series is omitted from regular saved Apply payloads.
+    _applied, default_diag = compile_motion_lab(p, layers=layers)
+    assert "series" not in default_diag
