@@ -316,10 +316,21 @@ def api_motion_lab_presets() -> dict[str, Any]:
 def api_motion_lab_compose_preview(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         project = load_animation_project(project_id)
+        # Optional unsaved Editor draft is accepted for PREVIEW only. Never
+        # persist changes or rely on the client snapshot for Apply.
+        editor_draft = payload.get("project")
+        if editor_draft is not None:
+            if not isinstance(editor_draft, dict):
+                raise MotionLabError("Motion Lab preview project must be an object.")
+            project = normalize_animation_project(
+                editor_draft, existing=project, project_id=project_id,
+            )
         layers = payload.get("layers")
         if not isinstance(layers, list):
             raise MotionLabError("Motion Lab preview requires a list of layers.")
-        compiled, diagnostics = compile_motion_lab(project, layers=layers)
+        compiled, diagnostics = compile_motion_lab(
+            project, layers=layers, conflict_policy="use-current",
+        )
         return {
             "status": "preview",
             "diagnostics": diagnostics,
@@ -339,7 +350,10 @@ def api_motion_lab_apply(project_id: str, payload: dict[str, Any]) -> dict[str, 
         layers = payload.get("layers")
         if not isinstance(layers, list):
             raise MotionLabError("Motion Lab apply requires a list of layers.")
-        compiled, diagnostics = compile_motion_lab(project, layers=layers)
+        compiled, diagnostics = compile_motion_lab(
+            project, layers=layers,
+            conflict_policy=("use-current" if payload.get("rebase_current") is True else "reject"),
+        )
         saved = save_animation_project(project_id, compiled, prefer_tracks=True)
         return {
             "status": "applied", "project": saved, "diagnostics": diagnostics,
@@ -348,7 +362,8 @@ def api_motion_lab_apply(project_id: str, payload: dict[str, Any]) -> dict[str, 
         status = 404 if "not found" in str(exc).lower() else 400
         raise HTTPException(status_code=status, detail=str(exc)) from exc
     except (MotionLabError, ScheduleError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        status = 409 if "Camera schedules changed since Motion Lab" in str(exc) else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 @app.get("/api/animation/timeline/descriptors")
