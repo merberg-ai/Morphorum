@@ -1,6 +1,6 @@
 # Morphorum Motion Lab — implementation roadmap
 
-**Status:** ML0, ML1a and ML1b physically accepted on Windows (2026-10-09). ML1b checkpoint `checkpoint/motion-lab-ml1b-windows-verified-20261009` at `333045e`. Follow-up smooth curve interpolation and compact-checkbox polish is implemented, awaiting final Windows acceptance. ML2 controller recording and ML3 audio remain future work.
+**Status:** ML0, ML1a, ML1b and the ML1b smoothing/checkbox polish physically accepted on Windows (2026-10-09). Latest protected checkpoint: `checkpoint/motion-lab-ml1b-smoothing-windows-verified-20261009` at `c0e5f90a692e14e32b48155f71d0a8afc923c6ae` (Syntax and Backend CI green). **Paused before ML2.** Keyboard/touch/controller motion recording and ML3 audio are not implemented.
 **Branch:** `feature/motion-lab`
 **Branch base:** `dev-ui` at `bc40d18d4f5968904afedc798ecd3efdef71761a` (B6.3.2 physical acceptance)
 **Existing paused separate work:** `feature/b6-3-3-hybrid-masks` at `c0e9be0aa03472747ba4c2594c128bdcd80318ef`. Do not touch that branch.
@@ -138,7 +138,7 @@ For 2D projects: start with a 3D camera lab and a clearly disabled/limited 2D mo
 - User physically verified ML1b curve/path editing and requested smoother velocity curves plus compact checkboxes on desktop. Recovery checkpoint preserves the accepted original at `333045e`.
 - Added `smoothstep` (smooth ease in/out), `smootherstep` (extra-smooth easing), and `cubic` (monotone shape-preserving Hermite) while preserving `linear` and `hold` compatibility. All are evaluated in the existing backend into native per-frame camera tracks, not cosmetic SVG splines. Frame zero remains stationary, clipping still applies, and keyframe interpolation persists on save/reopen.
 - Motion Lab checkbox styles explicitly size Edit Curve, Edit Path, Loop, and layer enable checkboxes to 16px in their own workspace without touching unrelated controls.
-- **Windows acceptance:** update `feature/motion-lab`, use a saved multi-key Translation X motion. Compare Linear, Ease In/Out, Extra Smooth, and Smooth Cubic via Update Curves; confirm rounded motion is visible and key values remain exact. Apply/reopen and verify interpolation choice persists. Check desktop checkbox dimensions and phone tap behavior.
+- **Windows acceptance: PASSED (user confirmed on 2026-10-09).** Smooth curves and checkbox-sizing changes accepted. Recovery checkpoint at `c0e5f90`. Extended GPU and per-device test matrices remain future work.
 
 **Deferred beyond ML1b:** true absolute-camera control points/Bezier 3D path editing, physical-world units, FOV-/depth-aware path handles, inverse kinematics, axis constraints with spatial solvers. Those would need a distinct calibrated editor rather than repurposing the auto-fit display.
 
