@@ -138,3 +138,38 @@ def test_motion_lab_preview_includes_unsaved_editor_camera_without_persisting(
         assert preview.json()["project"]["motion_lab"]["base_tracks"]["translation_y"]["schedule"] == "0:(0.04)"
         on_disk = client.get("/api/animation/projects/" + project["id"]).json()["project"]
         assert on_disk["camera_3d"]["translation_y"] == "0:(0)"
+
+
+
+def test_ml1b_manual_curve_api_previews_and_saves_native_camera_track(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setattr(projects, "PROJECTS_DIR", tmp_path / "projects")
+    manual = {
+        "id": "manual-tx", "type": "keyframes", "axis": "translation_x",
+        "blend": "add", "enabled": True, "interpolation": "linear",
+        "start_frame": 0, "end_frame": 24,
+        "keys": [{"frame": 0, "value": 0}, {"frame": 12, "value": .08}],
+    }
+    with TestClient(app) as client:
+        made = client.post("/api/animation/projects", json={"name": "Curve API"})
+        assert made.status_code == 201
+        source = made.json()["project"]
+        source["animation"].update(mode="3d", max_frames=24, fps=12)
+        project_id = source["id"]
+        assert client.put("/api/animation/projects/" + project_id, json=source).status_code == 200
+        endpoint = f"/api/animation/projects/{project_id}/motion-lab"
+        draft = client.post(endpoint + "/preview", json={"layers": [manual]})
+        assert draft.status_code == 200, draft.text
+        assert draft.json()["diagnostics"]["series"]["translation_x"][6] == pytest.approx(.04)
+        untouched = client.get(f"/api/animation/projects/{project_id}").json()["project"]
+        assert untouched["camera_3d"]["translation_x"] == "0:(0)"
+        accepted = client.post(endpoint + "/apply", json={"layers": [manual]})
+        assert accepted.status_code == 200, accepted.text
+        loaded = client.get(f"/api/animation/projects/{project_id}").json()["project"]
+        assert loaded["motion_lab"]["layers"][0]["type"] == "keyframes"
+        assert loaded["motion_lab"]["layers"][0]["keys"][1]["frame"] == 12
+        assert loaded["camera_3d"]["translation_x"] != "0:(0)"
+        second = client.post(endpoint + "/apply", json={"layers": [manual]})
+        assert second.status_code == 200, second.text
+        assert second.json()["project"]["camera_3d"]["translation_x"] == loaded["camera_3d"]["translation_x"]
