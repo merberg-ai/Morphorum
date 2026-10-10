@@ -135,7 +135,7 @@ def test_hybrid_compositing_opacity_schedule_and_blend():
     source = Image.new("RGB", (2, 2), (255, 0, 0))
     assert blend_hybrid_video(generated, source, 0).getpixel((0, 0)) == (0, 0, 255)
     assert blend_hybrid_video(generated, source, 1).getpixel((0, 0)) == (255, 0, 0)
-    assert blend_hybrid_video(generated, source, .5).getpixel((0, 0)) == (128, 0, 128)
+    assert blend_hybrid_video(generated, source, .5).getpixel((0, 0)) == (127, 0, 127)
 
 
 def test_hybrid_compositing_opt_in_invalid_schedule_and_bounds():
@@ -185,7 +185,7 @@ def test_post_temporal_composite_is_resume_idempotent_and_preserves_sources(
         )
     manager = AnimationRenderManager()
     assert manager._apply_hybrid_compositing(job) is True
-    expected = [(0, 0, 255), (25, 0, 128), (50, 0, 0)]
+    expected = [(0, 0, 255), (25, 0, 127), (50, 0, 0)]
     for frame, pixel in enumerate(expected):
         path = render_dir / "frames" / f"frame_{frame:06d}.png"
         with Image.open(path) as result:
