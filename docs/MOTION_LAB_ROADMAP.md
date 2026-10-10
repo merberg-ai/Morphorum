@@ -1,6 +1,6 @@
 # Morphorum Motion Lab — implementation roadmap
 
-**Status:** Architecture and development planning; no Motion Lab renderer or frontend implementation yet.
+**Status:** Motion Lab workspace shell and existing motion-preview integration implemented on this branch; preset/layer composer ML0 and live recording ML2 still pending.
 **Branch:** `feature/motion-lab`
 **Branch base:** `dev-ui` at `bc40d18d4f5968904afedc798ecd3efdef71761a` (B6.3.2 physical acceptance)
 **Existing paused separate work:** `feature/b6-3-3-hybrid-masks` at `c0e9be0aa03472747ba4c2594c128bdcd80318ef`. Do not touch that branch.
@@ -15,7 +15,7 @@ Motion Lab is a motion *authoring/composition* tool. It must not launch a second
 
 The friend's project supplies **behavioral inspiration**: six-axis motion controls, Still/Gentle drift/Wave/Spiral/Figure eight/Rocking/Push/Pull presets, explicit layer add/replace, travel, constrained bass pulses, interactive recording, speed/limits, undo, and Deforum settings export. The friend’s README reports calibrated **flat-depth** geometry preview and 20 automated tests; it does **not** reproduce changing depth maps, AI regeneration, cadence or final video. Morphorum already handles depth-aware warp and diffusion and should use its own existing preview and renderer.
 
-**Licensing:** The GitHub repo exposes no declared license / LICENSE at planning time. Do not copy or transplant its `app.py`, `motion.py`, `controller.py`, or `geometry.py` without explicit permission or a suitable license from the author. Independently implement equivalent ideas against the Morphorum project model. Record attribution to the inspiration.
+**Source authorization:** The Morphorum maintainer reports that the author of `chicodog530/Deforum-Motion-Studio` gave permission to reuse **any and all of his code** in this project. Reusing adapted source is therefore within the owner's stated authorization, but the public upstream repo still has no formal license declaration. Before publishing copied code under Morphorum's Unlicense, get a short written confirmation that the permission expressly includes redistribution, modification, and release under Unlicense (or ask the author to add an appropriate public license). Retain clear upstream credit and review any third-party material separately. Prefer integrating its tested algorithms, not its independent Tk GUI or parallel rendering system.
 
 ## Existing Morphorum extension points (verified against dev-ui)
 
@@ -31,7 +31,7 @@ The friend's project supplies **behavioral inspiration**: six-axis motion contro
 
 ## Proposed UX
 
-A fifth **Motion Lab** workspace tab inside Animation Studio (alongside Editor/Monitor/Media/Outputs), accessible via a shortcut near 3D Camera Schedules and Visual Timeline.
+A prominent **Motion Lab** workspace tab inside Animation Studio (Editor / Motion Lab / Monitor / Outputs). The unfinished Media (hybrid-video import/extract) workspace is intentionally hidden **only on this feature branch** while B6.3.3 is paused. Its DOM, API, data, extraction and saved hybrid project settings are preserved and can be restored later without migration. MP4/WebM video export remains visible in Outputs. The working CPU-only Camera Motion Preview has been moved from Editor into Motion Lab, with navigation shortcuts back to 3D Camera Schedules and Visual Timeline.
 
 **Desktop**
 - Left: preset library, range/strength/cycle/fade, mode Add/Replace, travel and limits.
@@ -90,7 +90,7 @@ For 2D projects: start with a 3D camera lab and a clearly disabled/limited 2D mo
 
 ## Delivery phases and acceptance gates
 
-### ML0: Architectural foundation and six-axis composer
+### ML0: Architectural foundation and six-axis composer (next development task)
 
 - Define versioned Motion Lab project sub-schema and non-destructive migration; default `enabled:false`.
 - Pure deterministic preset series generator in **Morphorum native units**; support Still, Drift, Wave, Spiral, Figure Eight, Rocking, Push, Pull.
@@ -140,5 +140,5 @@ Begin ML0 with a small backend-focused PR on this branch. Define the versioned l
 - Morphorum remains LAN-accessible on Windows; all authoring state belongs to the selected Morphorum project, not a local Tk app or the client's file system.
 - Safe expression parsing uses existing `schedules.py`; never `eval` arbitrary expressions.
 - No new GPU model dependencies. Optional audio analysis libraries must be weighed against installation footprint.
-- Friend's repo currently has **no declared license**. Do not copy source or assets without permission or an explicit open-source license. Attribution for design inspiration is appropriate even for an independent implementation.
-- The only commit made in this branch at roadmap creation is this planning document; no Motion Lab behavior is implemented yet.
+- The user reports express author permission to reuse any/all of the friend's code. Check that permission includes republishing adapted files under Unlicense before shipping direct copies; do not assume it covers third-party materials.
+- Workspace shell is underway: Media removed from visible tabs, its data/backend preserved in a hidden vault; functional existing motion-preview panel relocated to Motion Lab; preset composer and recording are not implemented yet.
