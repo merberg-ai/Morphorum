@@ -190,7 +190,7 @@ test('hybrid anchor inputs are opt-in and persisted through project save', () =>
   assert.match(script, /enabled: Boolean\(qs\('#animation-hybrid-render-enabled'\)\?\.checked\)/);
   assert.match(script, /function hybridRestoreProjectFrames\(/);
   assert.match(script, /markDirty\(\)/);
-  assert.match(script, /await api\(hybridBase\(\) \+ '\/hybrid-frames'\)/);
+  assert.match(script, /await api\(hybridBase\(\) \+ '\/hybrid-frames\?refresh='/);
 });
 
 test('source-over video compositing has independent opt-in schedule controls', () => {
@@ -200,4 +200,15 @@ test('source-over video compositing has independent opt-in schedule controls', (
   assert.match(script, /project\.hybrid\?\.composite_opacity \?\? '0:\(0\.35\)'/);
   assert.match(script, /composite_enabled: Boolean\(qs\('#animation-hybrid-composite-enabled'\)\?\.checked\)/);
   assert.match(script, /composite_opacity: qs\('#animation-hybrid-composite-opacity'\)\?\.value/);
+});
+
+test('replacing a video clears stale previews and busts extracted frame cache', () => {
+  assert.match(script, /function hybridClearPreview\(/);
+  assert.match(script, /image\.removeAttribute\('src'\)/);
+  assert.match(script, /hybrid\.requestToken !== token/);
+  assert.match(script, /hybrid\.requestToken\+\+/);
+  assert.match(script, /\?revision=' \+ revision \+ '&refresh=' \+ hybrid\.previewRevision/);
+  assert.match(script, /New video selected\. Upload & inspect, then extract its frames/);
+  assert.match(script, /Previous extraction cleared; extract this video to continue/);
+  assert.match(script, /Extracting new frames\. Previous preview hidden/);
 });
