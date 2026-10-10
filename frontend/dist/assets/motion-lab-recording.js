@@ -192,6 +192,44 @@
     }
   }
 
+  // ML2.3 punch-in edits a copy, preserving all frames outside the interval
+  // and all axes not armed in the new take.
+  function splicePunchIn(target, take) {
+    if (!target || target.type !== 'recording' || !take) throw new Error('Select a recorded target take.');
+    const fps = Number(target.fps);
+    if (!Number.isFinite(fps) || fps !== Number(take.fps)) throw new Error('Recording FPS mismatch.');
+    if (!Number.isInteger(take.startFrame) || !Number.isInteger(take.endFrame) ||
+        take.startFrame < target.start_frame || take.endFrame > target.end_frame ||
+        take.startFrame >= take.endFrame ||
+        !Array.isArray(take.samples) ||
+        take.samples.length !== take.endFrame - take.startFrame) {
+      throw new Error('Punch-in must fully cover the selected range inside the take.');
+    }
+    const armed = take.armedAxes;
+    if (!Array.isArray(armed) || !armed.length || armed.some(axis =>
+        !target.axes.includes(axis)) || new Set(armed).size !== armed.length) {
+      throw new Error('Punch-in axes must be armed in the original recording.');
+    }
+    const copy = JSON.parse(JSON.stringify(target));
+    for (let frame = take.startFrame; frame < take.endFrame; frame += 1) {
+      const incoming = take.samples[frame - take.startFrame];
+      const row = copy.samples[frame - target.start_frame];
+      if (!Array.isArray(row) || row.length !== 6 || !Array.isArray(incoming) ||
+          incoming.length !== 6 || incoming.some(v => !Number.isFinite(v))) {
+        throw new Error('Invalid six-axis punch-in samples.');
+      }
+      for (const axis of armed) {
+        const i = AXES.indexOf(axis);
+        if (i < 0) throw new Error('Invalid punch-in axis.');
+        row[i] = frame === 0 ? 0 : incoming[i];
+      }
+    }
+    copy.source = target.source === (take.sources?.[0] || 'unknown') ?
+      target.source : 'mixed';
+    return copy;
+  }
+
   window.MorphorumMotionLabFrameRecorder = MotionLabFrameRecorder;
+  window.MorphorumMotionLabSplicePunchIn = splicePunchIn;
   window.MorphorumMotionLabRecordingAxes = AXES.slice();
 })();
