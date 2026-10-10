@@ -2177,3 +2177,13 @@ dialog#animation-deforum-dialog {
 .animation-motion-audio-length input[type="checkbox"] {display:inline-block;flex:0 0 17px;width:17px!important;height:17px!important;min-width:17px;max-width:17px;min-height:17px;max-height:17px;margin:0;accent-color:#5ed4ee;vertical-align:middle;}
 .animation-motion-audio-length .motion-audio-help {flex:0 0 auto;}
 #animation-motion-lab-visual .animation-motion-audio-playback {margin:10px 0 15px;padding:9px 12px;border:1px solid rgba(115,213,237,.18);border-radius:9px;}
+
+/* ML3.3 frame-addressable diagnostic camera preview */
+.animation-motion-frame-player {display:grid;gap:10px;min-width:0;}
+.animation-motion-frame-player[hidden] {display:none;}
+#animation-motion-frame-image {display:block;max-width:100%;width:auto;max-height:65vh;object-fit:contain;border-radius:8px;margin:auto;}
+.animation-motion-player-actions {display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.animation-motion-player-actions label {display:inline-flex;align-items:center;gap:6px;}
+.animation-motion-player-actions input[type=checkbox] {width:16px;height:16px;}
+#animation-motion-frame-scrub {display:block;width:100%;min-width:0;accent-color:#63d4e9;}
+@media(max-width:540px) {.animation-motion-player-actions button {min-height:42px;}}
