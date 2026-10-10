@@ -158,6 +158,11 @@ test('ML1 curves and path stay entirely within Motion Lab, never Editor', () => 
   assert.match(js, /if \(!apply\) payload\.project = collectProject\(\)/);
   assert.match(js, /motionLabPreviewOrApply\(false, \{ curvesOnly: true \}\)/);
   assert.match(js, /panels\.motion\.appendChild\(composer\)/);
+  assert.match(js, /if \(visual\) panels\.motion\.appendChild\(visual\)/);
+  const composerAt = js.indexOf('panels.motion.appendChild(composer)');
+  const visualAt = js.indexOf('panels.motion.appendChild(visual)');
+  const previewAt = js.indexOf('panels.motion.appendChild(motionPreview)');
+  assert.ok(composerAt > 0 && composerAt < visualAt && visualAt < previewAt);
   assert.match(css, /\.animation-motion-lab-visual-grid \{display:grid;/);
   assert.match(css, /@media\(max-width:980px\)/);
 });
