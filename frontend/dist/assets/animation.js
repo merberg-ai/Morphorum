@@ -2646,6 +2646,7 @@
           options: {
             highlight_holes: animationMode() === '3d' &&
               Boolean(qs('#animation-preview-highlight-holes')?.checked),
+            quality: qs('#animation-motion-preview-quality')?.value || 'balanced',
           },
         }),
       });
