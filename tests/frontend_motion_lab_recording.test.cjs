@@ -250,9 +250,22 @@ test('ML3 audio duration match is opt-in and preserves project FPS', () => {
   assert.match(html, /id="animation-motion-lab-audio-length-status"/);
   assert.match(animation, /Math\.ceil\(Number\(analysis\.duration_seconds\) \* fps - 1e-9\)/);
   assert.match(animation, /targetFrames > 3000/);
-  assert.match(animation, /motionLabDraftLayers\.length \|\| state\.project\.motion_lab\?\.layers\?\.length/);
+  assert.match(animation, /const storedLayerCount = Array\.isArray\(state\.project\.motion_lab\?\.layers\)/);
   assert.match(animation, /await window\.MorphorumDialog\.confirm\(/);
   assert.match(animation, /editorFrames\.value = String\(targetFrames\)/);
   assert.match(animation, /await motionLabAnalyzeAudio\(\);/);
   assert.match(animation, /matchLength\.checked = false/);
+});
+
+test('ML3 duration matching reconciles invisible saved layers without deleting camera tracks', () => {
+  assert.match(animation, /if \(motionLabDraftLayers\.length\) \{/);
+  assert.match(animation, /title: 'Clear saved Motion Lab history\?'/);
+  assert.match(animation, /if \(!discardStoredMotionLab\) \{/);
+  assert.match(animation, /layers: \[\],\s*base_tracks: null,\s*last_applied_tracks: null/);
+  assert.match(animation, /method:'PUT',body:JSON\.stringify\(draft\)/);
+  assert.match(css, /\.animation-motion-audio-length input\[type="checkbox"\]/);
+  const curve = html.indexOf('id="animation-motion-lab-visual"');
+  const sync = html.indexOf('id="animation-motion-lab-audio-sync"');
+  const editor = html.indexOf('id="animation-motion-lab-curve-editor"');
+  assert.ok(curve >= 0 && sync > curve && editor > sync);
 });
