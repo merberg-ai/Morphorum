@@ -127,3 +127,14 @@ test('Manual Editor motion edits do not block draft previews, apply needs explic
   assert.doesNotMatch(workflow, /if \(state\.dirty\)\s*\{\s*motionLabNotify\('Save current Editor changes/);
   assert.match(js, /animation-motion-lab-enable-3d'\)\?\.addEventListener\('click'/);
 });
+
+
+test('Motion Lab can edit previously saved preset layers without destructive remove/readd', () => {
+  assert.match(js, /let motionLabEditingIndex = -1/);
+  assert.match(js, /edit\.textContent = 'Edit'/);
+  assert.match(js, /motionLabEditingIndex = index/);
+  assert.match(js, /cycle: layer\.cycle_seconds/);
+  assert.match(js, /motionLabDraftLayers\[motionLabEditingIndex\] = entry/);
+  assert.match(js, /motionLabEditingIndex < 0 \? '\+ Add Preset Layer' : 'Update Selected Layer'/);
+  assert.match(css, /\.animation-motion-lab-layer-actions \{display:flex;/);
+});
