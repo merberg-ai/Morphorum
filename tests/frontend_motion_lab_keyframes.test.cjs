@@ -20,6 +20,7 @@ test('ML1b numeric/drag curve keyframe editing stays inside Motion Lab', () => {
     'animation-motion-lab-key-frame',
     'animation-motion-lab-key-value',
     'animation-motion-lab-key-drag',
+    'animation-motion-lab-path-drag',
     'animation-motion-lab-key-save',
     'animation-motion-lab-key-delete',
     'animation-motion-lab-key-clear',
@@ -45,8 +46,20 @@ function prepare() {
     replaceChildren: () => {},
     innerHTML: '',
   };
+  const pathHandlers = {};
+  const pathSvg = {
+    dataset: {},
+    addEventListener: (name, fn) => {pathHandlers[name] = fn;},
+    getBoundingClientRect: () => ({left: 0, top: 0, width: 440, height: 300}),
+    setPointerCapture: () => {},
+    querySelector: () => null,
+    replaceChildren: () => {},
+    innerHTML: '',
+  };
   const context = {
-    document: {getElementById: id => id === 'animation-motion-lab-curves' ? svg : null},
+    document: {getElementById: id =>
+      id === 'animation-motion-lab-curves' ? svg :
+      id === 'animation-motion-lab-path' ? pathSvg : null},
     window: {},
     requestAnimationFrame: () => 1,
     cancelAnimationFrame: () => {},
@@ -59,7 +72,7 @@ function prepare() {
     rotation_y: [0, 0, 0, 0], rotation_z: [0, 0, 0, 0],
   };
   visual.setData({series, frames: 4, fps: 12});
-  return {visual, handlers};
+  return {visual, handlers, pathHandlers};
 }
 
 test('ML1b curve pointer dragging moves an existing keyframe without saving a project', () => {
@@ -96,4 +109,30 @@ test('ML1b graph editing cannot set nonzero camera movement on frame 0', () => {
   handlers.pointerdown(evt(43,20));
   handlers.pointerup(evt(43,20));
   assert.equal(changes.length, 0);
+});
+
+
+test('ML1b camera path handle adjusts per-frame native X and Y velocities', () => {
+  const {visual, pathHandlers} = prepare();
+  const edits = [];
+  visual.configureEditor({
+    axis:'translation_x', keys:[], enabled:false, pathEnabled:true,
+    onPathEdit: edit => edits.push(edit),
+  });
+  const [x,y] = visual.points[2];
+  const evt = (cx,cy) => ({
+    clientX: cx, clientY:cy, pointerId:3, buttons:1, preventDefault() {},
+  });
+  pathHandlers.pointerdown(evt(x,y));
+  assert.equal(visual.pathDrag.frame, 2);
+  pathHandlers.pointermove(evt(x+24,y-12));
+  pathHandlers.pointerup(evt(x+24,y-12));
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0].frame, 2);
+  const expectedScale = visual.points.nativeToPixelScale;
+  assert.ok(Math.abs(edits[0].deltaX - 24/expectedScale) < 1e-8);
+  assert.ok(Math.abs(edits[0].deltaY - 12/expectedScale) < 1e-8);
+  assert.equal(visual.pathDrag, null);
+  assert.match(animation, /function motionLabCurvePathEdit\(\{frame, deltaX, deltaY\}\)/);
+  assert.match(animation, /deferCommit:true/);
 });
