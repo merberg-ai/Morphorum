@@ -233,3 +233,44 @@ def test_ml41_missing_or_multiple_audio_sources_never_silently_mux_wrong_track(t
     ]}
     with pytest.raises(video.VideoExportError, match="Multiple audio"):
         video._render_audio_source(project_id, payload)
+
+
+def test_ml41_real_ffmpeg_soundtrack_export_when_available(tmp_path):
+    import math
+    import shutil
+    import struct
+    import subprocess
+    import wave
+    from PIL import Image
+
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        pytest.skip("FFmpeg and ffprobe not installed on this runner")
+    folder = tmp_path / "frames"
+    folder.mkdir()
+    for frame in range(12):
+        Image.new("RGB", (32, 32), (frame * 12, 20, 40)).save(
+            folder / f"frame_{frame:06d}.png")
+    wav = tmp_path / "beat.wav"
+    with wave.open(str(wav), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(12000)
+        out.writeframes(b"".join(struct.pack("<h", int(5000 * math.sin(
+            2 * math.pi * 200 * n / 12000))) for n in range(12000)))
+    for fmt in ("mp4", "webm"):
+        destination = tmp_path / ("soundtrack." + fmt)
+        command = video._command(
+            ffmpeg, input_pattern=folder / "frame_%06d.png",
+            destination=destination, frame_count=12, format=fmt,
+            quality="compact", fps=12, audio_path=wav)
+        run = subprocess.run(command, capture_output=True, text=True, timeout=45)
+        assert run.returncode == 0, run.stderr
+        probe = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries",
+             "stream=codec_type", "-of", "csv=p=0", str(destination)],
+            capture_output=True, text=True, timeout=15)
+        assert probe.returncode == 0, probe.stderr
+        streams = probe.stdout.split()
+        assert "video" in streams and "audio" in streams
