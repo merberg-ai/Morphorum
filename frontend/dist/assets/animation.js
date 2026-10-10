@@ -4436,13 +4436,15 @@
           if (motionLabDraftLayers.length || state.project.motion_lab?.layers?.length) {
             throw new Error('Cannot automatically resize a project with Motion Lab layers. Preserve or clear those layers first, then reanalyze. No project settings were changed.');
           }
-          const approved = window.confirm(
-            'Match project duration to WAV?\\n\\nAudio: ' +
-            Number(analysis.duration_seconds).toFixed(2) + 's\\n' +
-            'Current: ' + state.project.animation.max_frames + ' frames at ' + fps + ' FPS\\n' +
-            'New: ' + targetFrames + ' frames at ' + fps + ' FPS\\n\\n' +
-            'This saves current project settings and reanalyzes the WAV. FPS will not change.'
-          );
+          const approved = await window.MorphorumDialog.confirm({
+            title: 'Match project length to WAV?',
+            message: 'Audio ' + Number(analysis.duration_seconds).toFixed(2) + 's. ' +
+              'Change project from ' + state.project.animation.max_frames + ' to ' +
+              targetFrames + ' frames at ' + fps +
+              ' FPS? This saves current project edits and reanalyzes the WAV. FPS remains unchanged.',
+            confirmText: 'Match & Save',
+            cancelText: 'Keep Duration',
+          });
           if (!approved) {
             if (lengthStatus) lengthStatus.textContent = 'Length matching canceled. Project unchanged.';
           } else {
