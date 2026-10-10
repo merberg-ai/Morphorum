@@ -98,7 +98,7 @@ def test_curve_preview_does_not_mutate_draft_or_double_apply():
     (curve(keys=[{"frame": 24, "value": .05}]), "Keyframe position"),
     (curve(keys=[{"frame": 4, "value": float("nan")}]), "Keyframe value"),
     (curve(keys=[{"frame": 4, "value": float("inf")}]), "Keyframe value"),
-    (curve(interpolation="cubic"), "linear or hold"),
+    (curve(interpolation="bezier-random"), "smoothstep, smootherstep or cubic"),
     (curve(keys=[{"frame": f, "value": 0} for f in range(129)]), "1–128 keyframes"),
 ])
 def test_invalid_keyframe_layers_fail_before_gpu_work(bad, match):
@@ -117,3 +117,76 @@ def test_manual_curve_preserves_editor_conflict_confirmation():
     )
     assert report["rebased"] is True
     assert draft["motion_lab"]["base_tracks"]["translation_x"]["schedule"] == "0:(0.01)"
+
+
+
+@pytest.mark.parametrize("mode,quarter", [
+    ("linear", 0.02),
+    ("smoothstep", 0.0125),
+    ("smootherstep", 0.00828125),
+])
+def test_ml1b_easing_smooths_keyframe_segments(mode, quarter):
+    layer = curve(interpolation=mode)
+    p, meta = compile_motion_lab(project(), layers=[layer], include_series=True)
+    assert resolved(p, 0) == 0
+    assert resolved(p, 3) == pytest.approx(quarter, abs=1e-8)
+    assert resolved(p, 12) == pytest.approx(.08)
+    assert resolved(p, 20) == pytest.approx(-.04)
+    assert meta["series"]["translation_x"][3] == pytest.approx(quarter, abs=1e-8)
+    # Recompiled native tracks never use a separate per-frame GPU expression.
+    assert p["tracks"]["camera_3d"]["translation_x"]["interpolation"] == "linear"
+
+
+def test_ml1b_monotone_cubic_is_curved_continuous_and_does_not_overshoot():
+    keys = [
+        {"frame": 0, "value": 0},
+        {"frame": 10, "value": 0.06},
+        {"frame": 19, "value": 0.09},
+        {"frame": 26, "value": -0.03},
+        {"frame": 38, "value": -0.015},
+        {"frame": 47, "value": 0.02},
+    ]
+    p = project(frames=48)
+    curved = curve(interpolation="cubic", end_frame=48, keys=keys)
+    compiled, info = compile_motion_lab(p, layers=[curved], include_series=True)
+    values = info["series"]["translation_x"]
+    assert len(values) == 48
+    for first, last in zip(keys, keys[1:]):
+        lo, hi = sorted((first["value"], last["value"]))
+        for f in range(first["frame"], last["frame"] + 1):
+            assert lo - 1e-8 <= values[f] <= hi + 1e-8
+    # The monotone cubic interpolator is not a straight line at interior points.
+    assert values[4] != pytest.approx(keys[1]["value"] * 4 / 10, abs=1e-6)
+    # Exact keyframe values and zero frame remain intact after save/reopen.
+    for key in keys:
+        assert resolved(compiled, key["frame"]) == pytest.approx(key["value"])
+    saved = normalize_animation_project(
+        compiled, existing=compiled, project_id=compiled["id"], prefer_tracks=True,
+    )
+    assert saved["motion_lab"]["layers"][0]["interpolation"] == "cubic"
+    assert resolve_project_frame(saved, 16)["camera_3d"]["translation_x"] == pytest.approx(values[16])
+
+
+@pytest.mark.parametrize("mode", ["smoothstep", "smootherstep", "cubic"])
+def test_ml1b_smooth_interpolation_with_offset_start_and_one_keyframe(mode):
+    solo = curve(
+        start_frame=4, end_frame=24, interpolation=mode,
+        keys=[{"frame": 16, "value": 0.08}],
+    )
+    output, diag = compile_motion_lab(
+        project(), layers=[solo], include_series=True,
+    )
+    assert diag["series"]["translation_x"][0] == 0
+    assert resolved(output, 4) == pytest.approx(0)
+    assert 0 < resolved(output, 10) < 0.08
+    assert resolved(output, 16) == pytest.approx(0.08)
+    assert resolved(output, 22) == pytest.approx(0.08)
+
+
+@pytest.mark.parametrize("mode", ["linear", "hold", "smoothstep", "smootherstep", "cubic"])
+def test_ml1b_interpolations_are_idempotent_on_apply(mode):
+    layers = [curve(interpolation=mode)]
+    once, _ = compile_motion_lab(project(), layers=layers)
+    repeated, _ = compile_motion_lab(once, layers=layers)
+    assert repeated["camera_3d"] == once["camera_3d"]
+    assert repeated["motion_lab"]["layers"][0]["interpolation"] == mode
