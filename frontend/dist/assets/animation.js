@@ -4295,6 +4295,19 @@
     motionLabVisual.onPause = () => motionLabAudioElement?.pause();
   }
 
+  function motionLabAudioSignal() {
+    const analysis = motionLabAudioAnalysis;
+    if (!analysis) return [];
+    const band = qs('#animation-motion-lab-audio-band')?.value || 'fullband';
+    const values = band === 'fullband' ? analysis.values : analysis.bands?.[band];
+    if (!Array.isArray(values) || values.length !== analysis.values.length) return [];
+    const mode = qs('#animation-motion-lab-audio-detection')?.value || 'level';
+    if (mode !== 'transient') return values;
+    const sensitivity = Math.max(0, Math.min(1, Number(qs('#animation-motion-lab-audio-sensitivity')?.value) || 0));
+    const rises = values.map((v, i) => i ? Math.max(0, v - values[i - 1]) : 0);
+    const peak = Math.max(0, ...rises);
+    return rises.map(v => peak > 1e-12 ? Math.max(0, Math.min(1, v / peak - sensitivity * .5)) : 0);
+  }
   function motionLabAudioPreview() {
     const preview = qs('#animation-motion-lab-audio-preview');
     const plot = qs('#animation-motion-lab-audio-plot');
@@ -4308,7 +4321,8 @@
       return;
     }
     preview.hidden = false;
-    const values = analysis.values;
+    const values = motionLabAudioSignal();
+    if (!values.length) { preview.hidden = true; return; }
     const threshold = Number(qs('#animation-motion-lab-audio-threshold')?.value);
     const gate = Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : .1;
     const attack = Number(qs('#animation-motion-lab-audio-attack')?.value);
@@ -4356,7 +4370,9 @@
       stroke:'#ff857c','stroke-width':2,'stroke-dasharray':'7 5',
       'vector-effect':'non-scaling-stroke'}));
     const summary = qs('#animation-motion-lab-audio-summary');
-    if (summary) summary.textContent = 'Peak RMS ' + peak.toFixed(3) +
+    if (summary) summary.textContent = 'Peak signal ' + peak.toFixed(3) +
+      ' · ' + (qs('#animation-motion-lab-audio-band')?.value || 'fullband') +
+      ' / ' + (qs('#animation-motion-lab-audio-detection')?.value || 'level') +
       ' · threshold ' + gate.toFixed(3) + ' · ' + values.length + ' frames';
     const prediction = qs('#animation-motion-lab-audio-prediction');
     if (prediction) prediction.textContent = valid
@@ -4413,7 +4429,7 @@
       motionLabAudioElement.preload = 'auto';
       motionLabAudioElement.load();
       motionLabAudioSyncStatus('Ready to play with Motion Curves playback.');
-      const peak = Math.max(0, ...analysis.values);
+      const peak = Math.max(0, ...motionLabAudioSignal());
       const thresholdField = qs('#animation-motion-lab-audio-threshold');
       if (thresholdField && peak > 0) {
         // File-specific starting point. Never require the user to guess the
@@ -4455,7 +4471,11 @@
       axis:qs('#animation-motion-lab-audio-axis')?.value || 'translation_z',
       start_frame:0,end_frame:analysis.values.length,
       fps:Number(analysis.fps),sha256:analysis.source_sha256,
-      envelope:analysis.values.slice(),threshold,distance,
+      envelope:(qs('#animation-motion-lab-audio-band')?.value === 'fullband'
+        ? analysis.values : analysis.bands?.[qs('#animation-motion-lab-audio-band')?.value])?.slice() || [],
+      band:qs('#animation-motion-lab-audio-band')?.value || 'fullband',
+      detection:qs('#animation-motion-lab-audio-detection')?.value || 'level',
+      sensitivity:read('sensitivity'),threshold,distance,
       attack_frames:attack,release_frames:release,cooldown_frames:3,offset_frames:0,
     };
     motionLabDraftLayers.push(layer);
@@ -5561,7 +5581,7 @@
         ? 'Audio will follow Motion Curves playback and seeking.'
         : 'Synchronized audio playback disabled.');
     });
-    for (const id of ['threshold','attack','release','distance']) {
+    for (const id of ['threshold','attack','release','distance','band','detection','sensitivity']) {
       qs('#animation-motion-lab-audio-' + id)?.addEventListener('input', motionLabAudioPreview);
     }
     qs('#animation-motion-lab-record-mode')?.addEventListener('change', motionLabRecordingUi);
