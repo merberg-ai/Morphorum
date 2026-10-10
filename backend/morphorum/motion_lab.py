@@ -222,6 +222,56 @@ def _normalize_recording_layer(
     }
 
 
+def _normalize_audio_layer(
+    raw: dict[str, Any], *, index: int, start: int, end: int,
+    mode: str, fps: float,
+) -> dict[str, Any]:
+    """Validate preanalyzed audio values as native velocity data.
+
+    Audio analysis must happen through the managed project upload endpoint.
+    An embedded bounded envelope makes the layer deterministic after reload.
+    """
+    from .audio_motion import balanced_pulses, AudioMotionError
+    axis = str(raw.get("axis") or "translation_z").lower()
+    if axis not in AXES:
+        raise MotionLabError("Audio layer must select a native camera axis.")
+    source_hash = str(raw.get("sha256") or "")
+    if len(source_hash) != 64 or any(c not in "0123456789abcdef" for c in source_hash):
+        raise MotionLabError("Audio layer requires an SHA256 source hash.")
+    audio_fps = _number(raw.get("fps"), "Audio analysis FPS", 1, 240)
+    if not math.isclose(audio_fps, fps, abs_tol=1e-9, rel_tol=0):
+        raise MotionLabError("Audio analysis FPS differs from project FPS; reanalyze the audio.")
+    values = raw.get("envelope")
+    if not isinstance(values, list) or len(values) != end - start:
+        raise MotionLabError("Audio envelope must provide one sample per layer frame.")
+    envelope = [_number(v, "Audio envelope sample", 0, 1) for v in values]
+    threshold = _number(raw.get("threshold", .25), "Audio threshold", 0, 1)
+    distance = _number(raw.get("distance", .04), "Audio pulse distance", 0, 1)
+    attack = _integer(raw.get("attack_frames", 1), "Audio attack frames", 1, 120)
+    release = _integer(raw.get("release_frames", 3), "Audio release frames", 1, 120)
+    cooldown = _integer(raw.get("cooldown_frames", 3), "Audio cooldown frames", 0, 120)
+    offset = _integer(raw.get("offset_frames", 0), "Audio offset frames", -3000, 3000)
+    try:
+        pulses = balanced_pulses(
+            envelope, threshold=threshold, distance=distance,
+            attack_frames=attack, release_frames=release,
+            cooldown_frames=cooldown, offset_frames=offset,
+        )
+    except AudioMotionError as exc:
+        raise MotionLabError(str(exc)) from exc
+    return {
+        "id": str(raw.get("id") or f"layer-{index + 1}")[:64],
+        "type": "audio", "enabled": raw.get("enabled", True) is True,
+        "blend": mode, "start_frame": start, "end_frame": end,
+        "name": str(raw.get("name") or "Audio pulses")[:96],
+        "axis": axis, "fps": audio_fps, "sha256": source_hash,
+        "envelope": envelope, "threshold": threshold, "distance": distance,
+        "attack_frames": attack, "release_frames": release,
+        "cooldown_frames": cooldown, "offset_frames": offset,
+        "pulses": pulses,
+    }
+
+
 def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any]]:
     count, fps = _frames(project)
     if not isinstance(layers, list) or len(layers) > MAX_LAYERS:
@@ -239,6 +289,11 @@ def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any
         if kind == "keyframes":
             output.append(_normalize_keyframe_layer(
                 raw, index=index, count=count, start=start, end=end, mode=mode,
+            ))
+            continue
+        if kind == "audio":
+            output.append(_normalize_audio_layer(
+                raw, index=index, start=start, end=end, mode=mode, fps=fps,
             ))
             continue
         if kind == "recording":
@@ -530,6 +585,9 @@ def compile_motion_lab(
                 values = {layer["axis"]: _keyframe_value(layer, frame)}
             elif layer["type"] == "recording":
                 values = _recording_frame(layer, frame)
+            elif layer["type"] == "audio":
+                pulse = layer["pulses"][frame - layer["start_frame"]]
+                values = {layer["axis"]: pulse} if pulse else {}
             else:
                 values = _preset_frame(layer, frame, fps)
             for axis, delta in values.items():
