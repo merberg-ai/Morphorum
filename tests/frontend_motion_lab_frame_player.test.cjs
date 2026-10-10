@@ -58,3 +58,10 @@ test('ML3.3 has accessible seek, play, pause, loop and frame player status',()=>
   }
   assert.match(html,/motion-lab-frame-player\.js/);
 });
+
+test('ML3.4 has distinct preview quality options and default balanced mode',()=>{
+  assert.match(html,/id="animation-motion-preview-quality"/);
+  assert.match(html,/<option value="fast">/);
+  assert.match(html,/<option value="balanced" selected>/);
+  assert.match(html,/<option value="detailed">/);
+});
