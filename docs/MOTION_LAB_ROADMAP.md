@@ -1,6 +1,6 @@
 # Morphorum Motion Lab — implementation roadmap
 
-**Status:** Motion Lab workspace shell and existing motion-preview integration implemented on this branch; preset/layer composer ML0 and live recording ML2 still pending.
+**Status:** Motion Lab UI and source-free CPU preview physically accepted on Windows (2026-10-09); ML0 deterministic preset composer and draft/apply UI implemented and undergoing Windows acceptance. Interactive recording ML2 and audio-reactivity ML3 remain future work.
 **Branch:** `feature/motion-lab`
 **Branch base:** `dev-ui` at `bc40d18d4f5968904afedc798ecd3efdef71761a` (B6.3.2 physical acceptance)
 **Existing paused separate work:** `feature/b6-3-3-hybrid-masks` at `c0e9be0aa03472747ba4c2594c128bdcd80318ef`. Do not touch that branch.
@@ -90,7 +90,7 @@ For 2D projects: start with a 3D camera lab and a clearly disabled/limited 2D mo
 
 ## Delivery phases and acceptance gates
 
-### ML0: Architectural foundation and six-axis composer (next development task)
+### ML0: Architectural foundation and six-axis composer (implemented, Windows acceptance pending)
 
 - Define versioned Motion Lab project sub-schema and non-destructive migration; default `enabled:false`.
 - Pure deterministic preset series generator in **Morphorum native units**; support Still, Drift, Wave, Spiral, Figure Eight, Rocking, Push, Pull.
@@ -141,4 +141,9 @@ Begin ML0 with a small backend-focused PR on this branch. Define the versioned l
 - Safe expression parsing uses existing `schedules.py`; never `eval` arbitrary expressions.
 - No new GPU model dependencies. Optional audio analysis libraries must be weighed against installation footprint.
 - The user reports express author permission to reuse any/all of the friend's code. Check that permission includes republishing adapted files under Unlicense before shipping direct copies; do not assume it covers third-party materials.
-- Workspace shell is underway: Media removed from visible tabs, its data/backend preserved in a hidden vault; functional existing motion-preview panel relocated to Motion Lab; preset composer and recording are not implemented yet.
+- Workspace shell is implemented and source-free calibration-grid preview was physically accepted. Media is hidden in a vault and its backend/data are preserved.
+- ML0 now includes `backend/morphorum/motion_lab.py`, `GET /api/animation/motion-lab/presets`, and project-owned POST `/motion-lab/preview` and `/motion-lab/apply` endpoints.
+- Presets: Still, Gentle Drift, Wave, Spiral, Figure Eight, Rocking, Push In, Pull Out; layer Add/Replace, frame range, fade/strength/cycle, per-axis native limits and diagnostics; preserve all other animation tracks, prompt/LoRA/depth/hybrid state.
+- Draft preview compiles to actual native `tracks.camera_3d` schedules without saving and then uses the existing source-free CPU Motion Preview API. Apply saves only after explicit action. Projects persist editable layer data, base tracks and last-applied snapshot; external timeline edits cause an intentional conflict instead of silently being overwritten.
+- ML0 safety: bounded 24 layers / 3000 frames per composition, numeric validation, clipping diagnostics, idempotent reapply, tests across API, project persistence, resolver and frontend.
+- **Windows physical gate:** update `feature/motion-lab`; choose a saved 3D project at 512x512, FPS 12, 24–60 frames. Add Wave + Push In at strength 0.5 and fade 0.2, Preview Draft Motion (grid GIF with visible movement), then Apply to Animation and inspect 3D Translation X/Z in Editor. Reapply without duplicate travel; test Spiral/Figure Eight and replace mode. Save/reopen the project and verify layers persist. Check 2D mode disables composer, and mobile layout. No GPU render is required yet for ML0.
