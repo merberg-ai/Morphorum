@@ -1,488 +1,422 @@
-# Morphorum: historical development handoff (2026-10-08)
+# Morphorum — Complete Motion Lab Handoff
+## Verified ML1b checkpoint and exact ML2 starting point
 
-> **2026-10-09 update:** This is a preserved engineering snapshot, **not the current checkout/acceptance guide**. The working branches are now `main` and `dev-ui`; [PR #14](https://github.com/merberg-ai/Morphorum/pull/14) promoted the tested baseline. B6.2 hybrid-video upload/FFprobe/extraction/preview reached validated checkpoint `5826d2d`, and PR #13's SDXL LoRA repair passed a 300-frame real-GPU stress test and was merged. B6.3 hybrid compositor/masks are next. **Read [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) for the authoritative current state.** Statements further below such as “hybrid video has not begun,” “B6 active branch,” and “not yet Windows accepted” refer to the older snapshot only.
-
-
-**Prepared:** 2026-10-08 (Pacific time)  
+**Prepared:** October 9, 2026 (Windows/Pacific development session)  
 **Repository:** https://github.com/merberg-ai/Morphorum  
-**Canonical working development branch:** `feature/deforum-compatibility-hybrid-b6`  
-**Version in `pyproject.toml`:** `0.1.0a1` (early alpha)  
-**B5.5 physically verified code SHA:** `e9ea6d0491b8ad57f1bc7539514fe8cb9c7063d3`  
-**B6 opening roadmap SHA:** `6992cdd342b69508030a063dd93026f64945f992`  
-**B6 high-resolution planning SHA:** `855f32d920cb8d0a9cd7d29b8da6244422b4054a`  
-**B6 automated code checkpoint:** `d982a323e946fb652cb11fdaf6b50d99a1e8adcb` — 273 Python tests, 17 browser tests, and Morphorum self-test passed  
-**B6 physical acceptance checklist:** `docs/B6_PHYSICAL_ACCEPTANCE.md`  
-**This file:** a project-state reference and continuation handoff. B6.1 and B6.0-P now have test-gated implementation work, but their Windows UI/GPU physical gates are still pending.
+**Active development branch:** \`feature/motion-lab\`  
+**Open draft PR:** [#19 — Motion Lab](https://github.com/merberg-ai/Morphorum/pull/19), **base \`dev-ui\`**  
+**Current product version:** \`0.1.0a1\` (early alpha)  
+**Current phase:** **ML1b COMPLETE, physically accepted; PAUSED IMMEDIATELY BEFORE ML2**  
+**Latest frozen, accepted checkpoint:** \`checkpoint/motion-lab-ml1b-smoothing-windows-verified-20261009\`  
+**Checkpoint commit (full SHA):** \`c0e5f90a692e14e32b48155f71d0a8afc923c6ae\`  
+**Branch HEAD:** \`feature/motion-lab\` now includes **documentation-only commits** beyond the accepted checkpoint. Check \`git rev-parse HEAD\` before future edits; the checkpoint above is the immutable source of truth for the accepted code.  
+**Developer machine:** HP Omen 35L, Windows, RTX 4080 SUPER 16 GiB, ~64 GiB RAM, test installation \`D:\Morphorum-test\`  
+**LAN:** Morphorum typically served at \`http://192.168.1.24:7865/#animation\`; LAN IP may change.  
+**Do not merge this branch or start ML2 until the user explicitly resumes work in the next conversation.**
 
-> **Immediate handoff:** B5 is **done and GPU-verified**; preserve the B5.5 checkpoint. On B6, the safe Deforum settings importer and browser preview/create flow are implemented and CI-gated, including golden 2D/3D round trips. B6.0-P also now has allocator-aware CUDA telemetry, phase memory samples, on-demand Windows WDDM process-memory correlation, an advisory high-resolution preflight, and an **opt-in, default-off SDXL VAE tiling mode**. Automated code checkpoint `d982a32` passed 273 Python tests, 17 browser tests, and Morphorum self-test. **None of this is yet a Windows physical acceptance result:** B6.1 still needs UI + short-render validation, and 768/1024 native/tiling GPU tests still need to run on the RTX 4080 SUPER. Hybrid video input/compositing has not begun.
+> **Immediate instruction to the next assistant:** Read this handoff and \`docs/MOTION_LAB_ROADMAP.md\`, inspect \`feature/motion-lab\` via the connected GitHub tools, and plan/implement ML2 starting from the current feature branch, preserving the protected checkpoint. **Do not create another renderer, reset the branch, resurrect Media, or start B6.3.3.** The user explicitly paused at the completed ML1b checkpoint to continue in a new conversation.
 
 ---
 
-## 1. Branch and release status
+## 1. Hard state: what has actually been checked
 
-| Branch or checkpoint | Commit | Meaning |
+### Repository status, verified October 9, 2026
+
+| Ref | Exact commit | State |
 | --- | --- | --- |
-| `main` | `8e985a73630b4b025f82b5edd2afea2063421a59` | Older stable/main integration baseline. **Do not assume B5/B6 changes are merged to main.** |
-| `feature/3d-depth-quality-b5` | `e9ea6d0491b8ad57f1bc7539514fe8cb9c7063d3` | Final B5.5 development branch, physical acceptance passed |
-| `checkpoint/b5-5-performance-stability-gpu-verified-20261008` | `e9ea6d0491b8ad57f1bc7539514fe8cb9c7063d3` | **Primary rescue / known-working B5 checkpoint** |
-| `checkpoint/b5-4-video-export-windows-verified-20261008` | `f5db57cab8173c5a8038762a20bb5cc5650f2bd7` | Working video export baseline |
-| `checkpoint/b5-3-preview-gpu-verified-20261008` | `cd280280...` | Working 3D motion preview baseline |
-| `checkpoint/b5-2-temporal-gpu-verified-20261008` | See GitHub ref | Working temporal-continuity baseline |
-| `checkpoint/b5-1-depth-quality-gpu-verified-20261008` | See GitHub ref | Working B5.1 baseline |
-| `checkpoint/b4-sdxl-flux-loras-working-20261008` | See GitHub ref | SDXL + Flux single-image LoRA verified |
-| `checkpoint/b5-cadence-lora-gpu-stable-20261008` | See GitHub ref | Cadence plus LoRA stability milestone |
-| `feature/deforum-compatibility-hybrid-b6` | Automated code checkpoint `d982a323e946fb652cb11fdaf6b50d99a1e8adcb` | **Active B6 branch. B6.1 importer + B6.0-P diagnostics/opt-in VAE tiling implemented and CI-gated; Windows physical gates pending. Hybrid video runtime not started.** |
+| \`main\` | \`4bc996be29104590a78ae84759a837a8a29a5135\` | Older stable integration; **not** Motion Lab |
+| \`dev-ui\` | \`bc40d18d4f5968904afedc798ecd3efdef71761a\` | B6.3.2-accepted integration, remains unchanged |
+| \`feature/motion-lab\` | **HEAD after this handoff commit**; before docs handoff, accepted ML1b code at \`c0e5f90\` | **Active feature development only; unmerged** |
+| \`checkpoint/motion-lab-preview-windows-verified-20261009\` | \`67138c26c70567198a154c1f35045b0713a49687\` | First Motion Lab UI / source-free preview |
+| \`checkpoint/motion-lab-ml0-windows-verified-20261009\` | \`f75bdf617162391015d142f94f86ad3d059f03e5\` | Composer, preset layers, conflict fixes physically accepted |
+| \`checkpoint/motion-lab-ml1a-windows-verified-20261009\` | \`b2bc351b2704ce51fa806e9f3923d0379aa8c1f5\` | Curves, geometric path, playback, layer ordering |
+| \`checkpoint/motion-lab-ml1b-windows-verified-20261009\` | \`333045eda1a180682bd48dc0b563bcd1fb91859f\` | Editable keyframes and path dragging before smoothing polish |
+| **\`checkpoint/motion-lab-ml1b-smoothing-windows-verified-20261009\`** | **\`c0e5f90a692e14e32b48155f71d0a8afc923c6ae\`** | **LATEST ACCEPTED CHECKPOINT; DO NOT MODIFY** |
+| \`feature/b6-3-3-hybrid-masks\` | \`c0e9be0aa03472747ba4c2594c128bdcd80318ef\` | **PAUSED**, planning only; separate from Motion Lab |
+| \`checkpoint/b6-3-3-planning-pause-20261009\` | \`c0e9be0aa03472747ba4c2594c128bdcd80318ef\` | B6.3.3 safe planning point |
 
-The B5.5 release candidate reached **247 backend tests passed, 14 browser tests passed, built-in self-test passed**, and received physical Windows acceptance. GitHub Actions reported success at the B5.5 commit on both the backend and syntax/browser workflows.
+Other verified B6 checkpoint: \`checkpoint/b6-3-2-hybrid-compositing-windows-verified-20261009\` at \`bc40d18\`.
 
-The current B6 automated code checkpoint `d982a32` reached **273 Python tests passed, 17 browser tests passed, and Morphorum self-test passed**. Those results validate parser/UI/contracts and CPU-testable behavior only. They do **not** certify Windows WDDM counters, Deforum visual equivalence, SDXL VAE tiling quality/performance, or 768/1024 GPU headroom.
+**PR #19** is **open, mergeable, and draft**, targeting \`dev-ui\`, not a nonexistent \`dev-main\`. Before the handoff changes, \`feature/motion-lab\` was 75 commits ahead of \`dev-ui\`, with no divergence. Subsequent handoff commits change documentation only. **There has been no Motion Lab merge into \`dev-ui\` or \`main\`.**
 
-The user also successfully validated B5.4 MP4 and WebM video output on Windows, B5.3 3D motion preview, B5.2 temporal improvements, B5.1 projection improvements, and cadence/LoRA single-image and animation paths.
+### Automated and human acceptance
 
-**Do not rebase, reset, or force-push verified checkpoint branches.** Do not quietly port experimental B6 code to `main`.
+The accepted checkpoint \`c0e5f90\` passed GitHub **Syntax checks** and **Backend tests**, including **359 passed Python tests, 5 warnings**, plus \`python -m morphorum self-test\`. Browser/Node regressions run under the syntax workflow. The user explicitly confirmed all of the following on the actual Windows/LAN UI:
+- Motion Lab appears as a first-class Animation tab; unfinished **Media** is hidden.
+- Camera Motion Preview works with a built-in calibration grid without uploading a source image.
+- ML0: Camera Motion Composer lives inside Motion Lab; Spiral visibly moves; 3D shortcut, preset layering, non-destructive preview and manual Editor change conflict flow function.
+- ML1a: all six movement traces, playback/scrubbing, geometric path, layer controls work.
+- ML1b: direct per-axis keyframe editing, path/curve controls and numeric keyframe list work.
+- Follow-up ML1b: **smooth curve interpolation** looks good and desktop checkbox sizing is corrected.
+- User said **"awesome, working great now. go ahead and checkpoint here"** and requested this handoff **before ML2**.
 
-### Current checkout workflow
+**Do not overclaim:** the latest acceptance covers the Motion Lab UI/CPU-authoring behavior the user tested, not a full new GPU stress profile, arbitrary controller compatibility, universally accurate depth-aware camera paths, or ML2 recording, which is **not yet implemented**.
 
-In the Windows Morphorum installation (use its real directory, such as `D:\Morphorum-test`):
+---
 
-```powershell
-git fetch origin
-git switch --track origin/feature/deforum-compatibility-hybrid-b6
-# If a local B6 branch already exists, instead use:
-# git switch feature/deforum-compatibility-hybrid-b6
-git pull --ff-only
-.\update.bat
-```
+## 2. Non-negotiable product direction
 
-A simpler branch-aware updater may also be used from a compatible installation:
+Morphorum is a standalone, local, browser-operated Deforum-style image/animation studio with the following engine boundaries:
+- **ONE authoritative image/animation renderer**, \`animation_render.py\`, using model adapters.
+- **ONE native camera timeline and resolved-frame contract**, \`animation_timeline.py\` + \`animation_resolution.py\`.
+- Motion Lab is an **authoring and compositing layer**. It generates native per-frame six-axis camera tracks and saves them through the existing project service after explicit Apply.
+- **No alternative renderer**, no second diffusion pipeline, no direct joystick influence over an actively rendering model, no incompatible standalone Tk interface.
+- Keep SDXL/Flux/Z-Image, LoRAs, cadence, 3D depth projection, prompt schedules, pause/resume, GPU telemetry and MP4/WebM export untouched unless explicitly in scope.
+- UX must be first-class on desktop and a portrait mobile LAN browser. No tab hopping for fundamental motion operations.
+- Physical Windows acceptance and CI green **before each merge/checkpoint**. Never infer physical acceptance from CI alone.
 
-```powershell
-.\update.bat feature/deforum-compatibility-hybrid-b6
-```
+### Model/runtime and licensing
 
-To recover the physical B5.5 baseline, check out
-`checkpoint/b5-5-performance-stability-gpu-verified-20261008` in a separate worktree/clone or via the guarded updater. **Preserve `data/`, `outputs/`, model paths and render manifests.**
+- Python 3.12 (managed \`uv\` and \`.venv\`), FastAPI/Uvicorn, vanilla static HTML/CSS/JavaScript in \`frontend/dist\`; \`pyproject.toml\` version \`0.1.0a1\`.
+- Model families: SDXL, Flux and Z-Image. GPU verification target: Windows RTX 4080 SUPER, 16 GiB VRAM.
+- Host FFmpeg for media and video export.
+- Core repository \`LICENSE\` is the **Unlicense**.
+- Inspiration: https://github.com/chicodog530/Deforum-Motion-Studio. The user reports explicit permission from the author to use any/all his code. The public upstream repo has no declared LICENSE in the review snapshot. **Before directly vendoring and redistributing upstream code under Unlicense, verify that permission covers redistribution/derivatives and record provenance in \`THIRD_PARTY.md\`.** No claim that our already-written Motion Lab code was directly copied.
+- Upstream uses different camera translation scales/flat-depth projection than Morphorum. **Do not paste its numerical velocities into native camera coordinates 1:1.** Adapt algorithms to the Morphorum-native axes and test sign, FOV, and projected movement.
 
-## 2. Product and engineering goals
+---
 
-Morphorum is a standalone, locally operated, browser-based AI image and Deforum-style animation studio. It runs its own backend on Windows/Linux and is used from desktop and LAN/mobile browsers. The architecture is **not a fork or transplant of GPL Deforum internals**: it is a clean-room, Unlicense-licensed core with native project and timeline types, designed to import legacy settings through translation while retaining modern multi-model independence.
+## 3. What is already built and verified
 
-Goals:
-- Single-image txt2img and image-to-image/animation generation using model-aware controls.
-- SDXL, Flux variants, Z-Image, and their family-compatible LoRAs.
-- User-owned external checkpoint/LoRA directories and a model index.
-- Detailed LoRA library/metadata management including Civitai optional lookup.
-- Deterministic persisted projects, seeds, schedules, frame-by-frame diagnostics, resume.
-- 2D and depth-aware 3D image-space camera transforms with diffusion cadence.
-- Optional temporal anchor refinement and local video export.
-- Responsive, phone-usable UI, LAN operation, no dependency on keeping a browser tab open.
-- Safe legacy Deforum settings import through translation into native Morphorum projects; future hybrid video sources, compositing, interpolation, and extensions.
+### UI organization
 
-**Implemented on B6 but not yet physically accepted:** Deforum JSON/JSON-serialized TXT import preview/create, allocator-aware GPU diagnostics, Windows WDDM process-memory correlation, high-resolution advisory preflight, and opt-in SDXL VAE tiling.
+Animation workspace visible tabs are **Editor / Motion Lab / Monitor / Outputs**. The old **Media** video-import/hybrid panel is deliberately hidden in an inert DOM vault on this feature branch. It is **not removed from the backend**: B6.2/B6.3.1/B6.3.2 upload/extraction, video-sourced diffusion/compositing, and saved hybrid project settings remain intact. Video MP4/WebM export still appears under Outputs. Existing projects may retain active hybrid settings even though the Media controls are hidden.
 
-**Not implemented merely because it appears in a roadmap:** hybrid video source/compositing, optical flow/RAFT, ControlNet, RIFE/FILM, audio-reactive curves, generic extension/plugin SDK, automatic memory-mode selection, or a physically verified general high-resolution GPU profile.
+Motion Lab sections are ordered:
+1. Motion Lab introduction and shortcuts.
+2. **Camera Motion Composer**: presets/layers with strength, cycle seconds, fade, start/end frames, Add/Replace, per-layer enable/edit/remove/order, draft undo/redo, Preview Draft Motion, Apply to Animation, Update Curves.
+3. **Motion Curves & Camera Path**: six color-coded camera velocity curves, frame seek/play/pause/loop at project FPS, integrated **auto-fit** path, exact axis readouts, editable per-axis keyframes, linear/hold/smooth interpolation, optional curve/path pointer editing.
+4. **Camera Motion Preview**: existing CPU-only 2D/3D image-warp preview, uploads optional; uses built-in calibration grid otherwise. In 3D mode, preview can highlight exposed pixels red. Preview has a **180-frame limit for 3D**; CPU preview is not equivalent to diffusion/cadence.
 
-## 3. Target environment and installation
+### ML0: compositional native six-axis engine
 
-**Physically tested machine:** HP Omen 35L desktop, NVIDIA RTX 4080 SUPER with 16 GiB VRAM, Windows NVIDIA/CUDA/PyTorch stack, roughly 64 GiB system RAM reported in earlier Morphorum telemetry. The specific current PyTorch build, Windows version, allocator backend, and current driver should be recorded again during memory analysis; older hardware telemetry is not a fresh verification.
+\`backend/morphorum/motion_lab.py\`:
+- Axes: \`translation_x\`, \`translation_y\`, \`translation_z\`, \`rotation_x\`, \`rotation_y\`, \`rotation_z\`.
+- Tracks are **per-frame relative velocities/deltas** in Morphorum scene units and **degrees per frame** for rotation. They are *not* global camera XYZ coordinates. Frame zero stays unwarped.
+- Presets: \`still\`, \`gentle-drift\`, \`wave\`, \`spiral\`, \`figure-eight\`, \`rocking\`, \`push-in\`, \`pull-out\`.
+- Each enabled layer has a bounded frame interval, Add/Replace blend, optional strength/cycle/fade. Preset output uses native camera amplitudes, axis limits, clamping diagnostics. Spiral was tuned for a visible two-second helical move.
+- Layer order matters. Base camera tracks are frozen before application, preventing compounded movement on repeated Apply.
+- When manual Editor camera tracks changed after Apply, draft preview uses latest camera temporarily; Apply responds with a conflict and requires explicit **Use Current Camera & Apply** rebase confirmation.
+- Supports \`include_series=True\` for the non-mutating draft-preview API to return full, clipped, resolved six-axis frame values for the JS visualizer.
+- Limits: **24 layers**, **3000 frames** per composition, **128 sparse keyframes per manual layer**; finite numbers, unique IDs/frames, clipping and frame-zero guard.
+- The first version is **3D only**. In Motion Lab the **Use 3D Motion** shortcut helps switch modes. Do not treat 3D Z as equivalent to 2D zoom.
 
-**Runtime:**
-- Python `>=3.12,<3.13` managed by Morphorum's `uv` installer and virtual environment `.venv`.
-- FastAPI + Uvicorn backend; frontend served as static HTML/CSS/JavaScript.
-- `pyproject.toml` pinned `diffusers==0.40.0`, `torchvision==0.29.0`, `transformers>=5,<6`, `accelerate>=1,<2`, `peft>=0.17,<1`, Pillow, NumPy, SciPy, etc. **PyTorch proper is installed by the runtime installer; inspect its current version rather than guessing based on torchvision.**
-- Default server `http://127.0.0.1:7865/`; `run-lan.bat` allows LAN listening, firewall permitting. Browser can be used from phone.
-- FFmpeg on the *host*, found via PATH or `MORPHORUM_FFMPEG`, is required for video export.
-- Launchers: `run.bat`, `run-lan.bat`, `install.bat`, `update.bat`, `repair.bat` (and Linux `.sh` equivalents). Entry-point CLI `morphorum`.
+### ML1a: visual feedback and layer editing
 
-**Installation layout, update survival:**
-- `.runtime/`: Morphorum-managed uv, Python runtime, caches.
-- `.venv/`: app dependencies and CUDA inference libraries.
-- `data/`: config, model indexes, databases, projects/user state.
-- `outputs/`: generated images, renders, frame PNGs, video files.
-- `logs/`: runtime, installation/update/repair logs.
-- `backups/`: update rollback snapshots.
-- External model/LoRA directories are indexed, not copied wholesale.
-- These runtime/user directories must not be clobbered by Git or installer upgrades.
+\`frontend/dist/assets/motion-lab-visual.js\`:
+- Charts actual per-frame camera motion, not cosmetic approximate splines.
+- Translations and rotations plotted separately with dynamic scaling.
+- Integrates X/Y/Z increments into a projected, **normalized/auto-fit** 2D camera path. The path is illustrative and not depth/FOV calibrated.
+- Uses client-side \`requestAnimationFrame\` for preview playback (not render timing). Sliders/keyboard/pointer scrub, loop and frame/second readout.
+- Draft edits mark curves stale, disable/stop outdated playback, and require Update Curves.
+- Switch projects clears previous preview. Leaving Motion Lab pauses playback.
+- Undo/redo retains up to 50 changes, with layer toggle, reorder, edit, clear, delete.
 
-Important commands:
+### ML1b: precise keyframes and smooth motion
 
-```powershell
-.\run-lan.bat
-.\update.bat
-.\repair.bat
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m morphorum doctor
-ffmpeg -version
-nvidia-smi
-```
+Manual \`type:"keyframes"\` layers are in the **same** Motion Lab layer stack as presets:
+- Single axis per layer, start/end frame, Add/Replace, enabled flag.
+- \`keys:[{"frame":n,"value":v}]\`, max 128, frame-0 nonzero rejected, bounds/corrupt input rejected.
+- **Five interpolation modes**, all implemented in backend and baked to native timeline:
+  - \`linear\` = sharp straight line between velocities.
+  - \`hold\` = step/hold.
+  - \`smoothstep\` = ease-in/out with zero endpoint slope.
+  - \`smootherstep\` = extra smooth C2 ease-in/out.
+  - \`cubic\` = shape-preserving monotone Hermite/PCHIP-style continuous tangents (no keyframe overshoot).
+- Exact numerical keyframe editing and optional SVG curve pointer dragging.
+- Optional projected path handle dragging **adds X/Y per-frame velocity deltas** to manual keyframe layers at the selected frame; it is *not* an absolute path-position editor.
+- Per-layer Add/Replace and ordering, undo/redo, Apply and round-trip save/reopen remain functional.
+- User-requested checkbox polish scopes **16×16 px native checkboxes** to Motion Lab curve edit, path edit, loop and layer toggles.
 
-If the development dependencies are installed: `uv run --group dev pytest` and `uv run --group dev ruff check backend tests`. The GitHub Actions jobs are the reference CI gates.
+### Native project structure (current)
 
-**Docs caveat:** some older milestone documents contain provisional language from the time they were written (such as "renderer not yet installed"). Follow **current source code, physical checkpoints, and newer B5/B6 documentation**, not stale historical paragraphs.
+\`animation_projects.py\` persists \`project.motion_lab\` (schema version 1). Minimal conceptual example:
 
-## 4. Repository map (files to know)
+\`\`\`json
+{
+  "animation": {"mode": "3d", "max_frames": 120, "fps": 24},
+  "motion_lab": {
+    "schema_version": 1,
+    "layers": [
+      {
+        "id": "wave-1", "type": "preset", "preset": "wave",
+        "enabled": true, "blend": "add",
+        "start_frame": 0, "end_frame": 120,
+        "strength": 0.5, "cycle_seconds": 2, "fade_seconds": 0.1
+      },
+      {
+        "id": "manual-translation_x", "type": "keyframes",
+        "axis": "translation_x", "enabled": true, "blend": "add",
+        "start_frame": 0, "end_frame": 120,
+        "interpolation": "cubic",
+        "keys": [
+          {"frame": 0, "value": 0},
+          {"frame": 30, "value": 0.04},
+          {"frame": 60, "value": -0.03}
+        ]
+      }
+    ],
+    "limits": {
+      "translation_x": 0.12, "translation_y": 0.12,
+      "translation_z": 0.12, "rotation_x": 2.0,
+      "rotation_y": 2.0, "rotation_z": 2.0
+    },
+    "base_tracks": null,
+    "last_applied_tracks": null
+  }
+}
+\`\`\`
 
-| Path | Responsibility |
+The compiler will populate the base/last-applied snapshots on **Apply**. A complete saved project also includes model, prompts, generation, \`camera_3d\` legacy mirror, and canonical \`tracks.camera_3d\` fields; the example is illustrative and not a standalone runnable project document.
+
+---
+
+## 4. Exact integration points and project map
+
+| Path | Live responsibility |
 | --- | --- |
-| `backend/morphorum/app.py` | FastAPI routes, health/system metrics, animation projects, timelines, previews, render jobs, video export, LoRA APIs, model APIs |
-| `backend/morphorum/generation.py` | Model capability table, SDXL/Flux/Z-Image pipeline loading, CUDA vs offload, txt2img/img2img conversion, LoRA attachment/activation, device/memory telemetry |
-| `backend/morphorum/animation_projects.py` | Schema 2 project defaults/normalization, legacy compatibility fields, persistence, unknown-field preservation |
-| `backend/morphorum/animation_timeline.py` | Canonical track/keyframe bundle, numeric and prompt tracks, legacy synchronization |
-| `backend/morphorum/schedules.py` | Restricted Deforum-like schedule parsing, interpolation and validation |
-| `backend/morphorum/animation_resolution.py` | Canonical resolved-frame state: prompts, motion, generation, cadence and LoRAs |
-| `backend/morphorum/animation_render.py` | Animation job queue, PNG generation, cadence anchors, motion/depth, prompt conditioning, cancellation/resume, snapshots and preview |
-| `backend/morphorum/animation_3d.py` | Depth-projected camera transforms / 3D image warping and exposed-pixel handling |
-| `backend/morphorum/animation_depth.py` | Depth Anything V2 Small backend, cached depth, device control and previews |
-| `backend/morphorum/animation_temporal.py` | Optional future-anchor depth reprojection and intermediate-frame blend |
-| `backend/morphorum/animation_motion.py` | Motion-only CPU previews, presets and coverage diagnostics |
-| `backend/morphorum/animation_performance.py` | JSONL per-frame timings, CUDA samples, LoRA residency, summary/restart handling |
-| `backend/morphorum/animation_video.py` | Independent FFmpeg MP4/WebM background export jobs and stored export history |
-| `backend/morphorum/deforum_import.py` | B6.1 untrusted Deforum JSON parsing, compatibility translation/reporting and new-project import |
-| `backend/morphorum/system_info.py` | System telemetry plus on-demand Windows WDDM per-process dedicated/shared GPU diagnostics |
-| `backend/morphorum/model_index.py`, `managed_models.py` | Model scanning/lookup and managed model download |
-| `frontend/dist/index.html` | Workspaces and controls |
-| `frontend/dist/assets/animation.js` + `animation.css` | Animation UI, cadence/3D scheduling, preview, render monitoring, performance, video export |
-| `docs/B5_3D_CADENCE_PLAN.md` | B5 implementation/physical gate history |
-| `docs/PERFORMANCE_CADENCE.md` | B4 LoRA/Flux performance investigations, tested fixes and caveats |
-| `docs/B6_DEFORUM_HYBRID_PLAN.md` | **Current B6 roadmap**, including implementation status and high-resolution investigation |
-| `docs/B6_PHYSICAL_ACCEPTANCE.md` | **Next gate:** Windows Deforum-import + RTX 4080 SUPER 512/768/1024 native-vs-VAE-tiling acceptance checklist |
-| `docs/TIMELINE_SCHEMA.md` / `ANIMATION_PROJECTS.md` / `SCHEDULES.md` | Project compatibility contract |
-| `tests/` and `.github/workflows/` | Python/JavaScript regression suites, backend/syntax CI |
-| `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` | Product overview, architecture, historical/future scope |
-
-## 5. Native project structure and rendering contract
-
-Native animation schema version **2** contains:
-- `animation`: `max_frames`, `fps`, `width`, `height`, `mode` (2d/3d), `start_mode` (prompt/source), source-image metadata and prompt transition mode.
-- `model`: selected indexed model ID, family, variant. Imported legacy filename **must not** become an implicitly trusted host path.
-- `prompts` / `negative_prompts`: frame-number-to-text maps. Prompt interpolation supports hold/blend; LoRAs can be embedded via `<lora:name:weight>`.
-- `motion`: 2D angle, zoom, translation X/Y, border behavior.
-- `camera_3d`: translation X/Y/Z, rotation X/Y/Z, FOV, depth resolution, projection mode and hole-fill strategy.
-- `generation`: strength, noise, steps, guidance, sampler, seed behavior/increment.
-- `cadence.diffusion`: per-frame diffusion interval schedule.
-- `temporal`: forward or future-anchor refinement with mix/contrast threshold.
-- `tracks`: canonical editable prompt and numeric keyframes mirrored into legacy schedule fields.
-- Unknown top-level fields are generally preserved for forward compatibility.
-- Render manifests freeze a project snapshot and seed plan, so resumed renders do not silently pick up later UI edits.
-
-**Architecture rule:** importers and new editors must translate into the canonical Morphorum project/track/resolver API, *not* add a second Deforum renderer or bypass model-family validation.
-
-**2D/3D frame loop:**
-1. Lock inference; resolve project frame, seed, model capability, active prompt and LoRA schedule.
-2. Frame 0 comes from a prompt generation or uploaded source image.
-3. For each subsequent frame, compute image-space camera transform. In 3D mode, estimate/reuse cached relative depth, warp using depth, and create disocclusion mask if applicable.
-4. With cadence 3, diffuse at frames 3,6,9,... plus forced last anchor; otherwise save transformed intermediate frames without diffusion.
-5. Diffused anchors run model-family img2img with scheduled strength/noise/LoRAs. Prompt embedding blend is wrapped in `torch.inference_mode()` and has bounded eight-entry caching to prevent graph retention.
-6. Optional B5.2 future-anchor mode refines intermediate frames with future diffused anchor; otherwise use original forward transform behavior.
-7. Save PNG + frame metadata + render manifest; append B5.5 performance JSONL record for completed frames. On cancel, leave resumable output.
-8. Assemble GIF preview; optionally encode separately to FFmpeg MP4/WebM **without rerunning diffusion**.
-
-### Functional API landmarks
-
-- `GET /api/health`; `GET /api/system/telemetry`; `GET /api/system/gpu-memory` (PyTorch allocator + on-demand Windows WDDM diagnostics)
-- `POST /api/animation/import/deforum/preview`; `POST /api/animation/import/deforum/create`
-- `GET|POST|PUT /api/animation/projects...`; source-image upload and depth preview routes
-- `GET /api/animation/timeline/descriptors` and project timeline/track endpoints
-- `POST /api/animation/resolve-frame`; `POST /api/animation/resolve-timeline`; `POST /api/animation/validate-schedules`
-- `POST /api/animation/motion-preview` and preview status/image
-- `POST /api/animation/renders`, `GET /api/animation/renders/{render_id}`, `POST .../cancel`, `POST /api/animation/renders/{project_id}/{render_id}/resume`
-- `GET /api/animation/renders/{project_id}/{render_id}/performance`
-- `GET /api/animation/video/availability`, `POST /api/animation/renders/{project_id}/{render_id}/video`, video jobs/history/download routes
-- `GET /api/loras`, inspect/Civitai/runtime audit, and model/managed model routes
-- Inspect current `app.py` OpenAPI for exact bodies, response schemas and route signatures instead of constructing them from this abbreviated list.
-
-## 6. Model and LoRA implementation details
-
-**SDXL:** checkpoints loaded using `StableDiffusionXLPipeline.from_single_file`, FP16 on available CUDA, then `pipe.to("cuda")`. Task switch via `StableDiffusionXLImg2ImgPipeline.from_pipe(...)` retains shared model components. SDXL LoRA loading includes a compatibility fallback to converted UNet-only weights if a known Diffusers/PEFT text-encoder rank compatibility bug triggers. This fallback has been visually verified on selected real SDXL LoRAs. Do not delete it casually; the skipped text-encoder weights are an explicit quality compatibility caveat.
-
-**Flux:** supported Dev/Schnell-class pipeline families. Base FP8 checkpoints can use FP8 layerwise storage with BF16 compute where supported. Some PEFT LoRA wrapping causes the FP8 CUDA `addmm_cuda` incompatibility; active Flux LoRAs intentionally use a BF16/FP16-compatible transformer storage path. On 16 GiB hardware, *non-streamed* block-level group offload avoids the prior pinned-host-memory `cuMemHostAlloc` setup failure. Do not reintroduce streamed pinned-memory loading blindly.
-
-**Z-Image:** managed model package with GPU or conservative low-VRAM offloading selected by available VRAM and model variant. External Z-Image LoRA indexing exists; do **not** claim physical Z-Image LoRA influence on this RTX 4080 SUPER without a separately logged A/B test.
-
-**LoRA Manager:** scans configured directories by family and supports metadata inspection, trigger-word display/insert, optional Civitai hash-based metadata lookup, runtime audit and family resolution. LoRA tag syntax is `<lora:name:weight>` in positive prompts only. Dynamic weights and multiple prompt windows are applied through Diffusers/PEFT; adapters are resident/reused, not fused into checkpoints. Family mismatch is an error, not an automatic substitution.
-
-**Physical LoRA acceptance:** user confirmed **SDXL and Flux single images with LoRAs visibly working**, plus SDXL long animation with up to three resident adapters. Treat additional combinations as future test cases, not as automatically verified.
-
-## 7. B5 phase-by-phase acceptance record
-
-| Phase | Delivered | Acceptance |
-| --- | --- | --- |
-| B5.0 / cadence hardening | Fixed SDXL prompt-conditioning CUDA graph retention, bounded embeddings, cadence UI and anchors, native GPU behavior | Windows generation verified; prior 75s latency outliers resolved |
-| B5.1 | Depth-aware subpixel splat projection, hole-fill and disocclusion masks, backward-compatible legacy mode | Physical 3D generation verified |
-| B5.2 | Optional future-anchor depth-aligned refinement with protection of legacy forward-only cadence | User accepted on Windows |
-| B5.3 | CPU-only 3D motion GIF preview, camera presets, red exposed-pixel diagnostics and projection coverage | User supplied successful preview and accepted |
-| B5.4 | Async FFmpeg H.264 MP4/VP9 WebM, quality/FPS settings, browser playback/download, persisted history | User confirmed video export works |
-| B5.5 | Per-frame GPU and stage telemetry, LoRA residency monitoring, crash-safe JSONL, resume/long-render regression | **User accepted on Windows**, checkpointed at `e9ea6d0` |
-
-B5.5 suite: **247 backend and 14 browser tests**, plus self-test, passed at final B5 commit. Do not label any later B6 head as tested at this count until its own CI completes.
-
-### B5.5 real render: exact observed evidence
-
-From user-supplied completed JSON report:
-- Project ID: `b5-test-1-9a350a88`
-- Render ID: `anim-20261008-193424-a59fce`
-- 75 frame outputs, detailed records for frames 1–74 (**74 observed**, because frame 0 is the starting image).
-- **25** diffused anchor records at cadence 3, including forced last anchor.
-- **Average frame elapsed:** 3.098 s over the profiled frames.
-- **Average anchor diffusion:** 7.487 s.
-- **Total recorded frame work:** 229.247 s, including **187.167 s diffusion**, **30.566 s prepare**, **1.813 s conditioning**.
-- **Slow anchor list:** empty for the 30s threshold.
-- **Max observed current CUDA tensors allocated:** 14.413 GiB.
-- **Max observed current allocator reserved:** 14.52 GiB.
-- **PyTorch process peak allocated:** 15.3563 GiB.
-- **PyTorch process peak reserved:** 16.4258 GiB, although reported device total was 15.9917 GiB.
-- **Reported GPU free:** 0.0 GiB in the later per-frame CUDA samples. This requires interpretation: see section 8.
-- **Active execution:** device `cuda`, optimization `native-gpu`, task `img2img`.
-- **Resident LoRAs:** 2 initially; third LoRA first introduced at frame 27; no continuing growth thereafter.
-- **Prompt-conditioning cache:** reached its configured 8-entry cap without unbounded growth.
-- **First diffusion anchor frame 3:** 32.735 s total; 25.36 s of that was *pipeline/LoRA preparation*, diffusion itself ~6.718 s. Later anchors had small prepare times except the 3rd adapter addition at frame 27 (~4.438 s prepare).
-- **Steady diffused anchors:** around 6.36 s early; around 7.08 s after third adapter was introduced; approximately 9.1 s near the end. Still correct CUDA inference, not evidence of CPU fallback.
-- **Transform-only frames:** typically ~0.08–0.16 s, with no diffusion.
-- User additionally confirmed pause/resume/cancel and telemetry work as expected.
-
-**Bottom line:** The B5.5 report does not show an accumulating allocator memory leak after the third LoRA. It shows that the model and adapters consume **most of 16 GiB already at 512x512** and that an unknown amount of headroom remains under actual peak inference conditions. Rendering at 1024 is **not yet certified**.
-
-## 8. CUDA / VRAM investigation and large-resolution engineering plan
-
-### 8.1 What is actually happening, and what is not yet proven
-
-**Confirmed from code:**
-- SDXL CUDA loader chooses `torch.float16`, instantiates the complete Diffusers pipeline and calls `pipe.to(device)`; it does **not** currently configure SDXL VAE tiling or SDXL CPU model offload as an automatic memory mode.
-- All requested LoRAs are loaded into shared PEFT-enabled pipeline components and remain resident to allow fast dynamic reweighting. A new adapter adds some VRAM; the same adapter's repeated use is cheap.
-- Frame-based depth uses Depth Anything V2 Small explicitly on CPU; **CPU depth prediction is not CPU diffusion**.
-- Prompt embedding generation uses inference-only tensors with eight-entry bounded cache; this fixed a prior true VRAM growth problem.
-- The hot loop attempts to preserve allocator caches; `maintain_inference_memory()` only trims reclaimable cache on substantial pressure, to prevent throughput destruction from gratuitous `empty_cache()` calls.
-- `cuda_memory_status()` reads `torch.cuda.mem_get_info()`, `memory_allocated()`, `memory_reserved()` and lifetime peaks. **It currently does not record the PyTorch CUDA allocator backend or WDDM dedicated/shared memory residency.**
-- The single-image request validator accepts dimensions 64–4096, divisible by 8 for SDXL or 16 for Flux/Z-Image; native animation normalization permits dimensions up to 8192. These are **input validation ceilings, not GPU memory guarantees**.
-
-**Not proven from a single JSON report:**
-- Whether physical VRAM was overcommitted and paged into shared system memory, or whether the driver and allocator were simply near their residency budgets.
-- Whether `max_memory_reserved` > 16 GiB represents simultaneous physical VRAM allocation. PyTorch documents that, when using the `cudaMallocAsync` allocator, the process high-water figure can *sum independent mempool peaks at different instants*, yielding a conservative upper bound above the true simultaneous peak. Check `torch.cuda.get_allocator_backend()` before interpreting that number.
-- Whether larger 768/1024 images fail, slow, or fit with optimizations.
-- Whether VAE decoding, UNet activations, prompt encoding or dynamic LoRA residency dominate the *transient peak*. The current per-frame snapshot is taken after inference, so it can miss a higher intermediate peak.
-
-**Working hypothesis to test:** On 16 GiB with 2–3 LoRAs, SDXL resident weights and activation peaks leave little margin for larger spatial tensor sizes. WDDM budget/residency under Windows may additionally constrain behavior, but must not be blamed without dedicated/shared GPU memory measurements. `free_gib=0.0` means the CUDA driver reported no free heap space in that query; it does not alone identify who owns each allocation or prove CPU execution.
-
-**Official technical references:**
-- PyTorch allocator peaks, including `cudaMallocAsync` caveat: https://docs.pytorch.org/docs/stable/generated/torch.cuda.memory.max_memory_reserved.html
-- PyTorch CUDA semantics and memory tuning: https://docs.pytorch.org/docs/stable/notes/cuda.html
-- PyTorch detailed CUDA memory profiling: https://docs.pytorch.org/docs/stable/torch_cuda_memory.html
-- Diffusers memory approaches, tiling/offload tradeoffs: https://huggingface.co/docs/diffusers/optimization/memory
-- Microsoft WDDM 2.0 GPU virtual-memory/residency model: https://learn.microsoft.com/en-us/windows-hardware/drivers/display/gpu-virtual-memory-in-wddm-2-0
-
-### 8.2 High-priority B6.0-P instrumentation
-
-**Before enabling any offload mode**, add low-cost, opt-in diagnostics:
-
-1. At startup/model load record GPU device, total physical VRAM, PyTorch version and `torch.cuda.get_allocator_backend()` (native or cudaMallocAsync), CUDA capability, active model family/dtype, driver info where available, platform and CUDA availability.
-2. Record **current** allocated/reserved and the separate **peak** allocated/reserved at phase boundaries; distinguish "process peak since launch" from "peak of this image / anchor." If using `reset_peak_memory_stats()`, only do so at safely controlled boundaries and document that it alters cumulative counters. Alternatively track per-phase deltas and independent sampling while retaining existing lifetime counters.
-3. Add separate optional checkpoints after model load, LoRA load, text conditioning, VAE image encode, UNet diffusion, VAE decode, depth projection, and cleanup. Do not insert blocking CUDA synchronization every frame unless running a deliberate profiling experiment.
-4. Snapshot `torch.cuda.memory_stats()` and allocator backend on errors; allow a manually requested `memory_summary()` or `memory_snapshot()` only while debugging and with an output-size/sensitivity cap. Avoid continuously storing giant allocator dumps.
-5. Capture Windows Task Manager **Dedicated GPU memory** and **Shared GPU memory**, alongside the process's system RAM/commit and overall free system RAM. `nvidia-smi` may expose different or incomplete accounting under WDDM. Correlate timestamps, don't assume PyTorch allocator metrics measure OS residency.
-6. Show VRAM safety state clearly: *allocated CUDA tensors*, *cached/reserved*, *CUDA driver free*, *Windows shared GPU usage*, *measurement backend*. Warn on pressure; don't silently switch from CUDA to CPU diffusion.
-7. Produce a short report that correlates resolution, model, # adapters, diffusion seconds and peak allocations. Keep masks, prompts and model paths out of logs unless explicitly exported by user.
-
-Non-invasive baseline commands (run in Windows PowerShell, from Morphorum folder):
-
-```powershell
-nvidia-smi
-nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv -l 1
-.\.venv\Scripts\python.exe -c "import torch; print('torch:',torch.__version__); print('allocator:',torch.cuda.get_allocator_backend()); print('GPU:',torch.cuda.get_device_name(0)); print('VRAM GiB:',round(torch.cuda.get_device_properties(0).total_memory/1024**3,2))"
-```
-
-Do not run a separate Python process's `torch.cuda.memory_summary()` and mistake it for **Morphorum's** allocations; each process has its own CUDA allocator. Log/inspect allocator state **in Morphorum's server process**.
-
-### 8.3 Staged, opt-in memory strategies (ranked)
-
-**Mode A: existing native CUDA (control case).** Preserve current SDXL FP16 full-GPU pipeline and all tested LoRA behavior. Compare the same seed/steps/prompt/LoRAs against every new mode. Avoid surprise output changes.
-
-**Mode B: VAE tiling first.** Diffusers provides `pipe.vae.enable_tiling()` to decode/encode large images using tiled processing; this can reduce large-image VAE memory use without relocating the diffusion UNet. Useful if VAE peaks are material. Validate SDXL image-to-image encode and decode, tile seams, slight visual/tone differences, output dimensions and native/tiling reproducibility. Tiling will not fix UNet activation peaks and is not a magic 1024px guarantee. `enable_vae_slicing()` is mainly useful for multi-image batches, not a single image per animation frame.
-
-**Mode C: attention/backend review.** Confirm Diffusers/PyTorch scaled-dot-product attention backend and any memory-efficient implementation are actually used. Benchmark alternatives only after profiling; a blanket `xformers`/`torch.compile` dependency or allocator switch is not a proven optimization for this environment.
-
-**Mode D: text-encoder lifecycle.** Since animation consumes text prompts chiefly at diffusion anchors and caches detached embeddings, investigate keeping UNet CUDA-resident but offloading inactive text encoder components to CPU between encoding windows. **Caution:** text-encoder LoRAs, active adapter state, `encode_prompt()` outside pipeline call, and `from_pipe()` task conversions all interact with device/offload hooks. Keep such mode opt-in, comprehensively test dynamic prompts/LoRAs, and fail explicitly on incompatible adapters.
-
-**Mode E: model-level CPU offload as memory-constrained fallback.** Diffusers `enable_model_cpu_offload()` may fit bigger frames by moving whole components when inactive, but adds transfer overhead. Sequential CPU offload is much slower and should be *explicitly last-resort*, not a default for the RTX 4080 SUPER. Existing Flux/Z-Image offload strategies have separate model-specific code; never apply an SDXL setting globally to those families.
-
-**Mode F: optional active/resident LoRA budget.** Cap or unload inactive adapters only if the telemetry actually shows that LoRA residence drives memory exhaustion. Cache invalidation must keep adapter names/signatures synchronized and must never drop the weights currently active in a window. Repeat-loaded LoRAs might cost performance; preserve the unmodified option.
-
-**Mode G: larger-than-native output workflows.** For 1536/2048/4K aspirations, consider a separate image/video **upscale and tiled-refinement** pipeline once true native generation is characterized. Distinguish "native 2048 diffusion" from "1024 diffusion plus 2x upscale" in the UI and metadata; these are not identical quality paths. Consider future tile-aware temporal coherence, optical-flow reuse, and export dimensions.
-
-**Do not** start by globally enabling `empty_cache()` after every frame, auto-switching to CPU, quantizing LoRA layers without tests, or assuming that changing `PYTORCH_CUDA_ALLOC_CONF` will cure a model that's genuinely too large. Changing allocator backend may invalidate comparisons and affect available statistics.
-
-### 8.4 Physical high-resolution acceptance matrix
-
-| Image dimensions | Relative pixels vs 512² | Gate |
-| --- | ---: | --- |
-| 512×512 | 1× | Existing B5.5 verified SDXL baseline |
-| 768×768 | 2.25× | First 1-image, then 3-frame CUDA + LoRA test |
-| 896×1152 | 3.94× | Portrait aspect ratio stress |
-| 1024×1024 | 4× | **Primary SDXL high-resolution target**, no current GPU acceptance |
-| 1216×832 | 3.86× | Landscape aspect stress |
-| 1536×1024 | 6× | Only after measured safety margin |
-| 1536×1536 | 9× | High-risk, optional memory mode and physical tests required |
-| 2048×2048 | 16× | Stretch target; likely requires specialized tiled/upscaling approach on 16 GiB |
-
-**Important:** pixel multipliers do *not* imply exact 2.25×/4×/9× VRAM or time: model weights are roughly fixed but activation and attention work depend on architecture/resolution, sampler and batch. SDXL is normally designed around ~1024px composition, but existing VRAM pressure makes a native 1024 **unverified here**.
-
-For every attempted size:
-1. Restart Morphorum or explicitly unload model to establish the controlled baseline.
-2. Use identical checkpoint, scheduler, steps, seed, prompts and LoRA weight; compare no-LoRA / one-LoRA / three-LoRA cases.
-3. Run still image first, then 3–6 frames in 2D and 3D with cadence 3, then a longer render only if stable.
-4. Record preparation, diffusion and decode times, current/peak CUDA allocations and Windows dedicated/shared memory, and visual LoRA/prompt influence.
-5. Verify cancellation/resume, depth masks, temporal mode, PNG frame count and FFmpeg exports at the target size.
-6. Stop on repeated OOM or obvious system-memory spill. Preserve logs, restore the safe mode; never let failed trial settings poison a previously working pipeline.
-7. Document device placement and memory mode in each frame/render manifest.
-
-**Release gate:** do not promote a high-resolution optimization based on CI alone. Physical quality/performance validation on the RTX 4080 SUPER is required, and B5.5 must remain untouched as a rollback.
-
-## 9. Complete B6 roadmap
-
-**B6 theme:** native Deforum project compatibility plus browser-first hybrid-video workflows, while retaining B5 reliability and adding a parallel, test-gated higher-resolution capability.
-
-**Current source of truth:** `docs/B6_DEFORUM_HYBRID_PLAN.md`. The milestone order below is deliberately additive. B6.0-P is a diagnostic/preflight priority; it may proceed alongside B6.1 but must be accepted before promising full-resolution B6 animation.
-
-### B6.0-P: VRAM profiling and high-resolution guardrails
-
-**Deliverables:** allocator-backend-aware reporting; phase-memory sampling and error diagnostics; Windows dedicated/shared residency correlation; explicit profile modes; bounded first high-resolution test matrix; non-destructive safeguards/clear OOM recovery.
-
-**Implementation restrictions:** no automatic CPU fallback, no forced allocator reset every frame, no renderer quality changes by default. New VAE tiling/text-encoder/offload modes are separately switchable and independently regression/physical tested.
-
-**Gate:** baseline 512px preserved, 768px GPU tested, 1024px path characterized and either accepted or clearly reported as requiring specific opt-in mode. No invented success.
-
-### B6.1: Legacy Deforum JSON/TXT import into native projects
-
-**A. Input parser and safety**
-- Identify common Deforum settings JSON formats and key naming. Support documented TXT serialization only when unambiguous; otherwise return useful diagnostic.
-- Strict size and nesting limits, keyframe count caps, syntax validation, safe expressions: no `eval`/arbitrary Python, no uncontrolled imports, no arbitrary paths from external JSON.
-- Deterministic importer version and a fixture-driven translator; original source input retained only in a passive namespaced compatibility metadata field, with limits.
-- Explicit warnings for unmapped, partially mapped, ambiguous, unsupported, or family-incompatible parameters.
-- Pure **preview/dry-run** operation that cannot mutate a project. A separate user confirmation saves to a **new** native project.
-
-**B. Initial settings mapping**
-- `max_frames`, `fps`, `W`, `H` → animation dimensions/length/playback.
-- `animation_mode` → native 2D/3D where supported; mark others as unsupported.
-- `animation_prompts` and supported negatives → prompt tracks/keyframes and legacy mirrors.
-- `angle`, `zoom`, `translation_x/y` → native 2D camera schedules.
-- `translation_z`, `rotation_3d_x/y/z` → 3D camera schedules **only after checking conventions/units**. Do not silently assume identical geometry.
-- `strength_schedule`, `noise_schedule`, `steps`, `cfg_scale/_schedule` → supported generation schedules, preserving expression syntax when safe.
-- `diffusion_cadence` → native cadence schedule (1–64).
-- `seed`, `seed_behavior` and known sampler names → native equivalents where family-compatible.
-- Deforum masks, ControlNet, hybrid video, optical flow and model paths → warnings and passive source metadata until explicit support is delivered; preserve source rather than fabricating working settings.
-- Resolve checkpoint and LoRA names only through indexed Morphorum libraries. Do not launch with unverified local paths or nonexistent families.
-
-**C. UI/UX**
-- Desktop/mobile import dialog: drop/upload JSON; structured preview; mapping status; side-by-side settings; warning badges as appropriate; deliberate model selection; create-new-project confirmation.
-- Imported project opens in the normal Animation timeline and resolved-frame inspector; no special legacy editing mode.
-- Always allow cancel/discard, and preserve original JSON in a user-visible compatibility report.
-
-**D. Tests and physical acceptance**
-- Golden 2D and 3D Deforum JSON fixtures with prompt and schedule scenarios.
-- Round-trip import → normalized schema 2 project → save/reload → native resolved frames; source never mutated; unknown fields retained.
-- Invalid JSON, oversized/corrupt payloads, unsafe expression strings, traversal paths, unsupported models, unknown sampler, ambiguous 3D motion.
-- UI must show warnings before creation, never silently overwrite an existing project.
-- Real Windows test: select known Deforum settings file, map to installed SDXL checkpoint, inspect timeline and output short GPU render with prompt+LoRA schedule. **Checkpoint B6.1 after acceptance.**
-
-### B6.2: Video input and reproducible source frame extraction
-
-- Browser-native upload and project-owned managed files. Avoid any host-computer file picker being opened remotely on the wrong machine.
-- Use FFmpeg/ffprobe to inspect codec/duration/FPS/dimensions; validate input size, safe file path and upload caps.
-- Source frame trim, target FPS resampling policy, start/end timestamps, frame numbering, optional input audio metadata, aspect fit/crop and color metadata.
-- Deterministic extracted PNG sequence with source-video hash/provenance and time-map manifest; robust progress/cancel/restart.
-- Frame-source mode opt-in; native prompt-start and source-image-start B5 workflows remain unmodified.
-- Tests for VFR source, missing file, invalid format, short clip, non-square pixels, rotation/orientation metadata, resampling policy, size limits and interrupted extraction.
-- Physical acceptance: browser/phone upload over LAN, reproducible frames, no server-side file chooser, safe error behavior.
-- **Checkpoint B6.2 after acceptance.**
-
-### B6.3: Hybrid render pipeline and compositing controls
-
-- Explicit selectable hybrid modes (source frame / generated frame / blend), scheduleable source-versus-generated contribution, opacity and mask tracks.
-- Order of operations documented: frame acquisition, camera/motion transforms, depth, source alignment, mask logic, denoise/conditioning, temporal blending and final composite.
-- Source-frame masks, compositing alpha and motion warp in consistent pixel coordinates. Validate source/resolution mismatch and frames with missing reference data.
-- Persist exact resolved hybrid state, source-frame index/time, mask and composite settings in each frame metadata and render manifest to guarantee resume.
-- CPU/GPU memory budget considered before enabling multi-frame buffers; do not hold entire video in GPU RAM.
-- Frame preview shows source, warped, mask and composite diagnostics. Outputs can use existing MP4/WebM exporter unchanged where possible.
-- Automated 2D/3D, cadence, multiple prompts and LoRA regression suite.
-- Physical acceptance: 75+ frames with source video, SDXL LoRAs, three prompt windows, cadence 3, save/resume, stable memory and correct exported video.
-- **Checkpoint B6.3 after acceptance.**
-
-### B6.4: Compatibility polish, hardening and B6 release gate
-
-- Report unsupported Deforum keys, import fidelity and native-equivalent settings; optionally export the subset of interoperable settings without claiming 100% Deforum parity.
-- Refine mobile/touch UX, saved presets, validation messages and project portability metadata.
-- Optional 3D/hybrid preview and comparison tools, plus repeatable performance profiling at the accepted resolution modes.
-- End-to-end CI for source import, video extraction, hybrid frames, LoRA transitions, cancellation/resume, export and bad/corrupt input.
-- Windows GPU acceptance: visual fidelity, deterministic output, long render, high-resolution diagnostics and graceful OOM/rollback.
-- Tag/checkpoint verified B6; only then merge/release according to existing repository policy.
-
-### Beyond B6 (do not claim as B6 implemented)
-
-Longer-term backlog in `docs/ROADMAP.md` includes optical flow (RAFT or equivalent), ControlNet, RIFE/FILM interpolation, Parseq concepts, audio/reactive schedules, plugins, model adapter expansion, queue/notifications and richer camera visualization. Schedule after B6 acceptance and based on actual GPU headroom.
-
-## 10. Tests, expected safeguards and definition of done
-
-**Baseline verification (B5.5):** 247 Python backend tests, 14 Node/browser tests, Morphorum self-test; successful real SDXL/Flux LoRA and long 3D/cadence tests. The exact B5.5 CI result is the reference, not a permanent count.
-
-**Current B6 automated checkpoint (`d982a32`):** 273 Python tests, 17 Node/browser tests, and Morphorum self-test passed. B6.1 golden 2D/3D fixtures cover safe parsing, mapping, save/reopen, timeline/resolved-frame agreement, unsupported settings, malicious paths/expressions and explicit model binding. B6.0-P tests cover allocator labels, phase samples, WDDM parser behavior, advisory high-resolution confirmation and default-off SDXL VAE tiling. Physical Windows/GPU acceptance remains separate.
-
-**Every B6 work packet:**
-1. Inspect current branch + latest commit and create a small-scoped plan.
-2. Write regression tests *before or alongside* new code. Run backend pytest, JavaScript syntax/browser checks, built-in self-test and validate GitHub Actions on final SHA.
-3. Confirm renderer nonregression and no change to frame/seed/LoRA schedules for pre-existing projects.
-4. Put any new high-VRAM or output-quality-changing optimization behind an explicit opt-in.
-5. Preserve render metadata and crash-safe resume. Avoid exposing arbitrary filesystem access to LAN clients.
-6. Update docs, changelog/roadmap, and exact GPU physical gate.
-7. Stop at test gate for user's real machine; never call CI "GPU-verified."
-8. Upon real acceptance, branch/commit a checkpoint from the verified SHA and advance to next milestone. **Never replace B5.5 checkpoint.**
-
-Potential additional tests for VRAM features:
-- Simulated CUDA OOM during load, LoRA activation, img2img, VAE, and hot frame; cleanup and actionable errors.
-- Repeated cold-start/reuse cycles; assert adapter registry and LoRA active signatures.
-- Peak-memory telemetry with `native` vs `cudaMallocAsync` backend mocks; clear label semantics.
-- Native vs tiling output dimensions/alpha/color handling; text-encoder LoRA compatibility.
-- No unbounded GPU references or cached tensors across prompt windows.
-- Large PNG and depth map memory use, backpressure on CPU queues and FFmpeg exports.
-- No automatic slow sequential-offload downgrade.
-
-## 11. Known risks and unresolved questions
-
-| Risk | Current evidence | Follow-up |
-| --- | --- | --- |
-| Large-resolution SDXL VRAM pressure | 512² native CUDA + up to 3 LoRAs left little headroom; process peak tensor allocation ~15.36 GiB | B6.0-P allocator/OS profiling and 768/1024 tests |
-| `max_memory_reserved` > device total | 16.4258 GiB peak statistic vs 15.9917 GiB physical | Record allocator backend and WDDM shared/dedicated residency; don't assert paging solely from peak |
-| SDXL fallback UNet-only LoRAs | Known Diffusers/PEFT text-encoder compatibility issue; real visual effectiveness works for tested LoRAs | Preserve diagnostics; compare text-encoder effects in targeted tests |
-| Flux FP8 plus LoRA | FP8 PEFT wrappers can fail on CUDA; higher-precision transformer LoRA fallback works physically | Preserve BF16 compatibility and nonstreamed 16GB offload |
-| GPU stress with VAE/3D at 1024+ | No Windows acceptance yet | Phase-specific memory profiling and opt-in tiles |
-| Legacy Deforum format complexity | B6.1 importer exists with golden 2D/3D fixtures, preview, passive unknown-field preservation and explicit indexed-model binding | Run Windows UI/short-render gate against golden + real Deforum settings; expand mappings only from observed files |
-| Deforum 3D coordinate semantics | Possible differences in rotation/translation and camera units | Explicit mapping tests; warn on non-equivalent keys |
-| Hybrid video pipeline | Not implemented | B6.2 + B6.3 opt-in and FFmpeg provenance |
-| Historical documentation inconsistencies | Old docs reflect provisional phase status | Use source+verified checkpoints as truth; update docs while implementing |
-
-### Useful repository links
-
-- Repo: https://github.com/merberg-ai/Morphorum
-- B6 branch: https://github.com/merberg-ai/Morphorum/tree/feature/deforum-compatibility-hybrid-b6
-- B5.5 recovery: https://github.com/merberg-ai/Morphorum/tree/checkpoint/b5-5-performance-stability-gpu-verified-20261008
-- B5 roadmap: https://github.com/merberg-ai/Morphorum/blob/feature/3d-depth-quality-b5/docs/B5_3D_CADENCE_PLAN.md
-- B6 roadmap: https://github.com/merberg-ai/Morphorum/blob/feature/deforum-compatibility-hybrid-b6/docs/B6_DEFORUM_HYBRID_PLAN.md
-- CUDA/LoRA historical notes: https://github.com/merberg-ai/Morphorum/blob/feature/3d-depth-quality-b5/docs/PERFORMANCE_CADENCE.md
-- SDXL loader: https://github.com/merberg-ai/Morphorum/blob/feature/deforum-compatibility-hybrid-b6/backend/morphorum/generation.py
-- Performance renderer: https://github.com/merberg-ai/Morphorum/blob/feature/deforum-compatibility-hybrid-b6/backend/morphorum/animation_performance.py
-
-## 12. Specific instructions to the next development session
-
-**Start here:**
-
-1. Fetch `feature/deforum-compatibility-hybrid-b6` and read this `handoff.md`, `docs/B6_DEFORUM_HYBRID_PLAN.md`, `docs/PERFORMANCE_CADENCE.md`, `backend/morphorum/generation.py`, `animation_render.py`, `animation_projects.py` and `animation_timeline.py`.
-2. Verify branch HEAD and latest CI independently. The last automated code checkpoint recorded here is `d982a32`; documentation-only commits may be ahead of it.
-3. **Run the physical gate in `docs/B6_PHYSICAL_ACCEPTANCE.md` before adding more GPU strategies.** Validate Deforum import UI/new-project behavior and a short imported SDXL render first.
-4. Run the B6.0-P stepped GPU matrix using the same SDXL checkpoint/LoRAs as B5.5: 512 control, then 768, then 1024 only if the previous level is clean. Capture `/api/system/gpu-memory`, render performance JSON, Windows dedicated/shared memory, device/optimization and visual LoRA influence.
-5. Keep `performance.sdxl_vae_tiling=false` for the native baseline. Then explicitly enable VAE tiling, save settings, unload/reload the model and repeat the **same** seed/prompt/model/LoRA/resolution for A/B comparison. Do not introduce model CPU offload until native-vs-tiling evidence exists.
-6. If the B6.1 Windows UI/short-render gate passes, create a B6.1 checkpoint from the exact verified SHA before starting B6.2 hybrid video input/extraction.
-7. Keep user informed of scope, CI counts, commit IDs and physical results. **Never** call CI a GPU result.
-
-**Current acceptance boundary:** B5.5 is complete and physically verified. B6.1 is implemented and automated-test gated but **awaiting Windows UI/short-render acceptance**. B6.0-P diagnostic/preflight/VAE-tiling code is implemented and test gated but **awaiting 512/768/1024 RTX 4080 SUPER measurements**. B6.2 hybrid video input/compositing has not begun.
+| \`backend/morphorum/motion_lab.py\` | Pure deterministic motion composer, layer validation, preset math, keyframe interpolation, clipping, native-track export |
+| \`backend/morphorum/animation_projects.py\` | Native project schema, \`motion_lab\` persistence/normalization |
+| \`backend/morphorum/animation_timeline.py\` | Canonical camera track descriptors/mapping and legacy schedule bridge |
+| \`backend/morphorum/animation_resolution.py\` | \`resolve_project_frame\`, source-of-truth per-frame camera values used by rendering |
+| \`backend/morphorum/animation_motion.py\` | CPU motion preview, calibration grid fallback and optional image/depth preview |
+| \`backend/morphorum/animation_3d.py\` | Actual depth-aware 3D camera reprojection and frame warp |
+| \`backend/morphorum/animation_render.py\` | Actual diffusion/cadence/camera job loop, resume and output; do **not** add a parallel recording renderer |
+| \`backend/morphorum/app.py\` | Motion Lab APIs and project endpoints |
+| \`frontend/dist/index.html\` | Motion Lab markup and Animation navigation |
+| \`frontend/dist/assets/animation.js\` | Motion Lab draft stack, form, endpoints, Apply flow, undo/redo, project switching, tab reparenting |
+| \`frontend/dist/assets/motion-lab-visual.js\` | Client curves, projected path, interactive dragging/scrub/playback |
+| \`frontend/dist/assets/animation.css\` | Responsive Motion Lab styling |
+| \`docs/MOTION_LAB_ROADMAP.md\` | Full staged program; now reflects latest physical acceptance |
+| \`docs/B6_3_2_HYBRID_COMPOSITING.md\` | Separate accepted hybrid render contract, currently hidden from visible Media tab |
+| \`docs/B6_3_3_HYBRID_MASKS_ROADMAP.md\` | **On different branch only**, B6.3.3 planning/paused |
+| \`tests/test_motion_lab.py\` | Presets, layer math, conflict/idempotence, resolver parity |
+| \`tests/test_motion_lab_keyframes.py\` | Linear/hold/smooth/cubic curves, validation, save/reapply, no overshoot |
+| \`tests/test_motion_lab_api.py\` | Non-mutating preview vs explicit Apply, persistent native tracks, conflict resolution |
+| \`tests/test_animation_motion.py\` and \`tests/test_api.py\` | Reference-grid CPU preview and API coverage |
+| \`tests/frontend_motion_lab_navigation.test.cjs\` | Dynamic tab placement, Media vault and UI elements |
+| \`tests/frontend_motion_lab_visual.test.cjs\` | JS curve model, frame scrub, time playback, stale-state behavior |
+| \`tests/frontend_motion_lab_keyframes.test.cjs\` | Pointer-edit paths, frame-zero safety, smoothing UI and checkbox styles |
+| \`.github/workflows/backend-tests.yml\` | Python 3.12/CPU torch CI, pytest and \`morphorum self-test\` |
+| \`.github/workflows/\` | Syntax/frontend checks (inspect workflow filename before changing) |
+
+**Critical UI trap already fixed twice:** The Animation workspace dynamically moves cards into tab panels in \`setupAnimationWorkspaceTabs()\` in \`animation.js\`. **Any new ML2 card must be explicitly reparented into \`panels.motion\`**, otherwise it will appear in Editor or a hidden parent. Add a regression test for ownership/order and phone layout. The earlier Camera Motion Composer and Motion Curves placement bugs came from missing this step.
+
+**Current visible workspace tab list:** \`['editor','motion','monitor','outputs']\`; there is no visible \`media\` tab.
+
+### HTTP API (existing)
+
+- \`GET /api/animation/motion-lab/presets\`: preset catalog.
+- \`POST /api/animation/projects/{project_id}/motion-lab/preview\`: accepts \`{"layers":[...], "project": <optional unsaved editor draft>}\`. Compiles using \`conflict_policy="use-current"\`, **does not save**, and returns \`project\` plus \`diagnostics\` with full \`series\`, frame count, FPS, clipping/rebase indicators.
+- \`POST /api/animation/projects/{project_id}/motion-lab/apply\`: accepts \`{"layers":[...], "rebase_current":false}\`; explicitly saves native \`tracks.camera_3d\` and \`camera_3d\` mirror with Motion Lab metadata. Manual schedule conflicts produce HTTP 409 unless the user confirmed \`rebase_current:true\`.
+- Standard project save/load API: \`/api/animation/projects/{project_id}\`.
+- Existing \`POST /api/animation/motion-preview\`: CPU geometric/depth preview of a project, optional source image.
+
+**ML2 must reuse the first two Motion Lab endpoints, rather than launching a second background render manager.** Extend layer normalization/composer; keep frontend input capture purely browser-side.
 
 ---
 
-*Updated from current B6 source through automated code checkpoint `d982a32`, the repository's architecture/installation/timeline/LoRA/B5 docs, and the physically tested B5.5 frame telemetry. External PyTorch, Diffusers and Microsoft documentation inform the VRAM interpretation and options. B6.1 visual fidelity and larger-resolution recommendations remain pending physical Windows/GPU acceptance.*
+## 5. Starting a new development session
+
+### Windows host update/launch
+
+Stop the running Morphorum server first to avoid an old process binding 7865, then:
+
+\`\`\`powershell
+Set-Location D:\Morphorum-test
+.\update.bat feature/motion-lab
+git branch --show-current
+git log -1 --oneline
+.\run-lan.bat
+\`\`\`
+
+Expected branch: \`feature/motion-lab\`; HEAD will be the newest documentation commit (later than the accepted \`c0e5f90\`). Hard-refresh in Chrome (\`Ctrl+Shift+R\`) when testing changed static JS/CSS.
+
+Use the **protected checkpoint** to recover the exact accepted code if needed:
+
+\`\`\`powershell
+Set-Location D:\Morphorum-test
+.\update.bat checkpoint/motion-lab-ml1b-smoothing-windows-verified-20261009
+.\run-lan.bat
+\`\`\`
+
+Do not overwrite or delete \`data/\`, \`outputs/\`, \`.venv/\`, \`.runtime/\`, \`backups/\`, render manifests or configured external model/LoRA directories. Check the updater's rollback output on failure before manually switching refs.
+
+### Useful developer checks
+
+\`\`\`powershell
+.\.venv\Scripts\python.exe -m pytest -q tests\test_motion_lab.py tests\test_motion_lab_keyframes.py tests\test_motion_lab_api.py
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m morphorum self-test
+node --test tests\frontend_motion_lab_navigation.test.cjs tests\frontend_motion_lab_visual.test.cjs tests\frontend_motion_lab_keyframes.test.cjs
+git status
+git rev-parse HEAD
+\`\`\`
+
+On GitHub, require both named workflows to pass at the **exact new head SHA**, then perform actual Windows browser/CPU/GPU tests as relevant. Feature branches are primarily tested through draft PR checks. Do not accept a green build from an older head.
+
+---
+
+## 6. Next phase: ML2 — Live motion recording (PLANNED, NOT IMPLEMENTED)
+
+### Why
+
+Make Motion Lab one of the application's main creative tools by letting the user **fly the camera** with keyboard, phone touch joysticks, and an optional gamepad, **record** six-axis movement over a defined animation frame interval, review a take, and add it as an editable/undoable motion layer. Preserve predictable native motion values and never cause a second render pipeline.
+
+### Recommended engineering phases
+
+#### ML2.0 — Recording contract and deterministic compiler (backend-first)
+
+Add \`type:"recording"\` to the versioned Motion Lab layer schema (possibly \`schema_version:2\` only if needed; legacy v1 preset/keyframe layers must load unchanged). Suggested normalized take:
+
+\`\`\`json
+{
+  "id": "take-001",
+  "type": "recording",
+  "name": "Hand-flown orbit",
+  "enabled": true,
+  "blend": "add",
+  "start_frame": 12,
+  "end_frame": 96,
+  "fps": 12,
+  "axes": [
+    "translation_x", "translation_y", "translation_z",
+    "rotation_x", "rotation_y", "rotation_z"
+  ],
+  "samples": [
+    [0, 0, 0, 0, 0, 0],
+    [0.012, -0.008, 0.004, 0.1, -0.04, 0.2]
+  ],
+  "source": "touch",
+  "capture_version": 1
+}
+\`\`\`
+
+**This is a proposed schema, NOT yet existing in code.** Resolve its precise encoding and limits first. One sample per animation frame (or sparse/RLE samples expanded deterministically), six numbers each; avoid treating recorded motion as a 128-point manual keyframe layer. At up to 3000 frames, 3000×6 samples are feasible with bounded JSON/data size, but review render-manifest schedule size and HTTP payload limits before committing. Source labels are provenance only; never require a device to replay a take.
+
+Required:
+- Capture/compose in **native** camera velocities, degrees per frame, and exact project-frame indices, starting with frame-zero identity.
+- Normalize finite values, valid axes, exact frame count, FPS/retiming rules, allowed Add/Replace and optional axis arming, per-axis safety clipping.
+- Keep recorded samples **editable and non-destructive** and included in the same \`motion_lab.layers\` ordered composition flow.
+- If project FPS/count changes, specify resample vs preserve frame-index behavior and test determinism. Do **not** silently shift recorded motion.
+- Pause/reapply must not compound motion. Manual Editor changes must still require an explicit Apply rebase.
+- Test four families: mathematical normalization, API preview/apply/save-reopen, interaction with presets/manual keyframes, and concurrency/security/payload limits.
+- **Gate ML2.0:** green CI; simulated sample series compiled frame-for-frame to native \`resolve_project_frame\`. No UI or gamepad assumptions.
+
+#### ML2.1 — Browser recording controls and keyboard/touch input
+
+Build a **dedicated Motion Recording card inside Motion Lab** and explicitly move it into \`panels.motion\`.
+
+Suggested first version: Start/Stop/Record, seek-to-frame, arm six axes, one or two thumb joysticks for X/Y, Z/pitch/yaw/roll controls, keyboard layout, per-axis sensitivity, deadzone, return/spring behavior, smoothing, optional pre-roll and a live frame/velocity status. Show a six-axis plot preview as input changes. **Responsive portrait mobile layout is mandatory.**
+
+Timing:
+- **The user's frame clock**, not GPU frame generation or a browser timestamp sequence, is the authoritative recording timeline.
+- \`requestAnimationFrame\` is a sampling/visual input mechanism only; translate monotonic elapsed recording time to discrete \`floor(elapsed * project_fps)\` or another documented mapping, including dropped/duplicate event handling.
+- Define playback speed separately from render FPS; when browser throttles/hides the page, stop or flag a gap. Do not backfill hidden frames with stale held input unnoticed.
+- Key-up/pointer-up/blur/visibilitychange must release input; do not leave a camera moving after focus loss.
+- Touch and keyboard input must work without HTTPS/gamepad permissions.
+- Consider brief post-release deceleration as explicit recorded samples (not implicit renderer behavior).
+- New recording can replace a take over a punch-in range or create a separate additive layer, but default action should not overwrite anything.
+- Draft/preview using the existing \`/motion-lab/preview\` and \`motion-lab-visual.js\` charts, and persist only when the user selects **Apply to Animation**.
+- A recording must be deterministic to replay regardless of input device, and must not depend on keeping a controller connected later.
+- **Gate ML2.1 physical:** record and replay 48 frames at 12 FPS using keyboard on Windows and touchscreen on phone; check axis signs, start/stop latency, released controls return to zero, frame alignment, undo/redo, Apply/save/reopen, and Mobile browser rotation/navigation.
+
+#### ML2.2 — Optional Gamepad API
+
+Read browser Gamepad API client-side with polling inside the actual user gesture/focused tab and clear opt-in, device indicator, calibration/deadzone/sensitivity mappings, axis inversion, triggers/bumpers, disconnect/reconnect handling. Do not implement host XInput bridge by default.
+
+**LAN caveat:** \`http://192.168.x.x:7865\` is often an **insecure origin**. Certain browsers restrict \`navigator.getGamepads\` to secure contexts, even with a controller physically connected. Gamepad availability depends on the browser and device the user is actually viewing, not merely the Windows box running Morphorum. Provide honest UI status and keyboard/touch fallback. If genuine LAN gamepad access is necessary, plan a supported local HTTPS dev/test path (including trusted cert), rather than falsely advertising support on plain HTTP.
+
+Use friend's Motion Studio \`controller.py\` and GUI behaviors as approved algorithmic reference, **calibrate axis/units** for Morphorum. Document vendoring/permissions if source actually copied.
+
+**Gate ML2.2 physical:** Windows browser with a known controller in a supported secure context, plus explicit fallback test on LAN HTTP and a phone with no controller. Verify no motion when disconnected, no spurious drift, correct trigger mapping and no double captures.
+
+#### ML2.3 — Punch-in, motion cleanup, take management
+
+- Arming/disarming individual axes, region-based punch-in/out, Add/Replace recording layers.
+- Sensitivity, smoothness, spring return and soft limiting without wiping intentional sharp movement.
+- Multiple takes and delete/rename/reorder; undo/redo remains stable.
+- Save/reopen and deterministic conversion to existing native tracks, with screenshots/video clips for UX acceptance.
+- No export or rendering feature creep in this phase.
+- **Gate:** CPU preview checks and one short SDXL/GPU render using recorded motion, verifying cadence/LoRA/timeline consistency, MP4 export, and no unrelated regressions.
+
+### Immediate first ML2 task
+
+1. **Read current source**, especially \`motion_lab.py\`, \`animation_projects.py\`, \`animation_resolution.py\`, \`frontend/dist/assets/animation.js\`, \`motion-lab-visual.js\`, and current tests; verify branch/ref status, not old docs.
+2. Choose exact \`recording\` sample schema and bounded FPS/memory semantics. Specify input-device-neutral samples and axis calibrations.
+3. Write normalization + frame-accuracy + preview/apply/resume regression tests **first**.
+4. Add a pure recording-series compiler to the existing Motion Lab \`compile_motion_lab\` layer loop.
+5. Submit on **\`feature/motion-lab\`**, leave PR #19 **draft**, wait for physical acceptance before further milestones or merging.
+
+### ML2 acceptance checklist (overview)
+
+| Scenario | Expected |
+| --- | --- |
+| Keyboard/touch controlled motion | Correct six axes, visible movement in Motion Lab preview |
+| Record at 12 FPS | Exactly frame-aligned samples, no dependence on machine/GPU inference speed |
+| Pause/stop/focus loss | No stuck inputs, clock behavior documented and testable |
+| Blend with Spiral + smooth keyframe curve | Respect layer order, Add/Replace, limits and clipping warnings |
+| Undo/redo, save/reopen | Take survives without altering applied tracks until explicit Apply |
+| Switch FPS or frame count | Explicit validated policy; no silent time shifts |
+| Browser Gamepad not available | Useful fallback and clear message; no broken Motion Lab controls |
+| 3D calibration-grid preview | Input velocities match actual compiled native camera schedules |
+| Windows RTX 4080 SUPER short run | Stable existing SDXL/LoRA/cadence/3D rendering, correct export |
+| Mobile portrait browser | No oversized checkboxes, scrolling bugs, misplaced cards or impossible touch targets |
+| GitHub CI + branch protection | Both workflows green at exact PR head; checkpoint before merge |
+
+---
+
+## 7. Separate work and what's intentionally NOT in ML2
+
+### B6 status
+
+- B6.1 Deforum JSON import implemented.
+- B6.2 source-video upload/inspect/FFmpeg extraction Windows validated.
+- B6.3.1 extracted frames as diffusion anchors accepted.
+- B6.3.2 hybrid-video opacity blending and source replacement regression accepted, merged to \`dev-ui\` in PR #18 at \`bc40d18\`.
+- B6.3.3 **hybrid masks** planned separately and **PAUSED** on \`feature/b6-3-3-hybrid-masks\` with \`docs/B6_3_3_HYBRID_MASKS_ROADMAP.md\` on that branch.
+- B6.4 compatibility/stability follows later. **Do not accidentally begin B6.3.3 or B6.4 while the user focuses on Motion Lab.**
+- The Media UI is deliberately hidden only on Motion Lab branch, for focus. Do not delete the APIs or user source media.
+
+### Later Motion Lab phases
+
+- **ML3** audio-reactive motion: upload audio/FFmpeg decode/CPU bass envelope, transient pulses with attack/release, returning pulses without permanent travel drift; persist as independent layers and time-lock to project frames. No GPU audio model.
+- **ML4** polished custom presets, Deforum six-axis settings export, deep 3D depth/cadence/LoRA/GPU regression tests, official Motion Lab PR review/integration.
+- Optional future features, **not part of ML2**: true physically calibrated 3D path editing, automatic subject tracking, RAFT optical flow, Bezier absolute-camera rigs, ControlNet, RIFE/FILM, multi-video composites.
+
+---
+
+## 8. Known limitations, pitfalls and guardrails
+
+1. **Reference-grid preview ≠ generated video.** It is a CPU diagnostic; depth/cadence/diffusion outputs can differ.
+2. **Geometric camera path is auto-fit**: visualized accumulated motion, not absolute calibrated space. Dragging X/Y changes *per-frame* velocity at a frame and affects downstream positions.
+3. **High-quality smooth interpolation already works**: preserve \`linear\`, \`hold\`, \`smoothstep\`, \`smootherstep\`, \`cubic\` semantics; do not replace it with decorative SVG splines.
+4. **Motion Lab UI card placement matters**: dynamic tabs require explicit reparenting; test in desktop/phone.
+5. **Project conflict handling is intentional**: Preview accepts recent unsaved Editor motion; Apply requires explicit confirmation when applied tracks were modified. Preserve idempotent Apply.
+6. **3D-only composer** as currently built. New recording controls should follow this until explicit 2D conversion semantics are designed.
+7. **Frame 0 fixed**, limited camera velocities, bounded 3000-frame compositions and 24 layers. Do not feed unvalidated controller floats directly into project schedules.
+8. **No browser Gamepad promise over plain LAN HTTP.** Fallback must work.
+9. **Old docs are stale.** The historical \`handoff.md\` before this update and \`docs/CURRENT_STATUS.md\` describe earlier B6 states (some falsely say compositing not implemented). Current source, frozen checkpoints, this updated handoff and \`docs/MOTION_LAB_ROADMAP.md\` take precedence. Previous root handoff remains retrievable from Git history at [the accepted checkpoint](https://github.com/merberg-ai/Morphorum/blob/c0e5f90a692e14e32b48155f71d0a8afc923c6ae/handoff.md).
+10. **Branch hygiene**: no force-push/reset/merge without explicit user acceptance; keep \`main\`, \`dev-ui\`, paused B6 branches and recovery checkpoints intact.
+11. **UI and browser navigation were human-tested** on the Windows host. Remote CI has no GPU; actual recording/gamepad/SDXL GPU features still need physical tests.
+
+---
+
+## 9. Source, test and documentation links
+
+- [Morphorum repo](https://github.com/merberg-ai/Morphorum)
+- [Motion Lab active branch](https://github.com/merberg-ai/Morphorum/tree/feature/motion-lab)
+- [Draft PR #19](https://github.com/merberg-ai/Morphorum/pull/19)
+- [ML1b accepted checkpoint](https://github.com/merberg-ai/Morphorum/tree/checkpoint/motion-lab-ml1b-smoothing-windows-verified-20261009)
+- [Motion Lab roadmap](https://github.com/merberg-ai/Morphorum/blob/feature/motion-lab/docs/MOTION_LAB_ROADMAP.md)
+- [Friend's Motion Studio](https://github.com/chicodog530/Deforum-Motion-Studio)
+- [Frozen B6.3.3 planning branch](https://github.com/merberg-ai/Morphorum/tree/feature/b6-3-3-hybrid-masks)
+- [Earlier B6 handoff in Git history](https://github.com/merberg-ai/Morphorum/blob/c0e5f90a692e14e32b48155f71d0a8afc923c6ae/handoff.md)
+
+---
+
+## 10. Paste this into the next chat
+
+> Continue development of Morphorum Motion Lab from \`feature/motion-lab\`, using the current repository-root \`handoff.md\` and \`docs/MOTION_LAB_ROADMAP.md\` as handoff. We have completed and physically verified ML0, ML1a, ML1b and the smoothing/checkbox fixes. The latest frozen checkpoint is \`checkpoint/motion-lab-ml1b-smoothing-windows-verified-20261009\` at \`c0e5f90a692e14e32b48155f71d0a8afc923c6ae\`. PR #19 targets \`dev-ui\` and remains draft; \`main\` and \`dev-ui\` must not change yet. B6.3.3 hybrid masks remain paused. Begin **ML2: live camera motion recording**, first planning a versioned, frame-accurate \`recording\` layer integrated with the existing six-axis composer and native renderer, then keyboard/touch capture and optionally gamepads. Keep it desktop/mobile friendly, do not create another renderer, run CI, and stop for physical Windows acceptance before merging.
+
+**End handoff. No ML2 work has been started.**
