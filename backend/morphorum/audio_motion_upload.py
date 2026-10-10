@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 import wave
 
-from .audio_motion import AudioMotionError, frame_envelope
+from .audio_motion import AudioMotionError, frame_envelope, spectral_band_envelopes
 from .animation_projects import animation_project_directory
 
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
@@ -51,6 +51,7 @@ def analyze_managed_wav(project_id: str, data: bytes, *, fps: float, frames: int
             total += value
         pcm.append(total / channels)
     result = frame_envelope(pcm, sample_rate=rate, fps=fps, max_frames=frames)
+    result["bands"] = spectral_band_envelopes(pcm, sample_rate=rate, fps=fps, max_frames=frames)
     source_sha256 = hashlib.sha256(data).hexdigest()
     folder = animation_project_directory(project_id) / "motion_lab_audio"
     folder.mkdir(parents=True, exist_ok=True)
