@@ -1919,6 +1919,163 @@ dialog#animation-deforum-dialog {
 .animation-workspace-nav {max-width:1260px;margin:0 auto 15px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;position:sticky;top:90px;z-index:15;padding:6px;border:1px solid var(--border);border-radius:13px;background:var(--panel-strong);}
 .animation-workspace-nav button {min-width:0;min-height:43px;padding:9px 11px;background:transparent;border:0;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:600;}
 .animation-workspace-nav button.active {color:#091016;background:linear-gradient(135deg,var(--accent),#85e5ff);}
+.animation-workspace-nav button[data-animation-tab="motion"]:not(.active) {color:var(--accent);background:rgba(40,185,218,.08);border:1px solid rgba(40,185,218,.22);}
+.animation-workspace-nav button[data-animation-tab="motion"].active {font-weight:800;}
+#animation-media-vault {display:none!important;}
+#animation-panel-motion {display:grid;gap:14px;}
+#animation-panel-motion .animation-motion-preview-card {min-width:0;}
+.animation-motion-lab-composer {padding:18px;min-width:0;}
+.animation-motion-lab-composer .card-header {display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
+.animation-motion-lab-composer .card-header h2 {margin:0 0 5px;}
+.animation-motion-lab-composer .card-header p {max-width:780px;line-height:1.5;}
+.animation-motion-lab-fields {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0;}
+.animation-motion-lab-fields label {display:grid;gap:5px;font-size:.8rem;min-width:0;}
+.animation-motion-lab-fields label span {color:var(--muted);}
+.animation-motion-lab-fields input,.animation-motion-lab-fields select {width:100%;min-width:0;}
+.animation-motion-lab-actions {display:flex;gap:9px;flex-wrap:wrap;margin:12px 0;}
+.animation-motion-lab-actions button {min-height:42px;}
+.animation-motion-lab-layer-list {display:grid;gap:6px;margin:12px 0;font-size:.82rem;color:var(--muted);}
+.animation-motion-lab-layer {display:flex;gap:12px;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:9px;padding:8px 10px;min-width:0;}
+.animation-motion-lab-layer span {min-width:0;overflow-wrap:anywhere;text-transform:capitalize;}
+.animation-motion-lab-layer button {flex:0 0 auto;}
+.animation-motion-lab-layer-actions {display:flex;gap:6px;align-items:center;flex:0 0 auto;flex-wrap:wrap;}
+.animation-motion-lab-layer-toggle {display:flex;align-items:center;gap:5px;color:var(--muted);font-size:.76rem;cursor:pointer;}
+.animation-motion-lab-layer-toggle input {accent-color:var(--accent);width:15px;height:15px;}
+.animation-motion-lab-recording {padding:18px;min-width:0;}
+.animation-motion-lab-recording .card-header {display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+.animation-motion-recording-controls {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0;}
+.animation-motion-recording-controls > label {display:grid;gap:5px;font-size:.8rem;min-width:0;}
+.animation-motion-recording-controls > label > span {color:var(--muted);}
+.animation-motion-recording-controls input:not([type="checkbox"]),.animation-motion-recording-controls select {width:100%;min-width:0;}
+.animation-motion-record-gamepad {display:flex!important;align-items:center;gap:8px;align-content:end;padding:10px;border:1px solid var(--border);border-radius:9px;color:var(--muted);}
+.animation-motion-record-gamepad input,.animation-motion-axis-arms input,.animation-motion-axis-inverts input {width:16px;height:16px;flex:0 0 16px;accent-color:var(--accent);}
+.animation-motion-axis-arms {border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin:10px 0;display:flex;gap:8px 14px;flex-wrap:wrap;}
+.animation-motion-axis-arms legend {padding:0 5px;color:var(--muted);font-size:.76rem;}
+.animation-motion-axis-arms label,.animation-motion-axis-inverts label {display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted);}
+.animation-motion-axis-invert-details {margin:8px 0 12px;border:1px solid var(--border);border-radius:9px;padding:7px 10px;}
+.animation-motion-axis-invert-details summary {cursor:pointer;color:var(--muted);font-size:.78rem;}
+.animation-motion-axis-inverts {display:flex;gap:8px 14px;flex-wrap:wrap;padding-top:9px;}
+.animation-motion-recording-actions {display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:12px 0;}
+.animation-motion-recording-actions button {min-height:42px;}
+.animation-motion-live-monitor {margin:12px 0;padding:12px;border:1px solid rgba(90,200,230,.36);border-radius:10px;background:rgba(36,150,195,.08);display:grid;gap:5px;min-width:0;}
+.animation-motion-live-monitor strong {font-size:.88rem;color:var(--accent);}
+.animation-motion-live-monitor > div {font-variant-numeric:tabular-nums;font-size:.84rem;line-height:1.6;overflow-wrap:anywhere;}
+.animation-motion-live-monitor p {margin:0;font-size:.78rem;}
+.animation-motion-controller-grid {display:grid;grid-template-columns:minmax(150px,220px) minmax(150px,220px) minmax(190px,1fr);gap:16px;align-items:center;margin:16px 0;}
+.animation-motion-stick-wrap {display:grid;gap:7px;justify-items:center;}
+.animation-motion-stick-wrap strong,.animation-motion-hold-controls strong {font-size:.78rem;color:var(--muted);}
+.animation-motion-stick {width:min(180px,100%);aspect-ratio:1;border-radius:50%;border:1px solid rgba(125,220,255,.45);background:radial-gradient(circle at center,rgba(63,190,223,.13) 0 12%,transparent 13% 48%,rgba(63,190,223,.08) 49% 51%,transparent 52%),linear-gradient(rgba(255,255,255,.04),rgba(255,255,255,.01));position:relative;touch-action:none;user-select:none;overscroll-behavior:contain;cursor:crosshair;}
+.animation-motion-stick::before,.animation-motion-stick::after {content:"";position:absolute;background:rgba(158,217,232,.18);pointer-events:none;}
+.animation-motion-stick::before {left:50%;top:10%;bottom:10%;width:1px;}
+.animation-motion-stick::after {top:50%;left:10%;right:10%;height:1px;}
+.animation-motion-stick-knob {position:absolute;left:50%;top:50%;width:42px;height:42px;margin:-21px;border-radius:50%;border:1px solid rgba(140,231,255,.8);background:rgba(63,190,223,.25);box-shadow:0 0 18px rgba(63,190,223,.18);pointer-events:none;transition:transform .04s linear;}
+.animation-motion-hold-controls {display:grid;gap:9px;justify-items:start;}
+.animation-motion-hold-controls > div {display:grid;grid-template-columns:repeat(2,minmax(74px,1fr));gap:8px;width:100%;max-width:280px;}
+.animation-motion-hold-controls button {min-height:48px;touch-action:none;}
+.animation-motion-hold-controls button.active {border-color:var(--accent);box-shadow:0 0 0 1px rgba(62,204,238,.28);}
+.animation-motion-recording-help {display:grid;gap:4px;margin-top:10px;}
+.animation-motion-gamepad-status {margin:9px 0 0;font-size:.76rem;}
+@media(max-width:900px){.animation-motion-recording-controls {grid-template-columns:repeat(2,minmax(0,1fr));}.animation-motion-controller-grid {grid-template-columns:repeat(2,minmax(0,1fr));}.animation-motion-hold-controls {grid-column:1/-1;justify-items:center;}}
+@media(max-width:640px){.animation-motion-recording-controls {grid-template-columns:minmax(0,1fr);}.animation-motion-controller-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}.animation-motion-stick {width:100%;max-width:160px;}.animation-motion-hold-controls {grid-column:1/-1;}.animation-motion-hold-controls > div {max-width:none;}.animation-motion-recording-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}.animation-motion-recording-actions span {grid-column:1/-1;}.animation-motion-recording-actions button {min-height:48px;}.animation-motion-axis-arms {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:390px){.animation-motion-controller-grid {grid-template-columns:minmax(0,1fr);}.animation-motion-hold-controls {grid-column:1;}.animation-motion-stick {max-width:190px;}}
+
+.animation-motion-lab-visual {padding:18px;min-width:0;}
+.animation-motion-lab-visual .card-header {display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.animation-motion-lab-visual .card-header p {max-width:750px;line-height:1.45;}
+.animation-motion-lab-curve-editor {margin:16px 0;border:1px solid var(--border);border-radius:12px;padding:14px;background:rgba(27,52,67,.17);}
+.animation-motion-lab-curve-fields {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.animation-motion-lab-curve-fields label {display:grid;gap:5px;min-width:0;color:var(--muted);font-size:.79rem;}
+.animation-motion-lab-curve-fields input,.animation-motion-lab-curve-fields select {width:100%;min-width:0;}
+.animation-motion-lab-curve-actions {display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0;}
+.animation-motion-lab-curve-actions button {min-height:39px;}
+.animation-motion-lab-edit-toggle {display:flex;align-items:center;gap:7px;font-size:.81rem;cursor:pointer;}
+/* Global form input rules were inflating native checkboxes to oversized
+   desktop controls. Scope a fixed native checkbox size to Motion Lab only. */
+#animation-panel-motion .animation-motion-lab-edit-toggle input[type="checkbox"],
+#animation-panel-motion .animation-motion-lab-loop input[type="checkbox"],
+#animation-panel-motion .animation-motion-lab-layer-toggle input[type="checkbox"] {
+  appearance:auto;
+  width:16px;
+  height:16px;
+  min-width:16px;
+  min-height:16px;
+  max-width:16px;
+  max-height:16px;
+  padding:0;
+  margin:0;
+  flex:0 0 16px;
+  box-sizing:border-box;
+  accent-color:var(--accent);
+}
+.animation-motion-lab-edit-toggle input {accent-color:var(--accent);}
+.animation-motion-lab-key-list {display:flex;flex-wrap:wrap;gap:6px;max-height:92px;overflow-y:auto;padding:5px 0;}
+.animation-motion-lab-key-list button {font-variant-numeric:tabular-nums;font-size:.74rem;min-height:32px;}
+.animation-motion-lab-key-help {font-size:.76rem;line-height:1.5;margin:10px 0 0;}
+.animation-motion-lab-curves:focus-visible {outline:2px solid var(--accent);outline-offset:3px;}
+@media(max-width:850px) {.animation-motion-lab-curve-fields {grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:540px) {
+  .animation-motion-lab-curve-editor {padding:10px;}
+  .animation-motion-lab-curve-fields {grid-template-columns:minmax(0,1fr);}
+  .animation-motion-lab-curve-actions button {flex:1 1 135px;}
+  .animation-motion-lab-edit-toggle {flex:1 1 100%;}
+}
+.animation-motion-lab-playbar {display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0;}
+.animation-motion-lab-playbar > button {min-width:78px;min-height:38px;}
+.animation-motion-lab-loop {display:flex;align-items:center;gap:6px;font-size:.81rem;white-space:nowrap;}
+.animation-motion-lab-scrubber {display:flex;align-items:center;gap:10px;flex:1 1 220px;min-width:0;font-size:.82rem;}
+.animation-motion-lab-scrubber input {flex:1;min-width:0;width:100%;accent-color:var(--accent);touch-action:pan-y;}
+#animation-motion-lab-frame-value {font-size:.83rem;min-width:62px;font-variant-numeric:tabular-nums;}
+#animation-motion-lab-time-value {font-size:.82rem;min-width:46px;font-variant-numeric:tabular-nums;}
+.animation-motion-lab-visual-grid {display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;}
+.animation-motion-lab-svg-wrap {min-width:0;border:1px solid var(--border);border-radius:11px;background:rgba(6,12,18,.37);padding:10px;}
+.animation-motion-lab-svg-wrap h3 {font-size:.83rem;margin:2px 0 10px;}
+.animation-motion-lab-svg {display:block;width:100%;max-width:100%;height:auto;min-width:0;touch-action:none;overflow:visible;}
+.animation-motion-lab-svg[data-stale="true"] {opacity:.43;}
+.animation-motion-lab-curves {cursor:crosshair;}
+.animation-motion-lab-legend {display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:.74rem;margin-top:9px;}
+.animation-motion-lab-legend span {font-weight:700;}
+.animation-motion-lab-legend .ml1-tx {color:#46d5e5;}
+.animation-motion-lab-legend .ml1-ty {color:#e596d7;}
+.animation-motion-lab-legend .ml1-tz {color:#f7c265;}
+.animation-motion-lab-legend .ml1-rx {color:#77aeff;}
+.animation-motion-lab-legend .ml1-ry {color:#a998fa;}
+.animation-motion-lab-legend .ml1-rz {color:#87dfb3;}
+.animation-motion-lab-visual-note {font-size:.72rem;line-height:1.35;}
+.animation-motion-lab-readout {display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0;font-size:.75rem;color:var(--muted);}
+.animation-motion-lab-axis-value {border-left:3px solid var(--accent);border-radius:4px;padding:5px 8px;background:rgba(15,25,38,.5);font-variant-numeric:tabular-nums;}
+@media(max-width:980px) {.animation-motion-lab-visual-grid {grid-template-columns:minmax(0,1fr);}}
+@media(max-width:540px) {
+  .animation-motion-lab-visual {padding:12px;}
+  .animation-motion-lab-playbar {gap:8px;}
+  .animation-motion-lab-scrubber {order:2;flex:1 1 100%;}
+  .animation-motion-lab-svg-wrap {padding:6px;}
+  .animation-motion-lab-layer-actions {justify-content:flex-start;}
+  .animation-motion-lab-layer {flex-wrap:wrap;}
+  .animation-motion-lab-layer-actions {width:100%;}
+}
+.animation-motion-lab-head-actions {display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;}
+.animation-motion-lab-head-actions button {min-height:36px;}
+.animation-motion-lab-diagnostics {font-size:.8rem;line-height:1.5;margin-top:12px;}
+@media(max-width:850px) {.animation-motion-lab-fields {grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:540px) {.animation-motion-lab-composer {padding:12px;} .animation-motion-lab-fields {grid-template-columns:minmax(0,1fr);} .animation-motion-lab-actions button {flex:1 1 140px;} .animation-motion-lab-layer {align-items:flex-start;}}
+
+#animation-panel-motion .animation-motion-preview-card .card-header {gap:12px;flex-wrap:wrap;}
+.animation-motion-lab-intro {padding:21px;min-width:0;}
+.animation-motion-lab-heading {display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+.animation-motion-lab-heading > div {min-width:0;}
+.animation-motion-lab-heading h2 {font-size:clamp(1.15rem,2.5vw,1.65rem);margin:5px 0 8px;}
+.animation-motion-lab-heading .muted {max-width:750px;line-height:1.55;}
+.animation-motion-lab-stage {flex:0 0 auto;align-self:flex-start;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.72rem;color:var(--muted);}
+.animation-motion-lab-quick-actions {display:flex;gap:9px;flex-wrap:wrap;margin:15px 0 8px;}
+.animation-motion-lab-quick-actions button {min-height:42px;}
+.animation-motion-lab-note {font-size:.78rem;margin-top:7px;}
+#animation-timeline-card,#animation-3d-camera-card {scroll-margin-top:160px;}
+@media(max-width:640px) {
+  .animation-motion-lab-intro {padding:14px;}
+  .animation-motion-lab-heading {flex-direction:column;gap:8px;}
+  .animation-motion-lab-quick-actions button {flex:1 1 160px;}
+  #animation-timeline-card,#animation-3d-camera-card {scroll-margin-top:32px;}
+}
 .animation-workspace-panel {max-width:1260px;margin:0 auto;min-width:0;}
 .animation-workspace-panel[hidden] {display:none!important;}
 .animation-monitor-panel {display:block;}
@@ -1949,3 +2106,84 @@ dialog#animation-deforum-dialog {
 }
 
 @media(max-width:640px) { .animation-workspace-nav {position:static;} }
+
+/* ML2: persistent, viewport-local actions without separating the take from review. */
+#animation-panel-motion {position:relative;}
+.animation-motion-lab-quick-actions {
+  position:sticky;bottom:8px;z-index:16;
+  display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px;
+  margin:12px auto 8px;padding:10px 12px;width:max-content;max-width:calc(100% - 16px);
+  border:1px solid rgba(110,195,225,.48);border-radius:12px;
+  background:rgba(15,22,34,.96);box-shadow:0 5px 22px rgba(0,0,0,.38);
+  backdrop-filter:blur(12px);
+}
+.animation-motion-lab-quick-actions button {white-space:nowrap;min-height:36px;padding:7px 12px;}
+.animation-motion-lab-quick-actions #animation-motion-lab-quick-status {font-size:.73rem;white-space:nowrap;}
+@media(max-width:640px) {
+  .animation-motion-lab-quick-actions {bottom:4px;gap:5px;padding:8px;width:calc(100% - 8px);}
+  .animation-motion-lab-quick-actions button {flex:1 1 auto;min-height:42px;padding:8px 6px;font-size:.78rem;}
+  .animation-motion-lab-quick-actions #animation-motion-lab-quick-status {width:100%;text-align:center;}
+}
+
+/* Mobile bottom navigation owns the viewport footer; desktop alone gets the sticky dock. */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  .animation-motion-lab-quick-actions { display: none !important; }
+}
+
+/* ML2.3 recording-take management: inline, nonmodal rename. */
+.animation-motion-take-rename {display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;width:100%;}
+.animation-motion-take-rename input {flex:1 1 180px;min-width:0;max-width:360px;padding:8px;}
+.animation-motion-take-rename button {min-height:34px;}
+@media(max-width:540px) {.animation-motion-take-rename input {flex-basis:100%;max-width:none;}}
+
+/* ML3.1 audio analysis card: compact on desktop, thumb-friendly on mobile. */
+.animation-motion-lab-audio {padding:18px;min-width:0;}
+.animation-motion-audio-controls {display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0;}
+.animation-motion-audio-controls label {display:flex;flex-direction:column;gap:5px;min-width:0;}
+.animation-motion-audio-controls input,.animation-motion-audio-controls select {width:100%;min-width:0;}
+@media(max-width:540px) {.animation-motion-lab-audio {padding:12px;}.animation-motion-audio-controls {grid-template-columns:minmax(0,1fr);}}
+
+.animation-motion-audio-preview {margin:14px 0;padding:12px;border:1px solid rgba(115,213,237,.26);border-radius:12px;background:rgba(10,20,32,.35);}
+.animation-motion-audio-preview[hidden] {display:none;}
+.animation-motion-audio-preview-header {display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;justify-content:space-between;margin-bottom:10px;}
+#animation-motion-lab-audio-plot {display:block;width:100%;height:220px;border-radius:7px;background:rgba(5,13,24,.38);}
+.animation-motion-audio-legend {display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;font-size:.78rem;}
+.animation-motion-audio-legend span:first-child {color:#73d5ed;}
+.animation-motion-audio-legend span:nth-child(2) {color:#ff857c;}
+.animation-motion-audio-legend span:nth-child(3) {color:#ffbd69;}
+#animation-motion-lab-audio-prediction {margin:8px 0 0;}
+@media(max-width:540px) {#animation-motion-lab-audio-plot {height:155px;}.animation-motion-audio-preview {padding:8px;}}
+
+.animation-motion-audio-playback {display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0;font-size:.86rem;}
+.animation-motion-audio-playback label {display:inline-flex;align-items:center;gap:8px;}
+.animation-motion-audio-playback input[type=checkbox] {width:16px;height:16px;}
+@media(max-width:540px) {.animation-motion-audio-playback {align-items:flex-start;flex-direction:column;}}
+
+.animation-motion-gif-sync {display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px;font-size:.83rem;}
+.animation-motion-gif-sync label {display:inline-flex;align-items:center;gap:6px;}
+.animation-motion-gif-sync input[type=checkbox] {width:16px;height:16px;}
+@media(max-width:540px) {.animation-motion-gif-sync {flex-direction:column;align-items:flex-start;}.animation-motion-gif-sync button {width:100%;min-height:42px;}}
+
+.motion-audio-help {display:inline-block;position:relative;vertical-align:middle;margin-left:4px;font-weight:normal;}
+.motion-audio-help summary {display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:.8rem;width:22px;height:22px;border:1px solid currentColor;border-radius:50%;list-style:none;opacity:.83;}
+.motion-audio-help summary::-webkit-details-marker {display:none;}
+.motion-audio-help[open] {z-index:30;}
+.motion-audio-help p {position:absolute;left:0;top:100%;z-index:40;width:min(290px,78vw);padding:12px;border:1px solid #4e748f;border-radius:10px;background:#182431;color:#ecf3fb;box-shadow:0 8px 25px rgba(0,0,0,.55);font-size:.83rem;font-weight:normal;line-height:1.5;}
+@media(max-width:540px) {.motion-audio-help p {left:auto;right:-10px;max-width:75vw;}}
+
+/* Duration-match checkbox is a compact boolean control, never an auto-sized grid input. */
+.animation-motion-audio-length {display:flex;flex-direction:column;gap:7px;align-self:start;min-width:0;}
+.animation-motion-audio-length > label {display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:7px;min-width:0;}
+.animation-motion-audio-length input[type="checkbox"] {display:inline-block;flex:0 0 17px;width:17px!important;height:17px!important;min-width:17px;max-width:17px;min-height:17px;max-height:17px;margin:0;accent-color:#5ed4ee;vertical-align:middle;}
+.animation-motion-audio-length .motion-audio-help {flex:0 0 auto;}
+#animation-motion-lab-visual .animation-motion-audio-playback {margin:10px 0 15px;padding:9px 12px;border:1px solid rgba(115,213,237,.18);border-radius:9px;}
+
+/* ML3.3 frame-addressable diagnostic camera preview */
+.animation-motion-frame-player {display:grid;gap:10px;min-width:0;}
+.animation-motion-frame-player[hidden] {display:none;}
+#animation-motion-frame-image {display:block;max-width:100%;width:auto;max-height:65vh;object-fit:contain;border-radius:8px;margin:auto;}
+.animation-motion-player-actions {display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.animation-motion-player-actions label {display:inline-flex;align-items:center;gap:6px;}
+.animation-motion-player-actions input[type=checkbox] {width:16px;height:16px;}
+#animation-motion-frame-scrub {display:block;width:100%;min-width:0;accent-color:#63d4e9;}
+@media(max-width:540px) {.animation-motion-player-actions button {min-height:42px;}}

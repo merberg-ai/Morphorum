@@ -271,9 +271,9 @@ def test_b53_camera_preview_simulates_cpu_depth_and_tracks_coverage(
 def test_b53_camera_preview_rejects_unbounded_frame_counts(
     tmp_path: Path,
 ) -> None:
-    project = sample_project(max_frames=181)
+    project = sample_project(max_frames=3001)
     project["animation"]["mode"] = "3d"
-    with pytest.raises(MotionPreviewError, match="up to 180 frames"):
+    with pytest.raises(MotionPreviewError, match="up to 3000"):
         render_motion_preview(
             project, Image.new("RGB", (32, 32), "red"), tmp_path / "too-long.gif",
         )
@@ -291,3 +291,76 @@ def test_b53_legacy_2d_preview_result_unchanged(
     assert result["border_mode"] == "replicate"
     assert result["source_frames"] == 4
     assert "average_coverage" not in result
+
+
+def test_motion_lab_calibration_grid_is_visible_and_bounded() -> None:
+    from morphorum.animation_motion import create_motion_reference_grid
+    grid = create_motion_reference_grid(1024, 1536)
+    assert grid.size == (213, 320)
+    assert grid.mode == "RGB"
+    colors = grid.getcolors(maxcolors=100_000)
+    assert colors is not None and len(colors) >= 4
+
+
+def test_motion_lab_preview_without_uploaded_source_uses_grid(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import time
+    import morphorum.animation_motion as motion
+    from morphorum.animation_motion import MotionPreviewManager
+
+    monkeypatch.setattr(motion, "OUTPUTS_DIR", tmp_path)
+    manager = MotionPreviewManager()
+    project = sample_project(max_frames=6)
+    project["animation"]["mode"] = "2d"
+    started = manager.start(project=project, source_path=None)
+    job = manager.get(started["id"])
+    for _ in range(150):
+        if job["status"] in {"completed", "failed"}:
+            break
+        time.sleep(.02)
+        job = manager.get(started["id"])
+    assert job["status"] == "completed", job
+    assert job["result"]["source_kind"] == "calibration-grid"
+    assert job["result"]["source_frames"] == 6
+    assert manager.result_path(started["id"]).is_file()
+    assert manager.frame_path(started["id"], 0).is_file()
+    with Image.open(manager.frame_path(started["id"], 0)) as seekable:
+        assert seekable.format == "PNG"
+    with pytest.raises(MotionPreviewError, match="index out of range"):
+        manager.frame_path(started["id"], -1)
+    with pytest.raises(MotionPreviewError, match="not found"):
+        manager.frame_path(started["id"], 71)
+    with Image.open(manager.result_path(started["id"])) as preview:
+        assert getattr(preview, "is_animated", False)
+
+
+def test_long_3d_preview_is_accepted_without_running_heavy_depth_work(tmp_path, monkeypatch):
+    import morphorum.animation_motion as motion
+
+    monkeypatch.setattr(motion, "OUTPUTS_DIR", tmp_path)
+    spawned = []
+    class NoStartThread:
+        def __init__(self, **kwargs):
+            spawned.append(kwargs)
+        def start(self):
+            pass
+    monkeypatch.setattr(motion.threading, "Thread", NoStartThread)
+    manager = motion.MotionPreviewManager()
+    project = sample_project(max_frames=196)
+    project["animation"]["mode"] = "3d"
+    accepted = manager.start(project=project, source_path=None)
+    assert accepted["id"]
+    assert spawned
+    project["animation"]["max_frames"] = motion.PREVIEW_MAX_3D_SOURCE_FRAMES
+    assert manager.start(project=project, source_path=None)["id"]
+    project["animation"]["max_frames"] = motion.PREVIEW_MAX_3D_SOURCE_FRAMES + 1
+    with pytest.raises(MotionPreviewError, match="3000 frames"):
+        manager.start(project=project, source_path=None)
+
+
+def test_long_preview_capture_is_bounded_but_includes_endpoints():
+    positions = capture_frames(196, 72)
+    assert len(positions) <= 72
+    assert positions[0] == 0
+    assert positions[-1] == 195

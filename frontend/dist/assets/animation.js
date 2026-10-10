@@ -496,6 +496,7 @@
     renderTimeline();
     renderDepthState();
     renderSourceState();
+    renderMotionLabDraft();
   }
 
   function timelineStatus(text, kind = '') {
@@ -1872,6 +1873,7 @@
 
   function fillForm() {
     const project = state.project;
+    syncMotionLabDraft();
     state.loading = true;
     try {
       renderProjectSelect();
@@ -2375,9 +2377,11 @@
       : (requiresSource ? 'No starting image uploaded.' : 'No image uploaded. Prompt mode does not require one.');
     if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
-    if (preview) preview.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    // A source photo is optional: Motion Lab falls back to a calibration grid.
+    if (preview) preview.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     const overlay = qs('#animation-preview-highlight-holes');
-    if (overlay) overlay.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    if (overlay) overlay.disabled = !state.project || animationMode() !== '3d' ||
+      Boolean(state.motionJobId) || renderActive || state.depthBusy;
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
@@ -2385,7 +2389,84 @@
     }
   }
 
+  let motionFramePlayer = null;
+  function ensureMotionFramePlayer() {
+    if (motionFramePlayer || !window.MorphorumMotionFramePlayer) return motionFramePlayer;
+    const root = qs('#animation-motion-frame-player');
+    if (!root) return null;
+    motionFramePlayer = new window.MorphorumMotionFramePlayer({
+      root,
+      image: qs('#animation-motion-frame-image'),
+      play: qs('#animation-motion-frame-play'),
+      reset: qs('#animation-motion-frame-reset'),
+      loop: qs('#animation-motion-frame-loop'),
+      scrub: qs('#animation-motion-frame-scrub'),
+      time: qs('#animation-motion-frame-time'),
+      getAudio: () => motionLabAudioProjectId === state.project?.id ? motionLabAudioElement : null,
+      shouldSync: () => Boolean(qs('#animation-motion-lab-audio-sync')?.checked),
+      status: message => motionGifSyncStatus(message),
+    });
+    return motionFramePlayer;
+  }
+  let motionGifSyncRun = 0;
+  let motionGifPreviewUrl = null;
+  let motionGifPreviewFps = null;
+  function motionGifSyncStatus(message) {
+    const node = qs('#animation-motion-gif-sync-status');
+    if (node) node.textContent = message;
+  }
+  async function replayMotionGifWithAudio() {
+    const image = qs('#animation-motion-preview-image');
+    if (!image || !motionGifPreviewUrl) {
+      motionGifSyncStatus('Generate a Camera Motion Preview first.');
+      return;
+    }
+    if (motionFramePlayer?.jobId) {
+      motionFramePlayer.seek(0);
+      motionFramePlayer.play();
+      return;
+    }
+    const run = ++motionGifSyncRun;
+    const audio = motionLabAudioElement;
+    const synced = audio && motionLabAudioProjectId === state.project?.id &&
+      qs('#animation-motion-lab-audio-sync')?.checked;
+    // GIF playback cannot be paused or frame-seeked. Reloading the GIF at
+    // the same time as the audio is a best-effort start synchronization.
+    if (audio) {
+      audio.pause();
+      if (audio.readyState >= 1) audio.currentTime = 0;
+    }
+    image.removeAttribute('src');
+    // Wait for the browser to be able to start the GIF, not an elapsed timeout.
+    const next = new Image();
+    next.onload = async () => {
+      if (run !== motionGifSyncRun || !qs('#animation-motion-result') ||
+          qs('#animation-motion-result').hidden) return;
+      image.src = next.src;
+      if (!synced) {
+        motionGifSyncStatus('Preview restarted without audio. Analyze WAV and enable audio sync.');
+        return;
+      }
+      try {
+        audio.currentTime = 0;
+        await audio.play();
+        if (run === motionGifSyncRun) {
+          motionGifSyncStatus('GIF and WAV restarted together (approximate sync; GIF timing is browser-dependent).');
+        }
+      } catch (error) {
+        motionGifSyncStatus('Audio could not play: ' + (error?.message || String(error)));
+      }
+    };
+    next.onerror = () => motionGifSyncStatus('Preview GIF failed to load.');
+    next.src = motionGifPreviewUrl + (motionGifPreviewUrl.includes('?') ? '&' : '?') +
+      'sync=' + Date.now() + '-' + run;
+  }
   function clearMotionPreviewResult() {
+    motionFramePlayer?.clear();
+    motionGifSyncRun++;
+    motionGifPreviewUrl = null;
+    motionGifPreviewFps = null;
+    motionLabAudioElement?.pause();
     window.clearTimeout(state.motionPollTimer);
     state.motionPollTimer = null;
     state.motionJobId = null;
@@ -2491,12 +2572,24 @@
       const image = qs('#animation-motion-preview-image');
       const meta = qs('#animation-motion-result-meta');
       if (result) result.hidden = false;
-      if (image) image.src = job.url + '?v=' + Date.now();
-      if (meta && job.result) meta.textContent =
-        job.result.preview_width + ' × ' + job.result.preview_height + ' · ' +
-        job.result.captured_frames + ' preview frames from ' + job.result.source_frames +
-        ' project frames · ' + Number(job.result.duration_seconds || 0).toFixed(2) +
-        's · ' + (job.result.mode === '3d' ? '3D depth on CPU' : job.result.border_mode);
+      motionGifPreviewUrl = job.url;
+      motionGifPreviewFps = Number(job.result?.fps || state.project?.animation?.fps || 12);
+      if (job.result?.frame_player_samples && ensureMotionFramePlayer()) {
+        motionFramePlayer.load(job);
+        if (image) image.hidden = true;
+      } else if (image) {
+        image.hidden = false;
+        image.src = job.url + '?v=' + Date.now();
+      }
+      if (motionFramePlayer?.jobId === job.id) {
+        motionGifSyncStatus('Frame player ready: seek, pause, loop and optional WAV sync.');
+        if (motionLabAudioElement && qs('#animation-motion-gif-auto-audio')?.checked &&
+            qs('#animation-motion-lab-audio-sync')?.checked) motionFramePlayer.play();
+      } else if (motionLabAudioElement && motionLabAudioProjectId === state.project?.id &&
+          qs('#animation-motion-gif-auto-audio')?.checked &&
+          qs('#animation-motion-lab-audio-sync')?.checked) {
+        void replayMotionGifWithAudio();
+      }
       const coverage = qs('#animation-camera-coverage');
       if (coverage) {
         coverage.hidden = job.result?.mode !== '3d';
@@ -2529,8 +2622,8 @@
     }
   }
 
-  async function generateMotionPreview() {
-    if (!state.project?.animation?.source_image || state.motionJobId) return;
+  async function generateMotionPreview(projectOverride = null) {
+    if (!state.project || state.motionJobId) return;
     const button = qs('#animation-generate-motion-preview');
     if (button) {
       button.classList.add('busy');
@@ -2548,7 +2641,8 @@
       const job = await api('/api/animation/motion-preview', {
         method: 'POST',
         body: JSON.stringify({
-          project: collectProject(),
+          project: projectOverride?.animation && projectOverride?.tracks
+            ? projectOverride : collectProject(),
           options: {
             highlight_holes: animationMode() === '3d' &&
               Boolean(qs('#animation-preview-highlight-holes')?.checked),
@@ -3957,11 +4051,1443 @@
     hybridButtons();
   }
 
-  // Four views share the original render controls and poller, never duplicate them.
+  // ML0: draft preset layers exist separately from the applied animation
+  // timeline. Only the Apply endpoint writes camera schedules or project.json.
+  let motionLabProjectId = '';
+  let motionLabDraftLayers = [];
+  let motionLabBusy = false;
+  let motionLabEditingIndex = -1;
+  let motionLabVisual = null;
+  let motionLabHistory = [[]];
+  let motionLabHistoryIndex = 0;
+  let motionLabRecorder = null;
+  const motionLabRecordKeys = new Set();
+  const motionLabRecordTouch = {
+    translate: {x: 0, y: 0, pointerId: null},
+    rotate: {x: 0, y: 0, pointerId: null},
+    hold: {},
+  };
+  const MOTION_RECORD_KEYMAP = {
+    KeyA: ['translation_x', -1], KeyD: ['translation_x', 1],
+    KeyR: ['translation_y', 1], KeyF: ['translation_y', -1],
+    KeyW: ['translation_z', 1], KeyS: ['translation_z', -1],
+    ArrowUp: ['rotation_x', 1], ArrowDown: ['rotation_x', -1],
+    ArrowLeft: ['rotation_y', -1], ArrowRight: ['rotation_y', 1],
+    KeyQ: ['rotation_z', -1], KeyE: ['rotation_z', 1],
+  };
+  function motionLabRecordStatus(message, gamepad = false) {
+    const target = qs(gamepad ? '#animation-motion-lab-gamepad-status' : '#animation-motion-lab-record-status');
+    if (target) target.textContent = message;
+  }
+  function motionLabRecordClamp(value) {
+    return Math.max(-1, Math.min(1, Number(value) || 0));
+  }
+  function motionLabRecordArmedAxes() {
+    return qsa('[data-motion-record-axis]:checked').map(input => input.dataset.motionRecordAxis);
+  }
+  function motionLabRecordInverted(axis) {
+    return Boolean(qs('[data-motion-record-invert="' + axis + '"]')?.checked);
+  }
+  function motionLabReadGamepad(values, sources) {
+    if (!qs('#animation-motion-lab-record-gamepad')?.checked) return;
+    if (typeof navigator.getGamepads !== 'function') {
+      motionLabRecordStatus('Gamepad API unavailable in this browser/security context. Keyboard and touch still work.', true);
+      return;
+    }
+    let pads = [];
+    try {
+      pads = Array.from(navigator.getGamepads() || []).filter(Boolean);
+    } catch (_) {
+      motionLabRecordStatus('Gamepad access was blocked by this browser/security context. Keyboard and touch still work.', true);
+      return;
+    }
+    const pad = pads.find(item => item.connected !== false);
+    if (!pad) {
+      motionLabRecordStatus('No client-browser gamepad detected. Keyboard and touch still work.', true);
+      return;
+    }
+    const axis = index => Number.isFinite(Number(pad.axes?.[index])) ? Number(pad.axes[index]) : 0;
+    const button = index => Number.isFinite(Number(pad.buttons?.[index]?.value))
+      ? Number(pad.buttons[index].value) : 0;
+    values.translation_x += axis(0);
+    values.translation_y += -axis(1);
+    values.rotation_y += axis(2);
+    values.rotation_x += -axis(3);
+    values.translation_z += button(7) - button(6);
+    values.rotation_z += button(5) - button(4);
+    if ([...pad.axes || [], button(4),button(5),button(6),button(7)]
+        .some(value => Math.abs(Number(value) || 0) > .001)) sources.push('gamepad');
+    motionLabRecordStatus('Gamepad visible to this browser: ' + (pad.id || 'controller') + '.', true);
+  }
+  function motionLabRecordSampleInput() {
+    const values = Object.fromEntries(MOTION_LAB_AXES.map(axis => [axis, 0]));
+    const sources = [];
+    for (const code of motionLabRecordKeys) {
+      const mapping = MOTION_RECORD_KEYMAP[code];
+      if (!mapping) continue;
+      values[mapping[0]] += mapping[1];
+    }
+    if (motionLabRecordKeys.size) sources.push('keyboard');
+    values.translation_x += motionLabRecordTouch.translate.x;
+    values.translation_y += motionLabRecordTouch.translate.y;
+    values.rotation_y += motionLabRecordTouch.rotate.x;
+    values.rotation_x += motionLabRecordTouch.rotate.y;
+    for (const [axis, value] of Object.entries(motionLabRecordTouch.hold)) {
+      if (MOTION_LAB_AXES.includes(axis)) values[axis] += value;
+    }
+    if (Math.abs(motionLabRecordTouch.translate.x) > .001 ||
+        Math.abs(motionLabRecordTouch.translate.y) > .001 ||
+        Math.abs(motionLabRecordTouch.rotate.x) > .001 ||
+        Math.abs(motionLabRecordTouch.rotate.y) > .001 ||
+        Object.values(motionLabRecordTouch.hold).some(value => Math.abs(value) > .001)) {
+      sources.push('touch');
+    }
+    motionLabReadGamepad(values, sources);
+    for (const axis of MOTION_LAB_AXES) {
+      values[axis] = motionLabRecordClamp(values[axis]);
+      if (motionLabRecordInverted(axis)) values[axis] *= -1;
+    }
+    return {values, sources:[...new Set(sources)]};
+  }
+  function motionLabNeutralizeRecordInput() {
+    motionLabRecordKeys.clear();
+    motionLabRecordTouch.translate.x = motionLabRecordTouch.translate.y = 0;
+    motionLabRecordTouch.rotate.x = motionLabRecordTouch.rotate.y = 0;
+    motionLabRecordTouch.translate.pointerId = null;
+    motionLabRecordTouch.rotate.pointerId = null;
+    motionLabRecordTouch.hold = {};
+    for (const id of ['animation-motion-lab-stick-translate','animation-motion-lab-stick-rotate']) {
+      const knob = qs('#' + id + ' .animation-motion-stick-knob');
+      if (knob) knob.style.transform = 'translate(0px, 0px)';
+    }
+  }
+  function motionLabRecordLiveFrame(frame, sample, captured, fps, maxFrame) {
+    const target = qs('#animation-motion-lab-record-frame');
+    if (target) target.textContent =
+      '● RECORDING · frame ' + frame + '/' + maxFrame +
+      ' · ' + captured + ' sample(s) · ' + fps + ' FPS';
+    const indicator = qs('#animation-motion-lab-live-indicator');
+    if (indicator) indicator.textContent = '● RECORDING · ' + captured + ' frames captured';
+    const axes = qs('#animation-motion-lab-live-axes');
+    if (axes) axes.textContent = [
+      'X ' + sample[0].toFixed(4), 'Y ' + sample[1].toFixed(4),
+      'Z ' + sample[2].toFixed(4), 'Pitch ' + sample[3].toFixed(3) + '°',
+      'Yaw ' + sample[4].toFixed(3) + '°', 'Roll ' + sample[5].toFixed(3) + '°',
+    ].join(' · ');
+    const input = qs('#animation-motion-lab-live-input');
+    if (input) {
+      const active = MOTION_LAB_AXES.filter((axis, index) =>
+        Math.abs(sample[index]) > 0.000001).map(axis => axis.replaceAll('_',' '));
+      input.textContent = active.length ? 'Movement: ' + active.join(', ') :
+        'Neutral controls. Hold keyboard keys or drag a joystick to record movement.';
+    }
+  }
+  function motionLabRecordFinishedFeedback(take) {
+    const indicator = qs('#animation-motion-lab-live-indicator');
+    if (indicator) indicator.textContent = '■ Stopped · ' + take.samples.length + ' frames';
+    const target = qs('#animation-motion-lab-record-frame');
+    if (target) target.textContent = 'Take captured: frames ' + take.startFrame +
+      '–' + (take.endFrame - 1) + ' · ' + take.samples.length + ' samples';
+    const input = qs('#animation-motion-lab-live-input');
+    if (input) input.textContent =
+      'Draft recording added to layer stack. Review curves; Apply to Animation to save.';
+  }
+  function motionLabSyncQuickActions() {
+    const active = Boolean(motionLabRecorder?.active);
+    for (const button of qsa('[data-motion-quick-target]')) {
+      const original = qs('#' + button.dataset.motionQuickTarget);
+      button.disabled = active || !original || original.disabled;
+      button.setAttribute('aria-busy', String(Boolean(motionLabBusy)));
+    }
+    const status = qs('#animation-motion-lab-quick-status');
+    if (status) status.textContent = active ? '● Recording' :
+      motionLabBusy ? 'Updating motion…' :
+      motionLabDraftLayers.length + ' draft layer(s)';
+  }
+  function motionLabSetupQuickActions(panel) {
+    const dock = document.createElement('div');
+    dock.id = 'animation-motion-lab-quick-actions';
+    dock.className = 'animation-motion-lab-quick-actions';
+    dock.setAttribute('role', 'toolbar');
+    dock.setAttribute('aria-label', 'Motion Lab quick actions');
+    const specs = [
+      ['animation-motion-lab-record', '● Record'],
+      ['animation-motion-lab-stop-recording', '■ Stop'],
+      ['animation-motion-lab-update-curves', '↻ Curves'],
+      ['animation-motion-lab-preview-draft', '▶ Preview'],
+      ['animation-motion-lab-apply', 'Apply'],
+    ];
+    for (const [id, label] of specs) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.dataset.motionQuickTarget = id;
+      button.className = id.endsWith('-apply') ? 'primary-button compact' : 'secondary-button compact';
+      button.disabled = true;
+      button.addEventListener('click', () => {
+        const original = qs('#' + id);
+        if (!original || original.disabled) return;
+        original.click();
+      });
+      dock.appendChild(button);
+    }
+    const status = document.createElement('span');
+    status.id = 'animation-motion-lab-quick-status';
+    status.className = 'muted';
+    status.setAttribute('aria-live', 'polite');
+    dock.appendChild(status);
+    panel.appendChild(dock);
+    motionLabSyncQuickActions();
+  }
+  let motionLabPunchContext = null;
+  function motionLabPunchUi() {
+    const mode = qs('#animation-motion-lab-record-mode')?.value || 'new';
+    const target = qs('#animation-motion-lab-punch-target');
+    const end = qs('#animation-motion-lab-punch-end');
+    if (target) {
+      const selected = target.value;
+      target.replaceChildren();
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = 'Select a recorded take';
+      target.appendChild(blank);
+      motionLabDraftLayers.forEach((layer, index) => {
+        if (layer.type !== 'recording') return;
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = (index + 1) + '. ' + (layer.name || 'Recorded take') +
+          ' (' + layer.start_frame + '–' + (layer.end_frame - 1) + ')';
+        target.appendChild(option);
+      });
+      if ([...target.options].some(o => o.value === selected)) target.value = selected;
+      target.disabled = mode !== 'punch' || Boolean(motionLabRecorder?.active);
+    }
+    if (end) {
+      end.disabled = mode !== 'punch' || Boolean(motionLabRecorder?.active);
+      end.max = String(Number(state.project?.animation?.max_frames || 120));
+    }
+  }
+  let motionLabAudioAnalysis = null;
+  let motionLabAudioProjectId = null;
+  let motionLabAudioElement = null;
+  let motionLabAudioUrl = null;
+  function motionLabReleaseAudio() {
+    motionLabAudioElement?.pause();
+    if (motionLabAudioElement) motionLabAudioElement.removeAttribute('src');
+    if (motionLabAudioUrl) URL.revokeObjectURL(motionLabAudioUrl);
+    motionLabAudioElement = null;
+    motionLabAudioUrl = null;
+  }
+  function motionLabAudioSyncStatus(message) {
+    const output = qs('#animation-motion-lab-audio-sync-status');
+    if (output) output.textContent = message;
+  }
+  function motionLabAudioTime(frame, fps) {
+    return Math.max(0, frame / Math.max(1, fps));
+  }
+  function motionLabSyncAudioFrame(frame) {
+    const audio = motionLabAudioElement;
+    if (!audio || !motionLabVisual ||
+        motionLabAudioProjectId !== state.project?.id ||
+        !qs('#animation-motion-lab-audio-sync')?.checked) return;
+    const goal = motionLabAudioTime(frame, motionLabVisual.fps);
+    if (audio.readyState >= 1 && Number.isFinite(audio.duration)) {
+      const position = Math.min(goal, Math.max(0, audio.duration - .001));
+      if (!motionLabVisual.playing || Math.abs(audio.currentTime - position) > .18) {
+        audio.currentTime = position;
+      }
+      if (goal >= audio.duration && !audio.paused) audio.pause();
+    }
+  }
+  function motionLabBindAudioTransport() {
+    if (!motionLabVisual) return;
+    const previousFrame = motionLabVisual.onFrameChange;
+    motionLabVisual.onFrameChange = frame => {
+      previousFrame?.(frame);
+      motionLabSyncAudioFrame(frame);
+    };
+    motionLabVisual.onPlay = (frame, fps) => {
+      const audio = motionLabAudioElement;
+      if (!audio || !qs('#animation-motion-lab-audio-sync')?.checked ||
+          motionLabAudioProjectId !== state.project?.id) return;
+      const seek = motionLabAudioTime(frame, fps);
+      if (audio.readyState >= 1 && seek < audio.duration) {
+        audio.currentTime = seek;
+        const promise = audio.play();
+        promise?.catch(error => motionLabAudioSyncStatus(
+          'Audio playback blocked by browser: ' + (error?.message || error)));
+      }
+    };
+    motionLabVisual.onPause = () => motionLabAudioElement?.pause();
+  }
+
+  function motionLabAudioSignal() {
+    const analysis = motionLabAudioAnalysis;
+    if (!analysis) return [];
+    const band = qs('#animation-motion-lab-audio-band')?.value || 'fullband';
+    const values = band === 'fullband' ? analysis.values : analysis.bands?.[band];
+    if (!Array.isArray(values) || values.length !== analysis.values.length) return [];
+    const mode = qs('#animation-motion-lab-audio-detection')?.value || 'level';
+    if (mode !== 'transient') return values;
+    const sensitivity = Math.max(0, Math.min(1, Number(qs('#animation-motion-lab-audio-sensitivity')?.value) || 0));
+    const rises = values.map((v, i) => i ? Math.max(0, v - values[i - 1]) : 0);
+    const peak = Math.max(0, ...rises);
+    return rises.map(v => peak > 1e-12 ? Math.max(0, Math.min(1, v / peak - sensitivity * .5)) : 0);
+  }
+  function motionLabAudioPreview() {
+    const preview = qs('#animation-motion-lab-audio-preview');
+    const plot = qs('#animation-motion-lab-audio-plot');
+    const analysis = motionLabAudioAnalysis;
+    if (!preview || !plot) return;
+    if (!analysis || motionLabAudioProjectId !== state.project?.id ||
+        Number(analysis.fps) !== Number(state.project?.animation?.fps) ||
+        analysis.values.length !== Number(state.project?.animation?.max_frames)) {
+      preview.hidden = true;
+      plot.replaceChildren();
+      return;
+    }
+    preview.hidden = false;
+    const values = motionLabAudioSignal();
+    if (!values.length) { preview.hidden = true; return; }
+    const threshold = Number(qs('#animation-motion-lab-audio-threshold')?.value);
+    const gate = Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : .1;
+    const attack = Number(qs('#animation-motion-lab-audio-attack')?.value);
+    const release = Number(qs('#animation-motion-lab-audio-release')?.value);
+    const pulseLength = Number.isInteger(attack) && Number.isInteger(release) &&
+      attack > 0 && release > 0 ? attack + release : 4;
+    const peak = Math.max(0, ...values);
+    const ceiling = Math.max(.05, peak * 1.08, gate * 1.08);
+    const width = 800, bottom = 196, top = 12, height = bottom - top;
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const make = (tag, attrs) => {
+      const el = document.createElementNS(svgNS, tag);
+      for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, String(value));
+      return el;
+    };
+    plot.replaceChildren();
+    const grid = make('path', {
+      d: [0, .25, .5, .75, 1].map(f => 'M0 ' + (bottom - f * height).toFixed(2) +
+        ' H' + width).join(' '),
+      stroke:'currentColor','stroke-opacity':'.13',fill:'none'
+    });
+    plot.appendChild(grid);
+    const points = [];
+    let onsets = 0, valid = 0, available = 1, prior = false;
+    for (let i = 0; i < values.length; i++) {
+      const x = ((i + .5) * width / values.length);
+      const y = bottom - values[i] / ceiling * height;
+      points.push((i ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2));
+      const above = values[i] >= gate && values[i] > 0;
+      if (above && !prior) {
+        onsets++;
+        if (i >= available && i >= 1 && i + pulseLength <= values.length) {
+          valid++;
+          plot.appendChild(make('circle', {cx:x.toFixed(2),cy:y.toFixed(2),
+            r:3.6,fill:'#ffbd69',stroke:'#fff','stroke-width':'.65'}));
+          available = i + pulseLength + 3;
+        }
+      }
+      prior = above;
+    }
+    plot.appendChild(make('path', {d:points.join(' '),fill:'none',
+      stroke:'#73d5ed','stroke-width':'2','vector-effect':'non-scaling-stroke'}));
+    const thresholdY = bottom - gate / ceiling * height;
+    plot.appendChild(make('line', {x1:0,y1:thresholdY,x2:width,y2:thresholdY,
+      stroke:'#ff857c','stroke-width':2,'stroke-dasharray':'7 5',
+      'vector-effect':'non-scaling-stroke'}));
+    const summary = qs('#animation-motion-lab-audio-summary');
+    if (summary) summary.textContent = 'Peak signal ' + peak.toFixed(3) +
+      ' · ' + (qs('#animation-motion-lab-audio-band')?.value || 'fullband') +
+      ' / ' + (qs('#animation-motion-lab-audio-detection')?.value || 'level') +
+      ' · threshold ' + gate.toFixed(3) + ' · ' + values.length + ' frames';
+    const prediction = qs('#animation-motion-lab-audio-prediction');
+    if (prediction) prediction.textContent = valid
+      ? valid + ' predicted complete motion pulse(s) from ' + onsets +
+        ' upward threshold crossing(s). Move the threshold to preview changes before adding.'
+      : 'No complete motion pulses at this threshold. Lower it or choose a file with stronger volume changes.';
+  }
+  function motionLabAudioUi() {
+    const ready = Boolean(state.project?.id && animationMode() === '3d' && !motionLabBusy);
+    const analyze = qs('#animation-motion-lab-analyze-audio');
+    const add = qs('#animation-motion-lab-add-audio');
+    if (analyze) analyze.disabled = !ready;
+    if (add) add.disabled = !ready || motionLabDraftLayers.length >= 24 ||
+      !motionLabAudioAnalysis || motionLabAudioProjectId !== state.project?.id ||
+      Number(motionLabAudioAnalysis.fps) !== Number(state.project?.animation?.fps);
+  }
+  async function motionLabAnalyzeAudio() {
+    const file = qs('#animation-motion-lab-audio-file')?.files?.[0];
+    const projectId = state.project?.id;
+    const status = qs('#animation-motion-lab-audio-info');
+    if (!projectId || animationMode() !== '3d' || !file) {
+      motionLabNotify('Choose a 3D project and PCM WAV audio file.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      motionLabNotify('WAV exceeds 20 MiB.');
+      return;
+    }
+    motionLabAudioAnalysis = null;
+    motionLabAudioProjectId = null;
+    motionLabReleaseAudio();
+    motionLabAudioPreview();
+    if (status) status.textContent = 'Analyzing WAV on host…';
+    motionLabAudioUi();
+    try {
+      const response = await fetch('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/audio-analyze', {
+        method:'POST',headers:{'Content-Type':'audio/wav'},body:file,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(typeof result.detail === 'string' ?
+        result.detail : 'Audio analysis failed (HTTP ' + response.status + ')');
+      if (state.project?.id !== projectId) return;
+      const analysis = result.analysis;
+      const matchLength = qs('#animation-motion-lab-audio-match-length');
+      const lengthStatus = qs('#animation-motion-lab-audio-length-status');
+      if (lengthStatus) lengthStatus.textContent =
+        'Audio ' + Number(analysis.duration_seconds).toFixed(2) + 's · project ' +
+        (Number(state.project.animation.max_frames) / Number(state.project.animation.fps)).toFixed(2) +
+        's at ' + state.project.animation.fps + ' FPS.';
+      if (matchLength?.checked) {
+        // Never silently retime recorded per-frame camera velocities.
+        // Change only frame count; leave FPS untouched.
+        const fps = Number(state.project.animation.fps);
+        const targetFrames = Math.ceil(Number(analysis.duration_seconds) * fps - 1e-9);
+        if (!Number.isInteger(targetFrames) || targetFrames < 1 || targetFrames > 3000) {
+          throw new Error('Audio needs ' + targetFrames +
+            ' frames at ' + fps + ' FPS. Motion Lab supports at most 3000 frames; choose a shorter WAV or lower FPS manually.');
+        }
+        if (targetFrames !== Number(state.project.animation.max_frames)) {
+          // The UI reports DRAFT layers. Saved Motion Lab authoring metadata
+          // can still exist after all visible draft layers were cleared.
+          // Never discard that invisible saved history without explicit consent.
+          if (motionLabDraftLayers.length) {
+            throw new Error('Cannot resize with ' + motionLabDraftLayers.length +
+              ' draft Motion Lab layer(s). Clear the draft first. No settings were changed.');
+          }
+          const storedLayerCount = Array.isArray(state.project.motion_lab?.layers)
+            ? state.project.motion_lab.layers.length : 0;
+          let discardStoredMotionLab = false;
+          if (storedLayerCount) {
+            discardStoredMotionLab = await window.MorphorumDialog.confirm({
+              title: 'Clear saved Motion Lab history?',
+              message: 'The composer shows 0 draft layers, but this project still has ' +
+                storedLayerCount + ' saved Motion Lab layer(s). Matching audio length requires ' +
+                'clearing that saved authoring history. Existing camera schedules are preserved. ' +
+                'Cancel to keep the stored layers and project duration unchanged.',
+              confirmText: 'Clear Saved Layers',
+              cancelText: 'Keep Layers',
+              variant: 'danger',
+            });
+            if (!discardStoredMotionLab) {
+              if (lengthStatus) lengthStatus.textContent =
+                'Duration unchanged. Saved Motion Lab layers preserved.';
+              return;
+            }
+          }
+          const approved = await window.MorphorumDialog.confirm({
+            title: 'Match project length to WAV?',
+            message: 'Audio ' + Number(analysis.duration_seconds).toFixed(2) + 's. ' +
+              'Change project from ' + state.project.animation.max_frames + ' to ' +
+              targetFrames + ' frames at ' + fps +
+              ' FPS? This saves current project edits and reanalyzes the WAV. FPS remains unchanged.',
+            confirmText: 'Match & Save',
+            cancelText: 'Keep Duration',
+          });
+          if (!approved) {
+            if (lengthStatus) lengthStatus.textContent = 'Length matching canceled. Project unchanged.';
+          } else {
+            const editorFrames = qs('#animation-max-frames');
+            if (!editorFrames) throw new Error('Cannot locate the Editor frame-count field.');
+            const previous = editorFrames.value;
+            editorFrames.value = String(targetFrames);
+            try {
+              const draft = collectProject();
+              if (discardStoredMotionLab) {
+                draft.motion_lab = {
+                  ...(draft.motion_lab || {}),
+                  layers: [],
+                  base_tracks: null,
+                  last_applied_tracks: null,
+                };
+              }
+              const payload = await api('/api/animation/projects/' + encodeURIComponent(projectId), {
+                method:'PUT',body:JSON.stringify(draft),
+              });
+              if (state.project?.id !== projectId) return;
+              state.project = payload.project;
+              fillForm();
+              clearDirty();
+              if (Number(state.project.animation.max_frames) !== targetFrames) {
+                throw new Error('Saved project frame count differs from requested audio length.');
+              }
+              matchLength.checked = false;
+              if (lengthStatus) lengthStatus.textContent = 'Matched ' + targetFrames +
+                ' frames at ' + fps + ' FPS. WAV reanalysis in progress.';
+              await motionLabAnalyzeAudio();
+              return;
+            } catch (error) {
+              editorFrames.value = previous;
+              throw error;
+            }
+          }
+        }
+      }
+      if (!Array.isArray(analysis?.values) ||
+          analysis.values.length !== Number(state.project.animation.max_frames) ||
+          Number(analysis.fps) !== Number(state.project.animation.fps)) {
+        throw new Error('Audio frame alignment changed; analyze again.');
+      }
+      motionLabAudioAnalysis = analysis;
+      motionLabAudioProjectId = projectId;
+      motionLabAudioUrl = URL.createObjectURL(file);
+      motionLabAudioElement = new Audio(motionLabAudioUrl);
+      motionLabAudioElement.preload = 'auto';
+      motionLabAudioElement.load();
+      motionLabAudioSyncStatus('Ready to play with Motion Curves playback.');
+      const peak = Math.max(0, ...motionLabAudioSignal());
+      const thresholdField = qs('#animation-motion-lab-audio-threshold');
+      if (thresholdField && peak > 0) {
+        // File-specific starting point. Never require the user to guess the
+        // analysis scale without seeing the envelope.
+        thresholdField.value = Math.min(.1, peak * .55).toFixed(3);
+      }
+      motionLabAudioPreview();
+      if (status) status.textContent = 'Analyzed ' + file.name + ': ' +
+        analysis.values.length + ' frames · ' + analysis.duration_seconds.toFixed(2) +
+        ' seconds · frame-aligned full-band RMS.';
+      const badge = qs('#animation-motion-lab-audio-status');
+      if (badge) badge.textContent = 'WAV ready';
+    } catch (error) {
+      if (status) status.textContent = 'Audio import failed: ' + (error?.message || error);
+      motionLabNotify('Audio import failed: ' + (error?.message || error));
+    }
+    motionLabAudioUi();
+    motionLabAudioPreview();
+  }
+  function motionLabAddAudio() {
+    const analysis = motionLabAudioAnalysis;
+    if (!analysis || !state.project || motionLabAudioProjectId !== state.project.id ||
+        animationMode() !== '3d' || motionLabDraftLayers.length >= 24) return;
+    const read = (id) => Number(qs('#animation-motion-lab-audio-' + id)?.value);
+    const threshold = read('threshold');
+    const distance = read('distance');
+    const attack = read('attack');
+    const release = read('release');
+    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1 ||
+        !Number.isFinite(distance) || distance < 0 || distance > 1 ||
+        !Number.isInteger(attack) || attack < 1 || attack > 120 ||
+        !Number.isInteger(release) || release < 1 || release > 120) {
+      motionLabNotify('Check audio threshold, pulse amount, attack and release.');
+      return;
+    }
+    const layer = {
+      id:'audio-' + Date.now().toString(36), type:'audio',
+      name:'Audio ' + analysis.filename.slice(0, 12), enabled:true, blend:'add',
+      axis:qs('#animation-motion-lab-audio-axis')?.value || 'translation_z',
+      start_frame:0,end_frame:analysis.values.length,
+      fps:Number(analysis.fps),sha256:analysis.source_sha256,
+      envelope:(qs('#animation-motion-lab-audio-band')?.value === 'fullband'
+        ? analysis.values : analysis.bands?.[qs('#animation-motion-lab-audio-band')?.value])?.slice() || [],
+      band:qs('#animation-motion-lab-audio-band')?.value || 'fullband',
+      detection:qs('#animation-motion-lab-audio-detection')?.value || 'level',
+      sensitivity:read('sensitivity'),threshold,distance,
+      attack_frames:attack,release_frames:release,cooldown_frames:3,offset_frames:0,
+    };
+    motionLabDraftLayers.push(layer);
+    motionLabEditingIndex = -1;
+    commitMotionLabDraft();
+    motionLabNotify('Audio motion draft layer added. Preview Curves before Apply.');
+    void motionLabPreviewOrApply(false,{curvesOnly:true});
+  }
+  function motionLabRecordingUi() {
+    const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
+    const active = Boolean(motionLabRecorder?.active);
+    const record = qs('#animation-motion-lab-record');
+    const stop = qs('#animation-motion-lab-stop-recording');
+    if (record) record.disabled = !ready || active ||
+      (motionLabDraftLayers.length >= 24 && qs('#animation-motion-lab-record-mode')?.value !== 'punch');
+    if (stop) stop.disabled = !active;
+    const start = qs('#animation-motion-lab-record-start');
+    const count = Number(state.project?.animation?.max_frames || 120);
+    if (start) {
+      start.max = String(Math.max(0, count - 1));
+      start.disabled = !ready || active;
+    }
+    qsa('#animation-motion-lab-recording input, #animation-motion-lab-recording select')
+      .forEach(control => {
+        if (control.id === 'animation-motion-lab-record-start') return;
+        if (control.id === 'animation-motion-lab-record-gamepad') {
+          control.disabled = !ready || active;
+          return;
+        }
+        if (control.matches('[data-motion-record-axis], [data-motion-record-invert]') ||
+            control.closest('.animation-motion-recording-controls')) {
+          control.disabled = !ready || active;
+        }
+      });
+    motionLabPunchUi();
+    if (!state.project) motionLabRecordStatus('Select a project');
+    else if (animationMode() !== '3d') motionLabRecordStatus('3D Motion required');
+    else if (!active) motionLabRecordStatus('Ready');
+    motionLabSyncQuickActions();
+  }
+  function motionLabFinalizeRecording(take) {
+    if (!take || take.reason === 'discard' || !state.project) {
+      motionLabRecordingUi();
+      return;
+    }
+    const count = Number(state.project.animation.max_frames || 120);
+    if (!take.samples?.length || take.startFrame < 0 || take.endFrame > count) {
+      motionLabNotify('Recorded take was empty or outside the current project and was not added.');
+      motionLabRecordingUi();
+      return;
+    }
+    if (!motionLabPunchContext && motionLabDraftLayers.length >= 24) {
+      motionLabNotify('Motion Lab supports at most 24 layers; the take was not added.');
+      motionLabRecordingUi();
+      return;
+    }
+    const source = take.sources.length === 1 ? take.sources[0] :
+      take.sources.length > 1 ? 'mixed' : 'unknown';
+    const layer = {
+      id: 'take-' + Date.now().toString(36),
+      type: 'recording',
+      name: 'Recorded ' + source + ' take',
+      enabled: true,
+      blend: qs('#animation-motion-lab-record-blend')?.value || 'add',
+      start_frame: take.startFrame,
+      end_frame: take.endFrame,
+      fps: Number(take.fps),
+      source,
+      capture_version: 1,
+      axes: take.armedAxes.slice(),
+      samples: take.samples.map(row => row.slice()),
+    };
+    if (motionLabPunchContext) {
+      const context = motionLabPunchContext;
+      motionLabPunchContext = null;
+      if (take.endFrame !== context.endFrame) {
+        motionLabRecorder = null;
+        motionLabNotify('Incomplete punch-in discarded. Capture the full selected frame range.');
+        motionLabRecordingUi();
+        return;
+      }
+      try {
+        const existing = motionLabDraftLayers[context.index];
+        if (!existing || existing.id !== context.id ||
+            JSON.stringify(existing) !== context.snapshot) {
+          throw new Error('Target take changed during recording. No edits were applied.');
+        }
+        motionLabDraftLayers[context.index] =
+          window.MorphorumMotionLabSplicePunchIn(existing, take);
+      } catch (error) {
+        motionLabRecorder = null;
+        motionLabNotify('Punch-in canceled: ' + (error?.message || String(error)));
+        motionLabRecordingUi();
+        return;
+      }
+      motionLabRecorder = null;
+      motionLabNeutralizeRecordInput();
+      commitMotionLabDraft();
+      motionLabRecordFinishedFeedback(take);
+      motionLabNotify('Punch-in replaced frames ' + take.startFrame + '–' +
+        (take.endFrame - 1) + ' on armed axes only. Undo restores the original take.');
+      void motionLabPreviewOrApply(false, {curvesOnly:true});
+      motionLabRecordingUi();
+      return;
+    }
+    motionLabDraftLayers.push(layer);
+    motionLabRecordFinishedFeedback(take);
+    motionLabRecorder = null;
+    motionLabNeutralizeRecordInput();
+    motionLabNotify(
+      'Recorded ' + layer.samples.length + ' frame(s) from ' + layer.start_frame +
+      '–' + (layer.end_frame - 1) + '. Take added as a draft layer; Update Curves or Apply when ready.'
+    );
+    commitMotionLabDraft();
+    const start = qs('#animation-motion-lab-record-start');
+    // A second take should not unexpectedly begin on the final frame.
+    // Preserve the explicit start selection for repeat takes.
+    void motionLabPreviewOrApply(false, {curvesOnly:true});
+    motionLabRecordingUi();
+  }
+  function motionLabStartRecording() {
+    if (!state.project || animationMode() !== '3d' || motionLabBusy) {
+      motionLabNotify('Choose a 3D project before recording camera motion.');
+      return;
+    }
+    if (!window.MorphorumMotionLabFrameRecorder) {
+      motionLabNotify('Motion recorder asset is unavailable. Hard-refresh the browser and try again.');
+      return;
+    }
+    const isPunch = qs('#animation-motion-lab-record-mode')?.value === 'punch';
+    if (!isPunch && motionLabDraftLayers.length >= 24) {
+      motionLabNotify('Motion Lab supports at most 24 layers.');
+      return;
+    }
+    const axes = motionLabRecordArmedAxes();
+    if (!axes.length) {
+      motionLabNotify('Arm at least one camera axis before recording.');
+      return;
+    }
+    const count = Number(state.project.animation.max_frames || 120);
+    const fps = Number(state.project.animation.fps || 12);
+    const startFrame = Number(qs('#animation-motion-lab-record-start')?.value || 0);
+    const translationScale = Number(qs('#animation-motion-lab-record-translation')?.value);
+    const rotationScale = Number(qs('#animation-motion-lab-record-rotation')?.value);
+    const deadzone = Number(qs('#animation-motion-lab-record-deadzone')?.value);
+    const response = Number(qs('#animation-motion-lab-record-response')?.value);
+    const tailFrames = Number(qs('#animation-motion-lab-record-tail')?.value);
+    let punch = null;
+    if (isPunch) {
+      const raw = qs('#animation-motion-lab-punch-target')?.value;
+      const index = raw === '' || raw == null ? -1 : Number(raw);
+      const target = motionLabDraftLayers[index];
+      const endFrame = Number(qs('#animation-motion-lab-punch-end')?.value);
+      if (!target || target.type !== 'recording' ||
+          !Number.isInteger(endFrame) || endFrame <= startFrame ||
+          startFrame < target.start_frame || endFrame > target.end_frame ||
+          Number(target.fps) !== fps || axes.some(axis => !target.axes.includes(axis))) {
+        motionLabNotify('Punch-in requires a recorded target, matching FPS, an interval inside it and axes armed on that take.');
+        return;
+      }
+      punch = {index, id:target.id, snapshot:JSON.stringify(target), endFrame};
+    }
+
+    if (!Number.isInteger(startFrame) || startFrame < 0 || startFrame >= count ||
+        !Number.isFinite(translationScale) || translationScale <= 0 ||
+        !Number.isFinite(rotationScale) || rotationScale <= 0 ||
+        !Number.isFinite(deadzone) || deadzone < 0 || deadzone > .5 ||
+        !Number.isFinite(response) || response < .05 || response > 1 ||
+        !Number.isInteger(tailFrames) || tailFrames < 0 || tailFrames > 12) {
+      motionLabNotify('Check recording start, sensitivity, deadzone, response and release-tail settings.');
+      return;
+    }
+    motionLabNeutralizeRecordInput();
+    motionLabVisual?.pause();
+    const remainingFrames = punch ? punch.endFrame - startFrame : count - startFrame;
+    const startStatus = qs('#animation-motion-lab-record-frame');
+    if (startStatus) startStatus.textContent =
+      '● Starting capture at frame ' + startFrame + ' · ' + remainingFrames +
+      ' available frames (' + (remainingFrames / fps).toFixed(1) + ' seconds)';
+    const indicator = qs('#animation-motion-lab-live-indicator');
+    if (indicator) indicator.textContent = '● RECORDING';
+    motionLabRecordStatus('● Recording ' + fps + ' FPS');
+    motionLabNotify('Recording active: keyboard, joysticks, Z/roll buttons and optional gamepad. Stop creates a draft layer.');
+    motionLabPunchContext = punch;
+    motionLabRecorder = new window.MorphorumMotionLabFrameRecorder();
+    try {
+      motionLabRecorder.start({
+      fps, startFrame, maxFrames: remainingFrames, armedAxes: axes,
+      translationScale, rotationScale, deadzone, response, tailFrames,
+      sampleInput: motionLabRecordSampleInput,
+      onFrame: ({frame, count: captured, sample}) => {
+        motionLabRecordLiveFrame(frame, sample, captured, fps, count - 1);
+        // During recording the saved curves are stale; only drive their
+        // playhead when actual compiled series are present.
+        if (motionLabVisual?.series && !motionLabVisual.stale) motionLabVisual.setFrame(frame);
+      },
+      onComplete: take => motionLabFinalizeRecording(take),
+      });
+    } catch (error) {
+      motionLabRecorder = null;
+      motionLabPunchContext = null;
+      motionLabRecordStatus('Recording failed');
+      motionLabNotify('Unable to start recording: ' + (error?.message || String(error)));
+      const failed = qs('#animation-motion-lab-live-indicator');
+      if (failed) failed.textContent = 'Recording failed';
+    }
+    motionLabRecordingUi();
+  }
+  function motionLabStopRecording(reason = 'manual') {
+    if (!motionLabRecorder?.active) return;
+    motionLabNeutralizeRecordInput();
+    motionLabRecorder.stop(reason);
+  }
+  function motionLabDiscardRecording() {
+    if (!motionLabRecorder?.active) return;
+    motionLabNeutralizeRecordInput();
+    motionLabRecorder.finish('discard');
+    motionLabPunchContext = null;
+    motionLabRecorder = null;
+    motionLabRecordingUi();
+  }
+  function motionLabBindStick(id, targetName) {
+    const stick = qs('#' + id);
+    if (!stick) return;
+    const stateTarget = motionLabRecordTouch[targetName];
+    const update = event => {
+      const rect = stick.getBoundingClientRect();
+      const radius = Math.max(1, Math.min(rect.width, rect.height) * .38);
+      let x = (event.clientX - (rect.left + rect.width / 2)) / radius;
+      let y = (event.clientY - (rect.top + rect.height / 2)) / radius;
+      const length = Math.hypot(x, y);
+      if (length > 1) { x /= length; y /= length; }
+      stateTarget.x = x;
+      stateTarget.y = -y;
+      const knob = stick.querySelector('.animation-motion-stick-knob');
+      if (knob) knob.style.transform =
+        'translate(' + (x * radius * .58).toFixed(1) + 'px, ' + (y * radius * .58).toFixed(1) + 'px)';
+    };
+    const release = event => {
+      if (stateTarget.pointerId !== null && event?.pointerId !== undefined &&
+          event.pointerId !== stateTarget.pointerId) return;
+      stateTarget.x = stateTarget.y = 0;
+      stateTarget.pointerId = null;
+      const knob = stick.querySelector('.animation-motion-stick-knob');
+      if (knob) knob.style.transform = 'translate(0px, 0px)';
+    };
+    stick.addEventListener('pointerdown', event => {
+      if (!motionLabRecorder?.active) return;
+      event.preventDefault();
+      stateTarget.pointerId = event.pointerId;
+      stick.setPointerCapture?.(event.pointerId);
+      update(event);
+    });
+    stick.addEventListener('pointermove', event => {
+      if (!motionLabRecorder?.active || stateTarget.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      update(event);
+    });
+    stick.addEventListener('pointerup', release);
+    stick.addEventListener('pointercancel', release);
+    stick.addEventListener('lostpointercapture', release);
+  }
+  function motionLabBindHoldControls() {
+    qsa('[data-motion-hold-axis]').forEach(button => {
+      const axis = button.dataset.motionHoldAxis;
+      const value = Number(button.dataset.motionHoldValue);
+      const release = () => {
+        if (motionLabRecordTouch.hold[axis] === value) delete motionLabRecordTouch.hold[axis];
+        button.classList.remove('active');
+      };
+      button.addEventListener('pointerdown', event => {
+        if (!motionLabRecorder?.active || !MOTION_LAB_AXES.includes(axis)) return;
+        event.preventDefault();
+        motionLabRecordTouch.hold[axis] = motionLabRecordClamp(value);
+        button.classList.add('active');
+        button.setPointerCapture?.(event.pointerId);
+      });
+      button.addEventListener('pointerup', release);
+      button.addEventListener('pointercancel', release);
+      button.addEventListener('lostpointercapture', release);
+    });
+  }
+  function commitMotionLabDraft() {
+    const snapshot = JSON.stringify(motionLabDraftLayers);
+    if (JSON.stringify(motionLabHistory[motionLabHistoryIndex]) === snapshot) {
+      renderMotionLabDraft();
+      return;
+    }
+    motionLabHistory = motionLabHistory.slice(0, motionLabHistoryIndex + 1);
+    motionLabHistory.push(JSON.parse(snapshot));
+    if (motionLabHistory.length > 51) motionLabHistory.shift();
+    motionLabHistoryIndex = motionLabHistory.length - 1;
+    motionLabVisual?.invalidate();
+    renderMotionLabDraft();
+  }
+  function restoreMotionLabDraft(direction) {
+    const next = motionLabHistoryIndex + direction;
+    if (next < 0 || next >= motionLabHistory.length) return;
+    motionLabHistoryIndex = next;
+    motionLabDraftLayers = motionLabHistory[next].map(layer => ({ ...layer }));
+    motionLabEditingIndex = -1;
+    motionLabVisual?.invalidate();
+    renderMotionLabDraft();
+    motionLabNotify('Draft layer change ' + (direction < 0 ? 'undone' : 'redone') +
+      '. Update Curves to view the new motion.');
+  }
+  function syncMotionLabDraft() {
+    const projectId = state.project?.id || '';
+    if (projectId === motionLabProjectId) return;
+    if (motionLabRecorder?.active && projectId !== motionLabProjectId) motionLabDiscardRecording();
+    motionLabProjectId = projectId;
+    motionLabEditingIndex = -1;
+    motionLabDraftLayers = Array.isArray(state.project?.motion_lab?.layers)
+      ? state.project.motion_lab.layers.map(layer => ({ ...layer })) : [];
+    motionLabHistory = [motionLabDraftLayers.map(layer => ({ ...layer }))];
+    motionLabHistoryIndex = 0;
+    motionLabVisual?.clear();
+    renderMotionLabDraft();
+  }
+  function renderMotionLabDraft() {
+    const project = state.project;
+    const is3d = animationMode() === '3d';
+    const ready = Boolean(project && is3d && !motionLabBusy);
+    const count = Number(project?.animation?.max_frames || 120);
+    motionLabRecordingUi();
+    motionLabAudioUi();
+    const stage = qs('#animation-motion-lab-compose-status');
+    if (stage) stage.textContent = !project ? 'Select a project' :
+      !is3d ? '2D project (switch to 3D here)' : motionLabDraftLayers.length +
+      ' draft layer' + (motionLabDraftLayers.length === 1 ? '' : 's');
+    const quick3d = qs('#animation-motion-lab-enable-3d');
+    if (quick3d) {
+      quick3d.hidden = !project || is3d;
+      quick3d.disabled = motionLabBusy || Boolean(state.motionJobId);
+    }
+    for (const id of ['animation-motion-lab-add','animation-motion-lab-clear',
+      'animation-motion-lab-preview-draft','animation-motion-lab-apply',
+      'animation-motion-lab-update-curves']) {
+      const button = qs('#' + id);
+      if (!button) continue;
+      const needsLayers = id !== 'animation-motion-lab-add';
+      button.disabled = !ready || (needsLayers && !motionLabDraftLayers.length);
+    }
+    motionLabSyncQuickActions();
+    const end = qs('#animation-motion-lab-end');
+    if (end) end.max = String(count);
+    const start = qs('#animation-motion-lab-start');
+    if (start) start.max = String(Math.max(0, count - 1));
+    const undo = qs('#animation-motion-lab-undo');
+    const redo = qs('#animation-motion-lab-redo');
+    if (undo) undo.disabled = !ready || motionLabHistoryIndex <= 0;
+    if (redo) redo.disabled = !ready || motionLabHistoryIndex >= motionLabHistory.length - 1;
+    const addButton = qs('#animation-motion-lab-add');
+    if (addButton) addButton.textContent = motionLabEditingIndex < 0 ? '+ Add Preset Layer' : 'Update Selected Layer';
+    const list = qs('#animation-motion-lab-layer-list');
+    if (!list) return;
+    list.replaceChildren();
+    if (!motionLabDraftLayers.length) {
+      list.textContent = 'No layers. Add a Wave, Spiral, Figure Eight, or another preset to begin.';
+      motionLabCurveRender();
+      return;
+    }
+    motionLabDraftLayers.forEach((layer, index) => {
+      const item = document.createElement('div');
+      item.className = 'animation-motion-lab-layer';
+      const desc = document.createElement('span');
+      desc.textContent = layer.type === 'audio'
+        ? (index + 1) + '. Audio ' + layer.axis.replaceAll('_',' ') +
+          ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
+          ' · threshold ' + layer.threshold
+        : layer.type === 'keyframes'
+        ? (index + 1) + '. Custom ' + layer.axis.replaceAll('_', ' ') +
+          ' · ' + layer.blend + ' · ' + layer.interpolation +
+          ' · ' + layer.keys.length + ' keyframe(s)'
+        : layer.type === 'recording'
+          ? (index + 1) + '. ' + (layer.name || 'Recorded take') +
+            ' · ' + layer.blend + ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
+            ' · ' + layer.samples.length + ' frame(s) · ' + (layer.source || 'unknown')
+          : (index + 1) + '. ' + String(layer.preset).replaceAll('-', ' ') +
+            ' · ' + layer.blend + ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
+            ' · strength ' + layer.strength;
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'secondary-button compact';
+      edit.textContent = 'Edit';
+      edit.disabled = !ready;
+      edit.addEventListener('click', () => {
+        if (layer.type === 'keyframes') {
+          motionLabEditingIndex = -1;
+          const axisField = qs('#animation-motion-lab-key-axis');
+          if (axisField) axisField.value = layer.axis;
+          motionLabCurveSyncAxis();
+          motionLabNotify('Selected custom keyframes on ' + layer.axis.replaceAll('_', ' ') + '.');
+          renderMotionLabDraft();
+          return;
+        }
+        if (layer.type === 'recording') {
+          motionLabEditingIndex = -1;
+          const start = qs('#animation-motion-lab-record-start');
+          if (start) start.value = String(layer.start_frame);
+          motionLabVisual?.setFrame(layer.start_frame);
+          motionLabNotify(
+            (layer.name || 'Recorded take') + ' selected: ' + layer.samples.length +
+            ' frame(s), ' + layer.axes.join(', ').replaceAll('_',' ') +
+            '. Record a new take to replace or layer additional movement.'
+          );
+          renderMotionLabDraft();
+          return;
+        }
+        motionLabEditingIndex = index;
+        for (const [id, value] of Object.entries({
+          preset: layer.preset, strength: layer.strength,
+          cycle: layer.cycle_seconds, fade: layer.fade_seconds,
+          start: layer.start_frame, end: layer.end_frame,
+          blend: layer.blend,
+        })) {
+          const field = qs('#animation-motion-lab-' + id);
+          if (field) field.value = String(value);
+        }
+        motionLabNotify('Editing layer ' + (index + 1) + '. Adjust controls and select Update Selected Layer.');
+        renderMotionLabDraft();
+      });
+      const toggle = document.createElement('label');
+      toggle.className = 'animation-motion-lab-layer-toggle';
+      const enabled = document.createElement('input');
+      enabled.type = 'checkbox';
+      enabled.checked = layer.enabled !== false;
+      enabled.disabled = !ready;
+      enabled.setAttribute('aria-label', 'Enable layer ' + (index + 1));
+      enabled.addEventListener('change', () => {
+        motionLabDraftLayers[index].enabled = enabled.checked;
+        commitMotionLabDraft();
+      });
+      toggle.append(enabled, document.createTextNode('On'));
+      const up = document.createElement('button');
+      up.type = 'button';
+      up.className = 'secondary-button compact';
+      up.textContent = '↑';
+      up.title = 'Move layer earlier';
+      up.setAttribute('aria-label', 'Move layer ' + (index + 1) + ' earlier');
+      up.disabled = !ready || index === 0;
+      up.addEventListener('click', () => {
+        [motionLabDraftLayers[index - 1], motionLabDraftLayers[index]] =
+          [motionLabDraftLayers[index], motionLabDraftLayers[index - 1]];
+        motionLabEditingIndex = -1;
+        commitMotionLabDraft();
+      });
+      const down = document.createElement('button');
+      down.type = 'button';
+      down.className = 'secondary-button compact';
+      down.textContent = '↓';
+      down.title = 'Move layer later';
+      down.setAttribute('aria-label', 'Move layer ' + (index + 1) + ' later');
+      down.disabled = !ready || index === motionLabDraftLayers.length - 1;
+      down.addEventListener('click', () => {
+        [motionLabDraftLayers[index + 1], motionLabDraftLayers[index]] =
+          [motionLabDraftLayers[index], motionLabDraftLayers[index + 1]];
+        motionLabEditingIndex = -1;
+        commitMotionLabDraft();
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'secondary-button compact';
+      remove.textContent = 'Remove';
+      remove.disabled = !ready;
+      remove.addEventListener('click', () => {
+        motionLabDraftLayers.splice(index, 1);
+        motionLabEditingIndex = -1;
+        commitMotionLabDraft();
+      });
+      const actions = document.createElement('div');
+      actions.className = 'animation-motion-lab-layer-actions';
+      actions.append(toggle, up, down, edit);
+      if (layer.type === 'recording') {
+        const rename = document.createElement('button');
+        rename.type = 'button';
+        rename.className = 'secondary-button compact';
+        rename.textContent = 'Rename';
+        rename.disabled = !ready;
+        rename.addEventListener('click', () => {
+          if (item.querySelector('.animation-motion-take-rename')) return;
+          const form = document.createElement('form');
+          form.className = 'animation-motion-take-rename';
+          const field = document.createElement('input');
+          field.type = 'text';
+          field.maxLength = 80;
+          field.value = layer.name || 'Recorded take';
+          field.setAttribute('aria-label', 'Recording take name');
+          const save = document.createElement('button');
+          save.type = 'submit';
+          save.className = 'primary-button compact';
+          save.textContent = 'Save name';
+          const cancel = document.createElement('button');
+          cancel.type = 'button';
+          cancel.className = 'secondary-button compact';
+          cancel.textContent = 'Cancel';
+          cancel.addEventListener('click', () => form.remove());
+          form.addEventListener('submit', event => {
+            event.preventDefault();
+            const value = field.value.trim();
+            if (!value) {
+              motionLabNotify('Take name cannot be empty.');
+              field.focus();
+              return;
+            }
+            motionLabDraftLayers[index].name = value;
+            commitMotionLabDraft();
+            motionLabNotify('Renamed recording take to ' + value + '.');
+          });
+          form.append(field, save, cancel);
+          item.appendChild(form);
+          field.focus();
+          field.select();
+        });
+        const duplicate = document.createElement('button');
+        duplicate.type = 'button';
+        duplicate.className = 'secondary-button compact';
+        duplicate.textContent = 'Duplicate';
+        duplicate.disabled = !ready || motionLabDraftLayers.length >= 24;
+        duplicate.addEventListener('click', () => {
+          if (motionLabDraftLayers.length >= 24) return;
+          const copy = JSON.parse(JSON.stringify(motionLabDraftLayers[index]));
+          copy.id = 'take-copy-' + Date.now().toString(36) + '-' +
+            Math.random().toString(36).slice(2, 8);
+          copy.name = (copy.name || 'Recorded take').slice(0, 73) + ' copy';
+          // A duplicate is a separately editable take, not a second motion
+          // contribution until the author intentionally enables it.
+          copy.enabled = false;
+          motionLabDraftLayers.splice(index + 1, 0, copy);
+          motionLabEditingIndex = -1;
+          commitMotionLabDraft();
+          motionLabNotify('Duplicated take as a disabled layer. Enable it when ready.');
+          void motionLabPreviewOrApply(false, {curvesOnly:true});
+        });
+        actions.append(rename, duplicate);
+      }
+      actions.append(remove);
+      item.append(desc, actions);
+      list.appendChild(item);
+    });
+    motionLabCurveRender();
+  }
+  function motionLabNotify(message) {
+    const target = qs('#animation-motion-lab-diagnostics');
+    if (target) target.textContent = message;
+  }
+  function motionLabAddPreset() {
+    if (!state.project || animationMode() !== '3d') {
+      motionLabNotify('Choose Use 3D Motion above to enable the six-axis composer.');
+      return;
+    }
+    const frames = Number(state.project.animation.max_frames || 120);
+    const read = key => qs('#animation-motion-lab-' + key)?.value;
+    const rawEnd = Number(read('end'));
+    const entry = {
+      id: motionLabEditingIndex >= 0
+        ? motionLabDraftLayers[motionLabEditingIndex].id
+        : 'layer-' + Date.now().toString(36) + '-' + motionLabDraftLayers.length,
+      preset: read('preset'), blend: read('blend'),
+      enabled: motionLabEditingIndex >= 0
+        ? motionLabDraftLayers[motionLabEditingIndex].enabled !== false : true,
+      strength: Number(read('strength')),
+      cycle_seconds: Number(read('cycle')), fade_seconds: Number(read('fade')),
+      start_frame: Number(read('start')),
+      end_frame: rawEnd === 0 ? frames : rawEnd,
+    };
+    if (!Number.isInteger(entry.start_frame) || !Number.isInteger(entry.end_frame) ||
+        entry.start_frame < 0 || entry.end_frame > frames ||
+        entry.end_frame <= entry.start_frame || !Number.isFinite(entry.strength) ||
+        entry.strength < 0 || entry.strength > 1 ||
+        !Number.isFinite(entry.cycle_seconds) || entry.cycle_seconds < .2 ||
+        !Number.isFinite(entry.fade_seconds) || entry.fade_seconds < 0) {
+      motionLabNotify('Check the preset range, strength, cycle and fade settings.');
+      return;
+    }
+    if (motionLabDraftLayers.length >= 24 && motionLabEditingIndex < 0) {
+      motionLabNotify('Motion Lab supports up to 24 layers.');
+      return;
+    }
+    if (motionLabEditingIndex >= 0) motionLabDraftLayers[motionLabEditingIndex] = entry;
+    else motionLabDraftLayers.push(entry);
+    motionLabEditingIndex = -1;
+    motionLabNotify('Draft updated. Update Curves for instant feedback, then Apply to Animation to save.');
+    commitMotionLabDraft();
+  }
+  // ML1b: manual camera-velocity keyframes live in the same ordered,
+  // undoable layer stack as presets, never in an independent render pipeline.
+  const MOTION_LAB_AXES = [
+    'translation_x','translation_y','translation_z',
+    'rotation_x','rotation_y','rotation_z',
+  ];
+  function motionLabCurveAxis() {
+    const value = qs('#animation-motion-lab-key-axis')?.value;
+    return MOTION_LAB_AXES.includes(value) ? value : 'translation_x';
+  }
+  function motionLabCurveLayerIndex(axis = motionLabCurveAxis()) {
+    return motionLabDraftLayers.findIndex(layer =>
+      layer.type === 'keyframes' && layer.axis === axis);
+  }
+  function motionLabCurveLayer(axis = motionLabCurveAxis()) {
+    const index = motionLabCurveLayerIndex(axis);
+    return index < 0 ? null : motionLabDraftLayers[index];
+  }
+  function motionLabCurveSyncAxis() {
+    const layer = motionLabCurveLayer();
+    if (layer) {
+      const interp = qs('#animation-motion-lab-key-interpolation');
+      const blend = qs('#animation-motion-lab-key-blend');
+      if (interp) interp.value = layer.interpolation;
+      if (blend) blend.value = layer.blend;
+    }
+    motionLabCurveRender();
+  }
+  function motionLabCurveFrameSync(frame) {
+    const input = qs('#animation-motion-lab-key-frame');
+    if (input && document.activeElement !== input) input.value = String(frame);
+    // The record start frame is an explicit field, not a side effect of
+    // curve playback/scrubbing. Otherwise hitting Record after a preview
+    // starts at the final frame and ends before controls can be used.
+    const value = qs('#animation-motion-lab-key-value');
+    if (value && document.activeElement !== value) {
+      const existing = motionLabCurveLayer()?.keys?.find(key => key.frame === frame);
+      if (existing) value.value = String(existing.value);
+    }
+  }
+  function motionLabCurveRender() {
+    const axis = motionLabCurveAxis();
+    const layer = motionLabCurveLayer(axis);
+    const list = qs('#animation-motion-lab-key-list');
+    if (list) {
+      list.replaceChildren();
+      if (!layer) {
+        list.textContent = 'No custom keyframes on this axis. Add one or drag on the curve graph.';
+      } else {
+        for (const key of layer.keys) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'secondary-button compact';
+          button.textContent = 'Frame ' + key.frame + ': ' + Number(key.value).toFixed(4);
+          button.disabled = motionLabBusy;
+          button.addEventListener('click', () => {
+            const frame = qs('#animation-motion-lab-key-frame');
+            const value = qs('#animation-motion-lab-key-value');
+            if (frame) frame.value = String(key.frame);
+            if (value) value.value = String(key.value);
+            motionLabVisual?.setFrame(key.frame);
+          });
+          list.appendChild(button);
+        }
+      }
+    }
+    const count = Number(state.project?.animation?.max_frames || 120);
+    const frame = qs('#animation-motion-lab-key-frame');
+    if (frame) frame.max = String(count - 1);
+    const eligible = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
+    for (const id of ['animation-motion-lab-key-save','animation-motion-lab-key-delete',
+      'animation-motion-lab-key-clear']) {
+      const control = qs('#' + id);
+      if (control) control.disabled = !eligible || (id !== 'animation-motion-lab-key-save' && !layer);
+    }
+    motionLabVisual?.configureEditor({
+      axis,
+      keys: layer?.keys || [],
+      enabled: Boolean(qs('#animation-motion-lab-key-drag')?.checked) && eligible,
+      pathEnabled: Boolean(qs('#animation-motion-lab-path-drag')?.checked) && eligible,
+      onEdit: motionLabCurvePointerEdit,
+      onPathEdit: motionLabCurvePathEdit,
+      onFrameChange: motionLabCurveFrameSync,
+      onPointerDraft: ({frame, value}) => {
+        const f = qs('#animation-motion-lab-key-frame');
+        const v = qs('#animation-motion-lab-key-value');
+        if (f) f.value = String(frame);
+        if (v) v.value = String(value);
+      },
+    });
+  }
+  function motionLabCurveModify({
+    frame, value, replaceFrame = null,
+    axis = motionLabCurveAxis(), deferCommit = false,
+  }) {
+    const count = Number(state.project?.animation?.max_frames || 120);
+    if (!state.project || animationMode() !== '3d' || motionLabBusy ||
+        !Number.isInteger(frame) || frame < 0 || frame >= count ||
+        !Number.isFinite(value) || Math.abs(value) > 30 ||
+        (frame === 0 && value !== 0)) {
+      motionLabNotify('Invalid curve point: frame must be in range, movement finite within ±30, and frame 0 must stay at zero.');
+      return false;
+    }
+    const index = motionLabCurveLayerIndex(axis);
+    let target = index >= 0 ? structuredClone(motionLabDraftLayers[index]) : {
+      id: 'manual-' + axis,
+      type: 'keyframes',
+      axis, enabled: true,
+      blend: axis === motionLabCurveAxis()
+        ? (qs('#animation-motion-lab-key-blend')?.value || 'add') : 'add',
+      interpolation: axis === motionLabCurveAxis()
+        ? (qs('#animation-motion-lab-key-interpolation')?.value || 'linear') : 'linear',
+      start_frame: 0, end_frame: count,
+      keys: [{frame: 0, value: 0}],
+    };
+    if (index < 0 && motionLabDraftLayers.length >= 24) {
+      motionLabNotify('Motion Lab supports at most 24 layers.');
+      return false;
+    }
+    if (axis === motionLabCurveAxis()) {
+      target.blend = qs('#animation-motion-lab-key-blend')?.value || target.blend;
+      target.interpolation = qs('#animation-motion-lab-key-interpolation')?.value || target.interpolation;
+    }
+    if (replaceFrame !== null && replaceFrame !== 0 && replaceFrame !== frame) {
+      target.keys = target.keys.filter(key => key.frame !== replaceFrame);
+    }
+    const existing = target.keys.find(key => key.frame === frame);
+    if (existing) existing.value = value;
+    else target.keys.push({frame, value});
+    target.keys.sort((a,b) => a.frame - b.frame);
+    if (target.keys.length > 128) {
+      motionLabNotify('Curve layers support at most 128 keyframes.');
+      return false;
+    }
+    if (index < 0) motionLabDraftLayers.push(target);
+    else motionLabDraftLayers[index] = target;
+    motionLabEditingIndex = -1;
+    if (!deferCommit) {
+      commitMotionLabDraft();
+      motionLabNotify('Manual ' + axis.replaceAll('_',' ') +
+        ' curve changed. Update Curves to inspect the new camera movement.');
+    }
+    return true;
+  }
+  function motionLabCurvePathEdit({frame, deltaX, deltaY}) {
+    if (!Number.isInteger(frame) || frame <= 0 ||
+        !Number.isFinite(deltaX) || !Number.isFinite(deltaY) || motionLabBusy) return;
+    const axes = [['translation_x', deltaX], ['translation_y', deltaY]];
+    const needed = axes.filter(([axis]) => motionLabCurveLayerIndex(axis) < 0).length;
+    if (motionLabDraftLayers.length + needed > 24) {
+      motionLabNotify('Not enough free Motion Lab layers to adjust both X and Y path values.');
+      return;
+    }
+    const snapshot = structuredClone(motionLabDraftLayers);
+    for (const [axis, delta] of axes) {
+      if (Math.abs(delta) < 1e-8) continue;
+      const current = motionLabCurveLayer(axis)?.keys?.find(k => k.frame === frame)?.value || 0;
+      const value = Number((current + delta).toFixed(6));
+      if (!motionLabCurveModify({axis, frame, value, deferCommit:true})) {
+        motionLabDraftLayers = snapshot;
+        return;
+      }
+    }
+    commitMotionLabDraft();
+    motionLabNotify('Camera path frame ' + frame +
+      ': X/Y velocity keyframes updated. Path is a projected, auto-fit visualization.');
+    void motionLabPreviewOrApply(false, {curvesOnly:true});
+  }
+  function motionLabCurvePointerEdit(point) {
+    if (motionLabCurveModify(point)) {
+      // Compose the new visual sample series on the existing CPU-free path.
+      void motionLabPreviewOrApply(false, {curvesOnly:true});
+    }
+  }
+  function motionLabCurveSave() {
+    const frame = Number(qs('#animation-motion-lab-key-frame')?.value);
+    const value = Number(qs('#animation-motion-lab-key-value')?.value);
+    if (motionLabCurveModify({frame, value})) {
+      void motionLabPreviewOrApply(false, {curvesOnly:true});
+    }
+  }
+  function motionLabCurveDelete() {
+    const axis = motionLabCurveAxis();
+    const index = motionLabCurveLayerIndex(axis);
+    if (index < 0) return;
+    const frame = Number(qs('#animation-motion-lab-key-frame')?.value);
+    if (!Number.isInteger(frame) || frame === 0) {
+      motionLabNotify('Frame 0 is the fixed motion anchor; select another keyframe to delete.');
+      return;
+    }
+    const layer = structuredClone(motionLabDraftLayers[index]);
+    const original = layer.keys.length;
+    layer.keys = layer.keys.filter(key => key.frame !== frame);
+    if (layer.keys.length === original) {
+      motionLabNotify('No keyframe at frame ' + frame + '.');
+      return;
+    }
+    if (!layer.keys.length) motionLabDraftLayers.splice(index, 1);
+    else motionLabDraftLayers[index] = layer;
+    commitMotionLabDraft();
+    void motionLabPreviewOrApply(false, {curvesOnly:true});
+  }
+  function motionLabCurveClear() {
+    const index = motionLabCurveLayerIndex();
+    if (index < 0) return;
+    motionLabDraftLayers.splice(index, 1);
+    commitMotionLabDraft();
+    motionLabNotify('Custom curve removed from draft; saved animation is unchanged.');
+    if (motionLabDraftLayers.length) void motionLabPreviewOrApply(false, {curvesOnly:true});
+    else motionLabVisual?.clear();
+  }
+
+  async function motionLabPreviewOrApply(apply, { curvesOnly = false } = {}) {
+    if (!state.project?.id || !motionLabDraftLayers.length || motionLabBusy) return;
+    const projectId = state.project.id;
+    motionLabBusy = true;
+    renderMotionLabDraft();
+    try {
+      if (apply && state.dirty) {
+        const approved = await window.MorphorumDialog.confirm({
+          title: 'Save Editor changes before applying Motion Lab?',
+          message: 'Your Editor has unsaved settings. Motion Lab will save them first, then apply these camera layers. Nothing will be discarded.',
+          variant: 'default', confirmText: 'Save & Apply', cancelText: 'Cancel',
+        });
+        if (!approved || state.project?.id !== projectId) return;
+        const saved = await api('/api/animation/projects/' + encodeURIComponent(projectId), {
+          method: 'PUT', body: JSON.stringify(collectProject()),
+        });
+        state.project = saved.project;
+        state.path = saved.path || state.path;
+        fillForm();
+        await loadTimeline();
+        // Confirming the save doesn't confirm overwriting hand-edited tracks.
+        // A separate explicit rebase confirmation is still required if needed.
+      }
+      const endpoint = '/api/animation/projects/' +
+        encodeURIComponent(projectId) + '/motion-lab/' + (apply ? 'apply' : 'preview');
+      const payload = { layers: motionLabDraftLayers };
+      if (!apply) payload.project = collectProject(); // include unsaved edits non-destructively
+      let result;
+      try {
+        result = await api(endpoint, {
+          method: 'POST', body: JSON.stringify(payload),
+        });
+      } catch (error) {
+        if (!apply || !String(error.message || '').includes('Camera schedules changed since Motion Lab')) {
+          throw error;
+        }
+        const approved = await window.MorphorumDialog.confirm({
+          title: 'Use your edited camera schedules as the new Motion Lab base?',
+          message: 'The Editor timeline has changed since Motion Lab last applied its layers. Keep those current camera values and layer this draft on top? This will replace the previous Motion Lab contribution as the baseline, but will not delete the edited schedules.',
+          variant: 'default', confirmText: 'Use Current Camera & Apply',
+          cancelText: 'Keep Existing Motion',
+        });
+        if (!approved || state.project?.id !== projectId) {
+          motionLabNotify('Apply canceled. Your camera timeline remains unchanged.');
+          return;
+        }
+        payload.rebase_current = true;
+        result = await api(endpoint, {
+          method: 'POST', body: JSON.stringify(payload),
+        });
+      }
+      if (state.project?.id !== projectId) return;
+      if (!apply && result.diagnostics?.series) {
+        motionLabVisual?.setData(result.diagnostics);
+      }
+      const limited = Object.entries(result.diagnostics?.limited || {});
+      const rebaseNote = result.diagnostics?.rebased
+        ? (apply ? ' Camera edits accepted as the new base.' :
+          ' Camera edits detected: draft uses current camera; Apply will ask before saving.') : '';
+      motionLabNotify((apply ? 'Applied ' : 'Previewing ') +
+        result.diagnostics.layer_count + ' motion layer(s) across ' +
+        result.diagnostics.frames + ' frames.' +
+        (limited.length ? ' Limited axes: ' + limited.map(([axis,n])=>axis+' ('+n+')').join(', ') : ' No clipping.') +
+        rebaseNote);
+      if (apply) {
+        state.project = result.project;
+        motionLabDraftLayers = result.project.motion_lab.layers.map(l => ({ ...l }));
+        clearMotionPreviewResult();
+        fillForm();
+        await loadTimeline();
+        await loadProjectList();
+        toast('Motion Lab applied', 'Native 3D camera schedules updated without leaving Motion Lab.', 'success');
+      } else if (!curvesOnly) {
+        await generateMotionPreview(result.project);
+      }
+    } catch (error) {
+      motionLabNotify('Motion Lab: ' + error.message);
+      toast('Motion Lab ' + (apply ? 'apply' : 'preview') + ' failed',
+        error.message, 'error', 7000);
+    } finally {
+      motionLabBusy = false;
+      renderMotionLabDraft();
+    }
+  }
+
+  // Motion Lab is first-class; unfinished hybrid Media controls remain mounted
+  // in a non-navigable vault so existing project and API semantics stay intact.
+  // Four visible views share the existing render controls and poller.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
+  const VISIBLE_ANIMATION_TABS = ['editor', 'motion', 'monitor', 'outputs'];
   let animationTab = 'editor';
   function showAnimationTab(name, { persist = true } = {}) {
-    if (!['editor','monitor','media','outputs'].includes(name)) return;
+    if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'editor';
+    if (name !== 'motion') {
+      motionLabVisual?.pause();
+      motionFramePlayer?.pause();
+      if (motionLabRecorder?.active) motionLabStopRecording('tab-change');
+    }
     animationTab = name;
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
@@ -3987,7 +5513,7 @@
     nav.setAttribute('aria-label', 'Animation workspace');
     nav.setAttribute('role', 'tablist');
     const panels = {};
-    const names = { editor: 'Editor', monitor: 'Monitor', media: 'Media', outputs: 'Outputs' };
+    const names = { editor: 'Editor', motion: 'Motion Lab', monitor: 'Monitor', outputs: 'Outputs' };
     for (const [name, label] of Object.entries(names)) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -4020,10 +5546,18 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['monitor','media','outputs']) {
+    for (const name of ['motion', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
+    // Keep the unfinished hybrid-media DOM for backward-compatible project
+    // state and extraction APIs, but make it inaccessible to visible tabs.
+    const mediaVault = document.createElement('section');
+    mediaVault.id = 'animation-media-vault';
+    mediaVault.hidden = true;
+    mediaVault.inert = true;
+    mediaVault.setAttribute('aria-hidden', 'true');
+    panels.outputs.after(mediaVault);
 
     // The old accordion was initialized while Render was a direct child.
     setAnimationCardCollapsed(card, false);
@@ -4031,18 +5565,26 @@
     const inner = qs('.animation-card-content', card) || card;
     const hybrid = qs('#animation-hybrid-source');
     const video = qs('#animation-video-export');
-    if (hybrid) {
-      const wrapper = document.createElement('article');
-      wrapper.className = 'card glass animation-media-card';
-      wrapper.appendChild(hybrid);
-      panels.media.appendChild(wrapper);
-    }
+    if (hybrid) mediaVault.appendChild(hybrid);
     if (video) {
       const wrapper = document.createElement('article');
       wrapper.className = 'card glass animation-output-card';
       wrapper.appendChild(video);
       panels.outputs.appendChild(wrapper);
     }
+    const motionIntro = qs('#animation-motion-lab-intro');
+    if (motionIntro) panels.motion.appendChild(motionIntro);
+    const composer = qs('#animation-motion-lab-composer');
+    if (composer) panels.motion.appendChild(composer);
+    const recording = qs('#animation-motion-lab-recording');
+    if (recording) panels.motion.appendChild(recording);
+    const audio = qs('#animation-motion-lab-audio');
+    if (audio) panels.motion.appendChild(audio);
+    const visual = qs('#animation-motion-lab-visual');
+    if (visual) panels.motion.appendChild(visual);
+    const motionPreview = qs('.animation-motion-preview-card');
+    if (motionPreview) panels.motion.appendChild(motionPreview);
+    motionLabSetupQuickActions(panels.motion);
     const history = qs('.animation-render-history-row');
     if (history) panels.outputs.prepend(history);
     const completedPreview = qs('.animation-render-preview-wrap');
@@ -4059,6 +5601,14 @@
     inner.appendChild(expert);
     qs('#animation-collapse-all')?.setAttribute('title', 'Collapse Editor cards');
     qs('#animation-expand-all')?.setAttribute('title', 'Expand Editor cards');
+    qs('#animation-motion-lab-edit-3d')?.addEventListener('click', () => {
+      showAnimationTab('editor');
+      qs('#animation-3d-camera-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    qs('#animation-motion-lab-edit-timeline')?.addEventListener('click', () => {
+      showAnimationTab('editor');
+      qs('#animation-timeline-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     let previous = 'editor';
     try { previous = localStorage.getItem(ANIMATION_TAB_KEY) || 'editor'; } catch (_) {}
     showAnimationTab(previous, { persist: false });
@@ -4129,6 +5679,76 @@
     qs('#animation-cadence')?.addEventListener('input', syncCadencePreset);
     qs('#animation-cadence')?.addEventListener('change', syncCadencePreset);
     qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
+    qs('#animation-motion-gif-replay')?.addEventListener('click', () => void replayMotionGifWithAudio());
+    qs('#animation-motion-lab-enable-3d')?.addEventListener('click', () => {
+      if (!state.project) return;
+      const selector = qs('#animation-mode');
+      if (selector) selector.value = '3d';
+      markDirty({ validate: true });
+      syncAnimationModeUi();
+      renderMotionLabDraft();
+      motionLabNotify('3D Motion enabled. Preview a draft now, or Apply to save the 3D setting and camera tracks.');
+    });
+    qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
+    qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
+    qs('#animation-motion-lab-analyze-audio')?.addEventListener('click', () => void motionLabAnalyzeAudio());
+    qs('#animation-motion-lab-add-audio')?.addEventListener('click', motionLabAddAudio);
+    qs('#animation-motion-lab-audio-sync')?.addEventListener('change', event => {
+      if (!event.target.checked) motionLabAudioElement?.pause();
+      motionLabAudioSyncStatus(event.target.checked
+        ? 'Audio will follow Motion Curves playback and seeking.'
+        : 'Synchronized audio playback disabled.');
+    });
+    for (const id of ['threshold','attack','release','distance','band','detection','sensitivity']) {
+      qs('#animation-motion-lab-audio-' + id)?.addEventListener('input', motionLabAudioPreview);
+    }
+    qs('#animation-motion-lab-record-mode')?.addEventListener('change', motionLabRecordingUi);
+    qs('#animation-motion-lab-stop-recording')?.addEventListener('click',
+      () => motionLabStopRecording('manual'));
+    qs('#animation-motion-lab-record-gamepad')?.addEventListener('change', event => {
+      if (!event.target.checked) {
+        motionLabRecordStatus('Gamepad input off. Keyboard and touch are always available.', true);
+      } else if (typeof navigator.getGamepads !== 'function') {
+        motionLabRecordStatus('Gamepad API unavailable in this browser/security context. Keyboard and touch still work.', true);
+      } else {
+        motionLabRecordStatus('Gamepad enabled. Move a controller control while recording to verify client-browser visibility.', true);
+      }
+    });
+    motionLabBindStick('animation-motion-lab-stick-translate', 'translate');
+    motionLabBindStick('animation-motion-lab-stick-rotate', 'rotate');
+    motionLabBindHoldControls();
+    qs('#animation-motion-lab-clear')?.addEventListener('click', () => {
+      motionLabDraftLayers = [];
+      motionLabEditingIndex = -1;
+      motionLabNotify('Draft cleared. The currently saved camera timeline is unchanged.');
+      commitMotionLabDraft();
+    });
+    qs('#animation-motion-lab-undo')?.addEventListener('click', () => restoreMotionLabDraft(-1));
+    qs('#animation-motion-lab-redo')?.addEventListener('click', () => restoreMotionLabDraft(1));
+    qs('#animation-motion-lab-update-curves')?.addEventListener('click',
+      () => motionLabPreviewOrApply(false, { curvesOnly: true }));
+    qs('#animation-motion-lab-key-axis')?.addEventListener('change', motionLabCurveSyncAxis);
+    qs('#animation-motion-lab-key-drag')?.addEventListener('change', motionLabCurveRender);
+    qs('#animation-motion-lab-path-drag')?.addEventListener('change', motionLabCurveRender);
+    for (const id of ['animation-motion-lab-key-blend','animation-motion-lab-key-interpolation']) {
+      qs('#' + id)?.addEventListener('change', () => {
+        const index = motionLabCurveLayerIndex();
+        if (index < 0) return;
+        const key = id.endsWith('blend') ? 'blend' : 'interpolation';
+        const value = qs('#' + id)?.value;
+        if (motionLabDraftLayers[index][key] === value) return;
+        motionLabDraftLayers[index] = {...motionLabDraftLayers[index], [key]:value};
+        commitMotionLabDraft();
+        void motionLabPreviewOrApply(false, {curvesOnly:true});
+      });
+    }
+    qs('#animation-motion-lab-key-save')?.addEventListener('click', motionLabCurveSave);
+    qs('#animation-motion-lab-key-delete')?.addEventListener('click', motionLabCurveDelete);
+    qs('#animation-motion-lab-key-clear')?.addEventListener('click', motionLabCurveClear);
+    qs('#animation-motion-lab-preview-draft')?.addEventListener('click',
+      () => motionLabPreviewOrApply(false));
+    qs('#animation-motion-lab-apply')?.addEventListener('click',
+      () => motionLabPreviewOrApply(true));
     qs('#animation-export-video')?.addEventListener('click', startVideoExport);
 
     qs('#animation-start-render')?.addEventListener('click', startAnimationRender);
@@ -4136,6 +5756,37 @@
     qs('#animation-resume-render')?.addEventListener('click', resumeAnimationRender);
     qs('#animation-render-select')?.addEventListener('change', event => {
       showRender(event.target.value);
+    });
+
+    window.addEventListener('keydown', event => {
+      if (!motionLabRecorder?.active || !MOTION_RECORD_KEYMAP[event.code]) return;
+      if (event.repeat) return;
+      event.preventDefault();
+      motionLabRecordKeys.add(event.code);
+    });
+    window.addEventListener('keyup', event => {
+      if (!MOTION_RECORD_KEYMAP[event.code]) return;
+      if (motionLabRecorder?.active) event.preventDefault();
+      motionLabRecordKeys.delete(event.code);
+    });
+    window.addEventListener('blur', () => {
+      if (!motionLabRecorder?.active) {
+        motionLabNeutralizeRecordInput();
+        return;
+      }
+      motionLabStopRecording('blur');
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && motionLabRecorder?.active) motionLabStopRecording('hidden');
+      else if (document.hidden) motionLabNeutralizeRecordInput();
+    });
+    window.addEventListener('gamepadconnected', event => {
+      if (qs('#animation-motion-lab-record-gamepad')?.checked) {
+        motionLabRecordStatus('Gamepad connected to this browser: ' + (event.gamepad?.id || 'controller') + '.', true);
+      }
+    });
+    window.addEventListener('gamepaddisconnected', () => {
+      motionLabRecordStatus('Gamepad disconnected. Keyboard and touch remain available.', true);
     });
 
     qs('#animation-project-select')?.addEventListener('change', event => {
@@ -4186,6 +5837,7 @@
         input.id === 'animation-project-select' ||
         input.id.startsWith('animation-deforum-') ||
         input.id.startsWith('animation-hybrid-') ||
+        input.id.startsWith('animation-motion-lab-') ||
         input.id.startsWith('animation-video-') ||
         input.id === 'animation-model' ||
         input.id === 'animation-resolution-preset' ||
@@ -4217,6 +5869,10 @@
   async function start() {
     setupAnimationAccordions();
     setupAnimationWorkspaceTabs();
+    if (window.MorphorumMotionLabVisualizer) {
+      motionLabVisual = new window.MorphorumMotionLabVisualizer();
+      motionLabBindAudioTransport();
+    }
     bind();
     setEditorEnabled(false);
 

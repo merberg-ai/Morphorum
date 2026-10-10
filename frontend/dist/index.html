@@ -492,11 +492,260 @@
             </div>
           </article>
 
+          <article class="card glass animation-motion-lab-intro" id="animation-motion-lab-intro">
+            <div class="animation-motion-lab-heading">
+              <div>
+                <p class="eyebrow">MOTION LAB / CAMERA AUTHORING</p>
+                <h2>Design the movement before the render</h2>
+                <p class="muted">Compose native six-axis 3D camera movement with presets and layers, preview the results without diffusion, and apply them directly to your existing animation timeline. Controller recording and audio-reactive movement are coming later.</p>
+              </div>
+              <span class="animation-motion-lab-stage">Camera preview available</span>
+            </div>
+            <div class="animation-motion-lab-quick-actions">
+              <button class="secondary-button compact" id="animation-motion-lab-edit-3d" type="button">Edit 3D Camera Schedules</button>
+              <button class="secondary-button compact" id="animation-motion-lab-edit-timeline" type="button">Open Visual Timeline</button>
+            </div>
+            <p class="muted animation-motion-lab-note">Choose a project and preview with the built-in calibration grid immediately. You can optionally upload your own reference image in Editor. Geometric previews do not run diffusion; your render pipeline remains unchanged.</p>
+          </article>
+
+          <article class="card glass animation-motion-lab-composer" id="animation-motion-lab-composer">
+            <div class="card-header">
+              <div>
+                <h2>Camera Motion Composer <small class="muted">ML0</small></h2>
+                <p class="muted">Design and layer native 3D camera movement. Preview directly here, even with unsaved Editor camera changes. Apply saves it to your existing animation timeline.</p>
+              </div>
+              <div class="animation-motion-lab-head-actions">
+                <span class="animation-motion-lab-stage" id="animation-motion-lab-compose-status">Select a 3D project</span>
+                <button class="secondary-button compact" id="animation-motion-lab-enable-3d" type="button" hidden>Use 3D Motion</button>
+              </div>
+            </div>
+            <div class="animation-motion-lab-fields">
+              <label><span>Preset</span><select id="animation-motion-lab-preset">
+                <option value="wave">Wave</option>
+                <option value="spiral">Spiral</option>
+                <option value="figure-eight">Figure Eight</option>
+                <option value="gentle-drift">Gentle Drift</option>
+                <option value="rocking">Rocking</option>
+                <option value="push-in">Push In</option>
+                <option value="pull-out">Pull Out</option>
+                <option value="still">Still (Replace to reset)</option>
+              </select></label>
+              <label><span>Strength (0–1)</span><input id="animation-motion-lab-strength" type="number" min="0" max="1" step=".05" value=".65"></label>
+              <label><span>Cycle (seconds)</span><input id="animation-motion-lab-cycle" type="number" min=".2" max="600" step=".1" value="2"></label>
+              <label><span>Fade (seconds)</span><input id="animation-motion-lab-fade" type="number" min="0" max="120" step=".05" value=".1"></label>
+              <label><span>Start frame</span><input id="animation-motion-lab-start" type="number" min="0" step="1" value="0"></label>
+              <label><span>End frame (0 = full)</span><input id="animation-motion-lab-end" type="number" min="0" step="1" value="0"></label>
+              <label><span>Blend</span><select id="animation-motion-lab-blend"><option value="add">Add to base</option><option value="replace">Replace affected axes</option></select></label>
+            </div>
+            <div class="animation-motion-lab-actions">
+              <button class="secondary-button compact" id="animation-motion-lab-add" type="button" disabled>+ Add Preset Layer</button>
+              <button class="secondary-button compact" id="animation-motion-lab-clear" type="button" disabled>Clear Draft</button>
+              <button class="secondary-button compact" id="animation-motion-lab-undo" type="button" disabled>Undo</button>
+              <button class="secondary-button compact" id="animation-motion-lab-redo" type="button" disabled>Redo</button>
+              <button class="secondary-button compact busy-button" id="animation-motion-lab-update-curves" type="button" disabled><span class="spinner"></span><span class="button-label">Update Curves</span></button>
+              <button class="secondary-button compact busy-button" id="animation-motion-lab-preview-draft" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Draft Motion</span></button>
+              <button class="primary-button compact busy-button" id="animation-motion-lab-apply" type="button" disabled><span class="spinner"></span><span class="button-label">Apply to Animation</span></button>
+            </div>
+            <div class="animation-motion-lab-layer-list" id="animation-motion-lab-layer-list" aria-live="polite">Add a preset layer to begin.</div>
+            <div class="animation-motion-lab-diagnostics muted" id="animation-motion-lab-diagnostics" role="status">Draft motion is not applied to the animation timeline until you select Apply.</div>
+          </article>
+
+          <article class="card glass animation-motion-lab-recording" id="animation-motion-lab-recording">
+            <div class="card-header">
+              <div>
+                <h2>Live Motion Recording <small class="muted">ML2</small></h2>
+                <p class="muted">Fly the native six-axis camera with keyboard, touch, or an optional browser-visible gamepad. Recording is sampled on the project frame clock and becomes another editable Motion Lab layer. It never steers a running diffusion render.</p>
+              </div>
+              <span class="animation-motion-lab-stage" id="animation-motion-lab-record-status">Ready</span>
+            </div>
+
+            <div class="animation-motion-recording-controls">
+              <label><span>Take mode</span><select id="animation-motion-lab-record-mode"><option value="new">New recording layer</option><option value="punch">Punch into existing take</option></select></label>
+              <label><span>Target take (punch-in)</span><select id="animation-motion-lab-punch-target" disabled><option value="">Select a recorded take</option></select></label>
+              <label><span>End frame exclusive (punch-in)</span><input id="animation-motion-lab-punch-end" type="number" min="1" step="1" value="24" disabled></label>
+              <label><span>Start frame</span><input id="animation-motion-lab-record-start" type="number" min="0" step="1" value="0"></label>
+              <label><span>Blend</span><select id="animation-motion-lab-record-blend"><option value="add">Add to existing motion</option><option value="replace">Replace armed axes</option></select></label>
+              <label><span>Translation sensitivity <small class="muted">units/frame</small></span><input id="animation-motion-lab-record-translation" type="number" min="0.0001" max="0.12" step="0.001" value="0.025"></label>
+              <label><span>Rotation sensitivity <small class="muted">deg/frame</small></span><input id="animation-motion-lab-record-rotation" type="number" min="0.01" max="2" step="0.05" value="0.5"></label>
+              <label><span>Deadzone</span><input id="animation-motion-lab-record-deadzone" type="number" min="0" max="0.5" step="0.01" value="0.08"></label>
+              <label><span>Response / return</span><input id="animation-motion-lab-record-response" type="number" min="0.05" max="1" step="0.05" value="0.55"></label>
+              <label><span>Release tail <small class="muted">frames</small></span><input id="animation-motion-lab-record-tail" type="number" min="0" max="12" step="1" value="3"></label>
+              <label class="animation-motion-record-gamepad"><input id="animation-motion-lab-record-gamepad" type="checkbox"> Use browser gamepad when available</label>
+            </div>
+
+            <fieldset class="animation-motion-axis-arms">
+              <legend>Armed axes</legend>
+              <label><input type="checkbox" data-motion-record-axis="translation_x" checked> Strafe X</label>
+              <label><input type="checkbox" data-motion-record-axis="translation_y" checked> Lift Y</label>
+              <label><input type="checkbox" data-motion-record-axis="translation_z" checked> Dolly Z</label>
+              <label><input type="checkbox" data-motion-record-axis="rotation_x" checked> Pitch</label>
+              <label><input type="checkbox" data-motion-record-axis="rotation_y" checked> Yaw</label>
+              <label><input type="checkbox" data-motion-record-axis="rotation_z" checked> Roll</label>
+            </fieldset>
+
+            <details class="animation-motion-axis-invert-details">
+              <summary>Axis inversion</summary>
+              <div class="animation-motion-axis-inverts">
+                <label><input type="checkbox" data-motion-record-invert="translation_x"> X</label>
+                <label><input type="checkbox" data-motion-record-invert="translation_y"> Y</label>
+                <label><input type="checkbox" data-motion-record-invert="translation_z"> Z</label>
+                <label><input type="checkbox" data-motion-record-invert="rotation_x"> Pitch</label>
+                <label><input type="checkbox" data-motion-record-invert="rotation_y"> Yaw</label>
+                <label><input type="checkbox" data-motion-record-invert="rotation_z"> Roll</label>
+              </div>
+            </details>
+
+            <div class="animation-motion-recording-actions">
+              <button class="primary-button compact" id="animation-motion-lab-record" type="button" disabled>● Record Take</button>
+              <button class="secondary-button compact" id="animation-motion-lab-stop-recording" type="button" disabled>■ Stop</button>
+              <span class="muted" id="animation-motion-lab-record-frame" role="status" aria-live="polite">No take in progress.</span>
+            </div>
+
+            <div class="animation-motion-live-monitor" id="animation-motion-lab-live-monitor" aria-live="off">
+              <strong id="animation-motion-lab-live-indicator">● Idle</strong>
+              <div id="animation-motion-lab-live-axes">X 0.0000 · Y 0.0000 · Z 0.0000 · Pitch 0.000° · Yaw 0.000° · Roll 0.000°</div>
+              <p id="animation-motion-lab-live-input" class="muted">No recording active.</p>
+            </div>
+            <div class="animation-motion-controller-grid">
+              <div class="animation-motion-stick-wrap">
+                <strong>Translate X / Y</strong>
+                <div class="animation-motion-stick" id="animation-motion-lab-stick-translate" role="application" aria-label="Translation touch joystick" tabindex="0"><span class="animation-motion-stick-knob"></span></div>
+              </div>
+              <div class="animation-motion-stick-wrap">
+                <strong>Pitch / Yaw</strong>
+                <div class="animation-motion-stick" id="animation-motion-lab-stick-rotate" role="application" aria-label="Rotation touch joystick" tabindex="0"><span class="animation-motion-stick-knob"></span></div>
+              </div>
+              <div class="animation-motion-hold-controls" aria-label="Depth and roll controls">
+                <strong>Depth / Roll</strong>
+                <div>
+                  <button type="button" class="secondary-button compact" data-motion-hold-axis="translation_z" data-motion-hold-value="1">Z +</button>
+                  <button type="button" class="secondary-button compact" data-motion-hold-axis="translation_z" data-motion-hold-value="-1">Z −</button>
+                  <button type="button" class="secondary-button compact" data-motion-hold-axis="rotation_z" data-motion-hold-value="-1">Roll ⟲</button>
+                  <button type="button" class="secondary-button compact" data-motion-hold-axis="rotation_z" data-motion-hold-value="1">Roll ⟳</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="notice subtle animation-motion-recording-help">
+              <strong>Keyboard</strong>
+              <span><b>A/D</b> strafe X · <b>R/F</b> lift Y · <b>W/S</b> dolly Z · <b>↑/↓</b> pitch · <b>←/→</b> yaw · <b>Q/E</b> roll. Inputs are neutralized on release, pointer cancel, window blur, or tab hiding. Gamepads are read by the client browser only and may be unavailable on a plain HTTP LAN origin.</span>
+            </div>
+            <p class="muted animation-motion-gamepad-status" id="animation-motion-lab-gamepad-status">Gamepad input off. Keyboard and touch are always available.</p>
+          </article>
+
+          <article class="card glass animation-motion-lab-audio" id="animation-motion-lab-audio">
+            <div class="card-header"><div><h2>Audio-Reactive Motion <span class="muted">ML3.1</span></h2>
+              <p class="muted">Analyze a mono/stereo PCM WAV and add deterministic beat pulses to the existing six-axis camera timeline. Full-band RMS in this first release; bass filtering and compressed audio follow later.</p>
+            </div><span class="animation-motion-lab-stage" id="animation-motion-lab-audio-status">No audio analyzed</span></div>
+            <div class="animation-motion-audio-controls">
+              <label><span>PCM WAV file (up to 20 MiB / 3 minutes)</span><input id="animation-motion-lab-audio-file" type="file" accept=".wav,audio/wav,audio/x-wav"></label>
+              <div class="animation-motion-audio-length"><label><input id="animation-motion-lab-audio-match-length" type="checkbox"> Match project length to analyzed audio <details class="motion-audio-help"><summary aria-label="Explain audio length matching">ⓘ</summary><p>After analysis, offer to change the project's frame count to cover the entire WAV at its existing FPS. It never changes FPS automatically. Existing Motion Lab layers must be cleared or handled separately first. Review and confirm before saving.</p></details></label><span id="animation-motion-lab-audio-length-status" class="muted">Current project FPS is preserved.</span></div>
+              <label><span>Frequency target <details class="motion-audio-help"><summary aria-label="Explain frequency target">ⓘ</summary><p>Full mix reacts to everything. Kick targets deep drum thumps (35–140 Hz), Bass emphasizes low instruments (40–250 Hz), Snare targets mid frequencies (150–2400 Hz), and Highs follows cymbals and sharp treble (2.5–10 kHz). These filters cannot fully isolate instruments.</p></details></span><select id="animation-motion-lab-audio-band"><option value="fullband">Full mix (RMS)</option><option value="kick" selected>Kick / heavy drums</option><option value="bass">Bass line</option><option value="snare">Snare / mids</option><option value="highs">Hi-hats / highs</option></select></label>
+              <label><span>Detection mode <details class="motion-audio-help"><summary aria-label="Explain detection mode">ⓘ</summary><p>Transient triggers on a sudden increase in band energy, better for sharp drum hits. Level triggers when continuous loudness rises above the threshold.</p></details></span><select id="animation-motion-lab-audio-detection"><option value="transient" selected>Transient / drum hit</option><option value="level">Level crossing</option></select></label>
+              <label><span>Transient sensitivity <details class="motion-audio-help"><summary aria-label="Explain transient sensitivity">ⓘ</summary><p>Higher sensitivity setting filters out weaker changes, detecting only sharper hits. Lower it to capture more subtle events. Only applies in Transient mode.</p></details></span><input id="animation-motion-lab-audio-sensitivity" type="number" min="0" max="1" step=".05" value=".35"></label>
+              <label><span>Motion axis <details class="motion-audio-help"><summary aria-label="Help for Motion axis">ⓘ</summary><p>Choose which of the six camera movements pulses with detected beats. Depth Z creates quick zooms.</p></details></span><select id="animation-motion-lab-audio-axis"><option value="translation_z">Depth Z</option><option value="translation_x">Translation X</option><option value="translation_y">Translation Y</option><option value="rotation_x">Pitch</option><option value="rotation_y">Yaw</option><option value="rotation_z">Roll</option></select></label>
+              <label><span>Onset threshold (0–1) <details class="motion-audio-help"><summary aria-label="Help for Onset threshold (0–1)">ⓘ</summary><p>Minimum strength for a hit. Lower this if no markers appear; raise it to ignore weaker hits.</p></details></span><input id="animation-motion-lab-audio-threshold" type="number" min="0" max="1" step=".01" value=".10"></label>
+              <label><span>Motion pulse (native units) <details class="motion-audio-help"><summary aria-label="Help for Motion pulse (native units)">ⓘ</summary><p>How far the camera moves per pulse, followed by an equal return. Smaller values are subtler.</p></details></span><input id="animation-motion-lab-audio-distance" type="number" min="0" max="1" step=".01" value=".04"></label>
+              <label><span>Attack frames <details class="motion-audio-help"><summary aria-label="Help for Attack frames">ⓘ</summary><p>Number of frames used to move out. One frame produces a sharp punch.</p></details></span><input id="animation-motion-lab-audio-attack" type="number" min="1" max="120" step="1" value="1"></label>
+              <label><span>Release frames <details class="motion-audio-help"><summary aria-label="Help for Release frames">ⓘ</summary><p>Number of frames used to return to the original position. More frames create a slower recovery.</p></details></span><input id="animation-motion-lab-audio-release" type="number" min="1" max="120" step="1" value="3"></label>
+            </div>
+
+            <div class="animation-motion-audio-preview" id="animation-motion-lab-audio-preview" hidden>
+              <div class="animation-motion-audio-preview-header"><strong>Analyzed audio envelope</strong><span class="muted" id="animation-motion-lab-audio-summary"></span></div>
+              <svg id="animation-motion-lab-audio-plot" viewBox="0 0 800 230" preserveAspectRatio="none" role="img" aria-label="Audio RMS over project frames, onset threshold, and predicted beat triggers"></svg>
+              <div class="animation-motion-audio-legend"><span>▥ Audio RMS</span><span>━ Trigger threshold</span><span>● Predicted pulses</span></div>
+              <p id="animation-motion-lab-audio-prediction" class="muted" aria-live="polite"></p>
+            </div>
+            <div class="animation-motion-recording-actions">
+              <button id="animation-motion-lab-analyze-audio" type="button" class="secondary-button compact">Analyze WAV</button>
+              <button id="animation-motion-lab-add-audio" type="button" class="primary-button compact" disabled>+ Add Audio Motion Layer</button>
+            </div>
+            <p class="muted" id="animation-motion-lab-audio-info" role="status" aria-live="polite">Audio analysis runs on the Morphorum host CPU. Adding a layer is draft-only until Apply to Animation.</p>
+          </article>
+
+          <article class="card glass animation-motion-lab-visual" id="animation-motion-lab-visual">
+            <div class="card-header">
+              <div>
+                <h2>Motion Curves & Camera Path <small class="muted">ML1</small></h2>
+                <p class="muted">Frame-accurate native camera increments and an integrated geometric path. This visualization does not load a depth model or run diffusion.</p>
+              </div>
+              <span class="animation-motion-lab-stage" id="animation-motion-lab-curve-state">Curves not compiled</span>
+            </div>
+                        <div class="animation-motion-audio-playback">
+              <label><input type="checkbox" id="animation-motion-lab-audio-sync" checked> Play analyzed WAV during Motion Curves playback</label>
+              <span class="muted" id="animation-motion-lab-audio-sync-status" role="status">Analyze a WAV to enable synchronized playback.</span>
+            </div>
+            <div class="animation-motion-lab-curve-editor" id="animation-motion-lab-curve-editor">
+              <div class="animation-motion-lab-curve-fields">
+                <label>Axis
+                  <select id="animation-motion-lab-key-axis">
+                    <option value="translation_x">Translation X</option>
+                    <option value="translation_y">Translation Y</option>
+                    <option value="translation_z">Translation Z</option>
+                    <option value="rotation_x">Pitch (rotation X)</option>
+                    <option value="rotation_y">Yaw (rotation Y)</option>
+                    <option value="rotation_z">Roll (rotation Z)</option>
+                  </select>
+                </label>
+                <label>Blend
+                  <select id="animation-motion-lab-key-blend">
+                    <option value="add">Add to existing movement</option>
+                    <option value="replace">Replace movement on this axis</option>
+                  </select>
+                </label>
+                <label>Interpolation
+                  <select id="animation-motion-lab-key-interpolation">
+                    <option value="linear">Linear (straight)</option>
+                    <option value="smoothstep">Ease In / Out (smooth)</option>
+                    <option value="smootherstep">Extra Smooth (gentle ease)</option>
+                    <option value="cubic">Smooth Cubic (through keyframes)</option>
+                    <option value="hold">Hold (step)</option>
+                  </select>
+                </label>
+                <label>Frame
+                  <input type="number" id="animation-motion-lab-key-frame" min="0" max="23" step="1" value="1"/>
+                </label>
+                <label>Velocity (units per frame, ° for rotations)
+                  <input type="number" id="animation-motion-lab-key-value" min="-30" max="30" step="0.001" value="0.02"/>
+                </label>
+              </div>
+              <div class="animation-motion-lab-curve-actions">
+                <label class="animation-motion-lab-edit-toggle"><input type="checkbox" id="animation-motion-lab-key-drag"/> Edit curve by dragging</label>
+                <label class="animation-motion-lab-edit-toggle"><input type="checkbox" id="animation-motion-lab-path-drag"/> Edit path X/Y by dragging</label>
+                <button class="secondary-button compact" id="animation-motion-lab-key-save" type="button">Add / Update Keyframe</button>
+                <button class="secondary-button compact" id="animation-motion-lab-key-delete" type="button">Delete Keyframe</button>
+                <button class="secondary-button compact" id="animation-motion-lab-key-clear" type="button">Remove Axis Curve</button>
+              </div>
+              <div id="animation-motion-lab-key-list" class="animation-motion-lab-key-list" aria-live="polite">No manual keyframes on this axis yet. Add a keyframe or enable curve dragging.</div>
+              <p class="muted animation-motion-lab-key-help">Keyframes define <strong>per-frame camera movement</strong>, not absolute camera positions. Frame 0 stays fixed. Linear connects points with straight lines. Ease In / Out rounds each segment, Extra Smooth softens transitions further, and Smooth Cubic gives continuous, shape-preserving tangents. Choose an axis and drag or enter exact frame/velocity values. Changes remain a draft until Apply to Animation.</p>
+            </div>
+            <div class="animation-motion-lab-playbar">
+              <button id="animation-motion-lab-play" class="secondary-button compact" type="button" disabled>Play</button>
+              <label class="animation-motion-lab-loop"><input id="animation-motion-lab-loop" type="checkbox" checked> Loop</label>
+              <label class="animation-motion-lab-scrubber"><span>Frame</span><input id="animation-motion-lab-frame" type="range" min="0" max="1" step="1" value="0" disabled></label>
+              <output id="animation-motion-lab-frame-value" for="animation-motion-lab-frame">0 / 0</output>
+              <span id="animation-motion-lab-time-value" class="muted">0.00s</span>
+            </div>
+            <div class="animation-motion-lab-visual-grid">
+              <div class="animation-motion-lab-svg-wrap">
+                <h3>Translation and rotation velocity</h3>
+                <svg id="animation-motion-lab-curves" class="animation-motion-lab-svg animation-motion-lab-curves" viewBox="0 0 800 300" role="img" aria-label="Six axis motion curves, scrub or drag to seek" tabindex="0"></svg>
+                <p class="animation-motion-lab-legend">Translation <span class="ml1-tx">X</span> <span class="ml1-ty">Y</span> <span class="ml1-tz">Z</span> · Rotation <span class="ml1-rx">Pitch</span> <span class="ml1-ry">Yaw</span> <span class="ml1-rz">Roll</span></p>
+              </div>
+              <div class="animation-motion-lab-svg-wrap">
+                <h3>Camera travel (geometric)</h3>
+                <svg id="animation-motion-lab-path" class="animation-motion-lab-svg animation-motion-lab-path" viewBox="0 0 440 300" role="img" aria-label="Normalized projected camera path, not depth-aware"></svg>
+                <p class="muted animation-motion-lab-visual-note">Integrated X/Y/Z increments, auto-fit to the plot. Optional path-point dragging adds X/Y velocity keyframes at that frame, affecting following positions. Not depth-aware or physically scaled.</p>
+              </div>
+            </div>
+            <div class="animation-motion-lab-readout" id="animation-motion-lab-axis-readout" aria-live="off">Add a motion layer and select Update Curves to inspect per-frame values.</div>
+          </article>
+
           <article class="card glass animation-motion-preview-card">
             <div class="card-header">
               <div>
                 <h2>Camera Motion Preview</h2>
-                <p class="muted">CPU-only 2D or 3D camera-motion preview from your uploaded image. No diffusion and no GPU model load.</p>
+                <p class="muted">CPU-only 2D or 3D camera-motion preview using the calibration grid or an uploaded reference image. No diffusion and no GPU model load.</p>
               </div>
               <button class="primary-button compact busy-button" id="animation-generate-motion-preview" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Camera Motion</span></button>
             </div>
@@ -504,7 +753,7 @@
             <label class="animation-preview-hole-toggle" data-animation-mode="3d"><input id="animation-preview-highlight-holes" type="checkbox" disabled> Highlight exposed pixels in red</label>
             <div class="notice subtle animation-motion-preview-note">
               <strong>Geometry only</strong>
-              <span>3D mode simulates sequential depth warps and reports projected coverage and newly exposed pixels. The red overlay is only a preview aid. The uploaded reference does not change your real starting-frame mode or model.</span>
+              <span>3D mode simulates sequential depth warps and reports projected coverage and newly exposed pixels. The red overlay is only a preview aid. An uploaded reference is optional; previews never change your real starting-frame mode or model.</span>
             </div>
 
             <div class="animation-motion-progress" id="animation-motion-progress" hidden>
@@ -516,7 +765,23 @@
             </div>
 
             <div class="animation-motion-result" id="animation-motion-result" hidden>
-              <img id="animation-motion-preview-image" alt="Motion-only animation preview">
+              <div class="animation-motion-gif-sync">
+                <button class="secondary-button compact" id="animation-motion-gif-replay" type="button">↻ Replay Preview + Audio</button>
+                <label><input type="checkbox" id="animation-motion-gif-auto-audio" checked> Start analyzed WAV when preview becomes ready</label>
+                <span class="muted" id="animation-motion-gif-sync-status" role="status">Analyze WAV to enable synchronized preview audio.</span>
+              </div>
+              <div id="animation-motion-frame-player" class="animation-motion-frame-player" hidden>
+                <img id="animation-motion-frame-image" alt="Frame-controlled camera preview">
+                <div class="animation-motion-player-actions">
+                  <button id="animation-motion-frame-play" type="button" class="secondary-button compact">▶ Play</button>
+                  <button id="animation-motion-frame-reset" type="button" class="secondary-button compact">↺ Start</button>
+                  <label><input id="animation-motion-frame-loop" type="checkbox" checked> Loop</label>
+                  <span id="animation-motion-frame-time" class="muted">0.00s</span>
+                </div>
+                <input id="animation-motion-frame-scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Seek camera preview project frame">
+                <p class="muted" id="animation-motion-frame-note">Frames are drawn from up to 72 CPU preview samples. Playback follows the project frame clock.</p>
+              </div>
+              <img id="animation-motion-preview-image" alt="Motion-only animation GIF fallback" hidden>
               <div class="animation-motion-result-meta" id="animation-motion-result-meta"></div>
               <div class="animation-camera-coverage" id="animation-camera-coverage" hidden></div>
             </div>
@@ -987,6 +1252,9 @@
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/loras.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/motion-lab-visual.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/motion-lab-recording.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/motion-lab-frame-player.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>

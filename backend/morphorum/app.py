@@ -54,6 +54,9 @@ from .animation_render import (
     AnimationRenderError,
     animation_render_manager,
 )
+from .motion_lab import MotionLabError, PRESETS as MOTION_LAB_PRESETS, compile_motion_lab
+from .audio_motion import AudioMotionError
+from .audio_motion_upload import MAX_AUDIO_BYTES, analyze_managed_wav
 from .animation_hybrid_extract import hybrid_extraction_manager
 from .animation_hybrid_source import (
     HybridSourceError, managed_video_path, probe_managed_video, store_managed_video,
@@ -304,6 +307,91 @@ def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
         raise HTTPException(status_code=status, detail=message) from exc
+
+
+@app.get("/api/animation/motion-lab/presets")
+def api_motion_lab_presets() -> dict[str, Any]:
+    return {"presets": list(MOTION_LAB_PRESETS)}
+
+
+@app.post("/api/animation/projects/{project_id}/motion-lab/audio-analyze")
+async def api_motion_lab_audio_analyze(project_id: str, request: Request) -> dict[str, Any]:
+    """Decode and retain bounded project-owned WAV, without modifying camera tracks."""
+    try:
+        project = load_animation_project(project_id)
+        if request.headers.get("content-length"):
+            if int(request.headers["content-length"]) > MAX_AUDIO_BYTES:
+                raise AudioMotionError("Audio file exceeds 20 MiB.")
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > MAX_AUDIO_BYTES:
+                raise AudioMotionError("Audio file exceeds 20 MiB.")
+        animation = project.get("animation") or {}
+        analysis = analyze_managed_wav(
+            project_id, bytes(data), fps=float(animation.get("fps", 12)),
+            frames=int(animation.get("max_frames", 120)),
+        )
+        return {"status": "analyzed", "analysis": analysis}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (AudioMotionError, ValueError, OverflowError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-lab/preview")
+def api_motion_lab_compose_preview(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        # Optional unsaved Editor draft is accepted for PREVIEW only. Never
+        # persist changes or rely on the client snapshot for Apply.
+        editor_draft = payload.get("project")
+        if editor_draft is not None:
+            if not isinstance(editor_draft, dict):
+                raise MotionLabError("Motion Lab preview project must be an object.")
+            project = normalize_animation_project(
+                editor_draft, existing=project, project_id=project_id,
+            )
+        layers = payload.get("layers")
+        if not isinstance(layers, list):
+            raise MotionLabError("Motion Lab preview requires a list of layers.")
+        compiled, diagnostics = compile_motion_lab(
+            project, layers=layers, conflict_policy="use-current",
+            include_series=True,
+        )
+        return {
+            "status": "preview",
+            "diagnostics": diagnostics,
+            "layers": compiled["motion_lab"]["layers"],
+            "project": compiled,
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (MotionLabError, ScheduleError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-lab/apply")
+def api_motion_lab_apply(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        project = load_animation_project(project_id)
+        layers = payload.get("layers")
+        if not isinstance(layers, list):
+            raise MotionLabError("Motion Lab apply requires a list of layers.")
+        compiled, diagnostics = compile_motion_lab(
+            project, layers=layers,
+            conflict_policy=("use-current" if payload.get("rebase_current") is True else "reject"),
+        )
+        saved = save_animation_project(project_id, compiled, prefer_tracks=True)
+        return {
+            "status": "applied", "project": saved, "diagnostics": diagnostics,
+        }
+    except AnimationProjectError as exc:
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    except (MotionLabError, ScheduleError) as exc:
+        status = 409 if "Camera schedules changed since Motion Lab" in str(exc) else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 @app.get("/api/animation/timeline/descriptors")
@@ -772,6 +860,10 @@ def api_start_motion_preview(payload: dict[str, Any]) -> dict[str, Any]:
             )
         source_path = animation_project_directory(project_id) / "assets" / "source.png"
         options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+        # Motion Lab can preview a built-in calibration grid even when the
+        # animation has no uploaded starting/reference image.
+        if not source_path.is_file():
+            source_path = None
         return motion_preview_manager.start(
             project=normalized,
             source_path=source_path,
@@ -794,6 +886,17 @@ def api_motion_preview_image(job_id: str):
     try:
         path = motion_preview_manager.result_path(job_id)
         return FileResponse(path, media_type="image/gif", filename="motion-preview.gif")
+    except MotionPreviewError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/motion-preview/{job_id}/frames/{index}")
+def api_motion_preview_frame(job_id: str, index: int):
+    try:
+        return FileResponse(
+            motion_preview_manager.frame_path(job_id, index),
+            media_type="image/png",
+        )
     except MotionPreviewError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
