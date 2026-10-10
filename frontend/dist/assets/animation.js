@@ -2959,7 +2959,7 @@
     const meta = qs('#animation-video-result-meta');
     if (latest) {
       const url = latest.url;
-      const versionedUrl = url + '?inline=true&v=' +
+      const versionedUrl = url + '?inline=true' + '&v=' +
         encodeURIComponent(latest.completed_at || latest.bytes || 'latest');
       if (video && video.dataset.videoUrl !== versionedUrl) {
         video.dataset.videoUrl = versionedUrl;
