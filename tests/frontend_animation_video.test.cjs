@@ -181,6 +181,7 @@ test('high-resolution animation submits immediately without a 512px confirmation
 test('hybrid anchor inputs are opt-in and persisted through project save', () => {
   for (const id of [
     'animation-hybrid-render-enabled', 'animation-hybrid-offset',
+    'animation-hybrid-composite-enabled', 'animation-hybrid-composite-opacity',
     'animation-hybrid-source', 'animation-hybrid-frame-slider',
   ]) assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
   assert.match(html, /Use extracted video frames for animation diffusion anchors/);
@@ -190,4 +191,13 @@ test('hybrid anchor inputs are opt-in and persisted through project save', () =>
   assert.match(script, /function hybridRestoreProjectFrames\(/);
   assert.match(script, /markDirty\(\)/);
   assert.match(script, /await api\(hybridBase\(\) \+ '\/hybrid-frames'\)/);
+});
+
+test('source-over video compositing has independent opt-in schedule controls', () => {
+  assert.match(html, /Composite source video over rendered frames/);
+  assert.match(html, /Video opacity schedule/);
+  assert.match(script, /project\.hybrid\?\.composite_enabled === true/);
+  assert.match(script, /project\.hybrid\?\.composite_opacity \?\? '0:\(0\.35\)'/);
+  assert.match(script, /composite_enabled: Boolean\(qs\('#animation-hybrid-composite-enabled'\)\?\.checked\)/);
+  assert.match(script, /composite_opacity: qs\('#animation-hybrid-composite-opacity'\)\?\.value/);
 });
