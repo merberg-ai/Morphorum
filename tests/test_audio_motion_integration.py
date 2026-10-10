@@ -66,3 +66,37 @@ def test_audio_layer_native_tracks_and_validation():
         compile_motion_lab(project, layers=[{**layer, "fps": 24}])
     with pytest.raises(MotionLabError, match="envelope"):
         compile_motion_lab(project, layers=[{**layer, "envelope": [0]}])
+
+
+def test_kick_frequency_band_prefers_low_tone_and_onset_is_bounded():
+    from morphorum.audio_motion import spectral_band_envelopes, onset_strength
+    rate = 12000
+    signal = [0.] * rate
+    for n in range(rate // 3, 2 * rate // 3):
+        signal[n] = .65 * math.sin(2 * math.pi * 70 * n / rate)
+    bands = spectral_band_envelopes(signal, sample_rate=rate, fps=24, max_frames=24)
+    assert len(bands["kick"]) == 24
+    assert max(bands["kick"]) > .8
+    assert bands["kick"][0] == 0
+    hits = onset_strength(bands["kick"], .25)
+    assert any(x > .5 for x in hits)
+    assert all(0 <= x <= 1 for x in hits)
+
+
+def test_audio_transient_layer_compiles_beat_and_keeps_unrelated_axis():
+    project = create_animation_project({"name": "ML3 transient"})
+    project["animation"]["mode"] = "3d"
+    project["animation"]["max_frames"] = 16
+    project["animation"]["fps"] = 12
+    layer = dict(id="kick", type="audio", enabled=True, blend="add",
+                 start_frame=0, end_frame=16, axis="translation_z", fps=12,
+                 sha256="b" * 64, envelope=[0, 0, 0, .8, .1] + [0] * 11,
+                 band="kick", detection="transient", sensitivity=.2,
+                 threshold=.4, distance=.06, attack_frames=1,
+                 release_frames=2, cooldown_frames=1, offset_frames=0)
+    _, diagnostic = compile_motion_lab(project, layers=[layer], include_series=True)
+    assert diagnostic["series"]["translation_z"][3] == pytest.approx(.06)
+    assert sum(diagnostic["series"]["translation_z"]) == pytest.approx(0, abs=1e-7)
+    assert diagnostic["series"]["rotation_y"] == [0] * 16
+    with pytest.raises(MotionLabError, match="detection"):
+        compile_motion_lab(project, layers=[{**layer, "detection": "anything"}])
