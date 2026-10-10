@@ -219,6 +219,16 @@ Implemented opt-in client-side Gamepad API support with honest fallback behavior
 9. FPS rule: a persisted 12-FPS take must never be silently reinterpreted at another FPS. A mismatch should be rejected until explicitly retimed/re-recorded.
 10. Confirm `main`, `dev-ui`, and `feature/b6-3-3-hybrid-masks` remain untouched. Only after physical acceptance create an ML2 checkpoint and proceed to ML2.3/punch-in polish or merge planning.
 
+### ML2.3: Take management (first slice implemented; physical gate pending)
+
+The ML2 keyboard/UX build was physically accepted October 10, 2026, and frozen in `checkpoint/motion-lab-ml2-recording-ux-verified-20261010` at commit `1245055f043519e9aab0a46cf8a5fa3310d31619`. Desktop toolbar behavior and mobile-only toolbar hiding were accepted. Browser gamepad remains optional and physically unverified.
+
+Current ML2.3 feature-branch changes implement **inline rename** for recording layers and **Duplicate**. The copy receives its own ID, keeps its frame-aligned sample data and armed axes, and begins **disabled** to prevent doubling camera travel. Existing Undo/Redo, layer limits and backend validation apply. This is NOT a physical acceptance checkpoint yet.
+
+**Next physical gate:** Create a recording, Rename it, Undo/Redo, Duplicate and confirm the copy is off by default. Verify enabling it deliberately adds the extra contribution; verify save/reopen retains names and copied samples and mobile inline editing is usable. Don't merge before physical approval.
+
+**Remaining ML2.3 proposal (not yet implemented):** scoped punch-in / replace-range with an explicit interval, deterministic sample splice at exact frame boundaries, validation for FPS/armed axes, no destructive overwrite before confirmation and regression tests for partial range/undo/redo. Keep this separate from first-slice take management.
+
 ### ML3: Audio-reactive motion
 
 - Upload audio to project-managed asset storage, decode once with existing FFmpeg; analyze bass-band intensity and transient peaks on CPU. No model/GPU allocation.
