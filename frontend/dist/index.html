@@ -591,6 +591,7 @@
               </div>
               <div class="animation-motion-lab-curve-actions">
                 <label class="animation-motion-lab-edit-toggle"><input type="checkbox" id="animation-motion-lab-key-drag"/> Edit curve by dragging</label>
+                <label class="animation-motion-lab-edit-toggle"><input type="checkbox" id="animation-motion-lab-path-drag"/> Edit path X/Y by dragging</label>
                 <button class="secondary-button compact" id="animation-motion-lab-key-save" type="button">Add / Update Keyframe</button>
                 <button class="secondary-button compact" id="animation-motion-lab-key-delete" type="button">Delete Keyframe</button>
                 <button class="secondary-button compact" id="animation-motion-lab-key-clear" type="button">Remove Axis Curve</button>
@@ -614,7 +615,7 @@
               <div class="animation-motion-lab-svg-wrap">
                 <h3>Camera travel (geometric)</h3>
                 <svg id="animation-motion-lab-path" class="animation-motion-lab-svg animation-motion-lab-path" viewBox="0 0 440 300" role="img" aria-label="Normalized projected camera path, not depth-aware"></svg>
-                <p class="muted animation-motion-lab-visual-note">Integrated X/Y/Z increments, auto-fit to the plot. Path shape is illustrative, not depth-aware or drawn to physical scale.</p>
+                <p class="muted animation-motion-lab-visual-note">Integrated X/Y/Z increments, auto-fit to the plot. Optional path-point dragging adds X/Y velocity keyframes at that frame, affecting following positions. Not depth-aware or physically scaled.</p>
               </div>
             </div>
             <div class="animation-motion-lab-readout" id="animation-motion-lab-axis-readout" aria-live="off">Add a motion layer and select Update Curves to inspect per-frame values.</div>
