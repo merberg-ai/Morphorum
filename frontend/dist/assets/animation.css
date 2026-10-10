@@ -2158,3 +2158,8 @@ dialog#animation-deforum-dialog {
 .animation-motion-audio-playback label {display:inline-flex;align-items:center;gap:8px;}
 .animation-motion-audio-playback input[type=checkbox] {width:16px;height:16px;}
 @media(max-width:540px) {.animation-motion-audio-playback {align-items:flex-start;flex-direction:column;}}
+
+.animation-motion-gif-sync {display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px;font-size:.83rem;}
+.animation-motion-gif-sync label {display:inline-flex;align-items:center;gap:6px;}
+.animation-motion-gif-sync input[type=checkbox] {width:16px;height:16px;}
+@media(max-width:540px) {.animation-motion-gif-sync {flex-direction:column;align-items:flex-start;}.animation-motion-gif-sync button {width:100%;min-height:42px;}}
