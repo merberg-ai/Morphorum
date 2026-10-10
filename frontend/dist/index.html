@@ -578,8 +578,11 @@
                 </label>
                 <label>Interpolation
                   <select id="animation-motion-lab-key-interpolation">
-                    <option value="linear">Linear</option>
-                    <option value="hold">Hold</option>
+                    <option value="linear">Linear (straight)</option>
+                    <option value="smoothstep">Ease In / Out (smooth)</option>
+                    <option value="smootherstep">Extra Smooth (gentle ease)</option>
+                    <option value="cubic">Smooth Cubic (through keyframes)</option>
+                    <option value="hold">Hold (step)</option>
                   </select>
                 </label>
                 <label>Frame
@@ -597,7 +600,7 @@
                 <button class="secondary-button compact" id="animation-motion-lab-key-clear" type="button">Remove Axis Curve</button>
               </div>
               <div id="animation-motion-lab-key-list" class="animation-motion-lab-key-list" aria-live="polite">No manual keyframes on this axis yet. Add a keyframe or enable curve dragging.</div>
-              <p class="muted animation-motion-lab-key-help">Keyframes define <strong>per-frame camera movement</strong>, not absolute camera positions. Frame 0 stays fixed. Click or drag the selected axis on the curve plot in edit mode, or enter an exact frame and value. Changes stay in the draft until Apply to Animation.</p>
+              <p class="muted animation-motion-lab-key-help">Keyframes define <strong>per-frame camera movement</strong>, not absolute camera positions. Frame 0 stays fixed. Linear connects points with straight lines. Ease In / Out rounds each segment, Extra Smooth softens transitions further, and Smooth Cubic gives continuous, shape-preserving tangents. Choose an axis and drag or enter exact frame/velocity values. Changes remain a draft until Apply to Animation.</p>
             </div>
             <div class="animation-motion-lab-playbar">
               <button id="animation-motion-lab-play" class="secondary-button compact" type="button" disabled>Play</button>
