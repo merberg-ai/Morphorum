@@ -558,6 +558,46 @@
               </div>
               <span class="animation-motion-lab-stage" id="animation-motion-lab-curve-state">Curves not compiled</span>
             </div>
+            <div class="animation-motion-lab-curve-editor" id="animation-motion-lab-curve-editor">
+              <div class="animation-motion-lab-curve-fields">
+                <label>Axis
+                  <select id="animation-motion-lab-key-axis">
+                    <option value="translation_x">Translation X</option>
+                    <option value="translation_y">Translation Y</option>
+                    <option value="translation_z">Translation Z</option>
+                    <option value="rotation_x">Pitch (rotation X)</option>
+                    <option value="rotation_y">Yaw (rotation Y)</option>
+                    <option value="rotation_z">Roll (rotation Z)</option>
+                  </select>
+                </label>
+                <label>Blend
+                  <select id="animation-motion-lab-key-blend">
+                    <option value="add">Add to existing movement</option>
+                    <option value="replace">Replace movement on this axis</option>
+                  </select>
+                </label>
+                <label>Interpolation
+                  <select id="animation-motion-lab-key-interpolation">
+                    <option value="linear">Linear</option>
+                    <option value="hold">Hold</option>
+                  </select>
+                </label>
+                <label>Frame
+                  <input type="number" id="animation-motion-lab-key-frame" min="0" max="23" step="1" value="1"/>
+                </label>
+                <label>Velocity (units per frame, ° for rotations)
+                  <input type="number" id="animation-motion-lab-key-value" min="-30" max="30" step="0.001" value="0.02"/>
+                </label>
+              </div>
+              <div class="animation-motion-lab-curve-actions">
+                <label class="animation-motion-lab-edit-toggle"><input type="checkbox" id="animation-motion-lab-key-drag"/> Edit curve by dragging</label>
+                <button class="secondary-button compact" id="animation-motion-lab-key-save" type="button">Add / Update Keyframe</button>
+                <button class="secondary-button compact" id="animation-motion-lab-key-delete" type="button">Delete Keyframe</button>
+                <button class="secondary-button compact" id="animation-motion-lab-key-clear" type="button">Remove Axis Curve</button>
+              </div>
+              <div id="animation-motion-lab-key-list" class="animation-motion-lab-key-list" aria-live="polite">No manual keyframes on this axis yet. Add a keyframe or enable curve dragging.</div>
+              <p class="muted animation-motion-lab-key-help">Keyframes define <strong>per-frame camera movement</strong>, not absolute camera positions. Frame 0 stays fixed. Click or drag the selected axis on the curve plot in edit mode, or enter an exact frame and value. Changes stay in the draft until Apply to Animation.</p>
+            </div>
             <div class="animation-motion-lab-playbar">
               <button id="animation-motion-lab-play" class="secondary-button compact" type="button" disabled>Play</button>
               <label class="animation-motion-lab-loop"><input id="animation-motion-lab-loop" type="checkbox" checked> Loop</label>
