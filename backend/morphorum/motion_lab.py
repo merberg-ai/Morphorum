@@ -92,8 +92,10 @@ def _normalize_keyframe_layer(
     if axis not in AXES:
         raise MotionLabError(f"Layer {index + 1} must specify one of the six camera axes.")
     interpolation = str(raw.get("interpolation", "linear")).strip().lower()
-    if interpolation not in {"linear", "hold"}:
-        raise MotionLabError("Curve interpolation must be linear or hold.")
+    if interpolation not in {"linear", "hold", "smoothstep", "smootherstep", "cubic"}:
+        raise MotionLabError(
+            "Curve interpolation must be linear, hold, smoothstep, smootherstep or cubic."
+        )
     raw_keys = raw.get("keys", [])
     if not isinstance(raw_keys, list) or not 1 <= len(raw_keys) <= MAX_KEYFRAMES_PER_LAYER:
         raise MotionLabError(
@@ -268,6 +270,41 @@ def _preset_frame(layer: dict[str, Any], frame: int, fps: float) -> dict[str, fl
     return {axis: value * s * envelope for axis, value in values.items()}
 
 
+def _monotone_tangent(points: list[tuple[int, float]], index: int) -> float:
+    """PCHIP-style shape-preserving derivative at a nonuniform keyframe."""
+    length = len(points)
+    if length <= 1:
+        return 0.0
+    if length == 2:
+        return (points[1][1] - points[0][1]) / (points[1][0] - points[0][0])
+
+    def segment(i: int) -> tuple[float, float]:
+        h = float(points[i + 1][0] - points[i][0])
+        return h, (points[i + 1][1] - points[i][1]) / h
+
+    if index in (0, length - 1):
+        if index == 0:
+            h0, d0 = segment(0)
+            h1, d1 = segment(1)
+        else:
+            h0, d0 = segment(length - 2)
+            h1, d1 = segment(length - 3)
+        derivative = ((2.0 * h0 + h1) * d0 - h0 * d1) / (h0 + h1)
+        if d0 == 0 or derivative * d0 <= 0:
+            return 0.0
+        if d0 * d1 < 0 and abs(derivative) > 3.0 * abs(d0):
+            return 3.0 * d0
+        return derivative
+
+    h0, d0 = segment(index - 1)
+    h1, d1 = segment(index)
+    if d0 * d1 <= 0:
+        return 0.0
+    w0 = 2.0 * h1 + h0
+    w1 = h1 + 2.0 * h0
+    return (w0 + w1) / (w0 / d0 + w1 / d1)
+
+
 def _keyframe_value(layer: dict[str, Any], frame: int) -> float:
     """Piecewise interpolation of sparse native per-frame velocity keyframes.
 
@@ -291,10 +328,41 @@ def _keyframe_value(layer: dict[str, Any], frame: int) -> float:
                 break
         left_frame, left_value = left["frame"], float(left["value"])
     right_frame = right["frame"]
-    if layer["interpolation"] == "hold" or right_frame == left_frame:
+    mode = layer["interpolation"]
+    if mode == "hold" or right_frame == left_frame:
         return left_value
     factor = (frame - left_frame) / (right_frame - left_frame)
-    return left_value + factor * (float(right["value"]) - left_value)
+    right_value = float(right["value"])
+    if mode == "smoothstep":
+        # Ease in/out with zero slope at both keyframes; no overshoot.
+        factor = factor * factor * (3.0 - 2.0 * factor)
+    elif mode == "smootherstep":
+        # C2-smooth, gentler starts/stops than smoothstep.
+        factor = factor ** 3 * (factor * (factor * 6.0 - 15.0) + 10.0)
+    elif mode == "cubic":
+        # Shape-preserving PCHIP-style Hermite interpolation. Tangents meet
+        # continuously across interior keys without ringing past extrema.
+        # A leading implicit zero at the layer start is a real interpolation
+        # anchor, but is never persisted as a user-authored keyframe.
+        points = [(key["frame"], float(key["value"])) for key in keys]
+        if points[0][0] > layer["start_frame"]:
+            points.insert(0, (layer["start_frame"], 0.0))
+        right_index = next(i for i, p in enumerate(points) if p[0] == right_frame)
+        left_index = right_index - 1
+        h = right_frame - left_frame
+        m0 = _monotone_tangent(points, left_index)
+        m1 = _monotone_tangent(points, right_index)
+        t2 = factor * factor
+        t3 = t2 * factor
+        value = (
+            (2 * t3 - 3 * t2 + 1) * left_value
+            + (t3 - 2 * t2 + factor) * h * m0
+            + (-2 * t3 + 3 * t2) * right_value
+            + (t3 - t2) * h * m1
+        )
+        # Numerical guard: cubic smoothing must never overshoot adjacent keys.
+        return max(min(left_value, right_value), min(max(left_value, right_value), value))
+    return left_value + factor * (right_value - left_value)
 
 
 def compile_motion_lab(
