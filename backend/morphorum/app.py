@@ -890,6 +890,17 @@ def api_motion_preview_image(job_id: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/motion-preview/{job_id}/frames/{index}")
+def api_motion_preview_frame(job_id: str, index: int):
+    try:
+        return FileResponse(
+            motion_preview_manager.frame_path(job_id, index),
+            media_type="image/png",
+        )
+    except MotionPreviewError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/renders", status_code=202)
 def api_start_animation_render(payload: dict[str, Any]) -> dict[str, Any]:
     project_payload = payload.get("project")
