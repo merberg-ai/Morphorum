@@ -271,6 +271,12 @@ ML3.3 replaces uncontrolled GIF playback **in the Camera Motion Preview display*
 
 **Physical gate on Windows:** update feature/motion-lab, hard refresh; generate CPU Camera Motion Preview for 196 frames @ 12 FPS with analyzed `TEST1_metal.wav`; verify Play/Pause resumes from current frame, seek to frame 100 jumps immediately, Start returns to frame 0, Loop returns to start, audio ON follows the same transport, and audio OFF stays silent. Verify completion, switching away from Motion Lab pauses audio, and repeated project changes invalidate the previous player. Test phone slider/buttons and a shorter preview. Separate quality/performance presets and source-frame-exact output remain future work.
 
+### ML3.4: Preview quality presets (Windows gate pending)
+
+ML3.3 frame player was physically accepted October 10, 2026, frozen as `checkpoint/motion-lab-ml3-3-frame-player-verified-20261010` at `a639de8ab69516151dc2bf9c1218a88115fa3d56`, with both CI checks green. New ML3.4 development on `feature/motion-lab` offers **Fast (192px, up to 36 sampled images)**, **Balanced (320px, up to 72 images, default)**, and **Detailed (320px, up to 144 images)**. The frame player uses the same project-frame clock and seeks across available samples; CPU depth warping still resolves every project frame. The quality options therefore change image resolution and sampled-frame smoothness, *not* the length of the rendered sequence or the cost of sequential depth estimation per source frame. Detailed can take longer to encode and consume more disk. Input validation refuses unknown presets. No GPU renderer or camera schedules were changed.
+
+**Physical gate:** 196 frames at 12 FPS with the test WAV; generate Fast, Balanced, Detailed; verify frames reported are 36/72/144, scrubbing/loop/audio playback work unchanged, progress reaches completion and disk usage remains acceptable. Confirm mobile selector; compare visually visible differences. Stop before ML3.4 is called accepted, and before merging PR #19. Further CPU frame caching, cancellation and deeper performance optimizations are future work.
+
 ### ML4: Final integration and physical acceptance
 
 - Optional custom presets/import-export, compatibility test against Deforum `translation_x/y/z` and `rotation_3d_x/y/z`, field mapping.
