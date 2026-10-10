@@ -36,6 +36,7 @@ _KNOWN_TOP_LEVEL = {
     "generation",
     "cadence",
     "temporal",
+    "hybrid",
     "tracks",
     "notes",
 }
@@ -153,6 +154,11 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "mode": "forward",
             "mix": 0.65,
             "contrast_threshold": 96,
+        },
+        "hybrid": {
+            "enabled": False,
+            "offset_frames": 0,
+            "end_policy": "hold-last",
         },
         "notes": "",
     }
@@ -345,6 +351,13 @@ def normalize_animation_project(
     animation["source_image"] = str(animation.get("source_image") or "").strip()
     animation["source_image_name"] = str(animation.get("source_image_name") or "").strip()
     project["animation"] = animation
+
+    # Hybrid source input is opt-in. Preserve the validated schema alongside
+    # existing native animation settings without changing B5 behavior.
+    from .animation_hybrid_render import normalize_hybrid_settings
+    project["hybrid"] = normalize_hybrid_settings(
+        payload.get("hybrid", project.get("hybrid"))
+    )
 
     model_source = payload.get("model", project.get("model", {}))
     model_source = model_source if isinstance(model_source, dict) else {}

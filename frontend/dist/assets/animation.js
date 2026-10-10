@@ -1925,6 +1925,8 @@
       qs('#animation-seed-behavior').value = project.generation?.seed_behavior || 'fixed';
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
       qs('#animation-notes').value = project.notes || '';
+      qs('#animation-hybrid-render-enabled').checked = project.hybrid?.enabled === true;
+      qs('#animation-hybrid-offset').value = project.hybrid?.offset_frames ?? 0;
       qs('#animation-schema-badge').textContent = 'Project loaded';
 
       const projectFile = qs('#animation-project-path');
@@ -2040,6 +2042,11 @@
         mode: qs('#animation-temporal-mode')?.value || 'forward',
         mix: Number(qs('#animation-temporal-mix')?.value ?? 0.65),
         contrast_threshold: Number(qs('#animation-temporal-contrast')?.value ?? 96),
+      },
+      hybrid: {
+        enabled: Boolean(qs('#animation-hybrid-render-enabled')?.checked),
+        offset_frames: Number(qs('#animation-hybrid-offset')?.value ?? 0),
+        end_policy: 'hold-last',
       },
       notes: qs('#animation-notes')?.value || '',
     };
@@ -3692,6 +3699,7 @@
       clearMotionPreviewResult();
       resetRenderUi();
       state.project = payload.project;
+      resetHybridForProject();
       state.path = payload.path || '';
       state.timeline = null;
       state.timelineSelection = null;
@@ -3764,20 +3772,37 @@
   function hybridButtons() {
     const ready = Boolean(hybridProjectId() && hybrid.info);
     const status = qs('#animation-hybrid-status');
-    if (status) status.textContent = hybridProjectId() ? 'Ready' : 'Select a project';
+    if (status) status.textContent = hybridProjectId()
+      ? (hybrid.frames ? hybrid.frames.frames + ' frames available' : 'Ready')
+      : 'Select a project';
     const active = Boolean(hybrid.jobId);
     qs('#animation-hybrid-extract').disabled = !ready || active;
     qs('#animation-hybrid-cancel').disabled = !active;
     qs('#animation-hybrid-upload').disabled = !hybridProjectId() || active || !qs('#animation-hybrid-file')?.files?.length;
   }
   async function hybridLoadFrames() {
+    const projectId = hybridProjectId();
     const manifest = await api(hybridBase() + '/hybrid-frames');
+    if (hybridProjectId() !== projectId) return;
     hybrid.frames = manifest;
     const slider = qs('#animation-hybrid-frame-slider');
     slider.max = String(manifest.frames);
     slider.value = '1';
     qs('#animation-hybrid-preview').hidden = false;
     hybridDisplayFrame();
+    hybridButtons();
+  }
+  async function hybridRestoreProjectFrames() {
+    const projectId = hybridProjectId();
+    if (!projectId) return;
+    try {
+      await hybridLoadFrames();
+      if (hybridProjectId() === projectId) {
+        hybridMessage(hybrid.frames.frames + ' extracted source frames ready. Enable anchor input to use them in rendering.');
+      }
+    } catch (_) {
+      if (hybridProjectId() === projectId) hybridButtons();
+    }
   }
   function hybridDisplayFrame() {
     if (!hybrid.frames || !hybridProjectId()) return;
@@ -3797,6 +3822,10 @@
       });
       hybrid.filename = reply.video.storage_name;
       hybrid.info = reply.video;
+      // Uploading a different video does not make previously extracted
+      // PNGs correspond to it. Require a fresh extraction before enabling.
+      hybrid.frames = null;
+      qs('#animation-hybrid-preview').hidden = true;
       qs('#animation-hybrid-end').value = String(Math.min(10, hybrid.info.duration_seconds));
       hybridMessage('Accepted ' + reply.video.width + '×' + reply.video.height + ', ' +
         reply.video.duration_seconds + 's, ' + reply.video.fps + ' FPS, codec ' + reply.video.codec + '.');
@@ -3857,8 +3886,9 @@
     if (preview) preview.hidden = true;
     const fileInput = qs('#animation-hybrid-file');
     if (fileInput) fileInput.value = '';
-    hybridMessage('Upload a local video to begin.');
+    hybridMessage('Checking for previously extracted frames…');
     hybridButtons();
+    hybridRestoreProjectFrames();
   }
   function bindHybrid() {
     qs('#animation-hybrid-upload')?.addEventListener('click', hybridUpload);
@@ -3866,6 +3896,13 @@
     qs('#animation-hybrid-extract')?.addEventListener('click', hybridExtract);
     qs('#animation-hybrid-cancel')?.addEventListener('click', hybridCancel);
     qs('#animation-hybrid-frame-slider')?.addEventListener('input', hybridDisplayFrame);
+    qs('#animation-hybrid-render-enabled')?.addEventListener('change', () => {
+      markDirty();
+      if (qs('#animation-hybrid-render-enabled')?.checked && !hybrid.frames) {
+        hybridMessage('Extract frames in Media before rendering with hybrid input.');
+      }
+    });
+    qs('#animation-hybrid-offset')?.addEventListener('change', () => markDirty());
     hybridButtons();
   }
 

@@ -176,3 +176,18 @@ test('high-resolution animation submits immediately without a 512px confirmation
   assert.equal(startButton.disabled, true);
   assert.equal(context.state.renderJobId, 'job-1');
 });
+
+
+test('hybrid anchor inputs are opt-in and persisted through project save', () => {
+  for (const id of [
+    'animation-hybrid-render-enabled', 'animation-hybrid-offset',
+    'animation-hybrid-source', 'animation-hybrid-frame-slider',
+  ]) assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
+  assert.match(html, /Use extracted video frames for animation diffusion anchors/);
+  assert.match(script, /project\.hybrid\?\.enabled === true/);
+  assert.match(script, /offset_frames: Number\(qs\('#animation-hybrid-offset'\)/);
+  assert.match(script, /enabled: Boolean\(qs\('#animation-hybrid-render-enabled'\)\?\.checked\)/);
+  assert.match(script, /function hybridRestoreProjectFrames\(/);
+  assert.match(script, /markDirty\(\)/);
+  assert.match(script, /await api\(hybridBase\(\) \+ '\/hybrid-frames'\)/);
+});

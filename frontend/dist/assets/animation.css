@@ -1899,6 +1899,14 @@ dialog#animation-deforum-dialog {
 .animation-hybrid-controls label {min-width:0;}
 .animation-hybrid-controls input {max-width:100%;width:100%;min-width:0;}
 .animation-hybrid-controls button {min-height:42px;}
+.animation-hybrid-render-settings {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.02);}
+.animation-hybrid-render-settings label {min-width:0;}
+.animation-hybrid-render-settings .animation-hybrid-enable {display:flex;gap:9px;align-items:center;line-height:1.4;font-weight:600;}
+.animation-hybrid-render-settings .animation-hybrid-enable input[type="checkbox"] {width:18px;height:18px;min-height:18px;padding:0;margin:0;flex:0 0 18px;}
+.animation-hybrid-render-settings .animation-hybrid-offset input {max-width:180px;}
+.animation-hybrid-render-settings > p {grid-column:1/-1;margin:0;font-size:.77rem;line-height:1.45;}
+@media(max-width:540px){.animation-hybrid-render-settings {grid-template-columns:minmax(0,1fr);}.animation-hybrid-render-settings > p {grid-column:1;}}
+
 .animation-hybrid-preview {display:grid;gap:10px;min-width:0;max-width:660px;margin-top:14px;}
 .animation-hybrid-preview img {display:block;width:100%;max-height:480px;object-fit:contain;border:1px solid var(--border);border-radius:var(--radius-sm);background:#050505;}
 .animation-hybrid-preview input {width:100%;}

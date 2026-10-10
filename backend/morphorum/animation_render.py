@@ -21,6 +21,9 @@ from PIL.PngImagePlugin import PngInfo
 
 from .animation_3d import Camera3DError, render_depth_warp, reverse_camera_chain
 from .animation_depth import DepthError, depth_manager
+from .animation_hybrid_render import (
+    HybridRenderError, freeze_hybrid_source, frozen_hybrid_frame,
+)
 from .animation_motion import (
     _frame_transform_matrix,
     capture_frames,
@@ -850,6 +853,13 @@ class AnimationRenderJob:
             else None
         )
         payload["resumable"] = self.status in {"failed", "cancelled", "interrupted"}
+        snapshot = self.project.get("_hybrid_snapshot")
+        payload["hybrid_source"] = (
+            {"enabled": True, "mode": "anchor-init",
+             "source_fps": snapshot["source_fps"], "source_frames": snapshot["source_frames"]}
+            if isinstance(snapshot, dict) and snapshot.get("enabled")
+            else {"enabled": False}
+        )
         return payload
 
     def manifest(self) -> dict[str, Any]:
@@ -926,7 +936,9 @@ class AnimationRenderManager:
             raise AnimationRenderError(
                 f"Unknown animation start mode '{start_mode}'."
             )
-        if start_mode == "source" and not source_path.is_file():
+        if (start_mode == "source"
+                and not project.get("hybrid", {}).get("enabled")
+                and not source_path.is_file()):
             raise AnimationRenderError(
                 "Start Mode is 'Use starting image', but no starting image is uploaded."
             )
@@ -968,7 +980,13 @@ class AnimationRenderManager:
         if source_path.is_file():
             shutil.copy2(source_path, copied_source)
 
-        seed_plan = self._resolve_seed_plan(project)
+        try:
+            seed_plan = self._resolve_seed_plan(project)
+            snapshot = freeze_hybrid_source(project, output_dir)
+        except (HybridRenderError, OSError, ValueError):
+            # Submission must not leave incomplete snapshots/output folders.
+            shutil.rmtree(output_dir, ignore_errors=True)
+            raise
         job = AnimationRenderJob(
             id=render_id,
             project_id=project_id,
@@ -977,6 +995,11 @@ class AnimationRenderManager:
             total_frames=int(project["animation"]["max_frames"]),
         )
         job.project.setdefault("_render_model_snapshot", deepcopy(model))
+        if snapshot is not None:
+            job.project["_hybrid_snapshot"] = snapshot
+            emit_console("info", "animation",
+                f"{render_id}: frozen {snapshot['source_frames']} extracted frame references "
+                f"({snapshot['source_fps']:g} FPS) for hybrid anchor input.")
         with self._lock:
             self._jobs[render_id] = job
         self._write_manifest(job)
@@ -1331,6 +1354,9 @@ class AnimationRenderManager:
             emit_console("warning", "animation", f"{job.id}: previous performance records unavailable: {exc}")
         job.performance = performance_tracker.public()
         copied_source = render_dir / "source.png"
+        hybrid_snapshot = project.get("_hybrid_snapshot")
+        if project.get("hybrid", {}).get("enabled") and not hybrid_snapshot:
+            raise AnimationRenderError("Hybrid render snapshot is missing; refusing to use live source frames.")
 
         cumulative_matrix = np.eye(3, dtype=np.float64)
         if animation_mode == "2d" and start_frame > 1:
@@ -1355,7 +1381,27 @@ class AnimationRenderManager:
             resolved = resolve_project_frame(project, 0, lora_records=lora_records)
             seed = int(job.seed_plan[0])
 
-            if start_mode == "source":
+            hybrid_first = frozen_hybrid_frame(hybrid_snapshot, render_dir, 0)
+            if hybrid_first is not None:
+                hybrid_path, hybrid_info = hybrid_first
+                with self._lock:
+                    job.current_prompt_state = _prompt_state_for_frame(
+                        resolved, applied=False,
+                        reason="Hybrid frame 0 uses extracted source video; diffusion begins at later anchors.",
+                    )
+                    job.current_frame_state = _frame_state_for_frame(
+                        resolved, seed=seed, diffusion_mode="hybrid-source",
+                        motion_applied=False, cumulative_matrix=cumulative_matrix,
+                    )
+                    job.current_frame_state["hybrid_source"] = {**hybrid_info, "applied": True}
+                with Image.open(hybrid_path) as opened:
+                    frame_image = _prepare_source(opened, width, height)
+                start_metadata = {
+                    "source_frame": True, "generated_start": False,
+                    "hybrid_source": {**hybrid_info, "applied": True},
+                }
+                job.message = f"Prepared hybrid source frame 1 of {total}"
+            elif start_mode == "source":
                 with self._lock:
                     job.current_prompt_state = _prompt_state_for_frame(
                         resolved,
@@ -1531,18 +1577,22 @@ class AnimationRenderManager:
                     "seed": seed,
                     "filename": path.name,
                     "path": str(path),
+                    **({"hybrid_source": start_metadata["hybrid_source"]}
+                       if hybrid_first is not None else {}),
                 }
             ]
             job.current_frame = 0
-            job.current_step = int(resolved["generation"]["steps"]) if start_mode == "prompt" else 0
-            job.current_step_total = int(resolved["generation"]["steps"]) if start_mode == "prompt" else 0
+            used_txt2img = start_mode == "prompt" and hybrid_first is None
+            job.current_step = int(resolved["generation"]["steps"]) if used_txt2img else 0
+            job.current_step_total = int(resolved["generation"]["steps"]) if used_txt2img else 0
             job.progress = 1 / total
             job.message = f"Starting frame 1 of {total} complete"
             self._write_manifest(job)
             emit_console(
                 "info",
                 "animation",
-                f"{job.id}: starting frame 0 complete using {start_mode} mode.",
+                f"{job.id}: starting frame 0 complete using "
+                f"{'hybrid-source' if hybrid_first is not None else start_mode} mode.",
             )
             start_frame = 1
         else:
@@ -1689,6 +1739,11 @@ class AnimationRenderManager:
                 "anchor": bool(cadence_anchor),
                 "phase": int(frame % cadence_value),
             }
+            hybrid_sample = frozen_hybrid_frame(hybrid_snapshot, render_dir, frame)
+            hybrid_state = (
+                {**hybrid_sample[1], "applied": bool(should_diffuse)}
+                if hybrid_sample is not None else None
+            )
             if should_diffuse:
                 diffusion_mode = "img2img"
                 prompt_reason = None
@@ -1714,12 +1769,14 @@ class AnimationRenderManager:
                     resolved,
                     seed=int(job.seed_plan[frame]),
                     diffusion_mode=diffusion_mode,
-                    motion_applied=True,
+                    motion_applied=not (should_diffuse and hybrid_sample is not None),
                     cumulative_matrix=cumulative_matrix,
                     depth_state=depth_state,
                     cadence_state=cadence_state,
                     timings=timings,
                 )
+                if hybrid_state is not None:
+                    job.current_frame_state["hybrid_source"] = hybrid_state
 
             positive = resolved["prompts"]["positive"]
             negative = resolved["prompts"]["negative"]
@@ -1729,6 +1786,12 @@ class AnimationRenderManager:
             sampler = str(generation["sampler"])
             noise_amount = float(generation["noise"])
             noise_started = time.monotonic()
+            if should_diffuse and hybrid_sample is not None:
+                # B6.3.1: the extracted video supplies img2img anchors.
+                # Non-anchor cadence frames still use the normal camera warp;
+                # B6.3.2 will introduce blend/composite controls.
+                with Image.open(hybrid_sample[0]) as opened:
+                    transformed = _prepare_source(opened, width, height)
             if should_diffuse:
                 transformed = _add_uniform_noise(
                     transformed,
@@ -1905,6 +1968,7 @@ class AnimationRenderManager:
                     "variant": generation_manager._model_variant(model),
                     "resolved": resolved,
                     "render_state": deepcopy(job.current_frame_state),
+                    **({"hybrid_source": hybrid_state} if hybrid_state else {}),
                 },
             )
             timings["save"] = max(0.0, time.monotonic() - save_started)
@@ -1922,6 +1986,7 @@ class AnimationRenderManager:
                     "seed": seed,
                     "filename": path.name,
                     "path": str(path),
+                    **({"hybrid_source": hybrid_state} if hybrid_state else {}),
                 }
             )
             job.results.sort(key=lambda item: int(item["frame"]))
