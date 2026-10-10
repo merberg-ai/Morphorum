@@ -112,6 +112,16 @@ def test_recording_add_replace_order_with_preset_and_cubic_keyframes():
     assert resolved(compiled, 6, "translation_z") > 0
 
 
+def test_disabled_recording_layer_is_inert_and_preserved():
+    disabled = take(enabled=False)
+    compiled, diagnostics = compile_motion_lab(
+        project(), layers=[disabled], include_series=True,
+    )
+    assert compiled["motion_lab"]["layers"][0]["enabled"] is False
+    for axis in AXES:
+        assert all(value == pytest.approx(0) for value in diagnostics["series"][axis])
+
+
 def test_recording_reapply_is_idempotent():
     once, _ = compile_motion_lab(project(), layers=[take()])
     twice, _ = compile_motion_lab(once, layers=[take()])
