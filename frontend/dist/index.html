@@ -508,6 +508,42 @@
             <p class="muted animation-motion-lab-note">Choose a project and preview with the built-in calibration grid immediately. You can optionally upload your own reference image in Editor. Geometric previews do not run diffusion; your render pipeline remains unchanged.</p>
           </article>
 
+          <article class="card glass animation-motion-lab-composer" id="animation-motion-lab-composer">
+            <div class="card-header">
+              <div>
+                <h2>Camera Motion Composer <small class="muted">ML0</small></h2>
+                <p class="muted">Build and layer preset movement in native Morphorum 3D camera units. Preview the draft, then explicitly apply it to the Visual Timeline.</p>
+              </div>
+              <span class="animation-motion-lab-stage" id="animation-motion-lab-compose-status">Select a 3D project</span>
+            </div>
+            <div class="animation-motion-lab-fields">
+              <label><span>Preset</span><select id="animation-motion-lab-preset">
+                <option value="wave">Wave</option>
+                <option value="spiral">Spiral</option>
+                <option value="figure-eight">Figure Eight</option>
+                <option value="gentle-drift">Gentle Drift</option>
+                <option value="rocking">Rocking</option>
+                <option value="push-in">Push In</option>
+                <option value="pull-out">Pull Out</option>
+                <option value="still">Still (Replace to reset)</option>
+              </select></label>
+              <label><span>Strength (0–1)</span><input id="animation-motion-lab-strength" type="number" min="0" max="1" step=".05" value=".5"></label>
+              <label><span>Cycle (seconds)</span><input id="animation-motion-lab-cycle" type="number" min=".2" max="600" step=".5" value="8"></label>
+              <label><span>Fade (seconds)</span><input id="animation-motion-lab-fade" type="number" min="0" max="120" step=".1" value=".5"></label>
+              <label><span>Start frame</span><input id="animation-motion-lab-start" type="number" min="0" step="1" value="0"></label>
+              <label><span>End frame (0 = full)</span><input id="animation-motion-lab-end" type="number" min="0" step="1" value="0"></label>
+              <label><span>Blend</span><select id="animation-motion-lab-blend"><option value="add">Add to base</option><option value="replace">Replace affected axes</option></select></label>
+            </div>
+            <div class="animation-motion-lab-actions">
+              <button class="secondary-button compact" id="animation-motion-lab-add" type="button" disabled>+ Add Preset Layer</button>
+              <button class="secondary-button compact" id="animation-motion-lab-clear" type="button" disabled>Clear Draft</button>
+              <button class="secondary-button compact busy-button" id="animation-motion-lab-preview-draft" type="button" disabled><span class="spinner"></span><span class="button-label">Preview Draft Motion</span></button>
+              <button class="primary-button compact busy-button" id="animation-motion-lab-apply" type="button" disabled><span class="spinner"></span><span class="button-label">Apply to Animation</span></button>
+            </div>
+            <div class="animation-motion-lab-layer-list" id="animation-motion-lab-layer-list" aria-live="polite">Add a preset layer to begin.</div>
+            <div class="animation-motion-lab-diagnostics muted" id="animation-motion-lab-diagnostics" role="status">Draft motion is not applied to the animation timeline until you select Apply.</div>
+          </article>
+
           <article class="card glass animation-motion-preview-card">
             <div class="card-header">
               <div>
