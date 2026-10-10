@@ -2389,6 +2389,25 @@
     }
   }
 
+  let motionFramePlayer = null;
+  function ensureMotionFramePlayer() {
+    if (motionFramePlayer || !window.MorphorumMotionFramePlayer) return motionFramePlayer;
+    const root = qs('#animation-motion-frame-player');
+    if (!root) return null;
+    motionFramePlayer = new window.MorphorumMotionFramePlayer({
+      root,
+      image: qs('#animation-motion-frame-image'),
+      play: qs('#animation-motion-frame-play'),
+      reset: qs('#animation-motion-frame-reset'),
+      loop: qs('#animation-motion-frame-loop'),
+      scrub: qs('#animation-motion-frame-scrub'),
+      time: qs('#animation-motion-frame-time'),
+      getAudio: () => motionLabAudioProjectId === state.project?.id ? motionLabAudioElement : null,
+      shouldSync: () => Boolean(qs('#animation-motion-lab-audio-sync')?.checked),
+      status: message => motionGifSyncStatus(message),
+    });
+    return motionFramePlayer;
+  }
   let motionGifSyncRun = 0;
   let motionGifPreviewUrl = null;
   let motionGifPreviewFps = null;
@@ -2400,6 +2419,11 @@
     const image = qs('#animation-motion-preview-image');
     if (!image || !motionGifPreviewUrl) {
       motionGifSyncStatus('Generate a Camera Motion Preview first.');
+      return;
+    }
+    if (motionFramePlayer?.jobId) {
+      motionFramePlayer.seek(0);
+      motionFramePlayer.play();
       return;
     }
     const run = ++motionGifSyncRun;
@@ -2438,6 +2462,7 @@
       'sync=' + Date.now() + '-' + run;
   }
   function clearMotionPreviewResult() {
+    motionFramePlayer?.clear();
     motionGifSyncRun++;
     motionGifPreviewUrl = null;
     motionGifPreviewFps = null;
@@ -2549,21 +2574,22 @@
       if (result) result.hidden = false;
       motionGifPreviewUrl = job.url;
       motionGifPreviewFps = Number(job.result?.fps || state.project?.animation?.fps || 12);
-      if (image) image.src = job.url + '?v=' + Date.now();
-      if (motionLabAudioElement && motionLabAudioProjectId === state.project?.id &&
-          qs('#animation-motion-gif-auto-audio')?.checked &&
-          qs('#animation-motion-lab-audio-sync')?.checked &&
-          Math.abs(motionGifPreviewFps - Number(motionLabAudioAnalysis?.fps)) < 1e-6) {
-        void replayMotionGifWithAudio();
-      } else {
-        motionGifSyncStatus('Preview ready. Replay Preview + Audio restarts the animation and WAV together.');
+      if (job.result?.frame_player_samples && ensureMotionFramePlayer()) {
+        motionFramePlayer.load(job);
+        if (image) image.hidden = true;
+      } else if (image) {
+        image.hidden = false;
+        image.src = job.url + '?v=' + Date.now();
       }
-      if (meta && job.result) meta.textContent =
-        job.result.preview_width + ' × ' + job.result.preview_height + ' · ' +
-        job.result.captured_frames + ' preview frames from ' + job.result.source_frames +
-        ' project frames · ' + Number(job.result.duration_seconds || 0).toFixed(2) +
-        's · ' + (job.result.source_kind === 'calibration-grid' ? 'Calibration grid' : 'Uploaded image') +
-        ' · ' + (job.result.mode === '3d' ? '3D depth on CPU' : job.result.border_mode);
+      if (motionFramePlayer?.jobId === job.id) {
+        motionGifSyncStatus('Frame player ready: seek, pause, loop and optional WAV sync.');
+        if (motionLabAudioElement && qs('#animation-motion-gif-auto-audio')?.checked &&
+            qs('#animation-motion-lab-audio-sync')?.checked) motionFramePlayer.play();
+      } else if (motionLabAudioElement && motionLabAudioProjectId === state.project?.id &&
+          qs('#animation-motion-gif-auto-audio')?.checked &&
+          qs('#animation-motion-lab-audio-sync')?.checked) {
+        void replayMotionGifWithAudio();
+      }
       const coverage = qs('#animation-camera-coverage');
       if (coverage) {
         coverage.hidden = job.result?.mode !== '3d';
@@ -5459,6 +5485,7 @@
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'editor';
     if (name !== 'motion') {
       motionLabVisual?.pause();
+      motionFramePlayer?.pause();
       if (motionLabRecorder?.active) motionLabStopRecording('tab-change');
     }
     animationTab = name;
