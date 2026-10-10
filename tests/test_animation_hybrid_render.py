@@ -43,6 +43,7 @@ def _project(**settings) -> dict:
 def test_hybrid_defaults_are_disabled_and_offset_validated():
     assert normalize_hybrid_settings(None) == {
         "enabled": False, "offset_frames": 0, "end_policy": "hold-last",
+        "composite_enabled": False, "composite_opacity": "0:(0.35)",
     }
     with pytest.raises(HybridRenderError):
         normalize_hybrid_settings({"enabled": "false"})
@@ -116,3 +117,40 @@ def test_hybrid_source_revision_guard_detects_replaced_upload(tmp_path, monkeypa
     original_video.write_bytes(b"new-source-is-different")
     with pytest.raises(HybridRenderError, match="changed"):
         freeze_hybrid_source(_project(), tmp_path / "next")
+
+
+def test_hybrid_compositing_opacity_schedule_and_blend():
+    from morphorum.animation_hybrid_render import (
+        blend_hybrid_video, composite_opacity_for_frame, validate_hybrid_composite,
+    )
+    project = _project(
+        composite_enabled=True,
+        composite_opacity="0:(0), 4:(1)",
+    )
+    validate_hybrid_composite(project)
+    assert composite_opacity_for_frame(project, 0) == pytest.approx(0)
+    assert composite_opacity_for_frame(project, 2) == pytest.approx(0.5)
+    assert composite_opacity_for_frame(project, 4) == pytest.approx(1)
+    generated = Image.new("RGB", (2, 2), (0, 0, 255))
+    source = Image.new("RGB", (2, 2), (255, 0, 0))
+    assert blend_hybrid_video(generated, source, 0).getpixel((0, 0)) == (0, 0, 255)
+    assert blend_hybrid_video(generated, source, 1).getpixel((0, 0)) == (255, 0, 0)
+    assert blend_hybrid_video(generated, source, .5).getpixel((0, 0)) == (128, 0, 128)
+
+
+def test_hybrid_compositing_opt_in_invalid_schedule_and_bounds():
+    from morphorum.animation_hybrid_render import (
+        validate_hybrid_composite, composite_opacity_for_frame,
+    )
+    with pytest.raises(HybridRenderError, match="Enable hybrid"):
+        normalize_hybrid_settings({"enabled": False, "composite_enabled": True})
+    project = _project(composite_enabled=True, composite_opacity="0:(1.2)")
+    with pytest.raises(HybridRenderError, match="allowed range"):
+        validate_hybrid_composite(project)
+    project["hybrid"]["composite_opacity"] = "0:(bad(expression)"
+    with pytest.raises(HybridRenderError, match="Invalid hybrid opacity schedule"):
+        validate_hybrid_composite(project)
+    project["hybrid"]["composite_opacity"] = "0:(0.3)"
+    project["hybrid"]["composite_enabled"] = False
+    validate_hybrid_composite(project)
+    assert composite_opacity_for_frame(project, 3) == 0
