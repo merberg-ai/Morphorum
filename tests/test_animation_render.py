@@ -1473,8 +1473,9 @@ def test_animation_img2img_frame_requests_resolve_loras_before_shared_generation
     assert weights == pytest.approx([0.4, 0.6, 0.8])
 
 
+@pytest.mark.parametrize("composite", [False, True])
 def test_hybrid_video_anchors_use_time_aligned_frozen_pngs_and_resume(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path, monkeypatch, composite: bool,
 ) -> None:
     import morphorum.animation_hybrid_render as hybrid_render
 
@@ -1513,7 +1514,10 @@ def test_hybrid_video_anchors_use_time_aligned_frozen_pngs_and_resume(
     project = sample_project(max_frames=6)
     project["animation"]["start_mode"] = "prompt"
     project["animation"]["source_image"] = ""
-    project["hybrid"] = {"enabled": True, "offset_frames": 0, "end_policy": "hold-last"}
+    project["hybrid"] = {
+        "enabled": True, "offset_frames": 0, "end_policy": "hold-last",
+        "composite_enabled": composite, "composite_opacity": "0:(0.5)",
+    }
     project["generation"]["strength"] = "0:(0.5)"
     project["generation"]["noise"] = "0:(0)"
     project["motion"]["translation_x"] = "0:(0)"
@@ -1527,6 +1531,14 @@ def test_hybrid_video_anchors_use_time_aligned_frozen_pngs_and_resume(
     assert done["results"][1]["hybrid_source"]["applied"] is False
     assert done["results"][3]["hybrid_source"]["applied"] is True
     folder = tmp_path / "outputs" / "animations" / "render-test" / job["id"]
+    with Image.open(folder / "frames" / "frame_000003.png") as im:
+        # Frame 3's diffused image is blue; time-aligned video source 4 is red.
+        # Source-over occurs AFTER diffusion and does not contaminate inputs.
+        assert im.getpixel((0, 0)) == ((40, 0, 127) if composite else (0, 0, 255))
+        metadata = json.loads(im.text["Morphorum"])
+        assert bool(metadata.get("hybrid_composite")) is composite
+    if composite:
+        assert done["results"][3]["hybrid_composite"]["source_frame"] == 4
     with Image.open(folder / "frames" / "frame_000000.png") as im:
         assert im.getpixel((0, 0)) == (20, 0, 0)
         metadata = json.loads(im.text["Morphorum"])
