@@ -649,10 +649,7 @@
               <label><span>Attack frames <details class="motion-audio-help"><summary aria-label="Help for Attack frames">ⓘ</summary><p>Number of frames used to move out. One frame produces a sharp punch.</p></details></span><input id="animation-motion-lab-audio-attack" type="number" min="1" max="120" step="1" value="1"></label>
               <label><span>Release frames <details class="motion-audio-help"><summary aria-label="Help for Release frames">ⓘ</summary><p>Number of frames used to return to the original position. More frames create a slower recovery.</p></details></span><input id="animation-motion-lab-audio-release" type="number" min="1" max="120" step="1" value="3"></label>
             </div>
-            <div class="animation-motion-audio-playback">
-              <label><input type="checkbox" id="animation-motion-lab-audio-sync" checked> Play analyzed WAV during Motion Curves playback</label>
-              <span class="muted" id="animation-motion-lab-audio-sync-status" role="status">Analyze a WAV to enable synchronized playback.</span>
-            </div>
+
             <div class="animation-motion-audio-preview" id="animation-motion-lab-audio-preview" hidden>
               <div class="animation-motion-audio-preview-header"><strong>Analyzed audio envelope</strong><span class="muted" id="animation-motion-lab-audio-summary"></span></div>
               <svg id="animation-motion-lab-audio-plot" viewBox="0 0 800 230" preserveAspectRatio="none" role="img" aria-label="Audio RMS over project frames, onset threshold, and predicted beat triggers"></svg>
@@ -673,6 +670,10 @@
                 <p class="muted">Frame-accurate native camera increments and an integrated geometric path. This visualization does not load a depth model or run diffusion.</p>
               </div>
               <span class="animation-motion-lab-stage" id="animation-motion-lab-curve-state">Curves not compiled</span>
+            </div>
+                        <div class="animation-motion-audio-playback">
+              <label><input type="checkbox" id="animation-motion-lab-audio-sync" checked> Play analyzed WAV during Motion Curves playback</label>
+              <span class="muted" id="animation-motion-lab-audio-sync-status" role="status">Analyze a WAV to enable synchronized playback.</span>
             </div>
             <div class="animation-motion-lab-curve-editor" id="animation-motion-lab-curve-editor">
               <div class="animation-motion-lab-curve-fields">
