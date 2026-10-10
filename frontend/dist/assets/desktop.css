@@ -1,0 +1,118 @@
+/* Desktop workspace foundation.
+   Loaded only for wide, fine-pointer viewports. The existing mobile
+   stylesheet and DOM behavior remain unchanged. */
+.app-shell {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-areas:
+    "top top"
+    "nav main";
+  align-content: start;
+  gap: 16px;
+  width: min(1920px, 100%);
+  padding: 16px 22px 72px;
+}
+.topbar { grid-area: top; }
+.main-nav {
+  grid-area: nav;
+  position: sticky;
+  top: 108px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 9px;
+  gap: 4px;
+}
+.nav-button {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 13px;
+  text-align: left;
+  border-radius: 9px;
+  font-weight: 550;
+}
+.nav-button:focus-visible,
+.animation-workspace-nav button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.workspace { grid-area: main; margin-top: 0; min-width: 0; }
+.page-heading,
+.grid,
+.settings-grid,
+.lora-manager-grid,
+.animation-workspace-nav,
+.animation-workspace-panel {
+  max-width: none;
+}
+.page-heading { padding-top: 2px; }
+.two-column { grid-template-columns: minmax(0, 1.08fr) minmax(365px, .92fr); }
+.animation-workspace-nav { top: 110px; }
+
+/* Motion Lab: editing tools on the left; curves and a live preview on
+   the right. Each control retains its original ID and event wiring. */
+#animation-panel-motion {
+  grid-template-columns: minmax(0, 1.08fr) minmax(370px, .92fr);
+  grid-template-areas:
+    "intro intro"
+    "composer visual"
+    "recording preview"
+    "audio audio"
+    "actions actions";
+  align-items: start;
+  gap: 16px;
+}
+#animation-panel-motion > #animation-motion-lab-intro { grid-area: intro; }
+#animation-panel-motion > #animation-motion-lab-composer { grid-area: composer; }
+#animation-panel-motion > #animation-motion-lab-recording { grid-area: recording; }
+#animation-panel-motion > #animation-motion-lab-visual { grid-area: visual; }
+#animation-panel-motion > .animation-motion-preview-card {
+  grid-area: preview;
+  position: sticky;
+  top: 177px;
+  align-self: start;
+}
+#animation-panel-motion > #animation-motion-lab-audio { grid-area: audio; }
+#animation-panel-motion > #animation-motion-lab-quick-actions {
+  grid-area: actions;
+  justify-self: center;
+}
+#animation-panel-motion .animation-motion-lab-visual-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+#animation-panel-motion .animation-motion-lab-fields,
+#animation-panel-motion .animation-motion-recording-controls {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+#animation-panel-motion .animation-motion-controller-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+#animation-panel-motion .animation-motion-hold-controls {
+  grid-column: 1 / -1;
+}
+#animation-panel-motion .animation-motion-lab-curve-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Concise, opt-in explanations: never obscure the working controls. */
+.motion-workflow-help,
+.motion-field-help {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: rgba(65, 217, 255, .035);
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.5;
+}
+.motion-workflow-help summary,
+.motion-field-help summary { cursor: pointer; color: var(--text); font-weight: 650; }
+.motion-workflow-help p,
+.motion-field-help p { margin: 9px 0 0; }
+.motion-workflow-help ol { margin: 9px 0 0; padding-left: 19px; }
+.motion-workflow-help li + li { margin-top: 3px; }
+.motion-field-help { margin: 8px 0 12px; }
+.motion-workflow-help { margin: 13px 0 0; }
