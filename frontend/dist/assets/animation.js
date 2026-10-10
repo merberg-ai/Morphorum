@@ -2389,7 +2389,59 @@
     }
   }
 
+  let motionGifSyncRun = 0;
+  let motionGifPreviewUrl = null;
+  let motionGifPreviewFps = null;
+  function motionGifSyncStatus(message) {
+    const node = qs('#animation-motion-gif-sync-status');
+    if (node) node.textContent = message;
+  }
+  async function replayMotionGifWithAudio() {
+    const image = qs('#animation-motion-preview-image');
+    if (!image || !motionGifPreviewUrl) {
+      motionGifSyncStatus('Generate a Camera Motion Preview first.');
+      return;
+    }
+    const run = ++motionGifSyncRun;
+    const audio = motionLabAudioElement;
+    const synced = audio && motionLabAudioProjectId === state.project?.id &&
+      qs('#animation-motion-lab-audio-sync')?.checked;
+    // GIF playback cannot be paused or frame-seeked. Reloading the GIF at
+    // the same time as the audio is a best-effort start synchronization.
+    if (audio) {
+      audio.pause();
+      if (audio.readyState >= 1) audio.currentTime = 0;
+    }
+    image.removeAttribute('src');
+    // Wait for the browser to be able to start the GIF, not an elapsed timeout.
+    const next = new Image();
+    next.onload = async () => {
+      if (run !== motionGifSyncRun || !qs('#animation-motion-result') ||
+          qs('#animation-motion-result').hidden) return;
+      image.src = next.src;
+      if (!synced) {
+        motionGifSyncStatus('Preview restarted without audio. Analyze WAV and enable audio sync.');
+        return;
+      }
+      try {
+        audio.currentTime = 0;
+        await audio.play();
+        if (run === motionGifSyncRun) {
+          motionGifSyncStatus('GIF and WAV restarted together (approximate sync; GIF timing is browser-dependent).');
+        }
+      } catch (error) {
+        motionGifSyncStatus('Audio could not play: ' + (error?.message || String(error)));
+      }
+    };
+    next.onerror = () => motionGifSyncStatus('Preview GIF failed to load.');
+    next.src = motionGifPreviewUrl + (motionGifPreviewUrl.includes('?') ? '&' : '?') +
+      'sync=' + Date.now() + '-' + run;
+  }
   function clearMotionPreviewResult() {
+    motionGifSyncRun++;
+    motionGifPreviewUrl = null;
+    motionGifPreviewFps = null;
+    motionLabAudioElement?.pause();
     window.clearTimeout(state.motionPollTimer);
     state.motionPollTimer = null;
     state.motionJobId = null;
@@ -2495,7 +2547,17 @@
       const image = qs('#animation-motion-preview-image');
       const meta = qs('#animation-motion-result-meta');
       if (result) result.hidden = false;
+      motionGifPreviewUrl = job.url;
+      motionGifPreviewFps = Number(job.result?.fps || state.project?.animation?.fps || 12);
       if (image) image.src = job.url + '?v=' + Date.now();
+      if (motionLabAudioElement && motionLabAudioProjectId === state.project?.id &&
+          qs('#animation-motion-gif-auto-audio')?.checked &&
+          qs('#animation-motion-lab-audio-sync')?.checked &&
+          Math.abs(motionGifPreviewFps - Number(motionLabAudioAnalysis?.fps)) < 1e-6) {
+        void replayMotionGifWithAudio();
+      } else {
+        motionGifSyncStatus('Preview ready. Replay Preview + Audio restarts the animation and WAV together.');
+      }
       if (meta && job.result) meta.textContent =
         job.result.preview_width + ' × ' + job.result.preview_height + ' · ' +
         job.result.captured_frames + ' preview frames from ' + job.result.source_frames +
@@ -5479,6 +5541,7 @@
     qs('#animation-cadence')?.addEventListener('input', syncCadencePreset);
     qs('#animation-cadence')?.addEventListener('change', syncCadencePreset);
     qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
+    qs('#animation-motion-gif-replay')?.addEventListener('click', () => void replayMotionGifWithAudio());
     qs('#animation-motion-lab-enable-3d')?.addEventListener('click', () => {
       if (!state.project) return;
       const selector = qs('#animation-mode');
