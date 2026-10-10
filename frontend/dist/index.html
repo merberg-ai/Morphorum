@@ -560,6 +560,9 @@
             </div>
 
             <div class="animation-motion-recording-controls">
+              <label><span>Take mode</span><select id="animation-motion-lab-record-mode"><option value="new">New recording layer</option><option value="punch">Punch into existing take</option></select></label>
+              <label><span>Target take (punch-in)</span><select id="animation-motion-lab-punch-target" disabled><option value="">Select a recorded take</option></select></label>
+              <label><span>End frame exclusive (punch-in)</span><input id="animation-motion-lab-punch-end" type="number" min="1" step="1" value="24" disabled></label>
               <label><span>Start frame</span><input id="animation-motion-lab-record-start" type="number" min="0" step="1" value="0"></label>
               <label><span>Blend</span><select id="animation-motion-lab-record-blend"><option value="add">Add to existing motion</option><option value="replace">Replace armed axes</option></select></label>
               <label><span>Translation sensitivity <small class="muted">units/frame</small></span><input id="animation-motion-lab-record-translation" type="number" min="0.0001" max="0.12" step="0.001" value="0.025"></label>
