@@ -2959,15 +2959,18 @@
     const meta = qs('#animation-video-result-meta');
     if (latest) {
       const url = latest.url;
-      if (video && video.dataset.videoUrl !== url) {
-        video.dataset.videoUrl = url;
-        video.src = url + '?inline=true';
+      const versionedUrl = url + '?inline=true&v=' +
+        encodeURIComponent(latest.completed_at || latest.bytes || 'latest');
+      if (video && video.dataset.videoUrl !== versionedUrl) {
+        video.dataset.videoUrl = versionedUrl;
+        video.src = versionedUrl;
         video.load();
       }
       if (link) { link.href = url; link.download = ''; }
       if (meta) meta.textContent =
         latest.format.toUpperCase() + ' · ' + latest.fps + ' fps · ' +
         latest.quality + ' · ' +
+        (latest.audio_included ? 'Soundtrack included' : 'Silent video') + ' · ' +
         (Number(latest.bytes || 0) / 1024 / 1024).toFixed(1) + ' MiB';
     } else if (video?.dataset.videoUrl) {
       video.pause();
