@@ -4073,6 +4073,37 @@
       if (knob) knob.style.transform = 'translate(0px, 0px)';
     }
   }
+  function motionLabRecordLiveFrame(frame, sample, captured, fps, maxFrame) {
+    const target = qs('#animation-motion-lab-record-frame');
+    if (target) target.textContent =
+      '● RECORDING · frame ' + frame + '/' + maxFrame +
+      ' · ' + captured + ' sample(s) · ' + fps + ' FPS';
+    const indicator = qs('#animation-motion-lab-live-indicator');
+    if (indicator) indicator.textContent = '● RECORDING · ' + captured + ' frames captured';
+    const axes = qs('#animation-motion-lab-live-axes');
+    if (axes) axes.textContent = [
+      'X ' + sample[0].toFixed(4), 'Y ' + sample[1].toFixed(4),
+      'Z ' + sample[2].toFixed(4), 'Pitch ' + sample[3].toFixed(3) + '°',
+      'Yaw ' + sample[4].toFixed(3) + '°', 'Roll ' + sample[5].toFixed(3) + '°',
+    ].join(' · ');
+    const input = qs('#animation-motion-lab-live-input');
+    if (input) {
+      const active = MOTION_LAB_AXES.filter((axis, index) =>
+        Math.abs(sample[index]) > 0.000001).map(axis => axis.replaceAll('_',' '));
+      input.textContent = active.length ? 'Movement: ' + active.join(', ') :
+        'Neutral controls. Hold keyboard keys or drag a joystick to record movement.';
+    }
+  }
+  function motionLabRecordFinishedFeedback(take) {
+    const indicator = qs('#animation-motion-lab-live-indicator');
+    if (indicator) indicator.textContent = '■ Stopped · ' + take.samples.length + ' frames';
+    const target = qs('#animation-motion-lab-record-frame');
+    if (target) target.textContent = 'Take captured: frames ' + take.startFrame +
+      '–' + (take.endFrame - 1) + ' · ' + take.samples.length + ' samples';
+    const input = qs('#animation-motion-lab-live-input');
+    if (input) input.textContent =
+      'Draft recording added to layer stack. Review curves; Apply to Animation to save.';
+  }
   function motionLabRecordingUi() {
     const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
     const active = Boolean(motionLabRecorder?.active);
@@ -4135,6 +4166,7 @@
       samples: take.samples.map(row => row.slice()),
     };
     motionLabDraftLayers.push(layer);
+    motionLabRecordFinishedFeedback(take);
     motionLabRecorder = null;
     motionLabNeutralizeRecordInput();
     motionLabNotify(
@@ -4143,7 +4175,8 @@
     );
     commitMotionLabDraft();
     const start = qs('#animation-motion-lab-record-start');
-    if (start) start.value = String(Math.min(count - 1, layer.end_frame));
+    // A second take should not unexpectedly begin on the final frame.
+    // Preserve the explicit start selection for repeat takes.
     void motionLabPreviewOrApply(false, {curvesOnly:true});
     motionLabRecordingUi();
   }
@@ -4184,21 +4217,36 @@
     }
     motionLabNeutralizeRecordInput();
     motionLabVisual?.pause();
+    const remainingFrames = count - startFrame;
+    const startStatus = qs('#animation-motion-lab-record-frame');
+    if (startStatus) startStatus.textContent =
+      '● Starting capture at frame ' + startFrame + ' · ' + remainingFrames +
+      ' available frames (' + (remainingFrames / fps).toFixed(1) + ' seconds)';
+    const indicator = qs('#animation-motion-lab-live-indicator');
+    if (indicator) indicator.textContent = '● RECORDING';
+    motionLabRecordStatus('● Recording ' + fps + ' FPS');
+    motionLabNotify('Recording active: keyboard, joysticks, Z/roll buttons and optional gamepad. Stop creates a draft layer.');
     motionLabRecorder = new window.MorphorumMotionLabFrameRecorder();
-    motionLabRecorder.start({
+    try {
+      motionLabRecorder.start({
       fps, startFrame, maxFrames: count - startFrame, armedAxes: axes,
       translationScale, rotationScale, deadzone, response, tailFrames,
       sampleInput: motionLabRecordSampleInput,
-      onFrame: ({frame, count: captured}) => {
-        const target = qs('#animation-motion-lab-record-frame');
-        if (target) target.textContent =
-          'Recording frame ' + frame + ' · ' + captured + ' captured · ' + fps + ' FPS project clock';
-        motionLabVisual?.setFrame(frame);
+      onFrame: ({frame, count: captured, sample}) => {
+        motionLabRecordLiveFrame(frame, sample, captured, fps, count - 1);
+        // During recording the saved curves are stale; only drive their
+        // playhead when actual compiled series are present.
+        if (motionLabVisual?.series && !motionLabVisual.stale) motionLabVisual.setFrame(frame);
       },
       onComplete: take => motionLabFinalizeRecording(take),
-    });
-    motionLabRecordStatus('Recording');
-    motionLabNotify('Recording live camera input on the project frame clock. Stop to create a draft recording layer.');
+      });
+    } catch (error) {
+      motionLabRecorder = null;
+      motionLabRecordStatus('Recording failed');
+      motionLabNotify('Unable to start recording: ' + (error?.message || String(error)));
+      const failed = qs('#animation-motion-lab-live-indicator');
+      if (failed) failed.textContent = 'Recording failed';
+    }
     motionLabRecordingUi();
   }
   function motionLabStopRecording(reason = 'manual') {
@@ -4538,10 +4586,9 @@
   function motionLabCurveFrameSync(frame) {
     const input = qs('#animation-motion-lab-key-frame');
     if (input && document.activeElement !== input) input.value = String(frame);
-    const recordStart = qs('#animation-motion-lab-record-start');
-    if (recordStart && !motionLabRecorder?.active && document.activeElement !== recordStart) {
-      recordStart.value = String(frame);
-    }
+    // The record start frame is an explicit field, not a side effect of
+    // curve playback/scrubbing. Otherwise hitting Record after a preview
+    // starts at the final frame and ends before controls can be used.
     const value = qs('#animation-motion-lab-key-value');
     if (value && document.activeElement !== value) {
       const existing = motionLabCurveLayer()?.keys?.find(key => key.frame === frame);
