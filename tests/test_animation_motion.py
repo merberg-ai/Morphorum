@@ -324,6 +324,13 @@ def test_motion_lab_preview_without_uploaded_source_uses_grid(
     assert job["result"]["source_kind"] == "calibration-grid"
     assert job["result"]["source_frames"] == 6
     assert manager.result_path(started["id"]).is_file()
+    assert manager.frame_path(started["id"], 0).is_file()
+    with Image.open(manager.frame_path(started["id"], 0)) as seekable:
+        assert seekable.format == "PNG"
+    with pytest.raises(MotionPreviewError, match="index out of range"):
+        manager.frame_path(started["id"], -1)
+    with pytest.raises(MotionPreviewError, match="not found"):
+        manager.frame_path(started["id"], 71)
     with Image.open(manager.result_path(started["id"])) as preview:
         assert getattr(preview, "is_animated", False)
 
