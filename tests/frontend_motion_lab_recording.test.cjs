@@ -130,3 +130,19 @@ test('ML2 recording card is wired into Motion Lab with mobile-safe controls', ()
   assert.match(css, /\.animation-motion-stick \{[^}]*touch-action:none/s);
   assert.match(css, /@media\(max-width:640px\)[\s\S]*animation-motion-recording-controls/);
 });
+
+test('ML2 recording exposes live axis/frame feedback and does not seek the start with playback', () => {
+  for (const id of [
+    'animation-motion-lab-live-monitor',
+    'animation-motion-lab-live-indicator',
+    'animation-motion-lab-live-axes',
+    'animation-motion-lab-live-input',
+  ]) assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
+  assert.match(animation, /function motionLabRecordLiveFrame\(frame, sample, captured, fps, maxFrame\)/);
+  assert.match(animation, /motionLabRecordLiveFrame\(frame, sample, captured, fps, count - 1\)/);
+  assert.match(animation, /motionLabRecordFinishedFeedback\(take\)/);
+  assert.match(animation, /The record start frame is an explicit field/);
+  assert.doesNotMatch(animation, /recordStart\.value = String\(frame\)/);
+  assert.doesNotMatch(animation, /start\.value = String\(Math\.min\(count - 1, layer\.end_frame\)\)/);
+  assert.match(css, /\.animation-motion-live-monitor \{/);
+});
