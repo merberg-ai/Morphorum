@@ -2142,3 +2142,14 @@ dialog#animation-deforum-dialog {
 .animation-motion-audio-controls label {display:flex;flex-direction:column;gap:5px;min-width:0;}
 .animation-motion-audio-controls input,.animation-motion-audio-controls select {width:100%;min-width:0;}
 @media(max-width:540px) {.animation-motion-lab-audio {padding:12px;}.animation-motion-audio-controls {grid-template-columns:minmax(0,1fr);}}
+
+.animation-motion-audio-preview {margin:14px 0;padding:12px;border:1px solid rgba(115,213,237,.26);border-radius:12px;background:rgba(10,20,32,.35);}
+.animation-motion-audio-preview[hidden] {display:none;}
+.animation-motion-audio-preview-header {display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;justify-content:space-between;margin-bottom:10px;}
+#animation-motion-lab-audio-plot {display:block;width:100%;height:220px;border-radius:7px;background:rgba(5,13,24,.38);}
+.animation-motion-audio-legend {display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;font-size:.78rem;}
+.animation-motion-audio-legend span:first-child {color:#73d5ed;}
+.animation-motion-audio-legend span:nth-child(2) {color:#ff857c;}
+.animation-motion-audio-legend span:nth-child(3) {color:#ffbd69;}
+#animation-motion-lab-audio-prediction {margin:8px 0 0;}
+@media(max-width:540px) {#animation-motion-lab-audio-plot {height:155px;}.animation-motion-audio-preview {padding:8px;}}
