@@ -4045,6 +4045,7 @@
     list.replaceChildren();
     if (!motionLabDraftLayers.length) {
       list.textContent = 'No layers. Add a Wave, Spiral, Figure Eight, or another preset to begin.';
+      motionLabCurveRender();
       return;
     }
     motionLabDraftLayers.forEach((layer, index) => {
