@@ -94,9 +94,10 @@
           next %= this.count;
           this.frameAtStart = next;
           this.startMs = now;
-          if (syncAudio) {
+          if (audio && this.shouldSync?.() && audio.readyState >= 1 &&
+              Number.isFinite(audio.duration) && audio.duration > 0) {
             audio.currentTime = next / this.fps;
-            audio.play()?.catch(() => {});
+            audio.play()?.catch(error => this.status?.('Audio replay blocked: ' + error.message));
           }
         } else {
           this.draw(this.count - 1);
