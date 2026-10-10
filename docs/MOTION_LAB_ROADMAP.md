@@ -251,6 +251,8 @@ Physical testing accepted ML2.3 punch-in, preserving original axes and untouched
 
 **Physical gate:** Use a short PCM WAV containing audible pulses/clear loud-soft sections; select a saved 3D project at 12 FPS and 48+ frames; Analyze WAV then Add Audio Motion Layer; inspect Z curves and Preview Draft Motion then Apply, reopen, repeat Apply and verify no drift/doubling. Check stale/invalid WAV, incorrect FPS after project changes, layer disable, Undo/Redo and phone layout. Onset detection currently triggers **upward RMS threshold crossings**, not every bass kick if the envelope stays above threshold. Do not merge before Windows acceptance.
 
+**ML3.1 waveform-preview polish (physical acceptance pending):** Following Windows feedback that a default threshold of 0.25 produced no visible camera movement until lowered to 0.1, the Audio-Reactive Motion card now shows the analyzed full-band RMS envelope directly after WAV analysis, with threshold guide line, predicted complete pulse markers and pulse count. Changing threshold, attack or release updates this preview without adding a layer. On analyze, the threshold starts at min(0.1, 55% of the analyzed maximum), avoiding empty previews on quieter sources. This is a frame-aligned RMS envelope, not a raw audio waveform or audio playback. Test varying threshold from 0.25 to 0.1 with the same WAV and verify markers/count change before adding any draft layer; then Add Audio Motion Layer and confirm the resulting curves agree. No protected branches merged.
+
 ### ML4: Final integration and physical acceptance
 
 - Optional custom presets/import-export, compatibility test against Deforum `translation_x/y/z` and `rotation_3d_x/y/z`, field mapping.
