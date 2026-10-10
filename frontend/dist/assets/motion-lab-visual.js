@@ -89,6 +89,12 @@
       this.value = find('animation-motion-lab-frame-value');
       this.time = find('animation-motion-lab-time-value');
       this.readout = find('animation-motion-lab-axis-readout');
+      this.editor = {axis: 'translation_x', keys: [], enabled: false};
+      this.dragKey = null;
+      this.graphScales = [0.04, 0.5];
+      this.onKeyframeEdit = null;
+      this.onFrameChange = null;
+      this.onPointerDraft = null;
       this.boundTick = stamp => this.tick(stamp);
       this.slider?.addEventListener('input', () => this.setFrame(Number(this.slider.value)));
       this.button?.addEventListener('click', () => this.playing ? this.pause() : this.play());
@@ -102,11 +108,56 @@
         };
         this.curves.addEventListener('pointerdown', event => {
           event.preventDefault();
-          seek(event);
+          if (!this.series || this.stale) return;
+          if (!this.editor.enabled) {
+            seek(event);
+            this.curves.setPointerCapture?.(event.pointerId);
+            return;
+          }
+          this.pause();
+          const point = this.editPoint(event);
+          if (!point) return;
+          const axis = this.editor.axis;
+          const group = AXES.indexOf(axis) < 3 ? 0 : 1;
+          const scale = this.graphScales[group];
+          const closest = this.editor.keys
+            .filter(key => key.frame > 0)
+            .map(key => ({
+              frame: key.frame,
+              distance: Math.hypot(
+                43 + key.frame * 735 / Math.max(1, this.count - 1) - point.x,
+                (group ? 226 : 86) - key.value / scale * 48 - point.y,
+              ),
+            })).sort((a,b) => a.distance - b.distance)[0];
+          this.dragKey = {
+            originalFrame: closest && closest.distance <= 12 ? closest.frame : null,
+            pointerId: event.pointerId,
+          };
           this.curves.setPointerCapture?.(event.pointerId);
+          this.previewEdit(point);
         });
         this.curves.addEventListener('pointermove', event => {
-          if (event.buttons & 1) seek(event);
+          if (!this.series || this.stale) return;
+          if (this.editor.enabled && this.dragKey && event.pointerId === this.dragKey.pointerId) {
+            this.previewEdit(this.editPoint(event));
+          } else if (!this.editor.enabled && (event.buttons & 1)) seek(event);
+        });
+        this.curves.addEventListener('pointerup', event => {
+          if (!this.dragKey || event.pointerId !== this.dragKey.pointerId) return;
+          const point = this.editPoint(event);
+          const originalFrame = this.dragKey.originalFrame;
+          this.dragKey = null;
+          this.hideGhost();
+          if (point && point.frame > 0) {
+            this.onKeyframeEdit?.({
+              axis: this.editor.axis, frame: point.frame,
+              value: point.value, replaceFrame: originalFrame,
+            });
+          }
+        });
+        this.curves.addEventListener('pointercancel', () => {
+          this.dragKey = null;
+          this.hideGhost();
         });
         this.curves.addEventListener('keydown', event => {
           if (!this.series || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -115,6 +166,48 @@
             this.frame + (event.key === 'ArrowRight' ? 1 : -1));
         });
       }
+    }
+    configureEditor({axis, keys = [], enabled = false, onEdit, onFrameChange, onPointerDraft} = {}) {
+      if (!AXES.includes(axis)) return;
+      this.editor = {
+        axis,
+        keys: keys.map(key => ({frame: Number(key.frame), value: Number(key.value)})),
+        enabled: Boolean(enabled),
+      };
+      this.onKeyframeEdit = onEdit || this.onKeyframeEdit;
+      this.onFrameChange = onFrameChange || this.onFrameChange;
+      this.onPointerDraft = onPointerDraft || this.onPointerDraft;
+      if (this.series) { this.draw(); this.setFrame(this.frame); }
+    }
+    editPoint(event) {
+      if (!this.series || this.count < 2) return null;
+      const rect = this.curves?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+      const x = (event.clientX - rect.left) * 800 / rect.width;
+      const y = (event.clientY - rect.top) * 300 / rect.height;
+      const axis = this.editor.axis;
+      const group = AXES.indexOf(axis) < 3 ? 0 : 1;
+      const center = group ? 226 : 86;
+      const maximum = this.graphScales[group];
+      const frame = clamp(Math.round((x - 43) / 735 * (this.count - 1)), 0, this.count - 1);
+      const value = clamp((center - y) / 48 * maximum, -30, 30);
+      return {frame, value: Number(value.toFixed(6)), x, y};
+    }
+    previewEdit(point) {
+      if (!point) return;
+      const ghost = this.curves?.querySelector('#ml1-key-ghost');
+      if (ghost) {
+        ghost.setAttribute('cx', String(43 + point.frame * 735 / Math.max(1, this.count - 1)));
+        const group = AXES.indexOf(this.editor.axis) < 3 ? 0 : 1;
+        ghost.setAttribute('cy', String((group ? 226 : 86) - point.value / this.graphScales[group] * 48));
+        ghost.setAttribute('visibility', 'visible');
+      }
+      this.setFrame(point.frame);
+      this.onPointerDraft?.({axis:this.editor.axis, frame:point.frame, value:point.value});
+    }
+    hideGhost() {
+      const ghost = this.curves?.querySelector('#ml1-key-ghost');
+      if (ghost) ghost.setAttribute('visibility', 'hidden');
     }
     clear() {
       this.pause();
@@ -164,7 +257,14 @@
       for (let group = 0; group < 2; group++) {
         const center = groupCenters[group];
         const axes = AXES.slice(group * 3, group * 3 + 3);
-        const maximum = Math.max(0.0001, ...axes.flatMap(axis => this.series[axis].map(Math.abs)));
+        const maximum = Math.max(
+          this.editor.enabled ? (group ? 0.25 : 0.02) : 0.0001,
+          ...axes.flatMap(axis => this.series[axis].map(Math.abs)),
+          ...(this.editor.enabled && AXES.indexOf(this.editor.axis) >= group * 3 &&
+              AXES.indexOf(this.editor.axis) < group * 3 + 3
+            ? this.editor.keys.map(key => Math.abs(key.value)) : []),
+        );
+        this.graphScales[group] = maximum;
         for (let fraction = -1; fraction <= 1; fraction += 1) {
           const y = center + fraction * 48;
           lines.push('<line x1="43" y1="' + y + '" x2="778" y2="' + y +
@@ -182,6 +282,21 @@
                      '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>');
         });
       }
+      const activeIndex = AXES.indexOf(this.editor.axis);
+      const activeGroup = activeIndex < 3 ? 0 : 1;
+      if (this.editor.keys.length) {
+        const maximum = this.graphScales[activeGroup];
+        this.editor.keys.forEach(key => {
+          if (!Number.isFinite(key.frame) || !Number.isFinite(key.value)) return;
+          const x = 43 + key.frame * 735 / Math.max(1, this.count - 1);
+          const y = (activeGroup ? 226 : 86) - key.value / maximum * 48;
+          lines.push('<circle cx="' + x.toFixed(2) + '" cy="' + y.toFixed(2) +
+                     '" r="5.3" fill="' + COLORS[activeIndex] +
+                     '" stroke="#111b28" stroke-width="2"/>');
+        });
+      }
+      lines.push('<circle id="ml1-key-ghost" r="6" visibility="hidden" fill="' +
+                 COLORS[activeIndex] + '" stroke="white" stroke-width="2"/>');
       lines.push('<line id="ml1-curve-marker" x1="43" y1="12" x2="43" y2="289" stroke="#fff" stroke-width="1.6" stroke-dasharray="4 3"/>');
       if (this.curves) this.curves.innerHTML = lines.join('');
       const pts = this.points.map(([x,y]) => x.toFixed(2) + ',' + y.toFixed(2)).join(' ');
@@ -209,6 +324,7 @@
         pathMarker.setAttribute('cx', this.points[this.frame][0].toFixed(2));
         pathMarker.setAttribute('cy', this.points[this.frame][1].toFixed(2));
       }
+      this.onFrameChange?.(this.frame);
       if (this.readout) {
         this.readout.replaceChildren();
         AXES.forEach((axis, i) => {
