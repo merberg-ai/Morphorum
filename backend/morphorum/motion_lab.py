@@ -215,6 +215,7 @@ def compile_motion_lab(
     *,
     layers: list[dict[str, Any]] | None = None,
     conflict_policy: str = "reject",
+    include_series: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Compile draft layers to real camera_3d tracks, without saving anything.
 
@@ -299,4 +300,12 @@ def compile_motion_lab(
             for frame in sorted(set([0, count - 1] + list(range(0, count, max(1, count // 36)))))
         ],
     }
+    # ML1: expose exactly the six resolved, clipped native per-frame values
+    # for browser-side curves and camera-path visualizations. This never
+    # triggers GPU/depth inference and is only requested for draft preview.
+    if include_series:
+        result["series"] = {
+            axis: [round(value, 9) for value in signals[axis]]
+            for axis in AXES
+        }
     return project, result
