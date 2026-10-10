@@ -45,6 +45,7 @@ DEFAULT_LIMITS = {
 }
 MAX_LAYERS = 24
 MAX_COMPOSE_FRAMES = 3000
+MAX_KEYFRAMES_PER_LAYER = 128
 
 
 class MotionLabError(ValueError):
@@ -77,6 +78,56 @@ def _frames(project: dict[str, Any]) -> tuple[int, float]:
     return count, fps
 
 
+def _normalize_keyframe_layer(
+    raw: dict[str, Any],
+    *,
+    index: int,
+    count: int,
+    start: int,
+    end: int,
+    mode: str,
+) -> dict[str, Any]:
+    """Validate a sparse, single-axis native velocity keyframe layer."""
+    axis = str(raw.get("axis", "")).strip().lower()
+    if axis not in AXES:
+        raise MotionLabError(f"Layer {index + 1} must specify one of the six camera axes.")
+    interpolation = str(raw.get("interpolation", "linear")).strip().lower()
+    if interpolation not in {"linear", "hold"}:
+        raise MotionLabError("Curve interpolation must be linear or hold.")
+    raw_keys = raw.get("keys", [])
+    if not isinstance(raw_keys, list) or not 1 <= len(raw_keys) <= MAX_KEYFRAMES_PER_LAYER:
+        raise MotionLabError(
+            f"Curve layer must have 1–{MAX_KEYFRAMES_PER_LAYER} keyframes."
+        )
+    keys: list[dict[str, Any]] = []
+    used: set[int] = set()
+    for n, item in enumerate(raw_keys):
+        if not isinstance(item, dict):
+            raise MotionLabError(f"Keyframe {n + 1} must be an object.")
+        frame = _integer(item.get("frame"), "Keyframe position", start, end - 1)
+        # Keyframes edit per-render-frame velocity. The first output frame is
+        # unwarped, so a nonzero frame-0 delta would be misleading.
+        value = _number(item.get("value"), "Keyframe value", -30, 30)
+        if frame == 0 and value != 0:
+            raise MotionLabError("Frame 0 must have zero camera movement.")
+        if frame in used:
+            raise MotionLabError(f"Duplicate keyframe at frame {frame}.")
+        used.add(frame)
+        keys.append({"frame": frame, "value": value})
+    keys.sort(key=lambda key: key["frame"])
+    return {
+        "id": str(raw.get("id") or f"layer-{index + 1}")[:64],
+        "type": "keyframes",
+        "axis": axis,
+        "keys": keys,
+        "interpolation": interpolation,
+        "enabled": raw.get("enabled", True) is True,
+        "blend": mode,
+        "start_frame": start,
+        "end_frame": end,
+    }
+
+
 def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any]]:
     count, _fps = _frames(project)
     if not isinstance(layers, list) or len(layers) > MAX_LAYERS:
@@ -85,14 +136,22 @@ def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any
     for index, raw in enumerate(layers):
         if not isinstance(raw, dict):
             raise MotionLabError(f"Layer {index + 1} must be an object.")
-        preset = str(raw.get("preset", "")).strip().lower()
-        if preset not in PRESETS:
-            raise MotionLabError(f"Layer {index + 1} has an unsupported preset: {preset}.")
         mode = str(raw.get("blend", "add")).strip().lower()
         if mode not in {"add", "replace"}:
             raise MotionLabError(f"Layer {index + 1} blend must be add or replace.")
         start = _integer(raw.get("start_frame", 0), "Layer start", 0, count - 1)
         end = _integer(raw.get("end_frame", count), "Layer end", start + 1, count)
+        kind = str(raw.get("type", "preset")).strip().lower()
+        if kind == "keyframes":
+            output.append(_normalize_keyframe_layer(
+                raw, index=index, count=count, start=start, end=end, mode=mode,
+            ))
+            continue
+        if kind != "preset":
+            raise MotionLabError(f"Layer {index + 1} has an unsupported type: {kind}.")
+        preset = str(raw.get("preset", "")).strip().lower()
+        if preset not in PRESETS:
+            raise MotionLabError(f"Layer {index + 1} has an unsupported preset: {preset}.")
         output.append({
             "id": str(raw.get("id") or f"layer-{index + 1}")[:64],
             "type": "preset",
@@ -108,7 +167,6 @@ def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any
     if len({item["id"] for item in output}) != len(output):
         raise MotionLabError("Motion layer IDs must be unique.")
     return output
-
 
 def normalize_motion_lab(raw: Any, project: dict[str, Any]) -> dict[str, Any]:
     data = raw if isinstance(raw, dict) else {}
@@ -210,6 +268,35 @@ def _preset_frame(layer: dict[str, Any], frame: int, fps: float) -> dict[str, fl
     return {axis: value * s * envelope for axis, value in values.items()}
 
 
+def _keyframe_value(layer: dict[str, Any], frame: int) -> float:
+    """Piecewise interpolation of sparse native per-frame velocity keyframes.
+
+    Missing lead-in samples start at zero at the layer start. After the last
+    keyframe the last value holds until the layer end. Frame zero is unwarped.
+    """
+    if frame == 0 or frame < layer["start_frame"] or frame >= layer["end_frame"]:
+        return 0.0
+    keys = layer["keys"]
+    if frame >= keys[-1]["frame"]:
+        return float(keys[-1]["value"])
+    if frame < keys[0]["frame"]:
+        left_frame, left_value = layer["start_frame"], 0.0
+        right = keys[0]
+    else:
+        left = keys[0]
+        right = keys[-1]
+        for n in range(len(keys) - 1):
+            if keys[n]["frame"] <= frame < keys[n + 1]["frame"]:
+                left, right = keys[n], keys[n + 1]
+                break
+        left_frame, left_value = left["frame"], float(left["value"])
+    right_frame = right["frame"]
+    if layer["interpolation"] == "hold" or right_frame == left_frame:
+        return left_value
+    factor = (frame - left_frame) / (right_frame - left_frame)
+    return left_value + factor * (float(right["value"]) - left_value)
+
+
 def compile_motion_lab(
     project: dict[str, Any],
     *,
@@ -266,7 +353,10 @@ def compile_motion_lab(
         if not layer["enabled"]:
             continue
         for frame in range(layer["start_frame"], layer["end_frame"]):
-            values = _preset_frame(layer, frame, fps)
+            if layer["type"] == "keyframes":
+                values = {layer["axis"]: _keyframe_value(layer, frame)}
+            else:
+                values = _preset_frame(layer, frame, fps)
             for axis, delta in values.items():
                 if layer["blend"] == "replace":
                     signals[axis][frame] = delta
