@@ -3957,11 +3957,14 @@
     hybridButtons();
   }
 
-  // Four views share the original render controls and poller, never duplicate them.
+  // Motion Lab is first-class; unfinished hybrid Media controls remain mounted
+  // in a non-navigable vault so existing project and API semantics stay intact.
+  // Four visible views share the existing render controls and poller.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
+  const VISIBLE_ANIMATION_TABS = ['editor', 'motion', 'monitor', 'outputs'];
   let animationTab = 'editor';
   function showAnimationTab(name, { persist = true } = {}) {
-    if (!['editor','monitor','media','outputs'].includes(name)) return;
+    if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'editor';
     animationTab = name;
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
@@ -3987,7 +3990,7 @@
     nav.setAttribute('aria-label', 'Animation workspace');
     nav.setAttribute('role', 'tablist');
     const panels = {};
-    const names = { editor: 'Editor', monitor: 'Monitor', media: 'Media', outputs: 'Outputs' };
+    const names = { editor: 'Editor', motion: 'Motion Lab', monitor: 'Monitor', outputs: 'Outputs' };
     for (const [name, label] of Object.entries(names)) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -4020,10 +4023,18 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['monitor','media','outputs']) {
+    for (const name of ['motion', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
+    // Keep the unfinished hybrid-media DOM for backward-compatible project
+    // state and extraction APIs, but make it inaccessible to visible tabs.
+    const mediaVault = document.createElement('section');
+    mediaVault.id = 'animation-media-vault';
+    mediaVault.hidden = true;
+    mediaVault.inert = true;
+    mediaVault.setAttribute('aria-hidden', 'true');
+    panels.outputs.after(mediaVault);
 
     // The old accordion was initialized while Render was a direct child.
     setAnimationCardCollapsed(card, false);
@@ -4031,18 +4042,15 @@
     const inner = qs('.animation-card-content', card) || card;
     const hybrid = qs('#animation-hybrid-source');
     const video = qs('#animation-video-export');
-    if (hybrid) {
-      const wrapper = document.createElement('article');
-      wrapper.className = 'card glass animation-media-card';
-      wrapper.appendChild(hybrid);
-      panels.media.appendChild(wrapper);
-    }
+    if (hybrid) mediaVault.appendChild(hybrid);
     if (video) {
       const wrapper = document.createElement('article');
       wrapper.className = 'card glass animation-output-card';
       wrapper.appendChild(video);
       panels.outputs.appendChild(wrapper);
     }
+    const motionPreview = qs('.animation-motion-preview-card');
+    if (motionPreview) panels.motion.appendChild(motionPreview);
     const history = qs('.animation-render-history-row');
     if (history) panels.outputs.prepend(history);
     const completedPreview = qs('.animation-render-preview-wrap');
@@ -4059,6 +4067,14 @@
     inner.appendChild(expert);
     qs('#animation-collapse-all')?.setAttribute('title', 'Collapse Editor cards');
     qs('#animation-expand-all')?.setAttribute('title', 'Expand Editor cards');
+    qs('#animation-motion-lab-edit-3d')?.addEventListener('click', () => {
+      showAnimationTab('editor');
+      qs('#animation-3d-camera-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    qs('#animation-motion-lab-edit-timeline')?.addEventListener('click', () => {
+      showAnimationTab('editor');
+      qs('#animation-timeline-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     let previous = 'editor';
     try { previous = localStorage.getItem(ANIMATION_TAB_KEY) || 'editor'; } catch (_) {}
     showAnimationTab(previous, { persist: false });
