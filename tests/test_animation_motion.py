@@ -271,9 +271,9 @@ def test_b53_camera_preview_simulates_cpu_depth_and_tracks_coverage(
 def test_b53_camera_preview_rejects_unbounded_frame_counts(
     tmp_path: Path,
 ) -> None:
-    project = sample_project(max_frames=181)
+    project = sample_project(max_frames=3001)
     project["animation"]["mode"] = "3d"
-    with pytest.raises(MotionPreviewError, match="up to 180 frames"):
+    with pytest.raises(MotionPreviewError, match="up to 3000"):
         render_motion_preview(
             project, Image.new("RGB", (32, 32), "red"), tmp_path / "too-long.gif",
         )
