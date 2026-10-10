@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageOps, ImageSequence
+from PIL import Image, ImageDraw, ImageOps
 from scipy.ndimage import map_coordinates
 
 from .animation_resolution import resolve_project_frame
@@ -329,6 +329,7 @@ def _render_3d_motion_preview(
         depth_manager.unload()
 
     _save_motion_preview_gif(captured, destination, fps)
+    _save_motion_preview_samples(captured, destination)
     counts = [float(item["projected_coverage"]) for item in coverage]
     worst = min(coverage, key=lambda item: item["projected_coverage"])
     return {
@@ -349,6 +350,18 @@ def _render_3d_motion_preview(
         "last_coverage": counts[-1],
         "per_frame_coverage": coverage,
     }
+
+
+def _save_motion_preview_samples(
+    captured: list[tuple[int, Image.Image]], destination: Path
+) -> None:
+    """Save the exact captured frames, even when GIF encoding coalesces duplicates."""
+    if len(captured) > PREVIEW_MAX_CAPTURE_FRAMES:
+        raise MotionPreviewError("Preview captured too many frames.")
+    folder = destination.parent / "frames"
+    folder.mkdir(parents=True, exist_ok=True)
+    for index, (_frame, picture) in enumerate(captured):
+        picture.convert("RGB").save(folder / f"{index:04d}.png", "PNG")
 
 
 def _save_motion_preview_gif(
@@ -477,6 +490,7 @@ def render_motion_preview(
         disposal=2,
     )
     temp.replace(destination)
+    _save_motion_preview_samples(captured, destination)
 
     return {
         "preview_width": preview_width,
@@ -646,14 +660,7 @@ class MotionPreviewManager:
                 highlight_holes=highlight_holes,
             )
             # Expose the existing bounded preview samples as seekable frames.
-            samples_dir = output.parent / "frames"
-            samples_dir.mkdir(parents=True, exist_ok=True)
-            with Image.open(output) as gif:
-                for index, sample in enumerate(ImageSequence.Iterator(gif)):
-                    if index >= PREVIEW_MAX_CAPTURE_FRAMES:
-                        break
-                    sample.convert("RGB").save(samples_dir / f"{index:04d}.png", "PNG")
-            result["frame_player_samples"] = min(result["captured_frames"], PREVIEW_MAX_CAPTURE_FRAMES)
+            result["frame_player_samples"] = result["captured_frames"]
             result["source_kind"] = source_kind
             with self._lock:
                 job = self._jobs[job_id]
