@@ -124,7 +124,8 @@ class HybridExtractionManager:
             manifest = {"source": filename, "start": start, "end": end, "fps": fps,
                         "frames": len(frames), "filenames": [p.name for p in frames],
                         "source_size_bytes": source_stat.st_size,
-                        "source_mtime_ns": source_stat.st_mtime_ns}
+                        "source_mtime_ns": source_stat.st_mtime_ns,
+                        "extraction_id": job_id}
             (staging / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
             previous = root / (".previous-" + job_id)
             if destination.exists():
@@ -153,8 +154,23 @@ class HybridExtractionManager:
         root = animation_project_directory(project_id) / "assets" / "hybrid" / "frames"
         path = root / "manifest.json"
         if not path.is_file():
-            raise HybridSourceError("No extracted frame sequence for this project.")
-        return json.loads(path.read_text(encoding="utf-8"))
+            raise HybridSourceError("No extracted frame sequence for this project. Extract the uploaded video first.")
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(manifest, dict):
+                raise ValueError("manifest must be an object")
+            if "source_size_bytes" in manifest and "source_mtime_ns" in manifest:
+                source_stat = managed_video_path(project_id, manifest["source"]).stat()
+                if (source_stat.st_size != int(manifest["source_size_bytes"])
+                        or source_stat.st_mtime_ns != int(manifest["source_mtime_ns"])):
+                    raise HybridSourceError(
+                        "Extracted frames belong to a previous video. Extract the new video first."
+                    )
+            return manifest
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise HybridSourceError(
+                "Extracted video frames are missing, stale or invalid. Extract the video again."
+            ) from exc
 
 
 hybrid_extraction_manager = HybridExtractionManager()
