@@ -1957,6 +1957,10 @@ dialog#animation-deforum-dialog {
 .animation-motion-axis-inverts {display:flex;gap:8px 14px;flex-wrap:wrap;padding-top:9px;}
 .animation-motion-recording-actions {display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:12px 0;}
 .animation-motion-recording-actions button {min-height:42px;}
+.animation-motion-live-monitor {margin:12px 0;padding:12px;border:1px solid rgba(90,200,230,.36);border-radius:10px;background:rgba(36,150,195,.08);display:grid;gap:5px;min-width:0;}
+.animation-motion-live-monitor strong {font-size:.88rem;color:var(--accent);}
+.animation-motion-live-monitor > div {font-variant-numeric:tabular-nums;font-size:.84rem;line-height:1.6;overflow-wrap:anywhere;}
+.animation-motion-live-monitor p {margin:0;font-size:.78rem;}
 .animation-motion-controller-grid {display:grid;grid-template-columns:minmax(150px,220px) minmax(150px,220px) minmax(190px,1fr);gap:16px;align-items:center;margin:16px 0;}
 .animation-motion-stick-wrap {display:grid;gap:7px;justify-items:center;}
 .animation-motion-stick-wrap strong,.animation-motion-hold-controls strong {font-size:.78rem;color:var(--muted);}
