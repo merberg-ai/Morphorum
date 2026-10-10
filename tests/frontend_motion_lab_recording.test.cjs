@@ -146,3 +146,17 @@ test('ML2 recording exposes live axis/frame feedback and does not seek the start
   assert.doesNotMatch(animation, /start\.value = String\(Math\.min\(count - 1, layer\.end_frame\)\)/);
   assert.match(css, /\.animation-motion-live-monitor \{/);
 });
+
+test('ML2 quick actions stay available during scrolling and use the canonical controls', () => {
+  assert.match(animation, /function motionLabSetupQuickActions\(panel\)/);
+  assert.match(animation, /motionLabSetupQuickActions\(panels\.motion\)/);
+  for (const id of ['animation-motion-lab-record', 'animation-motion-lab-stop-recording',
+    'animation-motion-lab-update-curves', 'animation-motion-lab-preview-draft',
+    'animation-motion-lab-apply']) {
+    assert.ok(animation.includes("['" + id + "',"), 'dock missing ' + id);
+  }
+  assert.match(animation, /button\.disabled = active \|\| !original \|\| original\.disabled/);
+  assert.match(animation, /original\.click\(\)/);
+  assert.match(css, /\.animation-motion-lab-quick-actions\s*\{[^}]*position:sticky;bottom:8px/s);
+  assert.match(css, /@media\(max-width:640px\)[\s\S]*animation-motion-lab-quick-actions/s);
+});
