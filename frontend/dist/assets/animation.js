@@ -3983,8 +3983,13 @@
     const count = Number(project?.animation?.max_frames || 120);
     const stage = qs('#animation-motion-lab-compose-status');
     if (stage) stage.textContent = !project ? 'Select a project' :
-      !is3d ? 'Select 3D in Editor' : motionLabDraftLayers.length +
+      !is3d ? '2D project (switch to 3D here)' : motionLabDraftLayers.length +
       ' draft layer' + (motionLabDraftLayers.length === 1 ? '' : 's');
+    const quick3d = qs('#animation-motion-lab-enable-3d');
+    if (quick3d) {
+      quick3d.hidden = !project || is3d;
+      quick3d.disabled = motionLabBusy || Boolean(state.motionJobId);
+    }
     for (const id of ['animation-motion-lab-add','animation-motion-lab-clear',
       'animation-motion-lab-preview-draft','animation-motion-lab-apply']) {
       const button = qs('#' + id);
@@ -4029,7 +4034,7 @@
   }
   function motionLabAddPreset() {
     if (!state.project || animationMode() !== '3d') {
-      motionLabNotify('Select a saved 3D animation project in Editor first.');
+      motionLabNotify('Choose Use 3D Motion above to enable the six-axis composer.');
       return;
     }
     const frames = Number(state.project.animation.max_frames || 120);
@@ -4062,24 +4067,65 @@
   }
   async function motionLabPreviewOrApply(apply) {
     if (!state.project?.id || !motionLabDraftLayers.length || motionLabBusy) return;
-    if (state.dirty) {
-      motionLabNotify('Save current Editor changes before composing Motion Lab presets.');
-      return;
-    }
     const projectId = state.project.id;
     motionLabBusy = true;
     renderMotionLabDraft();
     try {
-      const result = await api('/api/animation/projects/' +
-        encodeURIComponent(projectId) + '/motion-lab/' + (apply ? 'apply' : 'preview'), {
-          method: 'POST', body: JSON.stringify({ layers: motionLabDraftLayers }),
+      if (apply && state.dirty) {
+        const approved = await window.MorphorumDialog.confirm({
+          title: 'Save Editor changes before applying Motion Lab?',
+          message: 'Your Editor has unsaved settings. Motion Lab will save them first, then apply these camera layers. Nothing will be discarded.',
+          variant: 'default', confirmText: 'Save & Apply', cancelText: 'Cancel',
         });
+        if (!approved || state.project?.id !== projectId) return;
+        const saved = await api('/api/animation/projects/' + encodeURIComponent(projectId), {
+          method: 'PUT', body: JSON.stringify(collectProject()),
+        });
+        state.project = saved.project;
+        state.path = saved.path || state.path;
+        fillForm();
+        await loadTimeline();
+        // Confirming the save doesn't confirm overwriting hand-edited tracks.
+        // A separate explicit rebase confirmation is still required if needed.
+      }
+      const endpoint = '/api/animation/projects/' +
+        encodeURIComponent(projectId) + '/motion-lab/' + (apply ? 'apply' : 'preview');
+      const payload = { layers: motionLabDraftLayers };
+      if (!apply) payload.project = collectProject(); // include unsaved edits non-destructively
+      let result;
+      try {
+        result = await api(endpoint, {
+          method: 'POST', body: JSON.stringify(payload),
+        });
+      } catch (error) {
+        if (!apply || !String(error.message || '').includes('Camera schedules changed since Motion Lab')) {
+          throw error;
+        }
+        const approved = await window.MorphorumDialog.confirm({
+          title: 'Use your edited camera schedules as the new Motion Lab base?',
+          message: 'The Editor timeline has changed since Motion Lab last applied its layers. Keep those current camera values and layer this draft on top? This will replace the previous Motion Lab contribution as the baseline, but will not delete the edited schedules.',
+          variant: 'default', confirmText: 'Use Current Camera & Apply',
+          cancelText: 'Keep Existing Motion',
+        });
+        if (!approved || state.project?.id !== projectId) {
+          motionLabNotify('Apply canceled. Your camera timeline remains unchanged.');
+          return;
+        }
+        payload.rebase_current = true;
+        result = await api(endpoint, {
+          method: 'POST', body: JSON.stringify(payload),
+        });
+      }
       if (state.project?.id !== projectId) return;
       const limited = Object.entries(result.diagnostics?.limited || {});
+      const rebaseNote = result.diagnostics?.rebased
+        ? (apply ? ' Camera edits accepted as the new base.' :
+          ' Camera edits detected: draft uses current camera; Apply will ask before saving.') : '';
       motionLabNotify((apply ? 'Applied ' : 'Previewing ') +
         result.diagnostics.layer_count + ' motion layer(s) across ' +
         result.diagnostics.frames + ' frames.' +
-        (limited.length ? ' Limited axes: ' + limited.map(([axis,n])=>axis+' ('+n+')').join(', ') : ' No clipping.'));
+        (limited.length ? ' Limited axes: ' + limited.map(([axis,n])=>axis+' ('+n+')').join(', ') : ' No clipping.') +
+        rebaseNote);
       if (apply) {
         state.project = result.project;
         motionLabDraftLayers = result.project.motion_lab.layers.map(l => ({ ...l }));
@@ -4087,7 +4133,7 @@
         fillForm();
         await loadTimeline();
         await loadProjectList();
-        toast('Motion Lab applied', 'Camera schedules updated in the existing 3D timeline.', 'success');
+        toast('Motion Lab applied', 'Native 3D camera schedules updated without leaving Motion Lab.', 'success');
       } else {
         await generateMotionPreview(result.project);
       }
@@ -4293,6 +4339,15 @@
     qs('#animation-cadence')?.addEventListener('input', syncCadencePreset);
     qs('#animation-cadence')?.addEventListener('change', syncCadencePreset);
     qs('#animation-generate-motion-preview')?.addEventListener('click', generateMotionPreview);
+    qs('#animation-motion-lab-enable-3d')?.addEventListener('click', () => {
+      if (!state.project) return;
+      const selector = qs('#animation-mode');
+      if (selector) selector.value = '3d';
+      markDirty({ validate: true });
+      syncAnimationModeUi();
+      renderMotionLabDraft();
+      motionLabNotify('3D Motion enabled. Preview a draft now, or Apply to save the 3D setting and camera tracks.');
+    });
     qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
     qs('#animation-motion-lab-clear')?.addEventListener('click', () => {
       motionLabDraftLayers = [];
