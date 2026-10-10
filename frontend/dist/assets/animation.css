@@ -2187,3 +2187,8 @@ dialog#animation-deforum-dialog {
 .animation-motion-player-actions input[type=checkbox] {width:16px;height:16px;}
 #animation-motion-frame-scrub {display:block;width:100%;min-width:0;accent-color:#63d4e9;}
 @media(max-width:540px) {.animation-motion-player-actions button {min-height:42px;}}
+
+/* ML3.4: preview quality selection does not widen the Motion Lab card. */
+.animation-motion-preview-quality {display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:.85rem;}
+.animation-motion-preview-quality select {min-width:210px;max-width:100%;}
+@media(max-width:540px) {.animation-motion-preview-quality select {width:100%;}}
