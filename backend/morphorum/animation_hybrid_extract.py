@@ -167,6 +167,8 @@ class HybridExtractionManager:
                         "Extracted frames belong to a previous video. Extract the new video first."
                     )
             return manifest
+        except HybridSourceError:
+            raise
         except (OSError, ValueError, TypeError, KeyError) as exc:
             raise HybridSourceError(
                 "Extracted video frames are missing, stale or invalid. Extract the video again."
