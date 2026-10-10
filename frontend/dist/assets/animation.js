@@ -1927,6 +1927,8 @@
       qs('#animation-notes').value = project.notes || '';
       qs('#animation-hybrid-render-enabled').checked = project.hybrid?.enabled === true;
       qs('#animation-hybrid-offset').value = project.hybrid?.offset_frames ?? 0;
+      qs('#animation-hybrid-composite-enabled').checked = project.hybrid?.composite_enabled === true;
+      qs('#animation-hybrid-composite-opacity').value = project.hybrid?.composite_opacity ?? '0:(0.35)';
       qs('#animation-schema-badge').textContent = 'Project loaded';
 
       const projectFile = qs('#animation-project-path');
@@ -2047,6 +2049,8 @@
         enabled: Boolean(qs('#animation-hybrid-render-enabled')?.checked),
         offset_frames: Number(qs('#animation-hybrid-offset')?.value ?? 0),
         end_policy: 'hold-last',
+        composite_enabled: Boolean(qs('#animation-hybrid-composite-enabled')?.checked),
+        composite_opacity: qs('#animation-hybrid-composite-opacity')?.value ?? '0:(0.35)',
       },
       notes: qs('#animation-notes')?.value || '',
     };
@@ -3903,6 +3907,20 @@
       }
     });
     qs('#animation-hybrid-offset')?.addEventListener('change', () => markDirty());
+    qs('#animation-hybrid-composite-enabled')?.addEventListener('change', () => {
+      if (qs('#animation-hybrid-composite-enabled')?.checked) {
+        const hybridEnabled = qs('#animation-hybrid-render-enabled');
+        if (hybridEnabled && !hybridEnabled.checked) hybridEnabled.checked = true;
+      }
+      markDirty();
+    });
+    qs('#animation-hybrid-render-enabled')?.addEventListener('change', () => {
+      if (!qs('#animation-hybrid-render-enabled')?.checked) {
+        const composite = qs('#animation-hybrid-composite-enabled');
+        if (composite) composite.checked = false;
+      }
+    });
+    qs('#animation-hybrid-composite-opacity')?.addEventListener('input', () => markDirty());
     hybridButtons();
   }
 
