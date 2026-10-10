@@ -227,7 +227,9 @@ Current ML2.3 feature-branch changes implement **inline rename** for recording l
 
 **Next physical gate:** Create a recording, Rename it, Undo/Redo, Duplicate and confirm the copy is off by default. Verify enabling it deliberately adds the extra contribution; verify save/reopen retains names and copied samples and mobile inline editing is usable. Don't merge before physical approval.
 
-**Remaining ML2.3 proposal (not yet implemented):** scoped punch-in / replace-range with an explicit interval, deterministic sample splice at exact frame boundaries, validation for FPS/armed axes, no destructive overwrite before confirmation and regression tests for partial range/undo/redo. Keep this separate from first-slice take management.
+**ML2.3 punch-in implementation now awaiting physical testing:** Select Take mode = Punch into existing take, select target, specify start and exclusive end frame, arm a subset of the target take's axes, then record until the selected end. New dense samples replace only that axis subset inside the interval. Outside frames and unrelated axes remain unchanged, including their original data. Source is copied before editing; existing draft Undo/Redo preserves the prior take. FPS must match and the range must fall completely inside the target. Stopping before the end discards an incomplete punch-in; no partial destructive overwrite. The draft then refreshes curves and requires normal Apply to persist native camera schedules.
+
+**Physical gate:** choose a six-axis 12 FPS take; punch into frames [12, 24), arm only translation_x, hold D until automatic stop. Confirm only frames 12–23 X values change, the other five axes and frames 0–11/24+ remain identical. Undo restores exact original; Redo reapplies. Try an invalid range, arm an axis absent from target, and stop midway, all of which must preserve the original. Save/reopen, verify idempotent Apply and retry on mobile. Gamepad still optional. Do not merge without acceptance.
 
 ### ML3: Audio-reactive motion
 
