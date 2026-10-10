@@ -3969,6 +3969,33 @@
   let motionLabDraftLayers = [];
   let motionLabBusy = false;
   let motionLabEditingIndex = -1;
+  let motionLabVisual = null;
+  let motionLabHistory = [[]];
+  let motionLabHistoryIndex = 0;
+  function commitMotionLabDraft() {
+    const snapshot = JSON.stringify(motionLabDraftLayers);
+    if (JSON.stringify(motionLabHistory[motionLabHistoryIndex]) === snapshot) {
+      renderMotionLabDraft();
+      return;
+    }
+    motionLabHistory = motionLabHistory.slice(0, motionLabHistoryIndex + 1);
+    motionLabHistory.push(JSON.parse(snapshot));
+    if (motionLabHistory.length > 51) motionLabHistory.shift();
+    motionLabHistoryIndex = motionLabHistory.length - 1;
+    motionLabVisual?.invalidate();
+    renderMotionLabDraft();
+  }
+  function restoreMotionLabDraft(direction) {
+    const next = motionLabHistoryIndex + direction;
+    if (next < 0 || next >= motionLabHistory.length) return;
+    motionLabHistoryIndex = next;
+    motionLabDraftLayers = motionLabHistory[next].map(layer => ({ ...layer }));
+    motionLabEditingIndex = -1;
+    motionLabVisual?.invalidate();
+    renderMotionLabDraft();
+    motionLabNotify('Draft layer change ' + (direction < 0 ? 'undone' : 'redone') +
+      '. Update Curves to view the new motion.');
+  }
   function syncMotionLabDraft() {
     const projectId = state.project?.id || '';
     if (projectId === motionLabProjectId) return;
@@ -3976,6 +4003,9 @@
     motionLabEditingIndex = -1;
     motionLabDraftLayers = Array.isArray(state.project?.motion_lab?.layers)
       ? state.project.motion_lab.layers.map(layer => ({ ...layer })) : [];
+    motionLabHistory = [motionLabDraftLayers.map(layer => ({ ...layer }))];
+    motionLabHistoryIndex = 0;
+    motionLabVisual?.clear();
     renderMotionLabDraft();
   }
   function renderMotionLabDraft() {
@@ -3993,7 +4023,8 @@
       quick3d.disabled = motionLabBusy || Boolean(state.motionJobId);
     }
     for (const id of ['animation-motion-lab-add','animation-motion-lab-clear',
-      'animation-motion-lab-preview-draft','animation-motion-lab-apply']) {
+      'animation-motion-lab-preview-draft','animation-motion-lab-apply',
+      'animation-motion-lab-update-curves']) {
       const button = qs('#' + id);
       if (!button) continue;
       const needsLayers = id !== 'animation-motion-lab-add';
@@ -4003,6 +4034,10 @@
     if (end) end.max = String(count);
     const start = qs('#animation-motion-lab-start');
     if (start) start.max = String(Math.max(0, count - 1));
+    const undo = qs('#animation-motion-lab-undo');
+    const redo = qs('#animation-motion-lab-redo');
+    if (undo) undo.disabled = !ready || motionLabHistoryIndex <= 0;
+    if (redo) redo.disabled = !ready || motionLabHistoryIndex >= motionLabHistory.length - 1;
     const addButton = qs('#animation-motion-lab-add');
     if (addButton) addButton.textContent = motionLabEditingIndex < 0 ? '+ Add Preset Layer' : 'Update Selected Layer';
     const list = qs('#animation-motion-lab-layer-list');
@@ -4038,6 +4073,44 @@
         motionLabNotify('Editing layer ' + (index + 1) + '. Adjust controls and select Update Selected Layer.');
         renderMotionLabDraft();
       });
+      const toggle = document.createElement('label');
+      toggle.className = 'animation-motion-lab-layer-toggle';
+      const enabled = document.createElement('input');
+      enabled.type = 'checkbox';
+      enabled.checked = layer.enabled !== false;
+      enabled.disabled = !ready;
+      enabled.setAttribute('aria-label', 'Enable layer ' + (index + 1));
+      enabled.addEventListener('change', () => {
+        motionLabDraftLayers[index].enabled = enabled.checked;
+        commitMotionLabDraft();
+      });
+      toggle.append(enabled, document.createTextNode('On'));
+      const up = document.createElement('button');
+      up.type = 'button';
+      up.className = 'secondary-button compact';
+      up.textContent = '↑';
+      up.title = 'Move layer earlier';
+      up.setAttribute('aria-label', 'Move layer ' + (index + 1) + ' earlier');
+      up.disabled = !ready || index === 0;
+      up.addEventListener('click', () => {
+        [motionLabDraftLayers[index - 1], motionLabDraftLayers[index]] =
+          [motionLabDraftLayers[index], motionLabDraftLayers[index - 1]];
+        motionLabEditingIndex = -1;
+        commitMotionLabDraft();
+      });
+      const down = document.createElement('button');
+      down.type = 'button';
+      down.className = 'secondary-button compact';
+      down.textContent = '↓';
+      down.title = 'Move layer later';
+      down.setAttribute('aria-label', 'Move layer ' + (index + 1) + ' later');
+      down.disabled = !ready || index === motionLabDraftLayers.length - 1;
+      down.addEventListener('click', () => {
+        [motionLabDraftLayers[index + 1], motionLabDraftLayers[index]] =
+          [motionLabDraftLayers[index], motionLabDraftLayers[index + 1]];
+        motionLabEditingIndex = -1;
+        commitMotionLabDraft();
+      });
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'secondary-button compact';
@@ -4046,11 +4119,11 @@
       remove.addEventListener('click', () => {
         motionLabDraftLayers.splice(index, 1);
         motionLabEditingIndex = -1;
-        renderMotionLabDraft();
+        commitMotionLabDraft();
       });
       const actions = document.createElement('div');
       actions.className = 'animation-motion-lab-layer-actions';
-      actions.append(edit, remove);
+      actions.append(toggle, up, down, edit, remove);
       item.append(desc, actions);
       list.appendChild(item);
     });
@@ -4093,10 +4166,10 @@
     if (motionLabEditingIndex >= 0) motionLabDraftLayers[motionLabEditingIndex] = entry;
     else motionLabDraftLayers.push(entry);
     motionLabEditingIndex = -1;
-    motionLabNotify('Draft updated. Preview the motion, then Apply to Animation to save.');
-    renderMotionLabDraft();
+    motionLabNotify('Draft updated. Update Curves for instant feedback, then Apply to Animation to save.');
+    commitMotionLabDraft();
   }
-  async function motionLabPreviewOrApply(apply) {
+  async function motionLabPreviewOrApply(apply, { curvesOnly = false } = {}) {
     if (!state.project?.id || !motionLabDraftLayers.length || motionLabBusy) return;
     const projectId = state.project.id;
     motionLabBusy = true;
@@ -4148,6 +4221,9 @@
         });
       }
       if (state.project?.id !== projectId) return;
+      if (!apply && result.diagnostics?.series) {
+        motionLabVisual?.setData(result.diagnostics);
+      }
       const limited = Object.entries(result.diagnostics?.limited || {});
       const rebaseNote = result.diagnostics?.rebased
         ? (apply ? ' Camera edits accepted as the new base.' :
@@ -4165,7 +4241,7 @@
         await loadTimeline();
         await loadProjectList();
         toast('Motion Lab applied', 'Native 3D camera schedules updated without leaving Motion Lab.', 'success');
-      } else {
+      } else if (!curvesOnly) {
         await generateMotionPreview(result.project);
       }
     } catch (error) {
@@ -4384,8 +4460,12 @@
       motionLabDraftLayers = [];
       motionLabEditingIndex = -1;
       motionLabNotify('Draft cleared. The currently saved camera timeline is unchanged.');
-      renderMotionLabDraft();
+      commitMotionLabDraft();
     });
+    qs('#animation-motion-lab-undo')?.addEventListener('click', () => restoreMotionLabDraft(-1));
+    qs('#animation-motion-lab-redo')?.addEventListener('click', () => restoreMotionLabDraft(1));
+    qs('#animation-motion-lab-update-curves')?.addEventListener('click',
+      () => motionLabPreviewOrApply(false, { curvesOnly: true }));
     qs('#animation-motion-lab-preview-draft')?.addEventListener('click',
       () => motionLabPreviewOrApply(false));
     qs('#animation-motion-lab-apply')?.addEventListener('click',
@@ -4447,6 +4527,7 @@
         input.id === 'animation-project-select' ||
         input.id.startsWith('animation-deforum-') ||
         input.id.startsWith('animation-hybrid-') ||
+        input.id.startsWith('animation-motion-lab-') ||
         input.id.startsWith('animation-video-') ||
         input.id === 'animation-model' ||
         input.id === 'animation-resolution-preset' ||
@@ -4478,6 +4559,9 @@
   async function start() {
     setupAnimationAccordions();
     setupAnimationWorkspaceTabs();
+    if (window.MorphorumMotionLabVisualizer) {
+      motionLabVisual = new window.MorphorumMotionLabVisualizer();
+    }
     bind();
     setEditorEnabled(false);
 
