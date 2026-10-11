@@ -3350,10 +3350,12 @@
         state.motionJobId || motionPreviewStarting) return;
     animationRenderStarting = true;
     motionLabSyncQuickActions();
-    const project = collectProject();
     const button = qs('#animation-start-render');
     if (button) { button.classList.add('busy'); button.disabled = true; }
     try {
+      // Keep collection inside the try: invalid project inputs must not
+      // strand the toolbar in its pending-render locked state.
+      const project = collectProject();
       const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project }) });
       state.renderJobId = job.id;
       renderAnimationJob(job);
