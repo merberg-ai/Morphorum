@@ -19,3 +19,17 @@ test('DA3 existing audio graph identifiers and interactions remain mounted', () 
   assert.match(js, /#animation-audio-event-editor/);
   assert.match(css, /#animation-motion-lab-audio-plot \{\s*height:260px/);
 });
+
+test('DA3.3 timeline view and editing history stay integrated', () => {
+  assert.match(js, /data-wave-mode/);
+  assert.match(js, /Envelope \+ markers/);
+  assert.match(js, /mode !== 'stereo'/);
+  assert.match(js, /motionLabMarkerUndo/);
+  assert.match(js, /motionLabMarkerRedo/);
+  assert.match(js, /pointerdown/);
+  assert.match(js, /pointermove/);
+  assert.match(js, /motionLabMarkerSnapshot\(\)/);
+  assert.match(js, /animation-audio-config-group/);
+  assert.match(css, /\.animation-audio-config-grid/);
+  assert.match(js, /diagnostics\.before\(section\)/);
+});
