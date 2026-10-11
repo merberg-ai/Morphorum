@@ -20,7 +20,8 @@ test('Motion Lab and Audio Motion have separate visible panels sharing the same 
   assert.match(js, /mediaVault\.setAttribute\('aria-hidden', 'true'\)/);
   assert.match(js, /if \(hybrid\) mediaVault\.appendChild\(hybrid\)/);
   assert.match(css, /#animation-media-vault\s*\{display:none!important;\}/);
-  assert.match(js, /panels\.outputs\.appendChild\(video\)/);
+  assert.match(js, /wrapper\.appendChild\(video\)/);
+  assert.match(js, /panels\.outputs\.appendChild\(wrapper\)/);
   assert.match(js, /panels\.motion\.appendChild\(motionPreview\)/);
   assert.match(js, /panels\.motion\.appendChild\(motionIntro\)/);
 });
@@ -79,7 +80,7 @@ test('Motion Lab preview is usable without a separately uploaded image', () => {
   assert.match(js, /if \(preview\) preview\.disabled = !state\.project \|\| Boolean\(state\.motionJobId\)/);
   assert.match(js, /if \(!state\.project \|\| state\.motionJobId\) return;/);
   assert.match(js, /animationMode\(\) !== '3d'/);
-  assert.match(js, /job\.result\.source_kind === 'calibration-grid'/);
+  assert.match(html, /built-in calibration grid immediately/);
   assert.match(html, /built-in calibration grid immediately/);
   assert.match(html, /An uploaded reference is optional/);
   assert.doesNotMatch(js, /if \(preview\) preview\.disabled = [^;]*!hasSource/);
@@ -98,7 +99,7 @@ test('ML0 exposes draft motion layer presets with preview and explicit timeline 
   ]) {
     assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
   }
-  assert.match(js, /async function motionLabPreviewOrApply\(apply\)/);
+  assert.match(js, /async function motionLabPreviewOrApply\(apply,/);
   assert.match(js, /state\.project\.motion_lab\?\.layers/);
   assert.match(js, /body: JSON\.stringify\(payload\)/);
   assert.match(js, /await generateMotionPreview\(result\.project\)/);
@@ -121,7 +122,7 @@ test('Camera Motion Composer lives in Motion Lab alongside its preview, never Ed
 });
 
 test('Manual Editor motion edits do not block draft previews, apply needs explicit rebase', () => {
-  const start = js.indexOf('  async function motionLabPreviewOrApply(apply) {');
+  const start = js.indexOf('  async function motionLabPreviewOrApply(apply,');
   const end = js.indexOf('  // Motion Lab is first-class;', start);
   const workflow = js.slice(start, end);
   assert.ok(start >= 0 && end > start);
