@@ -46,7 +46,7 @@ LORA_PATH_FAMILIES = tuple(
 )
 MODEL_PATH_KEYS = ("checkpoints", "loras")
 
-UI_THEME_OPTIONS = {"midnight-glass"}
+UI_THEME_OPTIONS = {"midnight-glass", "deep-ocean", "amethyst-night", "slate-graphite"}
 UI_FONT_STYLE_OPTIONS = {"modern", "humanist", "geometric", "technical"}
 UI_MONO_FONT_STYLE_OPTIONS = {"modern-mono", "cascadia", "classic-mono", "compact-mono"}
 UI_SCALE_OPTIONS = {"compact", "standard", "comfortable"}
