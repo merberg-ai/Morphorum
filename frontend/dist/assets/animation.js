@@ -4644,6 +4644,24 @@
   let motionLabEditedEvents = null;
   let motionLabSelectedEvent = null;
   let motionLabMarkersDirty = false;
+  let motionLabMarkerUndo = [];
+  let motionLabMarkerRedo = [];
+  function motionLabMarkerSnapshot() {
+    if (!motionLabEditedEvents) return;
+    motionLabMarkerUndo.push(motionLabEditedEvents.map(e=>({...e})));
+    if (motionLabMarkerUndo.length > 60) motionLabMarkerUndo.shift();
+    motionLabMarkerRedo = [];
+  }
+  function motionLabMarkerHistory(redo) {
+    const source = redo ? motionLabMarkerRedo : motionLabMarkerUndo;
+    if (!source.length || !motionLabEditedEvents) return;
+    const destination = redo ? motionLabMarkerUndo : motionLabMarkerRedo;
+    destination.push(motionLabEditedEvents.map(e=>({...e})));
+    motionLabEditedEvents = source.pop();
+    motionLabMarkersDirty = true;
+    motionLabStereoWaveform();
+  }
+
   async function motionLabSaveMarkers() {
     if (!motionLabAudioAnalysis || !motionLabEditedEvents || !state.project ||
         motionLabAudioProjectId !== state.project.id) return;
@@ -4682,6 +4700,10 @@
     if (time) { time.disabled = !selected; time.value = selected ? String(selected.time_seconds) : ''; }
     if (kind) { kind.disabled = !selected; kind.value = selected?.kind || 'kick'; }
     if (enabled) { enabled.disabled = !selected; enabled.checked = selected?.enabled !== false; }
+    const undo = panel.querySelector('[data-event-undo]');
+    const redo = panel.querySelector('[data-event-redo]');
+    if (undo) undo.disabled = !motionLabMarkerUndo.length;
+    if (redo) redo.disabled = !motionLabMarkerRedo.length;
     const remove = panel.querySelector('[data-event-remove]');
     if (remove) remove.disabled = !selected;
     const summary = panel.querySelector('[data-event-selected]');
@@ -4693,6 +4715,8 @@
     if (!motionLabAudioAnalysis || !motionLabEditedEvents) return;
     const panel = qs('#animation-audio-event-editor');
     const selected = motionLabEditedEvents.find(e => e.id === motionLabSelectedEvent);
+    if (action === 'add' || action === 'remove' || action === 'reset' ||
+        (action === 'update' && selected)) motionLabMarkerSnapshot();
     if (action === 'add') {
       const duration = motionLabAudioAnalysis.duration_seconds;
       const time = Math.max(0, Math.min(duration - .000001,
@@ -4873,11 +4897,15 @@
         '<div class="animation-audio-event-actions"><button type="button" data-event-save>Update marker</button>' +
         '<button type="button" data-event-add>Add at playhead</button>' +
         '<button type="button" data-event-remove disabled>Remove marker</button>' +
+        '<button type="button" data-event-undo disabled>Undo</button>' +
+        '<button type="button" data-event-redo disabled>Redo</button>' +
         '<button type="button" data-event-reset>Reset detections</button>' +
         '<button type="button" data-event-persist>Save marker edits</button></div>' +
         '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera motion until a later phase.</p>';
       section.after(editor);
       editor.querySelector('[data-event-persist]')?.addEventListener('click', () => void motionLabSaveMarkers());
+      editor.querySelector('[data-event-undo]')?.addEventListener('click', () => motionLabMarkerHistory(false));
+      editor.querySelector('[data-event-redo]')?.addEventListener('click', () => motionLabMarkerHistory(true));
       for (const [attr, action] of [['data-event-save','update'],['data-event-add','add'],
         ['data-event-remove','remove'],['data-event-reset','reset']]) {
         editor.querySelector('['+attr+']')?.addEventListener('click', () => motionLabEventChange(action));
@@ -5118,6 +5146,8 @@
     motionLabEditedEvents = null;
     motionLabSelectedEvent = null;
     motionLabMarkersDirty = false;
+    motionLabMarkerUndo = [];
+    motionLabMarkerRedo = [];
     motionLabAudioProjectId = null;
     motionLabReleaseAudio();
     motionLabAudioPreview();
@@ -5233,6 +5263,8 @@
       motionLabEditedEvents = (analysis.events?.events || []).map(e => ({...e, enabled:true}));
       motionLabSelectedEvent = null;
       motionLabMarkersDirty = false;
+      motionLabMarkerUndo = [];
+      motionLabMarkerRedo = [];
       const stored = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
         '/motion-lab/audio-markers/' + encodeURIComponent(analysis.source_sha256));
       if (stored?.markers) {
