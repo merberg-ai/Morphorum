@@ -24,25 +24,24 @@ Core goals:
 
 ## Quick install
 
-### Windows PowerShell
+### Windows (recommended: `bootstrap.bat`)
 
-Default install location (`$HOME\Morphorum`):
+Download [bootstrap.bat](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat), then double-click it or run it from Command Prompt/PowerShell. It displays a colored welcome screen and asks for the installation folder. **Press Enter for `C:\\Morphorum`**, or enter any other path (for example `D:\\Morphorum`).
 
-```powershell
-irm https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1 | iex
-```
-
-Custom install location, for example `D:\Morphorum`:
+To fetch and start it from a Windows terminal:
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1'))) -InstallDir 'D:\Morphorum'
+curl.exe -fL -o bootstrap.bat https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat
+.\\bootstrap.bat
 ```
 
-You can also set `MORPHORUM_HOME` before running the normal one-line installer:
+For unattended or scripted installations:
 
 ```powershell
-$env:MORPHORUM_HOME='D:\Morphorum'; irm https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1 | iex
+.\\bootstrap.bat -InstallDir 'D:\\Morphorum'
 ```
+
+The previous PowerShell bootstrap still works. Both modes accept `MORPHORUM_HOME`, and an explicit `-InstallDir` takes precedence. A fresh install seeds the supplied **Default** 3D starter animation from `config/example-project.json` when the project library is empty; existing projects are never overwritten.
 
 ### Linux
 
