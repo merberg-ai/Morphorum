@@ -919,3 +919,49 @@ def test_deforum_import_route_rejects_python_text() -> None:
         )
     assert response.status_code == 400
     assert "not JSON-serialized" in response.json()["detail"]
+
+
+def test_project_manager_trash_api_preserves_outputs_and_blocks_active_render(
+    tmp_path, monkeypatch
+) -> None:
+    from types import SimpleNamespace
+    import morphorum.animation_render as render_module
+
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path / "projects")
+    with TestClient(app) as client:
+        created = client.post("/api/animation/projects", json={
+            "name": "Trash API Test",
+            "animation": {"mode": "3d", "max_frames": 210, "fps": 30},
+        })
+        assert created.status_code == 201
+        project_id = created.json()["project"]["id"]
+        listed = client.get("/api/animation/projects")
+        assert listed.status_code == 200
+        summary = next(p for p in listed.json()["projects"] if p["id"] == project_id)
+        assert summary["mode"] == "3d"
+        assert summary["max_frames"] == 210
+        assert summary["model_family"] == ""
+        assert summary["motion_layers"] == 0
+
+        outputs = tmp_path / "saved-outputs"
+        outputs.mkdir()
+        (outputs / "finished.mp4").write_bytes(b"saved")
+        manager = render_module.animation_render_manager
+        with monkeypatch.context() as m:
+            m.setattr(manager, "_jobs", {
+                "test-active": SimpleNamespace(
+                    id="test-active", project_id=project_id, status="rendering")
+            })
+            blocked = client.delete(f"/api/animation/projects/{project_id}")
+            assert blocked.status_code == 409
+            assert "active operation" in blocked.json()["detail"]
+        moved = client.delete(f"/api/animation/projects/{project_id}")
+        assert moved.status_code == 200
+        assert moved.json()["status"] == "trashed"
+        assert moved.json()["id"] == project_id
+        assert (tmp_path / "projects" / ".trash").is_dir()
+        assert not (tmp_path / "projects" / project_id).exists()
+        assert (outputs / "finished.mp4").read_bytes() == b"saved"
+        assert client.get(f"/api/animation/projects/{project_id}").status_code == 404
+        assert client.delete(f"/api/animation/projects/{project_id}").status_code == 404
+        assert client.delete("/api/animation/projects/..%2Foutside").status_code in (400, 404)

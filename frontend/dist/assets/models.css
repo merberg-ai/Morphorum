@@ -41,13 +41,13 @@
   background: rgba(255,255,255,.025);
 }
 .managed-status.installed { color: var(--ok); border-color: rgba(114,230,167,.26); }
-.managed-status.downloading, .managed-status.checking { color: var(--accent); border-color: rgba(65,217,255,.25); }
+.managed-status.downloading, .managed-status.checking { color: var(--accent); border-color: color-mix(in srgb,var(--accent) 25%,transparent); }
 .managed-status.failed { color: var(--danger); border-color: rgba(255,120,130,.25); }
 .managed-description { margin: 6px 0 5px; font-size: .76rem; }
-.managed-model-meta { color: #8d98a4; font-size: .69rem; }
+.managed-model-meta { color: var(--muted); font-size: .69rem; }
 .managed-model-path {
   margin-top: 5px;
-  color: #69747f;
+  color: var(--muted);
   font-family: var(--font-mono);
   font-size: .66rem;
   overflow: hidden;
@@ -76,8 +76,8 @@
   min-width: 0;
   width: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), #a56cff);
-  box-shadow: 0 0 12px rgba(65,217,255,.28);
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px color-mix(in srgb,var(--accent) 28%,transparent);
   transition: width .25s ease;
 }
 .managed-progress-percent { font-weight: 760; color: var(--text); white-space: nowrap; }
@@ -127,8 +127,8 @@
   color: var(--muted);
   background: rgba(255,255,255,.025);
 }
-.model-family-badge { color: var(--accent); border-color: rgba(65,217,255,.18); }
-.model-path { color: #7f8a96; font-family: var(--font-mono); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-family-badge { color: var(--accent); border-color: color-mix(in srgb,var(--accent) 18%,transparent); }
+.model-path { color: var(--muted); font-family: var(--font-mono); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-size { color: var(--muted); font-size: .72rem; white-space: nowrap; text-align: right; }
 .use-model-button { min-height: 33px; padding: 5px 10px; font-size: .74rem; }
 .model-count-note { color: var(--muted); font-size: .72rem; padding: 9px 13px; border-top: 1px solid var(--border); background: rgba(255,255,255,.012); }

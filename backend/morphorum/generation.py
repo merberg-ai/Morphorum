@@ -22,6 +22,7 @@ from PIL.PngImagePlugin import PngInfo
 from .console import emit_console
 from .loras import LoRAError, parse_and_resolve_prompt_loras
 from .model_index import get_model
+from .managed_models import ManagedModelManager
 from .paths import CACHE_DIR, OUTPUTS_DIR, ensure_runtime_dirs
 from .settings import load_settings
 
@@ -506,19 +507,13 @@ class GenerationManager:
 
         model_path = Path(model["path"])
         if family == "zimage":
-            required = (
-                model_path / "model_index.json",
-                model_path / "scheduler",
-                model_path / "text_encoder",
-                model_path / "tokenizer",
-                model_path / "transformer",
-                model_path / "vae",
-                model_path / ".morphorum-managed-complete.json",
-            )
+            # Revalidate the complete local Diffusers snapshot when a
+            # job begins. A stale database row or a manually deleted shard
+            # must not be treated as usable for either txt2img or img2img.
             if (
                 model.get("source") != "managed"
                 or not model_path.is_dir()
-                or not all(path.exists() for path in required)
+                or not ManagedModelManager._installed(model_path)
             ):
                 raise GenerationError(
                     "The selected Z-Image managed package is missing or incomplete. "

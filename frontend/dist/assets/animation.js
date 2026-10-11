@@ -1,6 +1,8 @@
 (() => {
   'use strict';
 
+  let motionPreviewStarting = false;
+  let animationRenderStarting = false;
   const state = {
     project: null,
     projects: [],
@@ -110,6 +112,11 @@
     ]);
 
     qsa('#view-animation .animation-layout > article.card').forEach((card, index) => {
+      // Standalone Motion Lab tool pages must always open with their
+      // controls visible. The Editor alone retains its accordion workflow.
+      if (['animation-motion-lab-composer', 'animation-motion-lab-recording',
+           'animation-motion-lab-visual', 'animation-motion-lab-audio'].includes(card.id) ||
+          card.classList.contains('animation-motion-preview-card')) return;
       if (card.dataset.animationAccordionReady === '1') return;
       card.dataset.animationAccordionReady = '1';
       const key = animationCardKey(card, index);
@@ -2385,8 +2392,13 @@
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
-      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive || state.depthBusy;
+      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) ||
+        renderActive || Boolean(state.motionJobId) || motionPreviewStarting ||
+        animationRenderStarting || state.depthBusy;
     }
+    // Keep the floating Render Animation shortcut synchronized with the
+    // existing guarded render button as models, sources, and jobs change.
+    motionLabSyncQuickActions();
   }
 
   let motionFramePlayer = null;
@@ -2623,7 +2635,10 @@
   }
 
   async function generateMotionPreview(projectOverride = null) {
-    if (!state.project || state.motionJobId) return;
+    if (!state.project || state.motionJobId || motionPreviewStarting ||
+        animationRenderStarting || renderIsActive()) return;
+    motionPreviewStarting = true;
+    motionLabSyncQuickActions();
     const button = qs('#animation-generate-motion-preview');
     if (button) {
       button.classList.add('busy');
@@ -2652,6 +2667,7 @@
       });
       state.motionJobId = job.id;
       updateMotionProgress(job);
+      motionLabSyncQuickActions();
       renderSourceState();
       pollMotionPreview(job.id);
     } catch (error) {
@@ -2663,6 +2679,9 @@
       }
       renderSourceState();
       toast('Could not start motion preview', error.message, 'error', 7500);
+    } finally {
+      motionPreviewStarting = false;
+      renderSourceState();
     }
   }
   function renderIsActive(job = state.renderJob) {
@@ -3327,11 +3346,16 @@
   }
 
   async function startAnimationRender() {
-    if (!state.project || renderIsActive()) return;
-    const project = collectProject();
+    if (!state.project || renderIsActive() || animationRenderStarting ||
+        state.motionJobId || motionPreviewStarting) return;
+    animationRenderStarting = true;
+    motionLabSyncQuickActions();
     const button = qs('#animation-start-render');
     if (button) { button.classList.add('busy'); button.disabled = true; }
     try {
+      // Keep collection inside the try: invalid project inputs must not
+      // strand the toolbar in its pending-render locked state.
+      const project = collectProject();
       const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project }) });
       state.renderJobId = job.id;
       renderAnimationJob(job);
@@ -3342,6 +3366,9 @@
     } catch (error) {
       renderAnimationJob(null);
       toast('Could not start animation render', error.message, 'error', 8000);
+    } finally {
+      animationRenderStarting = false;
+      renderSourceState();
     }
   }
 
@@ -3741,10 +3768,284 @@
     }
   }
 
+
+  const projectManagerState = { selectedId: '', busy: false };
+  function projectManagerDate(value) {
+    const date = new Date(value || '');
+    return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
+  }
+  function projectManagerDuration(item) {
+    const seconds = Number(item?.max_frames || 0) / Number(item?.fps || 1);
+    return Number.isFinite(seconds) ? seconds.toFixed(seconds < 10 ? 2 : 1) + 's' : '--';
+  }
+  function projectManagerSummary(item) {
+    return [(item.mode || '2d').toUpperCase(),
+      (item.width || '--') + ' × ' + (item.height || '--'),
+      (item.max_frames || 0) + ' frames', (item.fps || '--') + ' FPS'].join(' · ');
+  }
+  function projectManagerFact(parent, label, value) {
+    const row = document.createElement('div');
+    row.className = 'animation-project-manager-fact';
+    const term = document.createElement('dt');
+    term.textContent = label;
+    const detail = document.createElement('dd');
+    detail.textContent = String(value ?? '--');
+    row.append(term, detail);
+    parent.appendChild(row);
+  }
+  function renderProjectManager() {
+    const list = qs('#animation-project-manager-list');
+    const details = qs('#animation-project-manager-details');
+    if (!list || !details) return;
+    const query = String(qs('#animation-project-manager-search')?.value || '').trim().toLowerCase();
+    const order = qs('#animation-project-manager-sort')?.value || 'updated';
+    const filtered = state.projects.filter(item =>
+      [item.name, item.model_id, item.id, item.model_family].some(value =>
+        String(value || '').toLowerCase().includes(query)));
+    filtered.sort((a, b) => order === 'name'
+      ? String(a.name).localeCompare(String(b.name))
+      : order === 'oldest'
+      ? String(a.updated_at || '').localeCompare(String(b.updated_at || ''))
+      : String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+    const count = qs('#animation-project-manager-count');
+    if (count) count.textContent = filtered.length + ' of ' + state.projects.length + ' projects';
+    if (!state.projects.some(p => p.id === projectManagerState.selectedId)) {
+      projectManagerState.selectedId =
+        state.projects.find(p => p.id === state.project?.id)?.id || state.projects[0]?.id || '';
+    }
+    list.replaceChildren();
+    if (!filtered.length) {
+      const empty = document.createElement('p');
+      empty.className = 'muted animation-project-manager-empty';
+      empty.textContent = state.projects.length ? 'No projects match your search.' :
+        'No projects yet. Create your first animation project to begin.';
+      list.appendChild(empty);
+    }
+    for (const project of filtered) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'animation-project-manager-item';
+      button.classList.toggle('active', project.id === projectManagerState.selectedId);
+      button.setAttribute('aria-pressed', String(project.id === projectManagerState.selectedId));
+      button.disabled = projectManagerState.busy;
+      const title = document.createElement('strong');
+      title.textContent = project.name;
+      const info = document.createElement('span');
+      info.textContent = projectManagerSummary(project);
+      const date = document.createElement('small');
+      date.textContent = 'Modified ' + projectManagerDate(project.updated_at);
+      button.append(title, info, date);
+      button.addEventListener('click', () => {
+        projectManagerState.selectedId = project.id;
+        renderProjectManager();
+      });
+      list.appendChild(button);
+    }
+    details.replaceChildren();
+    const selected = state.projects.find(p => p.id === projectManagerState.selectedId);
+    for (const id of ['open', 'rename', 'trash']) {
+      const button = qs('#animation-project-manager-' + id);
+      if (button) button.disabled = !selected || projectManagerState.busy;
+    }
+    if (!selected) {
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Select a project to view its details.';
+      details.appendChild(empty);
+      return;
+    }
+    const title = document.createElement('h3');
+    title.textContent = selected.name;
+    const info = document.createElement('p');
+    info.className = 'muted';
+    info.textContent = projectManagerSummary(selected);
+    const facts = document.createElement('dl');
+    facts.className = 'animation-project-manager-facts';
+    for (const [label, value] of [
+      ['Animation mode', (selected.mode || '2d').toUpperCase()],
+      ['Resolution', (selected.width || '--') + ' × ' + (selected.height || '--')],
+      ['Duration', projectManagerDuration(selected)],
+      ['Frames / rate', selected.max_frames + ' / ' + selected.fps + ' FPS'],
+      ['Model', selected.model_id || 'Not selected'],
+      ['Model family', selected.model_family || 'Not selected'],
+      ['Prompt keyframes', selected.prompt_keyframes ?? 0],
+      ['Motion layers', selected.motion_layers ?? 0],
+      ['Start mode', selected.start_mode === 'source' ? 'Source image' : 'Prompt'],
+      ['Created', projectManagerDate(selected.created_at)],
+      ['Last modified', projectManagerDate(selected.updated_at)],
+      ['Project ID', selected.id],
+    ]) projectManagerFact(facts, label, value);
+    details.append(title, info, facts);
+    if (selected.id === state.project?.id) {
+      const active = document.createElement('p');
+      active.className = 'animation-project-manager-active';
+      active.textContent = state.dirty ? 'Open now · unsaved edits in Editor' :
+        'Currently open in Motion Lab';
+      details.appendChild(active);
+    }
+  }
+
+
+  async function projectManagerOpen() {
+    const id = projectManagerState.selectedId;
+    if (!id || projectManagerState.busy) return;
+    projectManagerState.busy = true;
+    renderProjectManager();
+    try {
+      const opened = await loadProject(id);
+      if (opened) showAnimationTab('editor');
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
+  async function projectManagerRename() {
+    const item = state.projects.find(p => p.id === projectManagerState.selectedId);
+    if (!item || projectManagerState.busy) return;
+    if (item.id === state.project?.id && state.dirty) {
+      toast('Save changes before renaming',
+        'This project has unsaved Editor changes. Save it first.', 'warning', 6500);
+      return;
+    }
+    const value = await window.MorphorumDialog.prompt({
+      title: 'Rename project',
+      message: 'Change this project name without changing its ID or folder.',
+      initialValue: item.name, inputLabel: 'Project name', maxLength: 120,
+      validate: value => String(value || '').trim() ? '' : 'Enter a project name.',
+      confirmText: 'Rename Project',
+    });
+    if (value === null || String(value).trim() === item.name) return;
+    projectManagerState.busy = true;
+    renderProjectManager();
+    try {
+      const url = '/api/animation/projects/' + encodeURIComponent(item.id);
+      const original = await api(url);
+      const updated = await api(url, {
+        method: 'PUT',
+        body: JSON.stringify({ ...original.project, name: String(value).trim() }),
+      });
+      if (state.project?.id === item.id) {
+        state.project = updated.project;
+        state.path = updated.path || state.path;
+        fillForm();
+      }
+      await loadProjectList();
+      toast('Project renamed', 'The saved project name has been updated.', 'success');
+    } catch (error) {
+      toast('Could not rename project', error.message, 'error', 7000);
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
+  async function projectManagerTrash() {
+    const item = state.projects.find(p => p.id === projectManagerState.selectedId);
+    if (!item || projectManagerState.busy) return;
+    if (item.id === state.project?.id && (
+      state.dirty || motionLabRecorder?.active || motionLabBusy ||
+      state.motionJobId || motionPreviewStarting || renderIsActive() ||
+      animationRenderStarting
+    )) {
+      toast('Project is currently in use',
+        'Save changes and wait for any recordings or jobs to finish before deleting.',
+        'warning', 7000);
+      return;
+    }
+    const typed = await window.MorphorumDialog.prompt({
+      title: 'Move project to Trash?',
+      message: 'Move "' + item.name + '" into the managed .trash folder. ' +
+        'Rendered animations and exported videos are NOT deleted. ' +
+        'Type the exact project name to confirm.',
+      initialValue: '', inputLabel: 'Type project name', maxLength: 120,
+      confirmText: 'Move to Trash',
+      validate: value => String(value || '') === item.name
+        ? '' : 'Enter the exact project name to confirm.',
+    });
+    if (typed === null || String(typed) !== item.name) return;
+    projectManagerState.busy = true;
+    renderProjectManager();
+    try {
+      await api('/api/animation/projects/' + encodeURIComponent(item.id), { method: 'DELETE' });
+      if (state.project?.id === item.id) {
+        clearMotionPreviewResult();
+        resetRenderUi();
+        state.project = null;
+        state.path = '';
+        state.timeline = null;
+        state.timelineSelection = null;
+        state.depthPreview = null;
+        resetHybridForProject();
+        fillForm();
+      }
+      projectManagerState.selectedId = '';
+      await loadProjectList();
+      toast('Project moved to Trash',
+        'Project removed from the list. Rendered animations and exports remain intact.',
+        'success', 6500);
+    } catch (error) {
+      toast('Could not move project to Trash', error.message, 'error', 7500);
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
+  function setupProjectManager(panel) {
+    panel.innerHTML = [
+      '<div class="motion-tool-page-heading">',
+      '<div><p class="eyebrow">MOTION LAB / PROJECT MANAGER</p><h2>Project Manager</h2>',
+      '<p class="muted">Browse and organize projects. Open one in Editor to edit its animation settings.</p></div>',
+      '<button type="button" class="primary-button compact" id="animation-project-manager-new">+ New Project</button></div>',
+      '<div class="animation-project-manager-layout">',
+      '<section class="card glass animation-project-manager-browser" aria-label="Project browser">',
+      '<div class="animation-project-manager-toolbar">',
+      '<label><span>Search projects</span><input id="animation-project-manager-search" type="search" placeholder="Name, model or ID…"></label>',
+      '<label><span>Sort</span><select id="animation-project-manager-sort">',
+      '<option value="updated">Recently updated</option><option value="name">Name A–Z</option>',
+      '<option value="oldest">Least recently updated</option></select></label></div>',
+      '<div class="animation-project-manager-count-row"><strong>Projects</strong>',
+      '<span id="animation-project-manager-count" class="muted"></span>',
+      '<button type="button" id="animation-project-manager-refresh" class="secondary-button compact">Refresh</button></div>',
+      '<div class="animation-project-manager-list" id="animation-project-manager-list" aria-label="Animation projects"></div>',
+      '</section><section class="card glass animation-project-manager-info" aria-label="Project details">',
+      '<div class="card-header"><div><h2>Project Details</h2>',
+      '<p class="muted">Saved project information. Unsaved Editor changes are not included.</p></div></div>',
+      '<div id="animation-project-manager-details" aria-live="polite"></div>',
+      '<div class="animation-project-manager-actions">',
+      '<button type="button" id="animation-project-manager-open" class="primary-button" disabled>Open in Editor</button>',
+      '<button type="button" id="animation-project-manager-rename" class="secondary-button" disabled>Rename</button>',
+      '<button type="button" id="animation-project-manager-trash" class="secondary-button animation-project-manager-danger" disabled>Move to Trash</button>',
+      '</div><p class="muted animation-project-manager-help">Trash keeps the managed project folder for manual recovery.',
+      ' Rendered frames and video exports live separately and are not removed.</p></section></div>',
+    ].join('');
+    qs('#animation-project-manager-search')?.addEventListener('input', renderProjectManager);
+    qs('#animation-project-manager-sort')?.addEventListener('change', renderProjectManager);
+    qs('#animation-project-manager-refresh')?.addEventListener('click', async () => {
+      try { await loadProjectList(); }
+      catch (error) { toast('Could not refresh projects', error.message, 'error', 6500); }
+    });
+    qs('#animation-project-manager-open')?.addEventListener('click', () => void projectManagerOpen());
+    qs('#animation-project-manager-rename')?.addEventListener('click', () => void projectManagerRename());
+    qs('#animation-project-manager-trash')?.addEventListener('click', () => void projectManagerTrash());
+    qs('#animation-project-manager-new')?.addEventListener('click', async () => {
+      if (projectManagerState.busy) return;
+      if (state.dirty && !(await window.MorphorumDialog.confirm({
+        title: 'Create a new project?',
+        message: 'Unsaved changes in the current Editor will be discarded.',
+        variant: 'danger', confirmText: 'Discard & Create',
+        cancelText: 'Keep Editing',
+      }))) return;
+      const original = state.project?.id;
+      await createProject();
+      if (state.project?.id && state.project.id !== original) showAnimationTab('editor');
+    });
+    renderProjectManager();
+  }
+
   async function loadProjectList({ loadFirst = false } = {}) {
     const payload = await api('/api/animation/projects');
     state.projects = Array.isArray(payload.projects) ? payload.projects : [];
     renderProjectSelect();
+    renderProjectManager();
     if (loadFirst && !state.project && state.projects.length) {
       await loadProject(state.projects[0].id, { confirmDirty: false });
     } else if (!state.project) {
@@ -3764,7 +4065,7 @@
       }))
     ) {
       renderProjectSelect();
-      return;
+      return false;
     }
 
     const select = qs('#animation-project-select');
@@ -3783,8 +4084,10 @@
       await loadTimeline();
       await loadDepthPreviewStatus();
       await loadRenderHistory();
+      return true;
     } catch (error) {
       toast('Could not load animation project', error.message, 'error', 6500);
+      return false;
     } finally {
       if (select) select.disabled = state.projects.length === 0;
     }
@@ -4073,6 +4376,7 @@
   let motionLabProjectId = '';
   let motionLabDraftLayers = [];
   let motionLabBusy = false;
+  let motionLabBusyAction = null;
   let motionLabEditingIndex = -1;
   let motionLabVisual = null;
   let motionLabHistory = [[]];
@@ -4211,15 +4515,50 @@
   }
   function motionLabSyncQuickActions() {
     const active = Boolean(motionLabRecorder?.active);
+    const motionPreviewBusy = motionPreviewStarting || Boolean(state.motionJobId);
+    const renderBusy = animationRenderStarting || renderIsActive();
+    const locked = motionLabBusy || motionPreviewBusy || renderBusy;
+    const working = motionLabBusyAction || (motionPreviewBusy ? 'preview' :
+      renderBusy ? 'render' : active ? 'record' : null);
+    const workingLabels = {
+      record: '● Recording…', curves: '↻ Updating…',
+      preview: '▶ Previewing…', apply: 'Applying…',
+      render: 'Rendering…',
+    };
+    const workingTargets = {
+      record: 'animation-motion-lab-record',
+      curves: 'animation-motion-lab-update-curves',
+      preview: 'animation-motion-lab-preview-draft',
+      apply: 'animation-motion-lab-apply',
+      render: 'animation-start-render',
+    };
     for (const button of qsa('[data-motion-quick-target]')) {
-      const original = qs('#' + button.dataset.motionQuickTarget);
-      button.disabled = active || !original || original.disabled;
-      button.setAttribute('aria-busy', String(Boolean(motionLabBusy)));
+      const id = button.dataset.motionQuickTarget;
+      // Audio Motion's inline Apply button also mirrors the quick-action
+      // target. Preserve its visible label before any busy-state repaint.
+      // Only dock buttons populate data-label during construction.
+      if (!button.dataset.label) button.dataset.label =
+        button.textContent.trim() || (id === 'animation-motion-lab-apply'
+          ? 'Apply to Animation' : '');
+      const original = qs('#' + id);
+      // Stop remains available during a take; all other actions honor
+      // preview, curves/apply, render and live-recording operation locks.
+      const isStop = id === 'animation-motion-lab-stop-recording';
+      const running = id === workingTargets[working];
+      button.disabled = (!isStop && (active || locked)) || !original || original.disabled;
+      button.dataset.running = String(running);
+      button.setAttribute('aria-busy', String(running));
+      button.textContent = running ? workingLabels[working] : button.dataset.label;
     }
     const status = qs('#animation-motion-lab-quick-status');
     if (status) status.textContent = active ? '● Recording' :
-      motionLabBusy ? 'Updating motion…' :
+      renderBusy ? 'Rendering animation…' :
+      motionPreviewBusy ? 'Generating camera preview…' :
+      motionLabBusy ? 'Updating camera motion…' :
       motionLabDraftLayers.length + ' draft layer(s)';
+    const audioStatus = qs('#animation-audio-workspace-status');
+    if (audioStatus) audioStatus.textContent = !state.project ? 'Open a project in Editor first.' :
+      motionLabDraftLayers.length + ' Motion Lab draft layer(s) · Add audio, review, then apply.';
   }
   function motionLabSetupQuickActions(panel) {
     const dock = document.createElement('div');
@@ -4233,18 +4572,32 @@
       ['animation-motion-lab-update-curves', '↻ Curves'],
       ['animation-motion-lab-preview-draft', '▶ Preview'],
       ['animation-motion-lab-apply', 'Apply'],
+      ['animation-start-render', 'Render Animation'],
     ];
     for (const [id, label] of specs) {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = label;
+      button.dataset.label = label;
       button.dataset.motionQuickTarget = id;
-      button.className = id.endsWith('-apply') ? 'primary-button compact' : 'secondary-button compact';
+      button.className = id === 'animation-start-render'
+        ? 'primary-button compact animation-motion-quick-render'
+        : id.endsWith('-apply') ? 'primary-button compact' : 'secondary-button compact';
       button.disabled = true;
       button.addEventListener('click', () => {
         const original = qs('#' + id);
         if (!original || original.disabled) return;
+        // Navigate first so recording controls, live graphs, and the
+        // preview player are mounted in their visible workspace.
+        const destination = {
+          'animation-motion-lab-record': 'recording',
+          'animation-motion-lab-update-curves': 'curves',
+          'animation-motion-lab-preview-draft': 'preview',
+          'animation-start-render': 'monitor',
+        }[id];
+        if (destination) showAnimationTab(destination);
         original.click();
+        motionLabSyncQuickActions();
       });
       dock.appendChild(button);
     }
@@ -5411,6 +5764,7 @@
     if (!state.project?.id || !motionLabDraftLayers.length || motionLabBusy) return;
     const projectId = state.project.id;
     motionLabBusy = true;
+    motionLabBusyAction = apply ? 'apply' : curvesOnly ? 'curves' : 'preview';
     renderMotionLabDraft();
     try {
       if (apply && state.dirty) {
@@ -5488,23 +5842,24 @@
         error.message, 'error', 7000);
     } finally {
       motionLabBusy = false;
+      motionLabBusyAction = null;
       renderMotionLabDraft();
     }
   }
 
   // Motion Lab is first-class; unfinished hybrid Media controls remain mounted
   // in a non-navigable vault so existing project and API semantics stay intact.
-  // Four visible views share the existing render controls and poller.
+  // Audio Motion is a dedicated Motion Lab workspace using the same draft
+  // camera layers, project, and render controls.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['editor', 'motion', 'monitor', 'outputs'];
-  let animationTab = 'editor';
+  const VISIBLE_ANIMATION_TABS = ['motion', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'];
+  const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
+  let animationTab = 'motion';
   function showAnimationTab(name, { persist = true } = {}) {
-    if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'editor';
-    if (name !== 'motion') {
-      motionLabVisual?.pause();
-      motionFramePlayer?.pause();
-      if (motionLabRecorder?.active) motionLabStopRecording('tab-change');
-    }
+    if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'motion';
+    if (name !== 'curves') motionLabVisual?.pause();
+    if (name !== 'preview') motionFramePlayer?.pause();
+    if (name !== 'recording' && motionLabRecorder?.active) motionLabStopRecording('tab-change');
     animationTab = name;
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
@@ -5517,6 +5872,19 @@
       panel.hidden = !selected;
       panel.classList.toggle('active', selected);
     });
+    qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => {
+      const selected = button.dataset.motionNav === name;
+      button.classList.toggle('active', selected);
+      if (selected) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    // This dock is the same set of real buttons on every Motion Lab page.
+    // Moving one element (not cloning it) keeps actions and status coherent.
+    const dock = qs('#animation-motion-lab-quick-actions');
+    if (dock && MOTION_LAB_TOOL_TABS.has(name)) {
+      qs('#animation-panel-' + name)?.appendChild(dock);
+    }
+    if (dock) dock.hidden = !MOTION_LAB_TOOL_TABS.has(name);
     if (persist) try { localStorage.setItem(ANIMATION_TAB_KEY, name); } catch (_) {}
   }
   function setupAnimationWorkspaceTabs() {
@@ -5527,10 +5895,15 @@
     const nav = document.createElement('nav');
     nav.id = 'animation-workspace-nav';
     nav.className = 'animation-workspace-nav';
-    nav.setAttribute('aria-label', 'Animation workspace');
+    nav.setAttribute('aria-label', 'Motion Lab workspaces');
     nav.setAttribute('role', 'tablist');
     const panels = {};
-    const names = { editor: 'Editor', motion: 'Motion Lab', monitor: 'Monitor', outputs: 'Outputs' };
+    const names = {
+      motion: 'Overview', projects: 'Project Manager', editor: 'Project Editor',
+      composer: 'Camera Composer', recording: 'Live Recording',
+      curves: 'Motion Curves', preview: 'Camera Preview',
+      audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
+    };
     for (const [name, label] of Object.entries(names)) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -5556,14 +5929,14 @@
       panel.dataset.animationPanel = name;
       panel.setAttribute('role', 'tabpanel');
       panel.setAttribute('aria-labelledby', button.id);
-      panel.hidden = name !== 'editor';
+      panel.hidden = name !== 'motion';
       panels[name] = panel;
     }
     layout.parentNode.insertBefore(nav, layout);
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'monitor', 'outputs']) {
+    for (const name of ['motion', 'projects', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -5591,17 +5964,117 @@
     }
     const motionIntro = qs('#animation-motion-lab-intro');
     if (motionIntro) panels.motion.appendChild(motionIntro);
-    const composer = qs('#animation-motion-lab-composer');
-    if (composer) panels.motion.appendChild(composer);
-    const recording = qs('#animation-motion-lab-recording');
-    if (recording) panels.motion.appendChild(recording);
-    const audio = qs('#animation-motion-lab-audio');
-    if (audio) panels.motion.appendChild(audio);
-    const visual = qs('#animation-motion-lab-visual');
-    if (visual) panels.motion.appendChild(visual);
-    const motionPreview = qs('.animation-motion-preview-card');
-    if (motionPreview) panels.motion.appendChild(motionPreview);
+    const cards = [
+      ['composer', '#animation-motion-lab-composer'],
+      ['recording', '#animation-motion-lab-recording'],
+      ['curves', '#animation-motion-lab-visual'],
+      ['preview', '.animation-motion-preview-card'],
+      ['audio', '#animation-motion-lab-audio'],
+    ];
+    for (const [name, selector] of cards) {
+      const card = qs(selector);
+      if (card) panels[name].appendChild(card);
+    }
+
+    // The landing page is a concise tool selector. Original controls live in
+    // exactly one dedicated panel, never copied or recreated.
+    const toolGrid = document.createElement('div');
+    toolGrid.className = 'motion-lab-tool-grid';
+    const toolCards = [
+      ['composer', 'Camera Motion Composer', 'Layer motion presets, timing, and blend settings.'],
+      ['recording', 'Live Motion Recording', 'Perform and edit a six-axis camera take.'],
+      ['curves', 'Motion Curves & Camera Path', 'Edit frame-aligned keyframes using the full-width plots.'],
+      ['preview', 'Camera Motion Preview', 'Inspect 2D or 3D camera motion before rendering.'],
+      ['audio', 'Audio-Reactive Motion', 'Turn WAV beats and frequency bands into camera movement.'],
+      ['monitor', 'Render Monitor', 'Watch progress, frame previews, and job diagnostics.'],
+      ['projects', 'Project Manager', 'Search, review, rename, and safely archive your animation projects.'],
+      ['editor', 'Project Editor', 'Configure projects, prompts, resolution, and timelines.'],
+      ['outputs', 'Outputs', 'Review completed animations and export videos.'],
+    ];
+    for (const [name, title, description] of toolCards) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'motion-lab-tool-card';
+      button.dataset.motionOpen = name;
+      const heading = document.createElement('strong');
+      heading.textContent = title;
+      const hint = document.createElement('span');
+      hint.textContent = description;
+      button.append(heading, hint);
+      button.addEventListener('click', () => showAnimationTab(name));
+      toolGrid.appendChild(button);
+    }
+    panels.motion.appendChild(toolGrid);
+    setupProjectManager(panels.projects);
+    for (const [name, label] of [
+      ['composer', 'Camera Motion Composer'],
+      ['recording', 'Live Motion Recording'],
+      ['curves', 'Motion Curves & Camera Path'],
+      ['preview', 'Camera Motion Preview'],
+    ]) {
+      const heading = document.createElement('div');
+      heading.className = 'motion-tool-page-heading';
+      const breadcrumb = document.createElement('div');
+      const eyebrow = document.createElement('p');
+      eyebrow.className = 'eyebrow';
+      eyebrow.textContent = 'MOTION LAB / ' + label.toUpperCase();
+      const title = document.createElement('h2');
+      title.textContent = label;
+      breadcrumb.append(eyebrow, title);
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'secondary-button compact';
+      back.textContent = '← All Motion Lab Tools';
+      back.addEventListener('click', () => showAnimationTab('motion'));
+      heading.append(breadcrumb, back);
+      panels[name].prepend(heading);
+    }
+
+    // Audio remains a Motion Lab tool. Provide the audio-specific workflow
+    // without duplicating any input, API, or motion-layer state.
+    const audioIntro = document.createElement('article');
+    audioIntro.className = 'card glass animation-audio-workspace-intro';
+    audioIntro.innerHTML = `
+      <div class="animation-audio-workspace-heading">
+        <div>
+          <p class="eyebrow">MOTION LAB / AUDIO MOTION</p>
+          <h2>Make your camera move to the music</h2>
+          <p class="muted">Analyze a WAV, select the beats you want, and add
+          camera movement to your Motion Lab layers. Audio motion is part of
+          the same project, not a separate animation or render.</p>
+        </div>
+        <button class="secondary-button compact" type="button"
+          id="animation-audio-back-motion">← Motion Lab</button>
+      </div>
+      <div class="animation-audio-workflow">
+        <span><strong>1</strong> Choose WAV and analyze</span>
+        <span><strong>2</strong> Adjust beats and add a layer</span>
+        <span><strong>3</strong> Review curves and apply motion</span>
+      </div>
+      <div class="animation-audio-workspace-actions">
+        <button class="secondary-button compact" type="button"
+          id="animation-audio-review-motion">Review Motion Curves</button>
+        <button class="primary-button compact" type="button"
+          id="animation-audio-apply" data-motion-quick-target="animation-motion-lab-apply"
+          disabled>Apply to Animation</button>
+        <span class="muted" id="animation-audio-workspace-status" role="status"
+          aria-live="polite">Select a 3D animation project to begin.</span>
+      </div>
+    `;
+    panels.audio.prepend(audioIntro);
+    const audioPlaceholder = document.createElement('div');
+    audioPlaceholder.className = 'animation-audio-preview-placeholder';
+    audioPlaceholder.innerHTML = '<strong>Beat analysis preview</strong><p>Choose a WAV file and select Analyze WAV. Your detected beats and audio levels will appear here before you add any motion.</p>';
+    qs('#animation-motion-lab-audio-preview')?.before(audioPlaceholder);
+    qs('#animation-audio-back-motion')?.addEventListener('click', () => showAnimationTab('motion'));
+    qs('#animation-audio-review-motion')?.addEventListener('click', () => showAnimationTab('curves'));
+    qs('#animation-audio-apply')?.addEventListener('click', () => {
+      const apply = qs('#animation-motion-lab-apply');
+      if (apply && !apply.disabled) apply.click();
+    });
+
     motionLabSetupQuickActions(panels.motion);
+    motionLabSyncQuickActions();
     const history = qs('.animation-render-history-row');
     if (history) panels.outputs.prepend(history);
     const completedPreview = qs('.animation-render-preview-wrap');
@@ -5618,16 +6091,8 @@
     inner.appendChild(expert);
     qs('#animation-collapse-all')?.setAttribute('title', 'Collapse Editor cards');
     qs('#animation-expand-all')?.setAttribute('title', 'Expand Editor cards');
-    qs('#animation-motion-lab-edit-3d')?.addEventListener('click', () => {
-      showAnimationTab('editor');
-      qs('#animation-3d-camera-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    qs('#animation-motion-lab-edit-timeline')?.addEventListener('click', () => {
-      showAnimationTab('editor');
-      qs('#animation-timeline-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    let previous = 'editor';
-    try { previous = localStorage.getItem(ANIMATION_TAB_KEY) || 'editor'; } catch (_) {}
+    let previous = 'motion';
+    try { previous = localStorage.getItem(ANIMATION_TAB_KEY) || 'motion'; } catch (_) {}
     showAnimationTab(previous, { persist: false });
   }
 

@@ -12,7 +12,7 @@ const app = read('frontend/dist/assets/app.js');
 test('user-facing HTML has no internal development milestones or phase numbers', () => {
   assert.doesNotMatch(html, /\bB[0-9](?:\.[0-9]+)*(?:-[a-zA-Z0-9]+)?\b/);
   assert.doesNotMatch(html, /FIRST IMAGE MILESTONE|future frame renderer|future repair|B5\.5 Performance Diagnostics/);
-  assert.match(html, /Animation Studio|ANIMATION STUDIO/);
+  assert.match(html, /MOTION LAB \/ IMAGE ANIMATION/);
   assert.match(html, /Source Video/);
   assert.match(html, /Performance & Memory/);
 });

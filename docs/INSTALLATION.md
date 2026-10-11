@@ -29,23 +29,41 @@ External checkpoint and LoRA directories are never copied into Morphorum unless 
 
 ## Windows
 
-### Default location
+### Interactive Windows install
+
+Download [`bootstrap.bat`](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat) and run it. It prints the Morphorum banner, checks prerequisites, and prompts for the installation folder. **The default is `C:\Morphorum`**. Press Enter to accept it, or enter a custom folder such as `D:\Morphorum`.
+
+PowerShell download/launch example:
+
+```powershell
+curl.exe -fL -o bootstrap.bat https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat
+.\bootstrap.bat
+```
+
+Noninteractive install with an explicit location:
+
+```powershell
+.\bootstrap.bat -InstallDir 'D:\Morphorum'
+```
+
+The new installer asks which **server port** to use (default `7865`). This is stored in `data/server-port.txt` and preserved by updates or repairs. To preselect a port, add `-Port 8080` to `bootstrap.bat` or `install.bat`. Normal launches load that preference, and you can override it temporarily:
+
+```powershell
+.\run.bat -Port 8080
+.\run-lan.bat -Port 8080
+```
+
+The bootstrap also supports `-Branch` for testing an alternate Git branch. If you already have an installation at the requested path, it uses the guarded updater instead of overwriting your data.
+
+The existing PowerShell bootstrap remains supported:
 
 ```powershell
 irm https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1 | iex
 ```
 
-Default: `$HOME\Morphorum`
+Selection precedence is an explicit `-InstallDir`, then `MORPHORUM_HOME`, then the interactive prompt defaulting to `C:\Morphorum`. In an existing checkout, `install.bat` prepares that checkout in place. Use `bootstrap.bat` to choose a fresh location, not `install.bat` from a different directory.
 
-### Custom location
-
-```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1'))) -InstallDir 'D:\Morphorum'
-```
-
-You may also set `MORPHORUM_HOME` before running the standard bootstrap command.
-
-The Windows bootstrap installs Git with `winget` when necessary, clones Morphorum, and hands off to `install.bat`.
+The Windows bootstrap installs Git with `winget` when necessary, clones Morphorum, and hands off to `install.bat`. `run.bat`, `run-lan.bat`, and `update.bat` use the same colorized console UI.
 
 The installer then:
 
@@ -59,7 +77,8 @@ The installer then:
 8. detects the NVIDIA driver/GPU when available;
 9. installs FFmpeg through `winget` when it is missing and `winget` is available;
 10. runs the Morphorum API self-test;
-11. writes installation metadata to `data/install.json`.
+11. writes installation metadata to `data/install.json`;
+12. seeds `projects/default-a070c78c/project.json` from `config/example-project.json` **only on a fresh install with no other projects**. Repair and update never create or overwrite project data.
 
 ### Launch
 
@@ -76,6 +95,8 @@ run-lan.bat
 ```
 
 Default port: `7865`.
+
+LAN mode is intended only for trusted networks. The Windows run script displays detected IPv4 URLs and explains that the local web server is not password-protected.
 
 ## Linux
 
@@ -222,11 +243,15 @@ The doctor currently checks items including:
 
 Installer/update/repair logs are stored in `logs/`.
 
-## Current development status
+## Runtime check
 
-The installer currently brings up the real Morphorum runtime foundation and API health endpoint. It does **not** yet install the future diffusion/model stack because those adapters are not implemented yet.
+The installer provisions a managed Python and PyTorch runtime, checks the configured CUDA backend where applicable, and runs the Morphorum self-test. Opening `http://127.0.0.1:7865/` shows the actual app, including Image Generation and Motion Lab. `http://127.0.0.1:7865/api/health` exposes its health endpoint.
 
-After launch, visiting `http://127.0.0.1:7865/` should display the Morphorum runtime placeholder page. `http://127.0.0.1:7865/api/health` should return a small JSON health response.
+### First-run Default project
+
+The bundled file `config/example-project.json` is the provided 3D example: 120 frames at 24 FPS, 1024×1024, with two cat prompt keyframes (frames 0 and 30), motion/generation schedules and the Deforum-style track data. The example has **no selected checkpoint**, so choose a compatible image model before rendering.
+
+The install seeds this template only when the projects library is empty. The seed command is idempotent (`.venv\\Scripts\\python.exe -m morphorum seed-example`): running it again leaves existing projects alone. Existing user data under `projects/`, including modified starter projects, is preserved by install/repair/update.
 
 ## Dependency locking
 
