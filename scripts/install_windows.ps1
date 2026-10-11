@@ -1,7 +1,9 @@
 param(
     [switch]$Repair,
     [switch]$Update,
-    [switch]$SkipSelfTest
+    [switch]$SkipSelfTest,
+    [ValidateRange(1, 65535)]
+    [int]$Port = 7865
 )
 
 $ErrorActionPreference = 'Stop'
@@ -95,6 +97,44 @@ try {
     Write-MorphorumSection 'SYSTEM CHECKS'
     Write-MorphorumDetail 'Mode' $mode
     Write-MorphorumDetail 'Location' $Root
+
+    Write-MorphorumSection 'SERVER PREFERENCES'
+    $PortFile = Join-Path $Root 'data\server-port.txt'
+    $ServerPort = 7865
+    $ExistingPort = $false
+    if (Test-Path $PortFile) {
+        $rawPort = (Get-Content -LiteralPath $PortFile -Raw).Trim()
+        $parsedPort = 0
+        if ([int]::TryParse($rawPort, [ref]$parsedPort) -and
+            $parsedPort -ge 1 -and $parsedPort -le 65535) {
+            $ServerPort = $parsedPort
+            $ExistingPort = $true
+        } else {
+            Warn 'The saved server port is invalid. Using 7865 until corrected.'
+        }
+    }
+    $SavePort = $false
+    if (-not $Repair -and -not $Update) {
+        if ($PSBoundParameters.ContainsKey('Port')) {
+            $ServerPort = $Port
+            $SavePort = $true
+        } elseif (-not $ExistingPort) {
+            Write-Host '  Choose the port Morphorum should listen on.' -ForegroundColor Gray
+            Write-Host '  Press ENTER for 7865 (recommended).' -ForegroundColor DarkGray
+            $choice = (Read-Host '  Server port').Trim()
+            if ($choice) {
+                $requested = 0
+                if (-not [int]::TryParse($choice, [ref]$requested) -or
+                    $requested -lt 1 -or $requested -gt 65535) {
+                    throw 'Invalid server port. Enter a number between 1 and 65535.'
+                }
+                $ServerPort = $requested
+            }
+            $SavePort = $true
+        }
+    }
+    Write-MorphorumDetail 'Server port' ([string]$ServerPort)
+    if ($ExistingPort -and -not $SavePort) { Okay 'Existing server port setting preserved.' }
 
     try {
         $driveRoot = [System.IO.Path]::GetPathRoot($Root)
@@ -211,8 +251,14 @@ try {
         Okay 'Morphorum self-test passed.'
     }
 
+    if ($SavePort) {
+        Set-Content -LiteralPath $PortFile -Value ([string]$ServerPort) -Encoding ASCII
+        Okay 'Server port preference saved for future launches.'
+    }
+
     Write-MorphorumSection 'MORPHORUM IS READY'
     Okay 'Installation successful.'
+    Write-MorphorumDetail 'Server port' ([string]$ServerPort)
     Write-MorphorumNext 'Local launch' "$Root\run.bat"
     Write-MorphorumNext 'LAN launch' "$Root\run-lan.bat"
     Write-MorphorumNext 'Update' "$Root\update.bat"
