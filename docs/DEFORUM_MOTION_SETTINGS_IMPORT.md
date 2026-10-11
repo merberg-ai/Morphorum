@@ -43,3 +43,11 @@ Regression file `tests/test_deforum_motion_import.py` covers six axes, frame int
 `python -m pytest tests/test_deforum_motion_import.py -v` and `python -m pytest tests/test_deforum_import.py -v`. Do not claim CI green without run evidence.
 
 DMI1 does not yet provide UI, WAV uploading, offset correction, timing adoption or project mutation. These remain DMI2/DMI3 work. Audio Motion navigation is deliberately still visible until replacement UI is ready, preventing a dead-end menu.
+
+## DMI2 browser workspace (physical test pending)
+
+- Audio Motion's left sidebar and visible tab are replaced by **Import Motion Settings**. The legacy Audio Motion card, state and all underlying handlers remain mounted inside a hidden workspace to avoid removal/regression; historical saved `audio` tab preferences redirect to importer.
+- The new page accepts a .txt/.json settings file and calls the read-only `POST /api/animation/projects/{project_id}/motion-import/preview` endpoint. Displays source/project FPS and frame counts, duration, cadence, warnings, axis selector and sampled camera velocity graph.
+- The optional WAV picker provides a local-browser audio player, Web Audio decoded waveform overview, seek/playhead and adjustable audio-time offset. No WAV is uploaded or saved in DMI2. The external machine soundtrack path is never accessed.
+- There is **no Apply button** yet. DMI2 never changes camera tracks, animation timings or project audio. DMI3 will add explicit guarded project apply and soundtrack integration.
+- Frontend tests in `tests/frontend_deforum_motion_workspace.test.cjs` and navigation expectations cover the new entry and preserved legacy DOM. The physical desktop/mobile browser gate should test open 3D project, choose an exported DMS .txt, inspect graph for six axes, verify mismatch diagnostics, load a WAV, seek and adjust offset, confirm no project changes or upload, then test the mobile layout and original editor/preview.
