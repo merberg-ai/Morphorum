@@ -129,7 +129,10 @@ def preview_motion_settings(
     raw_path = settings.get("soundtrack_path")
     if raw_path is not None and not isinstance(raw_path, str):
         raise DeforumImportError("soundtrack_path must be text.")
-    # Never return the host's local path; it is metadata, not a usable file locator.
+    # Explicitly expose the embedded reference for display/copy only. Never resolve
+    # or open it on the server; importing a settings file grants no file access.
+    if raw_path is not None and (len(raw_path) > 4096 or any(ord(c) < 32 for c in raw_path)):
+        raise DeforumImportError("soundtrack_path contains invalid characters or is too long.")
     basename = raw_path.replace("\\", "/").split("/")[-1][:160] if raw_path else None
     count = min(frames, 241)
     positions = sorted(set(round(i * (frames - 1) / (count - 1)) for i in range(count)))
@@ -142,6 +145,7 @@ def preview_motion_settings(
         "source": {"filename": filename[:160], "fps": fps, "max_frames": frames,
                    "duration_seconds": frames / fps, "cadence": source_cadence,
                    "cadence_keyframes": [{"frame": f, "value": int(v)} for f, v in cadence_keys],
+                   "soundtrack_path": raw_path or None,
                    "soundtrack_filename": basename,
                    "soundtrack_attached": bool(raw_path and settings.get("add_soundtrack") == "File")},
         "project_comparison": {"fps": current_fps, "max_frames": current_frames,
