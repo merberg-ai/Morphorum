@@ -4952,6 +4952,8 @@
         '<span class="muted">Place a camera move at any point, even without detected beats.</span></div>' +
         '<div class="animation-audio-director-actions"><button type="button" data-cue-add>Add cue at playhead</button>' +
         '<button type="button" data-cue-save>Save cues</button>' +
+        '<button type="button" data-cue-preview>Preview camera cues</button>' +
+        '<button type="button" data-cue-apply>Apply camera cues</button>' +
         '<span data-cue-status class="muted"></span></div>' +
         '<div class="animation-audio-director-fields">' +
         '<label>Movement<select data-cue-preset></select></label>' +
@@ -5030,6 +5032,48 @@
         motionDirectorCues=motionDirectorCues.filter(c=>c.id!==motionDirectorSelected);
         motionDirectorSelected=null;motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
       });
+      const stageCues = (apply) => {
+        const project=state.project;
+        if (!project || motionLabAudioProjectId !== project.id || motionLabBusy) {
+          motionLabNotify('Open and analyze the project WAV first.');return;
+        }
+        if (motionDirectorDirty) {
+          motionLabNotify('Save camera cues first, then preview or apply them.');return;
+        }
+        if (!motionDirectorCues.some(c=>c.enabled && c.intensity>0)) {
+          motionLabNotify('Add an enabled camera cue first.');return;
+        }
+        const frames=Number(project.animation?.max_frames);
+        if (!Number.isInteger(frames) || frames<1 || frames>3000) return;
+        const cueDocument={
+          source_sha256:motionLabAudioAnalysis.source_sha256,
+          duration_seconds:motionLabAudioAnalysis.duration_seconds,
+          cues:motionDirectorCues.map(c=>({...c})),
+        };
+        const id='director-'+cueDocument.source_sha256.slice(0,24);
+        const replacement={
+          id,type:'audio_cues',enabled:true,blend:'add',
+          start_frame:0,end_frame:frames,sha256:cueDocument.source_sha256,
+          name:'Audio Motion Director',cue_document:cueDocument,
+        };
+        const existing=motionLabDraftLayers.findIndex(l=>l.id===id);
+        if (existing<0 && motionLabDraftLayers.length>=24) {
+          motionLabNotify('Motion Lab supports a maximum of 24 layers.');return;
+        }
+        if (existing>=0) motionLabDraftLayers[existing]=replacement;
+        else motionLabDraftLayers.push(replacement);
+        commitMotionLabDraft();
+        void motionLabPreviewOrApply(apply,{curvesOnly:!apply});
+      };
+      panel.querySelector('[data-cue-preview]').addEventListener('click',()=>stageCues(false));
+      panel.querySelector('[data-cue-apply]').addEventListener('click',async()=>{
+        const approved=await window.MorphorumDialog.confirm({
+          title:'Apply Audio Motion Director cues?',
+          message:'Replace this source\'s existing Director layer with the saved cues and apply native six-axis camera schedules to this project? Other Motion Lab layers remain in the draft.',
+          confirmText:'Apply Camera Cues',cancelText:'Cancel',variant:'default',
+        });
+        if (approved) stageCues(true);
+      });
       panel.querySelector('[data-cue-save]').addEventListener('click', async () => {
         const projectId=state.project?.id;
         if (!projectId || motionLabAudioProjectId!==projectId) return;
@@ -5072,6 +5116,8 @@
       panel.querySelector('['+attr+']').disabled=!selected;
     const status=panel.querySelector('[data-cue-status]');
     status.textContent=motionDirectorCues.length+' cues'+(motionDirectorDirty?' · Unsaved':' · Saved');
+    for (const kind of ['data-cue-preview','data-cue-apply'])
+      panel.querySelector('['+kind+']').disabled=motionDirectorDirty || !motionDirectorCues.length || motionLabBusy;
     const list=panel.querySelector('[data-cue-list]');list.replaceChildren();
     for (const cue of [...motionDirectorCues].sort((a,b)=>a.time_seconds-b.time_seconds)) {
       const button=document.createElement('button');button.type='button';
