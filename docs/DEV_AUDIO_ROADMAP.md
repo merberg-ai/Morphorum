@@ -24,3 +24,8 @@ This is a **backend foundation only**, not wired into the audio upload endpoint,
 7. **DA6**: integration tests, 30 FPS render, soundtrack mux and Windows RTX 4080 SUPER physical gate.
 
 Do not modify `main` or `dev-ui`. Stop before merging.
+## DA1.2 API increment implemented (not yet physically accepted)
+
+The existing project WAV analysis endpoint now adds `analysis.events` with high-resolution candidate hit timestamps (seconds and original sample index), label and strength. The original `values` and `bands` remain intact for legacy audio-motion UI and rendering. An `analysis.fps_recommendations` object lists duration-matched frame counts for 12/24/30/60 FPS and indicates which respect the 3000-frame limit. This is a **proposal only**: FPS and max_frames are never changed by analysis, because recorded/keyframed content may be invalidated by retiming. A future UI must require explicit confirmation and reject/retime existing motion safely. Unit tests exercise the API helper and WAV analysis.
+
+**Gate:** verify backend tests and that old audio motion still behaves as before. A Windows WAV analysis response should contain events and recommendations. Stereo waveform and user-facing FPS selection come in DA2 / UI wiring.
