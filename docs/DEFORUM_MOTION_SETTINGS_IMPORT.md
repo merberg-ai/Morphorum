@@ -51,3 +51,11 @@ DMI1 does not yet provide UI, WAV uploading, offset correction, timing adoption 
 - The optional WAV picker provides a local-browser audio player, Web Audio decoded waveform overview, seek/playhead and adjustable audio-time offset. No WAV is uploaded or saved in DMI2. The external machine soundtrack path is never accessed.
 - There is **no Apply button** yet. DMI2 never changes camera tracks, animation timings or project audio. DMI3 will add explicit guarded project apply and soundtrack integration.
 - Frontend tests in `tests/frontend_deforum_motion_workspace.test.cjs` and navigation expectations cover the new entry and preserved legacy DOM. The physical desktop/mobile browser gate should test open 3D project, choose an exported DMS .txt, inspect graph for six axes, verify mismatch diagnostics, load a WAV, seek and adjust offset, confirm no project changes or upload, then test the mobile layout and original editor/preview.
+
+## DMI2 follow-up: soundtrack path from exported Deforum settings (2026-10-11)
+
+- Importer preview includes `source.soundtrack_path` from the JSON export, alongside `source.soundtrack_filename`. A path is metadata only: the server **does not access** the file or use it as an upload path.
+- New **Referenced soundtrack path** display, **Copy path**, and **Copy folder** controls on the Import Motion Settings page. The copied folder can be pasted into the Windows file chooser's address bar.
+- The browser's normal `<input type=file>` does not permit pre-setting a native file-picker directory from an arbitrary imported Windows pathname, for privacy/security reasons. No claim of automatic default-directory selection. If a future desktop/file-system integration provides an explicitly user-granted directory handle, it could optionally be used as a picker hint.
+- File chooser now accepts WAV/MP3/OGG/FLAC where the browser supports decoding, because the user-supplied `deforum_motion_settings.txt` references `TEST_METAL.mp3`; all audio remains browser-local and preview-only.
+- Regression tests assert source path metadata and UI controls. No WAV upload or project modification. The example export was inspected to verify `add_soundtrack=File`, `fps=24`, `max_frames=296`, `diffusion_cadence=3`, and the MP3 soundtrack reference.
