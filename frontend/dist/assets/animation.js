@@ -6421,6 +6421,30 @@
     const audioPreview = qs('#animation-motion-lab-audio-preview');
     if (audioPreview) analysisWorkspace.appendChild(audioPreview);
     panels.audio.appendChild(analysisWorkspace);
+    // DA3.3a: keep editable timeline and inspector together; separate configuration
+    // into source, detection and camera-response groups without cloning controls.
+    const audioCard = qs('#animation-motion-lab-audio');
+    const controls = audioCard?.querySelector('.animation-motion-audio-controls');
+    if (controls) {
+      const fields = Array.from(controls.children);
+      const sections = [
+        ['Audio source', fields.slice(0,2), true],
+        ['Beat detection', [fields[2],fields[3],fields[4],fields[6]], false],
+        ['Camera response', [fields[5],fields[7],fields[8],fields[9]], false],
+      ];
+      for (const [label, elements, opened] of sections) {
+        const details = document.createElement('details');
+        details.className = 'animation-audio-config-group';
+        details.open = opened;
+        const summary = document.createElement('summary');
+        summary.textContent = label;
+        const grid = document.createElement('div');
+        grid.className = 'animation-audio-config-grid';
+        for (const field of elements) if (field) grid.appendChild(field);
+        details.append(summary,grid);
+        controls.appendChild(details);
+      }
+    }
     const audioPlaceholder = document.createElement('div');
     audioPlaceholder.className = 'animation-audio-preview-placeholder';
     audioPlaceholder.innerHTML = '<strong>Beat analysis preview</strong><p>Choose a WAV file and select Analyze WAV. Your detected beats and audio levels will appear here before you add any motion.</p>';
