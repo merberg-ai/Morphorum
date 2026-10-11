@@ -1,5 +1,8 @@
 # Morphorum roadmap
 
+> [!NOTE]
+> **Historical planning document.** This roadmap preserves original milestones; some phases are now implemented and some remain experimental. The current features, Windows integration and limitations are summarized in [Current status](CURRENT_STATUS.md). The dated status paragraph below describes the project **as of 2026-10-09**, not today's active backlog.
+
 > **Milestone status update (2026-10-09):** Much of the original roadmap below is historical planning text, not a live checklist. Native depth-aware 3D animation, cadence/temporal blend, multi-LoRA scheduling, resumable rendering, MP4/WebM export and responsive workspaces are implemented. B6.1 Deforum settings import and **B6.2 hybrid-video upload, inspect and frame extraction** are implemented, with B6.2 Windows validated. **B6.3 hybrid source-frame compositing/mask tracks** is the next build milestone; optical flow/RAFT and other later roadmap items are not implicitly implemented. See [CURRENT_STATUS.md](CURRENT_STATUS.md) and [B6_DEFORUM_HYBRID_PLAN.md](B6_DEFORUM_HYBRID_PLAN.md).
 
 
