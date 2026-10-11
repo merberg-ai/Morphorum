@@ -4704,6 +4704,79 @@
     const peak = Math.max(0, ...rises);
     return rises.map(v => peak > 1e-12 ? Math.max(0, Math.min(1, v / peak - sensitivity * .5)) : 0);
   }
+  function motionLabStereoWaveform() {
+    const preview = qs('#animation-motion-lab-audio-preview');
+    const analysis = motionLabAudioAnalysis;
+    if (!preview) return;
+    let section = qs('#animation-audio-stereo-timeline');
+    if (!analysis?.waveform?.channels?.length) {
+      if (section) section.hidden = true;
+      return;
+    }
+    if (!section) {
+      section = document.createElement('section');
+      section.id = 'animation-audio-stereo-timeline';
+      section.className = 'animation-audio-stereo-timeline';
+      section.innerHTML = '<div class="animation-audio-wave-controls"><strong>Stereo waveform & drum events</strong>' +
+        '<label>Zoom <input type="range" min="1" max="12" value="1" step="1" data-wave-zoom></label>' +
+        '<label>Start <input type="range" min="0" max="1000" value="0" step="1" data-wave-start></label></div>' +
+        '<svg data-wave-svg viewBox="0 0 800 180" role="img" aria-label="Left and right audio waveform and detected kick and snare events"></svg>' +
+        '<p class="muted" data-wave-description></p>';
+      preview.before(section);
+      section.querySelector('[data-wave-zoom]')?.addEventListener('input', motionLabStereoWaveform);
+      section.querySelector('[data-wave-start]')?.addEventListener('input', motionLabStereoWaveform);
+    }
+    section.hidden = false;
+    const channels = analysis.waveform.channels;
+    const total = analysis.waveform.bins;
+    const zoom = Number(section.querySelector('[data-wave-zoom]')?.value || 1);
+    const startControl = section.querySelector('[data-wave-start]');
+    const maxStart = Math.max(0, 1 - 1 / zoom);
+    const from = Math.round(Number(startControl?.value || 0) / 1000 * maxStart * total);
+    const to = Math.min(total, from + Math.max(1, Math.ceil(total / zoom)));
+    const svg = section.querySelector('[data-wave-svg]');
+    const ns = 'http://www.w3.org/2000/svg';
+    svg.replaceChildren();
+    const make = (tag, attributes) => {
+      const el = document.createElementNS(ns, tag);
+      for (const [k, v] of Object.entries(attributes)) el.setAttribute(k, String(v));
+      svg.appendChild(el);
+      return el;
+    };
+    const count = channels.length;
+    const height = count === 2 ? 64 : 120;
+    channels.forEach((channel, index) => {
+      const center = count === 2 ? 45 + index * 81 : 88;
+      make('line', {x1:0,y1:center,x2:800,y2:center,stroke:'currentColor','stroke-opacity':'.16'});
+      const d = [];
+      for (let i = from; i < to; i++) {
+        const x = (i - from) * 800 / Math.max(1,to-from);
+        const pair = channel[i] || [0,0];
+        d.push('M' + x.toFixed(2) + ' ' + (center - pair[1] * height/2).toFixed(2) +
+          ' V' + (center - pair[0] * height/2).toFixed(2));
+      }
+      make('path', {d:d.join(' '),fill:'none',stroke:index?'#b49df3':'#73d5ed',
+        'stroke-width':Math.max(.8,Math.min(2,800/(to-from))),'vector-effect':'non-scaling-stroke'});
+      make('text', {x:5,y:center-25,fill:'currentColor','font-size':11}).textContent =
+        count === 2 ? (index ? 'R' : 'L') : 'Mono';
+    });
+    const tStart = from / total * analysis.duration_seconds;
+    const tEnd = to / total * analysis.duration_seconds;
+    const events = analysis.events?.events || [];
+    let visible = 0;
+    for (const event of events) {
+      if (event.time_seconds < tStart || event.time_seconds > tEnd) continue;
+      const x = (event.time_seconds - tStart) * 800 / Math.max(1e-9,tEnd-tStart);
+      make('line', {x1:x,y1:4,x2:x,y2:176,stroke:event.kind === 'kick'?'#ffba66':
+        event.kind === 'snare'?'#f28fba':'#a0a0a0','stroke-width':1.5,'stroke-opacity':'.85'});
+      visible++;
+    }
+    const desc = section.querySelector('[data-wave-description]');
+    if (desc) desc.textContent = (count === 2?'Separate L/R channels':'Mono channel') +
+      ' · ' + tStart.toFixed(2) + '–' + tEnd.toFixed(2) + ' s · ' + visible +
+      ' attack candidates in view (orange kick, pink snare, gray highs). ' +
+      'Markers represent spectral candidates, not isolated instruments.';
+  }
   function motionLabAudioPreview() {
     const preview = qs('#animation-motion-lab-audio-preview');
     const plot = qs('#animation-motion-lab-audio-plot');
@@ -4923,6 +4996,7 @@
         // analysis scale without seeing the envelope.
         thresholdField.value = Math.min(.1, peak * .55).toFixed(3);
       }
+      motionLabStereoWaveform();
       motionLabAudioPreview();
       if (status) status.textContent = 'Analyzed ' + file.name + ': ' +
         analysis.values.length + ' frames · ' + analysis.duration_seconds.toFixed(2) +
