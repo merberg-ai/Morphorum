@@ -2638,3 +2638,24 @@ dialog#animation-deforum-dialog {
   #animation-panel-audio .animation-audio-stereo-timeline {padding:12px;}
   #animation-panel-audio .animation-audio-wave-controls {grid-template-columns:minmax(0,1fr);}
 }
+
+
+/* DA2 waveform transport and keyboard/touch seek affordances */
+#animation-panel-audio .animation-audio-wave-transport {
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0;
+}
+#animation-panel-audio .animation-audio-wave-transport button {
+  width:auto;flex:0 0 auto;min-height:36px;padding:6px 14px;
+}
+#animation-panel-audio .animation-audio-wave-transport output {
+  font-variant-numeric:tabular-nums;color:var(--text);font-size:.84rem;
+}
+#animation-panel-audio .animation-audio-wave-transport span {
+  font-size:.78rem;color:var(--muted);
+}
+#animation-panel-audio .animation-audio-stereo-timeline [data-wave-svg] {
+  cursor:crosshair;touch-action:manipulation;
+}
+#animation-panel-audio .animation-audio-stereo-timeline [data-wave-svg]:focus-visible {
+  outline:2px solid var(--accent);outline-offset:3px;
+}
