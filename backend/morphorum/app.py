@@ -20,6 +20,7 @@ from .animation_projects import (
     load_animation_project,
     normalize_animation_project,
     save_animation_project,
+    trash_animation_project,
 )
 from .animation_resolution import (
     project_schedule_series,
@@ -307,6 +308,40 @@ def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
         raise HTTPException(status_code=status, detail=message) from exc
+
+
+@app.delete("/api/animation/projects/{project_id}")
+def api_trash_animation_project(project_id: str) -> dict[str, Any]:
+    # Never relocate a project while a live worker may read its sources.
+    # Render outputs live elsewhere and are intentionally not deleted.
+    try:
+        load_animation_project(project_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    workers = (
+        (animation_render_manager, {"queued", "loading_model", "rendering", "finalizing"}),
+        (motion_preview_manager, {"queued", "running", "rendering", "processing"}),
+        (video_export_manager, {"queued", "encoding", "running"}),
+        (hybrid_extraction_manager, {"queued", "running"}),
+    )
+    for manager, busy in workers:
+        with manager._lock:
+            for job in manager._jobs.values():
+                owner = job.get("project_id") if isinstance(job, dict) else job.project_id
+                status = job.get("status") if isinstance(job, dict) else job.status
+                if owner == project_id and status in busy:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="This project has an active operation. Wait for it to finish before moving to Trash.",
+                    )
+    try:
+        moved = trash_animation_project(project_id)
+        return {"status": "trashed", **moved}
+    except AnimationProjectError as exc:
+        message = str(exc)
+        code = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=code, detail=message) from exc
 
 
 @app.get("/api/animation/motion-lab/presets")
