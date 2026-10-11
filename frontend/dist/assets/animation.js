@@ -4654,6 +4654,22 @@
     if (!line || !duration) return;
     const begin = Number(section.dataset.waveStart || 0);
     const end = Number(section.dataset.waveEnd || duration);
+    const follow = section.querySelector('[data-wave-follow]')?.checked;
+    const span = end - begin;
+    // Page forward before the playhead reaches the right edge. Updating the
+    // Start slider redraws the waveform, then this function uses new bounds.
+    if (follow && audio && !audio.paused && span > 0 && span < duration &&
+        (current > begin + span * .75 || current < begin)) {
+      const desired = Math.max(0, Math.min(duration - span, current - span * .25));
+      const startSlider = section.querySelector('[data-wave-start]');
+      const zoom = Number(section.querySelector('[data-wave-zoom]')?.value || 1);
+      const available = Math.max(0, 1 - 1 / zoom);
+      if (startSlider && available > 0) {
+        startSlider.value = String(Math.round(desired / duration / available * 1000));
+        motionLabStereoWaveform();
+        return;
+      }
+    }
     const shown = current >= begin && current <= end;
     line.setAttribute('visibility', shown ? 'visible' : 'hidden');
     if (shown) {
@@ -4752,14 +4768,22 @@
       section.className = 'animation-audio-stereo-timeline';
       section.innerHTML = '<div class="animation-audio-wave-controls"><strong>Stereo waveform & drum events</strong>' +
         '<label>Zoom <input type="range" min="1" max="12" value="1" step="1" data-wave-zoom></label>' +
-        '<label>Start <input type="range" min="0" max="1000" value="0" step="1" data-wave-start></label></div>' +
+        '<label>Start <input type="range" min="0" max="1000" value="0" step="1" data-wave-start></label>' +
+        '<label class="animation-audio-wave-follow"><input type="checkbox" data-wave-follow checked> Follow playhead</label></div>' +
         '<div class="animation-audio-wave-transport"><button type="button" data-wave-play>Play audio</button>' +
         '<output data-wave-time>0.00 / 0.00 s</output><span>Click or tap the waveform to seek</span></div>' +
         '<svg data-wave-svg viewBox="0 0 800 180" role="img" tabindex="0" aria-label="Stereo waveform, drum events and audio playhead; click or tap to seek"></svg>' +
         '<p class="muted" data-wave-description></p>';
       preview.before(section);
       section.querySelector('[data-wave-zoom]')?.addEventListener('input', motionLabStereoWaveform);
-      section.querySelector('[data-wave-start]')?.addEventListener('input', motionLabStereoWaveform);
+      section.querySelector('[data-wave-start]')?.addEventListener('input', () => {
+        const follow = section.querySelector('[data-wave-follow]');
+        if (follow) follow.checked = false; // manual navigation takes priority
+        motionLabStereoWaveform();
+      });
+      section.querySelector('[data-wave-follow]')?.addEventListener('change', () => {
+        motionLabStereoWaveform();
+      });
       section.querySelector('[data-wave-play]')?.addEventListener('click', motionLabWaveToggle);
       const seekTo = ratio => {
         const audio = motionLabAudioElement;
