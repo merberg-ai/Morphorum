@@ -3768,6 +3768,123 @@
     }
   }
 
+
+  const projectManagerState = { selectedId: '', busy: false };
+  function projectManagerDate(value) {
+    const date = new Date(value || '');
+    return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
+  }
+  function projectManagerDuration(item) {
+    const seconds = Number(item?.max_frames || 0) / Number(item?.fps || 1);
+    return Number.isFinite(seconds) ? seconds.toFixed(seconds < 10 ? 2 : 1) + 's' : '--';
+  }
+  function projectManagerSummary(item) {
+    return [(item.mode || '2d').toUpperCase(),
+      (item.width || '--') + ' × ' + (item.height || '--'),
+      (item.max_frames || 0) + ' frames', (item.fps || '--') + ' FPS'].join(' · ');
+  }
+  function projectManagerFact(parent, label, value) {
+    const row = document.createElement('div');
+    row.className = 'animation-project-manager-fact';
+    const term = document.createElement('dt');
+    term.textContent = label;
+    const detail = document.createElement('dd');
+    detail.textContent = String(value ?? '--');
+    row.append(term, detail);
+    parent.appendChild(row);
+  }
+  function renderProjectManager() {
+    const list = qs('#animation-project-manager-list');
+    const details = qs('#animation-project-manager-details');
+    if (!list || !details) return;
+    const query = String(qs('#animation-project-manager-search')?.value || '').trim().toLowerCase();
+    const order = qs('#animation-project-manager-sort')?.value || 'updated';
+    const filtered = state.projects.filter(item =>
+      [item.name, item.model_id, item.id, item.model_family].some(value =>
+        String(value || '').toLowerCase().includes(query)));
+    filtered.sort((a, b) => order === 'name'
+      ? String(a.name).localeCompare(String(b.name))
+      : order === 'oldest'
+      ? String(a.updated_at || '').localeCompare(String(b.updated_at || ''))
+      : String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+    const count = qs('#animation-project-manager-count');
+    if (count) count.textContent = filtered.length + ' of ' + state.projects.length + ' projects';
+    if (!state.projects.some(p => p.id === projectManagerState.selectedId)) {
+      projectManagerState.selectedId =
+        state.projects.find(p => p.id === state.project?.id)?.id || state.projects[0]?.id || '';
+    }
+    list.replaceChildren();
+    if (!filtered.length) {
+      const empty = document.createElement('p');
+      empty.className = 'muted animation-project-manager-empty';
+      empty.textContent = state.projects.length ? 'No projects match your search.' :
+        'No projects yet. Create your first animation project to begin.';
+      list.appendChild(empty);
+    }
+    for (const project of filtered) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'animation-project-manager-item';
+      button.classList.toggle('active', project.id === projectManagerState.selectedId);
+      button.setAttribute('aria-pressed', String(project.id === projectManagerState.selectedId));
+      button.disabled = projectManagerState.busy;
+      const title = document.createElement('strong');
+      title.textContent = project.name;
+      const info = document.createElement('span');
+      info.textContent = projectManagerSummary(project);
+      const date = document.createElement('small');
+      date.textContent = 'Modified ' + projectManagerDate(project.updated_at);
+      button.append(title, info, date);
+      button.addEventListener('click', () => {
+        projectManagerState.selectedId = project.id;
+        renderProjectManager();
+      });
+      list.appendChild(button);
+    }
+    details.replaceChildren();
+    const selected = state.projects.find(p => p.id === projectManagerState.selectedId);
+    for (const id of ['open', 'rename', 'trash']) {
+      const button = qs('#animation-project-manager-' + id);
+      if (button) button.disabled = !selected || projectManagerState.busy;
+    }
+    if (!selected) {
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Select a project to view its details.';
+      details.appendChild(empty);
+      return;
+    }
+    const title = document.createElement('h3');
+    title.textContent = selected.name;
+    const info = document.createElement('p');
+    info.className = 'muted';
+    info.textContent = projectManagerSummary(selected);
+    const facts = document.createElement('dl');
+    facts.className = 'animation-project-manager-facts';
+    for (const [label, value] of [
+      ['Animation mode', (selected.mode || '2d').toUpperCase()],
+      ['Resolution', (selected.width || '--') + ' × ' + (selected.height || '--')],
+      ['Duration', projectManagerDuration(selected)],
+      ['Frames / rate', selected.max_frames + ' / ' + selected.fps + ' FPS'],
+      ['Model', selected.model_id || 'Not selected'],
+      ['Model family', selected.model_family || 'Not selected'],
+      ['Prompt keyframes', selected.prompt_keyframes ?? 0],
+      ['Motion layers', selected.motion_layers ?? 0],
+      ['Start mode', selected.start_mode === 'source' ? 'Source image' : 'Prompt'],
+      ['Created', projectManagerDate(selected.created_at)],
+      ['Last modified', projectManagerDate(selected.updated_at)],
+      ['Project ID', selected.id],
+    ]) projectManagerFact(facts, label, value);
+    details.append(title, info, facts);
+    if (selected.id === state.project?.id) {
+      const active = document.createElement('p');
+      active.className = 'animation-project-manager-active';
+      active.textContent = state.dirty ? 'Open now · unsaved edits in Editor' :
+        'Currently open in Motion Lab';
+      details.appendChild(active);
+    }
+  }
+
   async function loadProjectList({ loadFirst = false } = {}) {
     const payload = await api('/api/animation/projects');
     state.projects = Array.isArray(payload.projects) ? payload.projects : [];
