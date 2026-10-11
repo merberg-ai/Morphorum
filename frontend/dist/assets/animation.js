@@ -5852,15 +5852,17 @@
   // Audio Motion is a dedicated Motion Lab workspace using the same draft
   // camera layers, project, and render controls.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['motion', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'];
+  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'];
   const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
   let animationTab = 'motion';
+  let projectWizard = null;
   function showAnimationTab(name, { persist = true } = {}) {
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'motion';
     if (name !== 'curves') motionLabVisual?.pause();
     if (name !== 'preview') motionFramePlayer?.pause();
     if (name !== 'recording' && motionLabRecorder?.active) motionLabStopRecording('tab-change');
     animationTab = name;
+    if (name === 'wizard') void projectWizard?.open();
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
       button.classList.toggle('active', selected);
@@ -5899,7 +5901,7 @@
     nav.setAttribute('role', 'tablist');
     const panels = {};
     const names = {
-      motion: 'Overview', projects: 'Project Manager', editor: 'Project Editor',
+      motion: 'Overview', wizard: 'New Project Wizard', projects: 'Project Manager', editor: 'Project Editor',
       composer: 'Camera Composer', recording: 'Live Recording',
       curves: 'Motion Curves', preview: 'Camera Preview',
       audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
@@ -5936,7 +5938,7 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'projects', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs']) {
+    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -5981,6 +5983,7 @@
     const toolGrid = document.createElement('div');
     toolGrid.className = 'motion-lab-tool-grid';
     const toolCards = [
+      ['wizard', 'New Project Wizard', 'Create a project step by step, with guided defaults and explanations.'],
       ['composer', 'Camera Motion Composer', 'Layer motion presets, timing, and blend settings.'],
       ['recording', 'Live Motion Recording', 'Perform and edit a six-axis camera take.'],
       ['curves', 'Motion Curves & Camera Path', 'Edit frame-aligned keyframes using the full-width plots.'],
@@ -6005,6 +6008,40 @@
       toolGrid.appendChild(button);
     }
     panels.motion.appendChild(toolGrid);
+    if (window.MorphorumProjectWizard) {
+      projectWizard = new window.MorphorumProjectWizard({
+        panel: panels.wizard,
+        onNavigate: async destination => {
+          if (destination === 'before-save') {
+            if (motionLabRecorder?.active || renderIsActive() || state.motionJobId ||
+                motionPreviewStarting || animationRenderStarting) {
+              toast('Finish the current job first',
+                'Wait for recording, preview, or rendering to finish before switching projects.',
+                'warning', 6500);
+              return false;
+            }
+            if (state.dirty) {
+              return window.MorphorumDialog.confirm({
+                title: 'Create and open this wizard project?',
+                message: 'Your currently open project has unsaved Editor changes. Saving this new project will switch away from those edits.',
+                confirmText: 'Discard Editor Changes & Continue',
+                cancelText: 'Keep Editing', variant: 'danger',
+              });
+            }
+            return true;
+          }
+          const button = qs('.nav-button[data-view="' + destination + '"]');
+          button?.click();
+          return true;
+        },
+        onSaved: async id => {
+          await loadProjectList();
+          const opened = await loadProject(id, { confirmDirty: false });
+          if (opened) showAnimationTab('editor');
+          else showAnimationTab('projects');
+        },
+      });
+    }
     setupProjectManager(panels.projects);
     for (const [name, label] of [
       ['composer', 'Camera Motion Composer'],
