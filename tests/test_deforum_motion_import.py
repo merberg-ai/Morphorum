@@ -19,7 +19,7 @@ def source(**changes):
 
 
 def project(frames=120, fps=24):
-    return {"animation":{"max_frames":frames,"fps":fps}}
+    return {"animation":{"max_frames":frames,"fps":fps}, "cadence":{"diffusion":"0:(3)"}}
 
 
 def test_dms_export_preview_is_nonmutating_and_audio_path_is_basename_only():
