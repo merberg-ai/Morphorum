@@ -4,7 +4,7 @@
 
 Morphorum is a self-hosted image and motion-graphics application for **Windows and Linux**. Generate still images, build keyframed 2D/3D animations, experiment with audio-reactive camera motion, and export videos without relying on a hosted generation service.
 
-**Release:** \`0.1.0a1\` (early alpha) · **License:** [The Unlicense](LICENSE) · **Source:** [GitHub](https://github.com/merberg-ai/Morphorum)
+**Release:** `0.1.0a1` (early alpha) · **License:** [The Unlicense](LICENSE) · **Source:** [GitHub](https://github.com/merberg-ai/Morphorum)
 
 > [!IMPORTANT]
 > Morphorum is **alpha software**. It has working local generation and animation workflows, but expect large downloads, hardware-dependent performance, and occasional rough edges. Back up important projects before updating. AI checkpoints are **not bundled** with the application.
@@ -16,34 +16,34 @@ Morphorum is a self-hosted image and motion-graphics application for **Windows a
 **Windows 10/11**
 
 1. Download **[bootstrap.bat](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat)**.
-2. Open your Downloads folder and run \`bootstrap.bat\`.
-3. When prompted, press **Enter** to install to \`C:\Morphorum\`, or enter another folder such as \`D:\Morphorum\`.
+2. Open your Downloads folder and run `bootstrap.bat`.
+3. When prompted, press **Enter** to install to `C:\Morphorum`, or enter another folder such as `D:\Morphorum`.
 4. Press **Enter** to use the default server port (**7865**), or choose another number.
 5. Let the installer finish. It downloads the required Python runtime and dependencies automatically.
 
 Or use PowerShell to download and launch it:
 
-\`\`\`powershell
+```powershell
 curl.exe -fL -o bootstrap.bat https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat
 .\bootstrap.bat
-\`\`\`
+```
 
 > [!TIP]
-> Prefer a different folder and port without being prompted? Run \`.\bootstrap.bat -InstallDir "D:\Morphorum" -Port 8080\`. The installer can also install Git and FFmpeg through Windows Package Manager when available.
+> Prefer a different folder and port without being prompted? Run `.\bootstrap.bat -InstallDir "D:\Morphorum" -Port 8080`. The installer can also install Git and FFmpeg through Windows Package Manager when available.
 
 **Linux**
 
 Paste this into a terminal:
 
-\`\`\`bash
+```bash
 curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash
-\`\`\`
+```
 
-The default location is \`~/Morphorum\`. To choose a different location:
+The default location is `~/Morphorum`. To choose a different location:
 
-\`\`\`bash
+```bash
 curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash -s -- "$HOME/Apps/Morphorum"
-\`\`\`
+```
 
 Some Linux systems may need FFmpeg installed separately. See the [full installation guide](docs/INSTALLATION.md#linux).
 
@@ -51,23 +51,23 @@ Some Linux systems may need FFmpeg installed separately. See the [full installat
 
 **Windows** (PowerShell, after installing to the default location):
 
-\`\`\`powershell
+```powershell
 cd C:\Morphorum
 .\run.bat
-\`\`\`
+```
 
 **Linux:**
 
-\`\`\`bash
+```bash
 cd ~/Morphorum
 ./run.sh
-\`\`\`
+```
 
 Keep the terminal window open while using Morphorum. In your browser, go to:
 
 **[http://127.0.0.1:7865](http://127.0.0.1:7865)**
 
-If you chose a different server port during installation, replace \`7865\` with that port. Press **Ctrl+C** in the terminal to stop the server.
+If you chose a different server port during installation, replace `7865` with that port. Press **Ctrl+C** in the terminal to stop the server.
 
 ### 3. Get a model and generate something
 
@@ -118,18 +118,18 @@ Run these from your **Morphorum installation directory**:
 
 | Task | Windows | Linux |
 | --- | --- | --- |
-| Start locally | \`.\run.bat\` | \`./run.sh\` |
-| Allow access from other devices on your LAN | \`.\run-lan.bat\` | \`./run-lan.sh\` |
-| Update the current branch | \`.\update.bat\` | \`./update.sh\` |
-| Update to the main branch | \`.\update.bat main\` | \`./update.sh main\` |
-| Repair / run diagnostics | \`.\repair.bat\` | \`./repair.sh\` |
+| Start locally | `.\run.bat` | `./run.sh` |
+| Allow access from other devices on your LAN | `.\run-lan.bat` | `./run-lan.sh` |
+| Update the current branch | `.\update.bat` | `./update.sh` |
+| Update to the main branch | `.\update.bat main` | `./update.sh main` |
+| Repair / run diagnostics | `.\repair.bat` | `./repair.sh` |
 
-On Windows, the installer remembers your selected port. You can override it for one run with \`.\run.bat -Port 8080\` or \`.\run-lan.bat -Port 8080\`, without changing the saved setting.
+On Windows, the installer remembers your selected port. You can override it for one run with `.\run.bat -Port 8080` or `.\run-lan.bat -Port 8080`, without changing the saved setting.
 
 > [!WARNING]
 > **LAN mode is not an internet-facing service.** It binds the application to network interfaces so trusted devices on your local network can connect. Morphorum does **not** currently provide built-in authentication for that server. **Do not** forward its port on your router or expose it directly to the internet.
 
-Updates protect Git-tracked changes and preserve project and configuration directories. For important work, keep a separate backup of your \`projects/\` and \`outputs/\` directories.
+Updates protect Git-tracked changes and preserve project and configuration directories. For important work, keep a separate backup of your `projects/` and `outputs/` directories.
 
 ## Requirements at a glance
 
@@ -155,6 +155,6 @@ For detailed system preparation, troubleshooting, and an explanation of what the
 
 Morphorum is an independent, clean-room implementation inspired by Deforum workflows. Supported file formats and observable behavior can be studied and reimplemented, but **GPL/AGPL-covered source code must not be copied** into the Unlicensed core.
 
-Development normally proceeds on **feature branches → \`dev-ui\` → \`main\`** after review and tests. Earlier milestone notes are historical and may not reflect the current build.
+Development normally proceeds on **feature branches → `dev-ui` → `main`** after review and tests. Earlier milestone notes are historical and may not reflect the current build.
 
 See [Contributing](CONTRIBUTING.md), [the license](LICENSE), [third-party notices](THIRD_PARTY.md), and [additional notices](NOTICE.md).
