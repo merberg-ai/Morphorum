@@ -1,0 +1,28 @@
+{
+  "id": "deep-ocean",
+  "name": "Deep Ocean",
+  "appearance": "dark",
+  "colors": {
+    "background": "#081528",
+    "surface": "rgba(17,35,60,0.84)",
+    "surfaceStrong": "rgba(14,29,51,0.96)",
+    "border": "rgba(160,193,231,0.17)",
+    "text": "#ECF4FF",
+    "textMuted": "#A9BFD9",
+    "accent": "#78B4FF",
+    "accentSecondary": "#73DCE9",
+    "success": "#75DFB0",
+    "warning": "#F0CA82",
+    "danger": "#FF929E"
+  },
+  "glass": {
+    "enabled": true,
+    "blurPx": 14,
+    "opacity": 0.84
+  },
+  "radiusPx": 12,
+  "motion": {
+    "enabled": true,
+    "durationMs": 170
+  }
+}
