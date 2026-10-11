@@ -4858,6 +4858,128 @@
     const peak = Math.max(0, ...rises);
     return rises.map(v => peak > 1e-12 ? Math.max(0, Math.min(1, v / peak - sensitivity * .5)) : 0);
   }
+  // DA4.2: manual choreography is independent of beat detection.
+  let motionDirectorCues = [];
+  let motionDirectorSelected = null;
+  let motionDirectorDirty = false;
+  const MOTION_DIRECTOR_PRESETS = [
+    ['push_zoom_in','Push Zoom In'],['roll_right_left','Roll Right → Left'],
+    ['push_return','Push & Return'],['roll_left_right','Roll Left → Right'],
+    ['dolly_out','Dolly Out'],['shake','Shake'],['ripple','Ripple'],
+    ['reveal_drift','Reveal Drift'],['fly_through','Fly-through'],
+  ];
+  function motionDirectorPanel() {
+    let panel = qs('#animation-audio-motion-director');
+    const waveform = qs('#animation-audio-stereo-timeline');
+    if (!waveform || !motionLabAudioAnalysis) return;
+    if (!panel) {
+      panel = document.createElement('section');
+      panel.id = 'animation-audio-motion-director';
+      panel.className = 'animation-audio-motion-director';
+      panel.innerHTML = '<div class="animation-audio-director-head"><strong>Camera motion cues</strong>' +
+        '<span class="muted">Place a camera move at any point, even without detected beats.</span></div>' +
+        '<div class="animation-audio-director-actions"><button type="button" data-cue-add>Add cue at playhead</button>' +
+        '<button type="button" data-cue-save>Save cues</button>' +
+        '<span data-cue-status class="muted"></span></div>' +
+        '<div class="animation-audio-director-fields">' +
+        '<label>Movement<select data-cue-preset></select></label>' +
+        '<label>Start (seconds)<input data-cue-time type="number" min="0" step=".001"></label>' +
+        '<label>Duration (seconds)<input data-cue-duration type="number" min=".01" max="30" step=".05"></label>' +
+        '<label>Intensity (0–1)<input data-cue-intensity type="number" min="0" max="1" step=".05"></label>' +
+        '<label>Easing<select data-cue-easing><option value="ease_in_out">Ease in/out</option>' +
+        '<option value="linear">Linear</option><option value="smoothstep">Smoothstep</option>' +
+        '<option value="ease_in">Ease in</option><option value="ease_out">Ease out</option></select></label>' +
+        '<label class="animation-audio-director-enabled"><input data-cue-enabled type="checkbox"> Enabled</label></div>' +
+        '<div class="animation-audio-director-actions"><button type="button" data-cue-update>Update selected</button>' +
+        '<button type="button" data-cue-delete>Delete selected</button></div>' +
+        '<div data-cue-list class="animation-audio-director-list"></div>' +
+        '<p class="muted">Cues save with this WAV. Native camera preview and motion application arrive in DA4.5.</p>';
+      waveform.after(panel);
+      const options = panel.querySelector('[data-cue-preset]');
+      for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
+        const option = document.createElement('option');
+        option.value = key; option.textContent = label; options.appendChild(option);
+      }
+      panel.querySelector('[data-cue-add]').addEventListener('click', () => {
+        const time = Math.max(0,Math.min(motionLabAudioAnalysis.duration_seconds-.000001,
+          Number(motionLabAudioElement?.currentTime)||0));
+        const id = 'cue-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,9);
+        const cue = {id,preset:'push_zoom_in',time_seconds:time,duration_seconds:.6,
+          intensity:.5,easing:'ease_in_out',enabled:true,source_event_id:null};
+        motionDirectorCues.push(cue);motionDirectorSelected=id;motionDirectorDirty=true;
+        motionDirectorPanel();
+      });
+      panel.querySelector('[data-cue-update]').addEventListener('click', () => {
+        const cue = motionDirectorCues.find(c => c.id === motionDirectorSelected);
+        if (!cue) return;
+        const time = Number(panel.querySelector('[data-cue-time]').value);
+        const duration = Number(panel.querySelector('[data-cue-duration]').value);
+        const intensity = Number(panel.querySelector('[data-cue-intensity]').value);
+        if (![time,duration,intensity].every(Number.isFinite) || time<0 ||
+            time>=motionLabAudioAnalysis.duration_seconds || duration<.01 ||
+            duration>30 || intensity<0 || intensity>1) {
+          motionLabNotify('Cue timing or intensity is outside allowed limits.');return;
+        }
+        Object.assign(cue,{preset:panel.querySelector('[data-cue-preset]').value,
+          time_seconds:time,duration_seconds:duration,intensity,
+          easing:panel.querySelector('[data-cue-easing]').value,
+          enabled:panel.querySelector('[data-cue-enabled]').checked});
+        motionDirectorDirty=true;motionDirectorPanel();
+      });
+      panel.querySelector('[data-cue-delete]').addEventListener('click', () => {
+        motionDirectorCues=motionDirectorCues.filter(c=>c.id!==motionDirectorSelected);
+        motionDirectorSelected=null;motionDirectorDirty=true;motionDirectorPanel();
+      });
+      panel.querySelector('[data-cue-save]').addEventListener('click', async () => {
+        const projectId=state.project?.id;
+        if (!projectId || motionLabAudioProjectId!==projectId) return;
+        const save=panel.querySelector('[data-cue-save]');save.disabled=true;
+        try {
+          const response=await api('/api/animation/projects/'+encodeURIComponent(projectId)+
+            '/motion-lab/audio-cues',{method:'PUT',body:JSON.stringify({
+              source_sha256:motionLabAudioAnalysis.source_sha256,
+              duration_seconds:motionLabAudioAnalysis.duration_seconds,cues:motionDirectorCues,
+            })});
+          if (!response?.cues) throw new Error('Cue save not confirmed.');
+          motionDirectorCues=response.cues.cues;motionDirectorDirty=false;
+          motionLabNotify('Camera cues saved with this WAV.');
+        } catch(error) {motionLabNotify('Cue save failed: '+(error?.message||error));}
+        finally {save.disabled=false;motionDirectorPanel();}
+      });
+      panel.querySelector('[data-cue-list]').addEventListener('click', event => {
+        const button=event.target.closest('[data-cue-id]');
+        if (!button) return;
+        motionDirectorSelected=button.dataset.cueId;
+        const cue=motionDirectorCues.find(c=>c.id===motionDirectorSelected);
+        if (cue && motionLabAudioElement) motionLabAudioElement.currentTime=cue.time_seconds;
+        motionDirectorPanel();
+      });
+    }
+    const selected=motionDirectorCues.find(c=>c.id===motionDirectorSelected);
+    for (const [attr,key] of [['data-cue-preset','preset'],['data-cue-time','time_seconds'],
+        ['data-cue-duration','duration_seconds'],['data-cue-intensity','intensity'],
+        ['data-cue-easing','easing']]) {
+      const input=panel.querySelector('['+attr+']');
+      input.disabled=!selected;
+      input.value=selected?String(selected[key]):'';
+    }
+    const enabled=panel.querySelector('[data-cue-enabled]');
+    enabled.disabled=!selected;enabled.checked=Boolean(selected?.enabled);
+    for (const attr of ['data-cue-update','data-cue-delete'])
+      panel.querySelector('['+attr+']').disabled=!selected;
+    const status=panel.querySelector('[data-cue-status]');
+    status.textContent=motionDirectorCues.length+' cues'+(motionDirectorDirty?' · Unsaved':' · Saved');
+    const list=panel.querySelector('[data-cue-list]');list.replaceChildren();
+    for (const cue of [...motionDirectorCues].sort((a,b)=>a.time_seconds-b.time_seconds)) {
+      const button=document.createElement('button');button.type='button';
+      button.className='animation-audio-cue-item'+(cue.id===motionDirectorSelected?' active':'');
+      button.dataset.cueId=cue.id;
+      button.textContent=cue.time_seconds.toFixed(3)+'s · '+
+        (MOTION_DIRECTOR_PRESETS.find(p=>p[0]===cue.preset)?.[1]||cue.preset)+
+        (cue.enabled?'':' (disabled)');
+      list.appendChild(button);
+    }
+  }
   function motionLabStereoWaveform() {
     const preview = qs('#animation-motion-lab-audio-preview');
     const analysis = motionLabAudioAnalysis;
@@ -5253,6 +5375,7 @@
       return;
     }
     motionLabAudioAnalysis = null;
+    motionDirectorCues=[];motionDirectorSelected=null;motionDirectorDirty=false;
     motionLabEditedEvents = null;
     motionLabSelectedEvent = null;
     motionLabMarkersDirty = false;
@@ -5385,6 +5508,14 @@
         motionLabEditedEvents = overrides.events.map(e => ({...e}));
       }
       motionLabAudioProjectId = projectId;
+      motionDirectorCues=[];motionDirectorSelected=null;motionDirectorDirty=false;
+      const storedCues=await api('/api/animation/projects/'+encodeURIComponent(projectId)+
+        '/motion-lab/audio-cues/'+encodeURIComponent(analysis.source_sha256));
+      if (storedCues?.cues) {
+        if (Math.abs(Number(storedCues.cues.duration_seconds)-Number(analysis.duration_seconds))>.001)
+          throw new Error('Saved motion cues have a different audio duration.');
+        motionDirectorCues=storedCues.cues.cues.map(c=>({...c}));
+      }
       motionLabAudioUrl = URL.createObjectURL(file);
       motionLabAudioElement = new Audio(motionLabAudioUrl);
       motionLabAudioElement.preload = 'auto';
@@ -5402,6 +5533,7 @@
         thresholdField.value = Math.min(.1, peak * .55).toFixed(3);
       }
       motionLabStereoWaveform();
+      motionDirectorPanel();
       motionLabAudioPreview();
       if (status) status.textContent = 'Analyzed ' + file.name + ': ' +
         analysis.values.length + ' frames · ' + analysis.duration_seconds.toFixed(2) +
