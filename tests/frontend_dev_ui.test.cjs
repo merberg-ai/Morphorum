@@ -76,7 +76,9 @@ test('Desktop has an independent wide-screen layout without replacing mobile sty
   assert.match(desktop, /#animation-panel-editor \.animation-layout\s*\{[^}]*grid-template-columns:\s*repeat\(12/);
   assert.match(desktop, /#animation-panel-motion\s*\{[^}]*grid-template-areas:/);
   assert.match(desktop, /"author review"/);
-  assert.match(desktop, /"audio audio"/);
+  assert.match(desktop, /#animation-panel-audio/);
+  assert.match(desktop, /"controls plot"/);
+  assert.match(desktop, /"actions plot"/);
   assert.match(desktop, /\.animation-motion-preview-card\s*\{[^}]*order:\s*-1/);
   assert.match(read('assets/animation.css'), /\.animation-motion-authoring-column,\s*#animation-panel-motion > \.animation-motion-review-column\s*\{\s*display:\s*contents;/);
   assert.match(mobile, /@media \(max-width: 640px\)/);
@@ -107,4 +109,16 @@ test('Motion Lab uses existing DOM controls in mobile-transparent desktop column
   assert.match(html, /class="card glass animation-generation-state-card"/);
   assert.match(html, /id="animation-timeline-card"/);
   assert.match(html, /id="animation-motion-lab-recording"/);
+});
+
+test('Audio Motion sits beside Motion Lab with a desktop waveform workspace', () => {
+  const desktop = read('assets/desktop.css');
+  const css = read('assets/animation.css');
+  const animation = read('assets/animation.js');
+  assert.match(desktop, /#animation-panel-audio \.animation-motion-lab-audio/);
+  assert.match(desktop, /grid-template-areas:\s*"head head"\s*"controls plot"\s*"actions plot"/);
+  assert.match(css, /#view-animation \.animation-workspace-nav\s*\{/);
+  assert.match(css, /overflow-x:auto/);
+  assert.match(animation, /panels\.audio\.prepend\(audioIntro\)/);
+  assert.match(animation, /data-motion-quick-target="animation-motion-lab-apply"/);
 });
