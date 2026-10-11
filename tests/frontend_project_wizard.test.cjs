@@ -42,7 +42,7 @@ function setup(fetchStub = null) {
     MorphorumToast:()=>{},
   };
   const context = {
-    window, document:{createElement:()=>({})},
+    window, document:{createElement:()=>({}),querySelector:()=>null},
     sessionStorage:{setItem:(k,v)=>stored.set(k,v),
       removeItem:k=>stored.delete(k),getItem:k=>stored.get(k)||null},
     fetch:fetchStub || (async()=>{throw Error('Unexpected network call')}),
