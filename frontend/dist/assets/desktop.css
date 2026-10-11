@@ -240,7 +240,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 9px 12px;
-  background: rgba(65, 217, 255, .035);
+  background: color-mix(in srgb,var(--accent) 3.5%,transparent);
   color: var(--muted);
   font-size: .82rem;
   line-height: 1.5;
@@ -257,7 +257,7 @@
 /* Audio Motion has its own editing surface, but remains within Motion Lab. */
 #view-animation .animation-workspace-nav button[data-animation-tab="audio"]:not(.active) {
   color: var(--accent);
-  background: rgba(65, 217, 255, .045);
+  background: color-mix(in srgb,var(--accent) 4.5%,transparent);
 }
 #animation-panel-audio { display: grid; gap: 14px; align-items: start; }
 #animation-panel-audio .animation-motion-lab-audio {
