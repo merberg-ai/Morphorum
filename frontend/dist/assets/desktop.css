@@ -50,35 +50,124 @@
 }
 .page-heading { padding-top: 2px; }
 .two-column { grid-template-columns: minmax(0, 1.08fr) minmax(365px, .92fr); }
-.animation-workspace-nav { top: 110px; }
 
-/* Motion Lab: editing tools on the left; curves and a live preview on
-   the right. Each control retains its original ID and event wiring. */
+/* Keep the workflow switcher sized to its labels, not the viewport.
+   The mobile four-button navigation stays exactly as it was. */
+#view-animation .animation-heading {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 11px;
+}
+#view-animation .animation-project-actions {
+  justify-content: flex-start;
+  gap: 7px;
+}
+#view-animation .animation-project-actions button {
+  min-height: 35px;
+  padding: 7px 11px;
+  font-size: .79rem;
+}
+#view-animation .animation-status-row { max-width: none; margin: 0 0 13px; }
+#view-animation .animation-workspace-nav {
+  display: inline-flex;
+  grid-template-columns: none;
+  justify-content: flex-start;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 0 16px;
+  padding: 4px;
+  gap: 3px;
+  top: 110px;
+  border-radius: 11px;
+}
+#view-animation .animation-workspace-nav button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 35px;
+  padding: 7px 15px;
+  border-radius: 8px;
+  font-size: .8rem;
+  white-space: nowrap;
+}
+
+/* A deliberate editor grid: project/cadence, source/depth, timeline,
+   prompts, camera/generation, and inspector/notes. */
+#animation-panel-editor .animation-layout {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-flow: row;
+  gap: 14px;
+  align-items: start;
+}
+#animation-panel-editor .animation-layout > article.card {
+  min-width: 0;
+  padding: 16px;
+}
+#animation-panel-editor .animation-layout > .animation-project-card { grid-column: span 5; }
+#animation-panel-editor .animation-layout > .animation-cadence-card { grid-column: span 7; }
+#animation-panel-editor .animation-layout > .animation-start-card,
+#animation-panel-editor .animation-layout > .animation-depth-card { grid-column: span 6; }
+/* No empty depth-map slot when the project uses 2D animation. */
+#animation-panel-editor .animation-layout:has(.animation-depth-card[hidden]) > .animation-start-card {
+  grid-column: 1 / -1;
+}
+#animation-panel-editor .animation-layout > .animation-timeline-card,
+#animation-panel-editor .animation-layout > .animation-prompts-card { grid-column: 1 / -1; }
+#animation-panel-editor .animation-layout > #animation-2d-motion-card,
+#animation-panel-editor .animation-layout > #animation-3d-camera-card { grid-column: span 7; }
+#animation-panel-editor .animation-layout > .animation-generation-state-card { grid-column: span 5; }
+#animation-panel-editor .animation-layout > .animation-inspector-card { grid-column: span 8; }
+#animation-panel-editor .animation-layout > .animation-notes-card { grid-column: span 4; }
+#animation-panel-editor .animation-start-grid,
+#animation-panel-editor .animation-depth-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, .75fr);
+  gap: 12px;
+}
+#animation-panel-editor #animation-3d-camera-card .animation-schedule-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+#animation-panel-editor .animation-card-content,
+#animation-panel-editor .animation-prompt-row { min-width: 0; }
+#animation-panel-editor .animation-timeline-scroll { max-width: 100%; }
+
+/* Motion Lab columns flow independently so recording doesn't leave a
+   towering blank rectangle under a shorter preview card. */
 #animation-panel-motion {
-  grid-template-columns: minmax(0, 1.08fr) minmax(370px, .92fr);
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
   grid-template-areas:
     "intro intro"
-    "composer visual"
-    "recording preview"
+    "author review"
     "audio audio"
     "actions actions";
   align-items: start;
-  gap: 16px;
+  gap: 14px;
 }
 #animation-panel-motion > #animation-motion-lab-intro { grid-area: intro; }
-#animation-panel-motion > #animation-motion-lab-composer { grid-area: composer; }
-#animation-panel-motion > #animation-motion-lab-recording { grid-area: recording; }
-#animation-panel-motion > #animation-motion-lab-visual { grid-area: visual; }
-#animation-panel-motion > .animation-motion-preview-card {
-  grid-area: preview;
-  position: sticky;
-  top: 177px;
-  align-self: start;
+#animation-panel-motion > .animation-motion-authoring-column {
+  display: flex;
+  flex-direction: column;
+  grid-area: author;
+  gap: 14px;
+  min-width: 0;
+}
+#animation-panel-motion > .animation-motion-review-column {
+  display: flex;
+  flex-direction: column;
+  grid-area: review;
+  gap: 14px;
+  min-width: 0;
 }
 #animation-panel-motion > #animation-motion-lab-audio { grid-area: audio; }
 #animation-panel-motion > #animation-motion-lab-quick-actions {
   grid-area: actions;
   justify-self: center;
+}
+#animation-panel-motion .animation-motion-preview-card {
+  order: -1;
+  position: static;
+  min-width: 0;
 }
 #animation-panel-motion .animation-motion-lab-visual-grid {
   grid-template-columns: minmax(0, 1fr);
@@ -90,9 +179,7 @@
 #animation-panel-motion .animation-motion-controller-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-#animation-panel-motion .animation-motion-hold-controls {
-  grid-column: 1 / -1;
-}
+#animation-panel-motion .animation-motion-hold-controls { grid-column: 1 / -1; }
 #animation-panel-motion .animation-motion-lab-curve-fields {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
