@@ -759,9 +759,13 @@ def test_zimage_flowmatch_sampler_constructs() -> None:
 def test_zimage_runtime_exposes_required_pipeline_api() -> None:
     import inspect
 
-    from diffusers import ZImagePipeline
+    from diffusers import ZImagePipeline, ZImageImg2ImgPipeline
 
     assert callable(getattr(ZImagePipeline, "from_pretrained", None))
+    assert callable(getattr(ZImageImg2ImgPipeline, "from_pipe", None))
+    img2img_params = inspect.signature(ZImageImg2ImgPipeline.__call__).parameters
+    for name in ("prompt", "image", "strength", "num_inference_steps", "guidance_scale"):
+        assert name in img2img_params
     assert callable(getattr(ZImagePipeline, "enable_model_cpu_offload", None))
     parameters = inspect.signature(ZImagePipeline.__call__).parameters
     for name in (
@@ -1946,4 +1950,80 @@ def test_sdxl_task_conversion_requires_explicit_source_precision(monkeypatch) ->
     with pytest.raises(GenerationError, match="Cannot determine.*SDXL UNet precision"):
         GenerationManager()._convert_pipeline_task(
             SimpleNamespace(unet=SimpleNamespace()), "sdxl", "img2img"
+        )
+
+
+def test_zimage_img2img_reuses_official_turbo_checkpoint_and_call_contract(tmp_path) -> None:
+    checkpoint = create_zimage_layout(tmp_path / "Z-Image-Turbo")
+    model = fake_model(checkpoint, "zimage", "turbo")
+    manager = GenerationManager()
+    request = GenerationRequest(
+        model_id=model["id"], prompt="a black cat with a red hat",
+        sampler="flowmatch_euler", steps=9, guidance_scale=0.0,
+        width=1024, height=1024,
+    )
+    source = object()
+    generator = object()
+    progress = object()
+    args = manager.build_img2img_call_args(
+        request, model, image=source, strength=0.6,
+        generator=generator, on_step_end=progress,
+    )
+    assert args["image"] is source
+    assert args["strength"] == 0.6
+    assert args["num_inference_steps"] == 9
+    assert args["guidance_scale"] == 0.0
+    assert args["max_sequence_length"] == 512
+    assert args["callback_on_step_end"] is progress
+    assert "negative_prompt" not in args
+
+
+def test_zimage_txt2img_and_img2img_switch_without_fetching_another_model(
+    monkeypatch,
+) -> None:
+    import diffusers
+
+    loaded = object()
+    calls = []
+
+    class DummyResult:
+        def set_progress_bar_config(self, *, disable):
+            assert disable
+
+    def into_img2img(cls, source, **kwargs):
+        calls.append(("img2img", source, kwargs))
+        return DummyResult()
+
+    def into_txt2img(cls, source, **kwargs):
+        calls.append(("txt2img", source, kwargs))
+        return DummyResult()
+
+    monkeypatch.setattr(
+        diffusers.ZImageImg2ImgPipeline, "from_pipe",
+        classmethod(into_img2img),
+    )
+    monkeypatch.setattr(
+        diffusers.ZImagePipeline, "from_pipe",
+        classmethod(into_txt2img),
+    )
+    manager = GenerationManager()
+    image = manager._convert_pipeline_task(loaded, "zimage", "img2img")
+    result = manager._convert_pipeline_task(image, "zimage", "txt2img")
+    assert isinstance(result, DummyResult)
+    assert [item[0] for item in calls] == ["img2img", "txt2img"]
+    assert calls[0][1] is loaded
+    assert calls[1][1] is image
+
+
+def test_zimage_generation_rejects_missing_shard_even_with_complete_marker(
+    monkeypatch, tmp_path,
+) -> None:
+    directory = create_zimage_layout(tmp_path / "Z-Image-Turbo")
+    (directory / "transformer" / "diffusion-1.safetensors").unlink()
+    monkeypatch.setattr(
+        generation, "get_model", lambda _id: fake_model(directory, "zimage", "turbo")
+    )
+    with pytest.raises(GenerationError, match="missing or incomplete"):
+        GenerationManager()._validate_request(
+            GenerationRequest(model_id="model-1", prompt="a cat", sampler="flowmatch_euler")
         )
