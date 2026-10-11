@@ -35,7 +35,7 @@ def test_invalid_audio_does_not_create_attachment(tmp_path,monkeypatch,filename,
 def test_invalid_offset_rejected(tmp_path,monkeypatch,offset):
     monkeypatch.setattr(audio,"animation_project_directory",lambda project_id:tmp_path)
     with pytest.raises(audio.ImportedSoundtrackError):
-        audio.store_soundtrack("test",b"OggS"+"\0"*12,filename="sound.ogg",offset_seconds=offset)
+        audio.store_soundtrack("test",b"OggS"+b"\0"*12,filename="sound.ogg",offset_seconds=offset)
 
 
 def test_missing_audio_rejected(tmp_path,monkeypatch):
