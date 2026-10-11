@@ -19,6 +19,7 @@ from .animation_projects import (
     list_animation_projects,
     load_animation_project,
     normalize_animation_project,
+    new_animation_project_template,
     save_animation_project,
     trash_animation_project,
 )
@@ -268,6 +269,12 @@ def api_create_deforum_import(payload: dict[str, Any]) -> dict[str, Any]:
         }
     except DeforumImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/project-template")
+def api_animation_project_template() -> dict[str, Any]:
+    """Read-only canonical defaults used by the new project wizard."""
+    return {"project": new_animation_project_template()}
 
 
 @app.post("/api/animation/projects", status_code=201)
