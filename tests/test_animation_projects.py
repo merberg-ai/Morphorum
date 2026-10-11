@@ -493,3 +493,39 @@ def test_project_trash_refuses_symlinked_trash_folder(tmp_path, monkeypatch) -> 
     with pytest.raises(AnimationProjectError, match="symlink"):
         animation_projects.trash_animation_project(created["id"])
     assert (tmp_path / created["id"] / "project.json").is_file()
+
+
+def test_installer_seeds_bundled_default_example_only_when_library_is_empty(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    example = animation_projects.seed_example_animation_project()
+    assert example is not None
+    assert example["name"] == "Default"
+    assert example["id"] == "default-a070c78c"
+    assert example["animation"]["mode"] == "3d"
+    assert example["animation"]["max_frames"] == 120
+    assert example["animation"]["fps"] == 24
+    assert example["generation"]["seed_behavior"] == "increment"
+    assert example["prompts"]["0"] == "A fat orange cat wearing a black tophat"
+    assert example["prompts"]["30"] == "A fat black cat wearing a red tophat"
+    assert len(example["tracks"]["prompts"]["positive"]["keyframes"]) == 2
+    assert (tmp_path / example["id"] / "project.json").is_file()
+
+    # Re-running bootstrap/install must never overwrite subsequent edits.
+    saved = animation_projects.save_animation_project(
+        example["id"], {**example, "name": "Customized Default"}
+    )
+    assert saved["name"] == "Customized Default"
+    assert animation_projects.seed_example_animation_project() is None
+    assert animation_projects.load_animation_project(example["id"])["name"] == "Customized Default"
+
+
+def test_installer_does_not_seed_example_when_a_different_project_exists(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    existing = create_animation_project({"name": "My Own Animation"})
+    assert animation_projects.seed_example_animation_project() is None
+    items = list_animation_projects()
+    assert [item["id"] for item in items] == [existing["id"]]
