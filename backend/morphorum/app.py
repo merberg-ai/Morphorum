@@ -248,6 +248,46 @@ def api_preview_project_motion_import(project_id: str, payload: dict[str, Any]) 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.post("/api/animation/projects/{project_id}/motion-import/prepare")
+def api_prepare_project_motion_import(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    import json
+    from .deforum_motion_import import prepare_motion_import
+    try:
+        current = load_animation_project(project_id)
+        candidate, report = prepare_motion_import(
+            payload.get("content"), filename=str(payload.get("filename") or ""),
+            project=current,
+        )
+        digest = hashlib.sha256(json.dumps(
+            current, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        return {
+            "can_apply": True, "project_sha256": digest,
+            "source_sha256": report["source_sha256"],
+            "changed_axes": report["changed_axes"],
+            "warnings": report["warnings"], "read_only": True,
+        }
+    except (AnimationProjectError, DeforumImportError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-import/apply")
+def api_apply_project_motion_import(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .deforum_motion_import import apply_motion_import
+    try:
+        saved, report = apply_motion_import(
+            project_id, payload.get("content"),
+            filename=str(payload.get("filename") or ""),
+            expected_source_sha256=str(payload.get("source_sha256") or ""),
+            expected_project_sha256=str(payload.get("project_sha256") or ""),
+        )
+        return {"status": "applied", "project": saved,
+                "path": animation_project_path(project_id),
+                "changed_axes": report["changed_axes"]}
+    except (AnimationProjectError, DeforumImportError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/import/deforum/preview")
 def api_preview_deforum_import(payload: dict[str, Any]) -> dict[str, Any]:
     try:
