@@ -5601,6 +5601,25 @@
     if (visual) panels.motion.appendChild(visual);
     const motionPreview = qs('.animation-motion-preview-card');
     if (motionPreview) panels.motion.appendChild(motionPreview);
+
+    // One DOM, two layouts: transparent on mobile, independent workspace
+    // columns on desktop. Move the existing nodes rather than cloning them
+    // so project state, media playback, and event handlers stay shared.
+    const motionAuthoringColumn = document.createElement('div');
+    motionAuthoringColumn.className = 'animation-motion-authoring-column';
+    for (const node of [composer, recording]) {
+      if (node) motionAuthoringColumn.appendChild(node);
+    }
+    const motionReviewColumn = document.createElement('div');
+    motionReviewColumn.className = 'animation-motion-review-column';
+    for (const node of [visual, motionPreview]) {
+      if (node) motionReviewColumn.appendChild(node);
+    }
+    if (motionIntro) motionIntro.after(motionAuthoringColumn);
+    else panels.motion.prepend(motionAuthoringColumn);
+    if (audio) audio.after(motionReviewColumn);
+    else panels.motion.appendChild(motionReviewColumn);
+
     motionLabSetupQuickActions(panels.motion);
     const history = qs('.animation-render-history-row');
     if (history) panels.outputs.prepend(history);
