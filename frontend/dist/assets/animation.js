@@ -110,8 +110,11 @@
     ]);
 
     qsa('#view-animation .animation-layout > article.card').forEach((card, index) => {
-      // Audio has its own workspace, and should not inherit Editor's accordion.
-      if (card.id === 'animation-motion-lab-audio') return;
+      // Standalone Motion Lab tool pages must always open with their
+      // controls visible. The Editor alone retains its accordion workflow.
+      if (['animation-motion-lab-composer', 'animation-motion-lab-recording',
+           'animation-motion-lab-visual', 'animation-motion-lab-audio'].includes(card.id) ||
+          card.classList.contains('animation-motion-preview-card')) return;
       if (card.dataset.animationAccordionReady === '1') return;
       card.dataset.animationAccordionReady = '1';
       const key = animationCardKey(card, index);
