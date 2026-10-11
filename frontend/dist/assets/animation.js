@@ -4641,12 +4641,45 @@
   let motionLabAudioProjectId = null;
   let motionLabAudioElement = null;
   let motionLabAudioUrl = null;
+  function motionLabWavePlayhead() {
+    const section = qs('#animation-audio-stereo-timeline');
+    const line = section?.querySelector('[data-wave-playhead]');
+    const readout = section?.querySelector('[data-wave-time]');
+    const button = section?.querySelector('[data-wave-play]');
+    const audio = motionLabAudioElement;
+    const duration = Number(motionLabAudioAnalysis?.duration_seconds) || 0;
+    const current = Math.max(0, Math.min(duration, Number(audio?.currentTime) || 0));
+    if (readout) readout.textContent = current.toFixed(2) + ' / ' + duration.toFixed(2) + ' s';
+    if (button) button.textContent = audio && !audio.paused ? 'Pause audio' : 'Play audio';
+    if (!line || !duration) return;
+    const begin = Number(section.dataset.waveStart || 0);
+    const end = Number(section.dataset.waveEnd || duration);
+    const shown = current >= begin && current <= end;
+    line.setAttribute('visibility', shown ? 'visible' : 'hidden');
+    if (shown) {
+      const x = (current - begin) / Math.max(1e-9, end - begin) * 800;
+      line.setAttribute('x1', x.toFixed(3));
+      line.setAttribute('x2', x.toFixed(3));
+    }
+  }
+  function motionLabWaveToggle() {
+    const audio = motionLabAudioElement;
+    if (!audio) return;
+    if (!audio.paused) { audio.pause(); return; }
+    if (audio.ended || (Number.isFinite(audio.duration) && audio.currentTime >= audio.duration)) {
+      audio.currentTime = 0;
+    }
+    const started = audio.play();
+    started?.catch(error => motionLabAudioSyncStatus(
+      'Audio playback blocked: ' + (error?.message || error)));
+  }
   function motionLabReleaseAudio() {
     motionLabAudioElement?.pause();
     if (motionLabAudioElement) motionLabAudioElement.removeAttribute('src');
     if (motionLabAudioUrl) URL.revokeObjectURL(motionLabAudioUrl);
     motionLabAudioElement = null;
     motionLabAudioUrl = null;
+    motionLabWavePlayhead();
   }
   function motionLabAudioSyncStatus(message) {
     const output = qs('#animation-motion-lab-audio-sync-status');
@@ -4720,11 +4753,37 @@
       section.innerHTML = '<div class="animation-audio-wave-controls"><strong>Stereo waveform & drum events</strong>' +
         '<label>Zoom <input type="range" min="1" max="12" value="1" step="1" data-wave-zoom></label>' +
         '<label>Start <input type="range" min="0" max="1000" value="0" step="1" data-wave-start></label></div>' +
-        '<svg data-wave-svg viewBox="0 0 800 180" role="img" aria-label="Left and right audio waveform and detected kick and snare events"></svg>' +
+        '<div class="animation-audio-wave-transport"><button type="button" data-wave-play>Play audio</button>' +
+        '<output data-wave-time>0.00 / 0.00 s</output><span>Click or tap the waveform to seek</span></div>' +
+        '<svg data-wave-svg viewBox="0 0 800 180" role="img" tabindex="0" aria-label="Stereo waveform, drum events and audio playhead; click or tap to seek"></svg>' +
         '<p class="muted" data-wave-description></p>';
       preview.before(section);
       section.querySelector('[data-wave-zoom]')?.addEventListener('input', motionLabStereoWaveform);
       section.querySelector('[data-wave-start]')?.addEventListener('input', motionLabStereoWaveform);
+      section.querySelector('[data-wave-play]')?.addEventListener('click', motionLabWaveToggle);
+      const seekTo = ratio => {
+        const audio = motionLabAudioElement;
+        if (!audio || !motionLabAudioAnalysis) return;
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        audio.currentTime = Math.max(0, Math.min(
+          Number.isFinite(audio.duration) ? audio.duration : end,
+          begin + Math.max(0, Math.min(1, ratio)) * (end - begin)));
+        motionLabWavePlayhead();
+      };
+      section.querySelector('[data-wave-svg]')?.addEventListener('click', event => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (bounds.width > 0) seekTo((event.clientX - bounds.left) / bounds.width);
+      });
+      section.querySelector('[data-wave-svg]')?.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        const current = Number(motionLabAudioElement?.currentTime) || 0;
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        seekTo((current - begin + (event.key === 'ArrowRight' ? .1 : -.1)) /
+          Math.max(1e-9, end - begin));
+      });
     }
     section.hidden = false;
     const channels = analysis.waveform.channels;
@@ -4762,6 +4821,8 @@
     });
     const tStart = from / total * analysis.duration_seconds;
     const tEnd = to / total * analysis.duration_seconds;
+    section.dataset.waveStart = String(tStart);
+    section.dataset.waveEnd = String(tEnd);
     const events = analysis.events?.events || [];
     let visible = 0;
     for (const event of events) {
@@ -4771,6 +4832,10 @@
         event.kind === 'snare'?'#f28fba':'#a0a0a0','stroke-width':1.5,'stroke-opacity':'.85'});
       visible++;
     }
+    make('line', {x1:0,x2:0,y1:0,y2:180,stroke:'#fff','stroke-width':2,
+      'vector-effect':'non-scaling-stroke','pointer-events':'none',
+      visibility:'hidden','data-wave-playhead':''});
+    motionLabWavePlayhead();
     const desc = section.querySelector('[data-wave-description]');
     if (desc) desc.textContent = (count === 2?'Separate L/R channels':'Mono channel') +
       ' · ' + tStart.toFixed(2) + '–' + tEnd.toFixed(2) + ' s · ' + visible +
@@ -4988,6 +5053,10 @@
       motionLabAudioElement = new Audio(motionLabAudioUrl);
       motionLabAudioElement.preload = 'auto';
       motionLabAudioElement.load();
+      for (const type of ['timeupdate', 'play', 'pause', 'seeked', 'ended']) {
+        motionLabAudioElement.addEventListener(type, motionLabWavePlayhead);
+      }
+      motionLabWavePlayhead();
       motionLabAudioSyncStatus('Ready to play with Motion Curves playback.');
       const peak = Math.max(0, ...motionLabAudioSignal());
       const thresholdField = qs('#animation-motion-lab-audio-threshold');
