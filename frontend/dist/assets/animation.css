@@ -2603,3 +2603,38 @@ dialog#animation-deforum-dialog {
   .project-wizard-shortcuts button {flex:1 1 100%;}
 }
 @media(prefers-reduced-motion:reduce) {.project-wizard-hint summary {transition:none;}}
+
+
+/* DA2: bounded, responsive stereo waveform controls. Keep global form rules out. */
+#animation-panel-audio .animation-audio-stereo-timeline {
+  display:grid;gap:12px;min-width:0;width:100%;
+  margin:14px 0;padding:16px;border:1px solid var(--border);
+  border-radius:12px;background:var(--panel);
+}
+#animation-panel-audio .animation-audio-stereo-timeline[hidden] {display:none;}
+#animation-panel-audio .animation-audio-wave-controls {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px 18px;align-items:end;min-width:0;
+}
+#animation-panel-audio .animation-audio-wave-controls > strong {
+  grid-column:1/-1;display:block;line-height:1.35;
+}
+#animation-panel-audio .animation-audio-wave-controls label {
+  display:flex;flex-direction:column;gap:7px;min-width:0;
+  font-size:.82rem;color:var(--muted);margin:0;
+}
+#animation-panel-audio .animation-audio-wave-controls input[type="range"] {
+  display:block;width:100%;max-width:100%;min-width:0;
+  box-sizing:border-box;margin:0;flex:none;
+}
+#animation-panel-audio .animation-audio-stereo-timeline [data-wave-svg] {
+  display:block;width:100%;height:auto;max-width:100%;
+  overflow:hidden;border-radius:7px;background:var(--panel-strong);
+}
+#animation-panel-audio .animation-audio-stereo-timeline [data-wave-description] {
+  margin:0;font-size:.78rem;line-height:1.5;overflow-wrap:anywhere;
+}
+@media(max-width:620px) {
+  #animation-panel-audio .animation-audio-stereo-timeline {padding:12px;}
+  #animation-panel-audio .animation-audio-wave-controls {grid-template-columns:minmax(0,1fr);}
+}
