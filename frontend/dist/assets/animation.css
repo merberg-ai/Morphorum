@@ -2262,3 +2262,74 @@ dialog#animation-deforum-dialog {
   #animation-panel-audio .animation-audio-workspace-intro { padding:14px; }
   .animation-audio-preview-placeholder { min-height:160px; }
 }
+
+
+/* Motion Lab workspace routing. All tools remain part of one project and
+   render pipeline, but each uses an independent page. On mobile the tablist
+   scrolls horizontally instead of making nine microscopic buttons. */
+#view-animation .animation-workspace-nav {
+  display:flex;
+  width:100%;
+  max-width:100%;
+  overflow-x:auto;
+  overscroll-behavior-x:contain;
+  scroll-snap-type:x proximity;
+  scrollbar-width:thin;
+  grid-template-columns:none;
+  gap:4px;
+}
+#view-animation .animation-workspace-nav button {
+  flex:0 0 auto;
+  width:auto;
+  padding:9px 12px;
+  white-space:nowrap;
+  scroll-snap-align:start;
+}
+.motion-lab-tool-grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  min-width:0;
+}
+.motion-lab-tool-card {
+  display:flex; flex-direction:column; align-items:flex-start;
+  gap:7px; min-width:0;
+  padding:18px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:rgba(24,32,46,.65);
+  color:var(--text);
+  text-align:left;
+  cursor:pointer;
+}
+.motion-lab-tool-card strong {font-size:.96rem;}
+.motion-lab-tool-card span {font-size:.8rem;line-height:1.5;color:var(--muted);}
+.motion-lab-tool-card:hover,.motion-lab-tool-card:focus-visible {
+  border-color:var(--accent);
+  background:rgba(65,217,255,.075);
+  outline-offset:3px;
+}
+.motion-tool-page-heading {
+  display:flex; justify-content:space-between; align-items:center;
+  flex-wrap:wrap; gap:12px;
+  padding:8px 2px 4px;
+}
+.motion-tool-page-heading .eyebrow {margin:0 0 4px;}
+.motion-tool-page-heading h2 {font-size:clamp(1.24rem,2vw,1.65rem);margin:0;}
+#animation-panel-composer,
+#animation-panel-recording,
+#animation-panel-curves,
+#animation-panel-preview { min-width:0; }
+#animation-panel-curves .animation-motion-lab-visual-grid {
+  min-width:0;
+}
+#animation-panel-curves .animation-motion-lab-svg-wrap {
+  min-width:0;
+}
+#animation-motion-lab-quick-actions[hidden] {display:none!important;}
+@media(max-width:720px) {
+  .motion-lab-tool-grid {grid-template-columns:1fr;gap:9px;}
+  .motion-lab-tool-card {padding:14px;}
+  .motion-tool-page-heading {flex-direction:column;align-items:flex-start;}
+  .motion-tool-page-heading button {min-height:42px;}
+}
