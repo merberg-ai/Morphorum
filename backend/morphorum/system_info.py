@@ -49,6 +49,11 @@ def git_commit() -> str | None:
     return _run(["git", "-C", str(ROOT), "rev-parse", "--short=12", "HEAD"])
 
 
+def git_commit_full() -> str | None:
+    """Full immutable Git SHA for repository links in the version popover."""
+    return _run(["git", "-C", str(ROOT), "rev-parse", "HEAD"])
+
+
 def git_branch() -> str | None:
     branch = _run(["git", "-C", str(ROOT), "branch", "--show-current"])
     if branch:
