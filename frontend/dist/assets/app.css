@@ -226,6 +226,10 @@ code { color: var(--accent); font-family: var(--font-mono); }
   padding: 7px;
   border-radius: 14px;
 }
+/* Motion Lab sub-navigation belongs to the wide-screen sidebar only.
+   Narrow/mobile browsers keep their existing bottom navigation. */
+#motion-lab-sidebar { display: none; }
+
 .nav-button {
   border: 0;
   background: transparent;
