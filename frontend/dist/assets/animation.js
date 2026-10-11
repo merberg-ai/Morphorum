@@ -4931,7 +4931,64 @@
           begin + Math.max(0, Math.min(1, ratio)) * (end - begin)));
         motionLabWavePlayhead();
       };
+      let dragMarker = null;
+      const waveform = section.querySelector('[data-wave-svg]');
+      const positionToTime = event => {
+        const rect = waveform.getBoundingClientRect();
+        if (!rect.width) return null;
+        const ratio = Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        return begin + ratio * (end - begin);
+      };
+      waveform?.addEventListener('pointerdown', event => {
+        if (event.button !== 0 || !motionLabEditedEvents?.length) return;
+        const target = positionToTime(event);
+        if (target === null) return;
+        const rect = waveform.getBoundingClientRect();
+        const tolerance = (Number(section.dataset.waveEnd)-Number(section.dataset.waveStart))
+          * 12 / rect.width;
+        const candidates = motionLabEditedEvents.filter(e => Math.abs(e.time_seconds-target) <= tolerance);
+        candidates.sort((a,b)=>Math.abs(a.time_seconds-target)-Math.abs(b.time_seconds-target));
+        if (!candidates.length) return;
+        const selected = candidates[0];
+        motionLabSelectedEvent = selected.id;
+        dragMarker = {id:selected.id,startX:event.clientX,moved:false};
+        waveform.setPointerCapture?.(event.pointerId);
+        motionLabEventEditor();
+      });
+      waveform?.addEventListener('pointermove', event => {
+        if (!dragMarker || !motionLabEditedEvents) return;
+        if (Math.abs(event.clientX-dragMarker.startX) <= 4 && !dragMarker.moved) return;
+        if (!dragMarker.moved) { motionLabMarkerSnapshot(); dragMarker.moved = true; }
+        const target = positionToTime(event);
+        const selected = motionLabEditedEvents.find(e=>e.id===dragMarker.id);
+        if (target !== null && selected) {
+          selected.time_seconds = Math.max(0,Math.min(
+            motionLabAudioAnalysis.duration_seconds-.000001,Math.round(target*1000)/1000));
+          motionLabMarkersDirty = true;
+          // Redraw after pointer release to retain capture during drag.
+          const x = (selected.time_seconds-Number(section.dataset.waveStart)) /
+            Math.max(1e-9,Number(section.dataset.waveEnd)-Number(section.dataset.waveStart))*800;
+          const marker = waveform.querySelector('[data-drag-preview]');
+          if (marker) {marker.setAttribute('x1',x);marker.setAttribute('x2',x);}
+          motionLabEventEditor();
+        }
+      });
+      const finishDrag = event => {
+        if (!dragMarker) return;
+        const moved = dragMarker.moved;
+        dragMarker = null;
+        if (waveform.hasPointerCapture?.(event.pointerId)) waveform.releasePointerCapture(event.pointerId);
+        if (moved) {section.dataset.waveSuppressClick='1'; motionLabStereoWaveform();}
+      };
+      waveform?.addEventListener('pointerup',finishDrag);
+      waveform?.addEventListener('pointercancel',finishDrag);
       section.querySelector('[data-wave-svg]')?.addEventListener('click', event => {
+        if (section.dataset.waveSuppressClick === '1') {
+          delete section.dataset.waveSuppressClick;
+          return;
+        }
         const bounds = event.currentTarget.getBoundingClientRect();
         if (bounds.width <= 0) return;
         const ratio = Math.max(0, Math.min(1,(event.clientX - bounds.left) / bounds.width));
@@ -4956,8 +5013,28 @@
         }
       });
       section.querySelector('[data-wave-svg]')?.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase()==='z' ||
+            event.key.toLowerCase()==='y')) {
+          event.preventDefault();
+          motionLabMarkerHistory(event.key.toLowerCase()==='y' || event.shiftKey);
+          return;
+        }
+        const selected = motionLabEditedEvents?.find(e=>e.id===motionLabSelectedEvent);
+        if (selected && (event.key==='Delete' || event.key==='Backspace')) {
+          event.preventDefault(); motionLabEventChange('remove'); return;
+        }
         if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
         event.preventDefault();
+        if (selected) {
+          motionLabMarkerSnapshot();
+          const step = event.shiftKey ? 1/Math.max(1,Number(motionLabAudioAnalysis?.fps)||12) : .01;
+          selected.time_seconds = Math.max(0,Math.min(
+            motionLabAudioAnalysis.duration_seconds-.000001,
+            Math.round((selected.time_seconds+(event.key==='ArrowRight'?step:-step))*1000000)/1000000));
+          motionLabMarkersDirty = true;
+          motionLabStereoWaveform();
+          return;
+        }
         const current = Number(motionLabAudioElement?.currentTime) || 0;
         const begin = Number(section.dataset.waveStart || 0);
         const end = Number(section.dataset.waveEnd || 0);
@@ -5036,6 +5113,9 @@
         'stroke-opacity':event.enabled===false?'.2':'.85'});
       visible++;
     }
+    make('line', {x1:0,x2:0,y1:0,y2:180,stroke:'#ffed81','stroke-width':3,
+      'vector-effect':'non-scaling-stroke','pointer-events':'none',
+      visibility:'hidden','data-drag-preview':''});
     make('line', {x1:0,x2:0,y1:0,y2:180,stroke:'#fff','stroke-width':2,
       'vector-effect':'non-scaling-stroke','pointer-events':'none',
       visibility:'hidden','data-wave-playhead':''});
