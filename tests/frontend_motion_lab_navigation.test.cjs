@@ -212,6 +212,9 @@ test('Floating Motion Lab shortcuts navigate before acting and keep Stop usable'
     setAttribute(k,v) {this.attrs[k] = v;},
   });
   const dockPanel = makeElement();
+  const audioInlineApply = makeElement();
+  audioInlineApply.textContent = 'Apply to Animation';
+  audioInlineApply.dataset.motionQuickTarget = 'animation-motion-lab-apply';
   const context = {
     document: {createElement:makeElement},
     motionLabRecorder: {active:false},
@@ -223,7 +226,9 @@ test('Floating Motion Lab shortcuts navigate before acting and keep Stop usable'
     state:{project:{id:'test'},motionJobId:null},
     renderIsActive: () => false,
     showAnimationTab: name => navigated.push(name),
-    qsa: selector => selector === '[data-motion-quick-target]' ? dockPanel.children[0]?.children.filter(c=>c.dataset.motionQuickTarget) || [] : [],
+    qsa: selector => selector === '[data-motion-quick-target]'
+      ? [...(dockPanel.children[0]?.children.filter(c=>c.dataset.motionQuickTarget) || []),
+        audioInlineApply] : [],
     qs: selector => originals.get(selector.slice(1)) || null,
   };
   vm.runInNewContext(js.slice(first,last)+
@@ -233,6 +238,9 @@ test('Floating Motion Lab shortcuts navigate before acting and keep Stop usable'
   const buttons = dockPanel.children[0].children.filter(c=>c.dataset.motionQuickTarget);
   const action = id => buttons.find(c=>c.dataset.motionQuickTarget === id);
   assert.equal(buttons.length,6);
+  assert.equal(audioInlineApply.textContent,'Apply to Animation',
+    'Audio Motion inline button must retain its original caption on first sync');
+  assert.equal(audioInlineApply.dataset.label,'Apply to Animation');
   assert.equal(action('animation-start-render').textContent,'Render Animation');
   for(const [id,page] of [
     ['animation-motion-lab-record','recording'],
@@ -286,9 +294,16 @@ test('Floating Motion Lab shortcuts navigate before acting and keep Stop usable'
   assert.equal(action('animation-motion-lab-update-curves').dataset.running,'true');
   assert.equal(action('animation-motion-lab-update-curves').textContent,'↻ Updating…');
   assert.equal(action('animation-motion-lab-apply').disabled,true);
+  context.motionLabBusyAction='apply';
+  context.syncQuick();
+  assert.equal(audioInlineApply.disabled,true);
+  assert.equal(audioInlineApply.textContent,'Applying…');
   context.motionLabBusy=false;
   context.motionLabBusyAction=null;
   context.syncQuick();
+  assert.equal(audioInlineApply.textContent,'Apply to Animation',
+    'Audio Motion caption must return after a busy action');
+  assert.equal(audioInlineApply.disabled,false);
   assert.equal(action('animation-motion-lab-preview-draft').disabled,false);
   assert.equal(action('animation-start-render').textContent,'Render Animation');
 });
@@ -355,4 +370,12 @@ test('Project Manager uses saved metadata and protects deletion', () => {
   assert.match(js, /state\.dirty \|\| motionLabRecorder\?\.active/);
   assert.match(css, /\.animation-project-manager-layout\s*\{/);
   assert.match(css, /\.animation-project-manager-item\.active\s*\{/);
+});
+
+test('Audio Motion Apply action has a readable width independent of the toolbar', () => {
+  assert.match(js, /if \(!button\.dataset\.label\) button\.dataset\.label =/);
+  assert.match(js, /'Apply to Animation' : ''/);
+  assert.match(css, /\.animation-audio-workspace-actions #animation-audio-apply\s*\{[^}]*flex:0 0 auto;[^}]*min-width:148px;[^}]*white-space:nowrap;/);
+  assert.match(css, /\.animation-audio-workspace-actions #animation-audio-workspace-status\s*\{[^}]*flex:1 1 220px;/);
+  assert.match(css, /@media\(max-width:640px\)[\s\S]*?\.animation-audio-workspace-actions #animation-audio-apply\s*\{[^}]*min-width:140px;/);
 });
