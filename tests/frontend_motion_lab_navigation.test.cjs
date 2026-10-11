@@ -11,9 +11,9 @@ const js = fs.readFileSync(path.join(dist, 'assets', 'animation.js'), 'utf8');
 const css = fs.readFileSync(path.join(dist, 'assets', 'animation.css'), 'utf8');
 const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
 
-test('Motion Lab is the main workspace with nine native, shared-state tool panels', () => {
-  const names = ['motion','editor','composer','recording','curves','preview','audio','monitor','outputs'];
-  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['motion', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'\]/);
+test('Motion Lab includes Project Manager and ten shared-state tool panels', () => {
+  const names = ['motion','projects','editor','composer','recording','curves','preview','audio','monitor','outputs'];
+  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['motion', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'\]/);
   assert.match(js, /const names = \{/);
   for (const name of names) assert.match(js, new RegExp(name + ":", 'm'));
   assert.match(js, /panels\.motion\.appendChild\(motionIntro\)/);
@@ -30,7 +30,7 @@ test('Tool switching highlights the desktop sidebar, preserves selections, and s
   const start = js.indexOf('  const ANIMATION_TAB_KEY = ');
   const end = js.indexOf('  function setupAnimationWorkspaceTabs() {', start);
   assert.ok(start >= 0 && end > start);
-  const keys = ['motion','editor','composer','recording','curves','preview','audio','monitor','outputs'];
+  const keys = ['motion','projects','editor','composer','recording','curves','preview','audio','monitor','outputs'];
   const item = key => ({ dataset: { animationTab:key, animationPanel:key, motionNav:key },
     tabIndex:-1, hidden:false, attrs:{},
     classList: { active:false, toggle(_,v) {this.active=v;} },
@@ -49,13 +49,13 @@ test('Tool switching highlights the desktop sidebar, preserves selections, and s
   };
   vm.runInNewContext(js.slice(start,end)+'\nthis.selectTab=showAnimationTab;',context);
   context.selectTab('curves');
-  assert.equal(panels[4].hidden,false);
-  assert.equal(sidebar[4].attrs['aria-current'],'page');
+  assert.equal(panels[5].hidden,false);
+  assert.equal(sidebar[5].attrs['aria-current'],'page');
   assert.equal(previewPaused,1);
   context.motionLabRecorder.active=true;
   context.selectTab('monitor');
   assert.equal(stopReason,'tab-change');
-  assert.equal(sidebar[7].attrs['aria-current'],'page');
+  assert.equal(sidebar[8].attrs['aria-current'],'page');
   assert.equal(stored.at(-1)[1],'monitor');
   context.motionLabRecorder.active=false;
   context.selectTab('media');
@@ -336,4 +336,23 @@ test('Preview and render locks include pending API requests and active operation
   assert.match(js,/motionPreviewStarting = false;\s*renderSourceState\(\)/);
   assert.match(js,/animationRenderStarting = false;\s*renderSourceState\(\)/);
   assert.match(js,/motionLabBusyAction = apply \? 'apply' : curvesOnly \? 'curves' : 'preview'/);
+});
+
+test('Project Manager uses saved metadata and protects deletion', () => {
+  assert.match(html, /data-motion-nav="projects">Project Manager/);
+  assert.match(js, /projects: 'Project Manager'/);
+  assert.match(js, /setupProjectManager\(panels\.projects\)/);
+  assert.match(js, /function renderProjectManager\(\)/);
+  assert.match(js, /function projectManagerSummary\(item\)/);
+  assert.match(js, /selected\.prompt_keyframes/);
+  assert.match(js, /selected\.motion_layers/);
+  assert.match(js, /new Date\(value \|\| ''\)/);
+  assert.match(js, /String\(value \|\| ''\) === item\.name/);
+  assert.match(js, /method: 'DELETE'/);
+  assert.match(js, /method: 'PUT'/);
+  assert.match(js, /await loadProject\(id\)/);
+  assert.match(js, /if \(opened\) showAnimationTab\('editor'\)/);
+  assert.match(js, /state\.dirty \|\| motionLabRecorder\?\.active/);
+  assert.match(css, /\.animation-project-manager-layout\s*\{/);
+  assert.match(css, /\.animation-project-manager-item\.active\s*\{/);
 });
