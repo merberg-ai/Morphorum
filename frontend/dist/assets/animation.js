@@ -6632,6 +6632,11 @@
         }
       }
     }
+    // Position source actions beside the file controls; camera/detection
+    // tuning remains after the waveform rather than pushing it offscreen.
+    const audioActions = audioCard?.querySelector('.animation-motion-recording-actions');
+    if (audioActions) audioSourceDock.appendChild(audioActions);
+    if (audioCard) panels.audio.appendChild(audioCard);
     const audioPlaceholder = document.createElement('div');
     audioPlaceholder.className = 'animation-audio-preview-placeholder';
     audioPlaceholder.innerHTML = '<strong>Beat analysis preview</strong><p>Choose a WAV file and select Analyze WAV. Your detected beats and audio levels will appear here before you add any motion.</p>';
