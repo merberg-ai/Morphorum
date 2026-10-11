@@ -216,8 +216,12 @@ test('Floating Motion Lab shortcuts navigate before acting and keep Stop usable'
     document: {createElement:makeElement},
     motionLabRecorder: {active:false},
     motionLabBusy:false,
+    motionLabBusyAction:null,
+    motionPreviewStarting:false,
+    animationRenderStarting:false,
     motionLabDraftLayers:[],
-    state:{project:{id:'test'}},
+    state:{project:{id:'test'},motionJobId:null},
+    renderIsActive: () => false,
     showAnimationTab: name => navigated.push(name),
     qsa: selector => selector === '[data-motion-quick-target]' ? dockPanel.children[0]?.children.filter(c=>c.dataset.motionQuickTarget) || [] : [],
     qs: selector => originals.get(selector.slice(1)) || null,
@@ -254,6 +258,39 @@ test('Floating Motion Lab shortcuts navigate before acting and keep Stop usable'
   action('animation-motion-lab-stop-recording').click();
   assert.equal(calls.at(-1).id,'animation-motion-lab-stop-recording');
   assert.equal(navigated.length,4,'Stop does not navigate away from live recording');
+  context.motionLabRecorder.active=false;
+  originals.get('animation-motion-lab-stop-recording').disabled=true;
+  originals.get('animation-start-render').disabled=false;
+  context.motionPreviewStarting=true;
+  context.syncQuick();
+  assert.equal(action('animation-motion-lab-preview-draft').disabled,true);
+  assert.equal(action('animation-motion-lab-preview-draft').dataset.running,'true');
+  assert.equal(action('animation-motion-lab-preview-draft').textContent,'▶ Previewing…');
+  assert.equal(action('animation-motion-lab-preview-draft').attrs['aria-busy'],'true');
+  assert.equal(action('animation-start-render').disabled,true);
+  context.motionPreviewStarting=false;
+  context.state.motionJobId='preview-job';
+  context.syncQuick();
+  assert.equal(action('animation-motion-lab-update-curves').disabled,true);
+  assert.equal(action('animation-motion-lab-preview-draft').dataset.running,'true');
+  context.state.motionJobId=null;
+  context.animationRenderStarting=true;
+  context.syncQuick();
+  assert.equal(action('animation-start-render').disabled,true);
+  assert.equal(action('animation-start-render').dataset.running,'true');
+  assert.equal(action('animation-start-render').textContent,'Rendering…');
+  context.animationRenderStarting=false;
+  context.motionLabBusy=true;
+  context.motionLabBusyAction='curves';
+  context.syncQuick();
+  assert.equal(action('animation-motion-lab-update-curves').dataset.running,'true');
+  assert.equal(action('animation-motion-lab-update-curves').textContent,'↻ Updating…');
+  assert.equal(action('animation-motion-lab-apply').disabled,true);
+  context.motionLabBusy=false;
+  context.motionLabBusyAction=null;
+  context.syncQuick();
+  assert.equal(action('animation-motion-lab-preview-draft').disabled,false);
+  assert.equal(action('animation-start-render').textContent,'Render Animation');
 });
 
 test('Curve toggles keep their native 16px dimensions after moving out of Overview', () => {
@@ -267,4 +304,36 @@ test('Curve toggles keep their native 16px dimensions after moving out of Overvi
   }
   assert.match(js, /\['animation-start-render', 'Render Animation'\]/);
   assert.match(js, /motionLabSyncQuickActions\(\);\s*\}\s*let motionFramePlayer/);
+});
+
+test('Themes drive button colors, interaction feedback and motion accessibility', () => {
+  const app = fs.readFileSync(path.join(dist,'assets','app.css'),'utf8');
+  const desktop = fs.readFileSync(path.join(dist,'assets','desktop.css'),'utf8');
+  const application = fs.readFileSync(path.join(dist,'assets','app.js'),'utf8');
+  assert.match(application,/root\.dataset\.theme = theme/);
+  assert.match(app,/--button-primary-bg:\s*linear-gradient\(135deg,var\(--accent\)/);
+  assert.match(app,/--button-secondary-hover:\s*color-mix\(in srgb,var\(--accent\)/);
+  assert.match(app,/\.primary-button:hover:not\(:disabled\)/);
+  assert.match(app,/\.secondary-button:active:not\(:disabled\)/);
+  assert.match(app,/\.icon-button:active:not\(:disabled\)/);
+  assert.match(app,/button:disabled\s*\{/);
+  assert.match(app,/prefers-reduced-motion:\s*reduce/);
+  assert.match(css,/#view-animation \.motion-lab-tool-card:hover:not\(:disabled\)/);
+  assert.match(css,/#view-animation \.animation-workspace-nav button\.active/);
+  assert.match(css,/button\[data-running="true"\]/);
+  assert.match(css,/@keyframes motion-button-working/);
+  assert.match(desktop,/#motion-lab-sidebar button:focus-visible/);
+  assert.match(desktop,/#motion-lab-sidebar button\.active/);
+});
+
+test('Preview and render locks include pending API requests and active operations', () => {
+  assert.match(js,/let motionPreviewStarting = false/);
+  assert.match(js,/let animationRenderStarting = false/);
+  assert.match(js,/const locked = motionLabBusy \|\| motionPreviewBusy \|\| renderBusy/);
+  assert.match(js,/const isStop = id === 'animation-motion-lab-stop-recording'/);
+  assert.match(js,/motionPreviewStarting = true;\s*motionLabSyncQuickActions\(\)/);
+  assert.match(js,/animationRenderStarting = true;\s*motionLabSyncQuickActions\(\)/);
+  assert.match(js,/motionPreviewStarting = false;\s*renderSourceState\(\)/);
+  assert.match(js,/animationRenderStarting = false;\s*renderSourceState\(\)/);
+  assert.match(js,/motionLabBusyAction = apply \? 'apply' : curvesOnly \? 'curves' : 'preview'/);
 });
