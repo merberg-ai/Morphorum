@@ -1,0 +1,340 @@
+{
+  "schema_version": 2,
+  "id": "default-a070c78c",
+  "name": "Default",
+  "created_at": "2026-10-11T01:41:54+00:00",
+  "updated_at": "2026-10-11T01:45:22+00:00",
+  "animation": {
+    "max_frames": 120,
+    "fps": 24.0,
+    "width": 1024,
+    "height": 1024,
+    "prompt_transition": "blend",
+    "mode": "3d",
+    "start_mode": "prompt",
+    "source_image": "",
+    "source_image_name": ""
+  },
+  "model": {
+    "model_id": "",
+    "family": "",
+    "variant": ""
+  },
+  "prompts": {
+    "0": "A fat orange cat wearing a black tophat",
+    "30": "A fat black cat wearing a red tophat"
+  },
+  "negative_prompts": {
+    "0": "",
+    "30": ""
+  },
+  "motion": {
+    "angle": "0:(0)",
+    "zoom": "0:(1.0)",
+    "translation_x": "0:(0)",
+    "translation_y": "0:(0)",
+    "border_mode": "replicate"
+  },
+  "camera_3d": {
+    "translation_x": "0:(0)",
+    "translation_y": "0:(0)",
+    "translation_z": "0:(0)",
+    "rotation_x": "0:(0)",
+    "rotation_y": "0:(0)",
+    "rotation_z": "0:(0)",
+    "fov": "0:(40)",
+    "depth_resolution": "auto",
+    "projection_mode": "splat",
+    "hole_fill": "nearest"
+  },
+  "generation": {
+    "strength": "0:(0.65)",
+    "noise": "0:(0.02)",
+    "steps": "0:(20)",
+    "guidance": "0:(6)",
+    "sampler": "flowmatch_euler",
+    "seed": -1,
+    "seed_behavior": "increment",
+    "seed_increment": 3
+  },
+  "cadence": {
+    "diffusion": "0:(2)"
+  },
+  "temporal": {
+    "mode": "future-anchor",
+    "mix": 0.65,
+    "contrast_threshold": 96.0
+  },
+  "hybrid": {
+    "enabled": false,
+    "offset_frames": 0,
+    "end_policy": "hold-last",
+    "composite_enabled": false,
+    "composite_opacity": "0:(0.35)"
+  },
+  "notes": "",
+  "tracks": {
+    "schema_version": 1,
+    "prompts": {
+      "positive": {
+        "interpolation": "blend",
+        "keyframes": [
+          {
+            "frame": 0,
+            "value": "A fat orange cat wearing a black tophat"
+          },
+          {
+            "frame": 30,
+            "value": "A fat black cat wearing a red tophat"
+          }
+        ],
+        "kind": "prompt"
+      },
+      "negative": {
+        "interpolation": "blend",
+        "keyframes": [
+          {
+            "frame": 0,
+            "value": ""
+          },
+          {
+            "frame": 30,
+            "value": ""
+          }
+        ],
+        "kind": "prompt"
+      }
+    },
+    "camera_2d": {
+      "angle": {
+        "schedule": "0:(0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0"
+          }
+        ]
+      },
+      "zoom": {
+        "schedule": "0:(1.0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "1.0"
+          }
+        ]
+      },
+      "translation_x": {
+        "schedule": "0:(0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0"
+          }
+        ]
+      },
+      "translation_y": {
+        "schedule": "0:(0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "camera_3d": {
+      "translation_x": {
+        "schedule": "0:(0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0"
+          }
+        ]
+      },
+      "translation_y": {
+        "schedule": "0:(0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0"
+          }
+        ]
+      },
+      "translation_z": {
+        "schedule": "0:(0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0"
+          }
+        ]
+      },
+      "rotation_x": {
+        "schedule": "0:(0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0"
+          }
+        ]
+      },
+      "rotation_y": {
+        "schedule": "0:(0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0"
+          }
+        ]
+      },
+      "rotation_z": {
+        "schedule": "0:(0)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0"
+          }
+        ]
+      },
+      "fov": {
+        "schedule": "0:(40)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "40"
+          }
+        ]
+      }
+    },
+    "generation": {
+      "strength": {
+        "schedule": "0:(0.65)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0.65"
+          }
+        ]
+      },
+      "noise": {
+        "schedule": "0:(0.02)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "0.02"
+          }
+        ]
+      },
+      "steps": {
+        "schedule": "0:(20)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "integer",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "20"
+          }
+        ]
+      },
+      "guidance": {
+        "schedule": "0:(6)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "float",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "6"
+          }
+        ]
+      }
+    },
+    "cadence": {
+      "diffusion": {
+        "schedule": "0:(2)",
+        "interpolation": "linear",
+        "kind": "numeric",
+        "value_type": "integer",
+        "keyframes": [
+          {
+            "frame": 0,
+            "frame_expression": "0",
+            "value": "2"
+          }
+        ]
+      }
+    },
+    "loras": {}
+  },
+  "motion_lab": {
+    "schema_version": 1,
+    "layers": [],
+    "limits": {
+      "translation_x": 0.12,
+      "translation_y": 0.12,
+      "translation_z": 0.12,
+      "rotation_x": 2.0,
+      "rotation_y": 2.0,
+      "rotation_z": 2.0
+    },
+    "base_tracks": null,
+    "last_applied_tracks": null
+  }
+}
