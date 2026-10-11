@@ -2,6 +2,8 @@ param(
     [Parameter(Position = 0)]
     [string]$InstallDir,
     [string]$Branch,
+    [ValidateRange(1, 65535)]
+    [int]$Port = 7865,
     [switch]$Help
 )
 
@@ -12,10 +14,11 @@ if ($Help) {
     Write-Host ''
     Write-Host '  MORPHORUM - WINDOWS INSTALLER' -ForegroundColor Cyan
     Write-Host '  ------------------------------------------' -ForegroundColor DarkGray
-    Write-Host '  bootstrap.bat [-InstallDir PATH] [-Branch NAME] [-Help]' -ForegroundColor White
+    Write-Host '  bootstrap.bat [-InstallDir PATH] [-Port 7865] [-Branch NAME] [-Help]' -ForegroundColor White
     Write-Host ''
     Write-Host '  No path supplied: prompt for an install location (default C:\Morphorum).' -ForegroundColor Gray
     Write-Host '  -InstallDir:       install to a specific folder without a prompt.' -ForegroundColor Gray
+    Write-Host '  -Port:             set the default server port (otherwise prompted).' -ForegroundColor Gray
     Write-Host '  -Branch:           clone/update the selected GitHub branch.' -ForegroundColor Gray
     Write-Host '  -Help:             show this help without installing anything.' -ForegroundColor Gray
     Write-Host ''
@@ -70,6 +73,7 @@ try {
     }
     Detail 'Installation' $installRoot
     if ($Branch) { Detail 'Git branch' $Branch }
+    if ($PSBoundParameters.ContainsKey('Port')) { Detail 'Server port' ([string]$Port) }
 
     Section 'PREREQUISITES'
     $gitExe = (Get-Command git -ErrorAction SilentlyContinue | Select-Object -First 1).Source
@@ -134,7 +138,8 @@ try {
     Section 'PREPARING THE LOCAL AI RUNTIME'
     $installer = Join-Path $installRoot 'install.bat'
     if (-not (Test-Path $installer)) { throw 'Checkout does not contain install.bat.' }
-    & $installer
+    if ($PSBoundParameters.ContainsKey('Port')) { & $installer -Port $Port }
+    else { & $installer }
     if ($LASTEXITCODE -ne 0) { throw "Morphorum installer failed (exit $LASTEXITCODE)." }
 
     Section 'READY'
