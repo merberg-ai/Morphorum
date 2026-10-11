@@ -182,7 +182,7 @@ test('Audio Motion shares the Motion Lab layer stack, with direct route to curve
   assert.match(js, /showAnimationTab\('curves'\)/);
   assert.match(js, /data-motion-quick-target="animation-motion-lab-apply"/);
   assert.match(js, /if \(apply && !apply\.disabled\) apply\.click\(\)/);
-  assert.match(js, /if \(card\.id === 'animation-motion-lab-audio'\) return/);
+  assert.match(js, /'animation-motion-lab-audio'\]\.includes\(card\.id\)/);
   assert.equal((html.match(/id="animation-motion-lab-audio"/g)||[]).length,1);
   assert.match(css, /overflow-x:auto/);
 });
