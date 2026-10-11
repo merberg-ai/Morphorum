@@ -4065,7 +4065,7 @@
       }))
     ) {
       renderProjectSelect();
-      return;
+      return false;
     }
 
     const select = qs('#animation-project-select');
@@ -4084,8 +4084,10 @@
       await loadTimeline();
       await loadDepthPreviewStatus();
       await loadRenderHistory();
+      return true;
     } catch (error) {
       toast('Could not load animation project', error.message, 'error', 6500);
+      return false;
     } finally {
       if (select) select.disabled = state.projects.length === 0;
     }
