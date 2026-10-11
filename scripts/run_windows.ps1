@@ -9,6 +9,23 @@ $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'ui_windows.ps1')
 Set-Location $Root
 $Python = Join-Path $Root '.venv\Scripts\python.exe'
+# A command-line -Port applies to this launch only. Otherwise use the
+# installer's saved preference, falling back to Morphorum's default.
+$PortSource = if ($PSBoundParameters.ContainsKey('Port')) { 'command line' } else { 'default' }
+if (-not $PSBoundParameters.ContainsKey('Port')) {
+    $portFile = Join-Path $Root 'data\server-port.txt'
+    if (Test-Path $portFile) {
+        $rawPort = (Get-Content -LiteralPath $portFile -Raw).Trim()
+        $savedPort = 0
+        if ([int]::TryParse($rawPort, [ref]$savedPort) -and
+            $savedPort -ge 1 -and $savedPort -le 65535) {
+            $Port = $savedPort
+            $PortSource = 'installed setting'
+        } else {
+            Write-Host '  [!] Saved server port is invalid. Falling back to 7865.' -ForegroundColor Yellow
+        }
+    }
+}
 
 $env:HF_HUB_DISABLE_PROGRESS_BARS = '1'
 $env:HF_HUB_DISABLE_TELEMETRY = '1'
@@ -16,6 +33,7 @@ $env:HF_HUB_DISABLE_TELEMETRY = '1'
 Show-MorphorumBanner -Mode $(if ($Lan) { 'RUN / LAN' } else { 'RUN / LOCAL' })
 Write-MorphorumSection 'STARTUP CHECKS'
 Write-MorphorumDetail 'Location' $Root
+Write-MorphorumDetail 'Server port' "$Port ($PortSource)"
 
 if (-not (Test-Path $Python)) {
     Fail 'Morphorum runtime is not installed. Run install.bat first.'
