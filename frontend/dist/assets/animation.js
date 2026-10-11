@@ -6662,7 +6662,7 @@
   // Audio Motion is a dedicated Motion Lab workspace using the same draft
   // camera layers, project, and render controls.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'];
+  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs'];
   const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
   let animationTab = 'motion';
   let projectWizard = null;
@@ -6699,6 +6699,148 @@
     if (dock) dock.hidden = !MOTION_LAB_TOOL_TABS.has(name);
     if (persist) try { localStorage.setItem(ANIMATION_TAB_KEY, name); } catch (_) {}
   }
+
+  // DMI2 imports are diagnostic only. DMI3 will add guarded project changes.
+  function setupDeforumMotionImport(panel) {
+    if (!panel) return;
+    panel.classList.add('animation-deforum-motion-import');
+    panel.innerHTML = `
+      <div class="card glass dmi-workspace">
+        <div class="dmi-heading"><div><h2>Import Deforum Motion Settings</h2>
+        <p class="muted">Inspect camera motion exported from <a href="https://github.com/chicodog530/Deforum-Motion-Studio" target="_blank" rel="noopener noreferrer">Deforum Motion Studio</a> or Deforum. Nothing is applied during this preview.</p></div></div>
+        <div class="dmi-source">
+          <label>Deforum settings (.txt / .json) <input type="file" accept=".txt,.json,application/json,text/plain" data-dmi-file></label>
+          <span class="muted" data-dmi-status>Select an existing project, then choose exported settings.</span>
+        </div>
+        <div data-dmi-results hidden>
+          <div data-dmi-summary class="dmi-summary"></div>
+          <div data-dmi-warnings class="dmi-warnings"></div>
+          <div class="dmi-chart-head"><strong>Camera motion curves</strong><label>Axis <select data-dmi-axis><option value="translation_z">Depth Z</option>
+            <option value="rotation_z">Roll Z</option><option value="translation_x">Translation X</option>
+            <option value="translation_y">Translation Y</option><option value="rotation_x">Pitch X</option>
+            <option value="rotation_y">Yaw Y</option></select></label></div>
+          <svg data-dmi-chart viewBox="0 0 800 210" role="img" aria-label="Selected imported camera motion curve"></svg>
+          <div class="dmi-audio"><strong>Optional WAV synchronization</strong>
+            <label>Choose local WAV <input type="file" accept=".wav,audio/wav" data-dmi-wav></label>
+            <audio data-dmi-player controls preload="metadata"></audio>
+            <div class="dmi-align"><label>Audio offset (seconds) <input type="number" data-dmi-offset step=".01" min="-30" max="30" value="0"></label>
+              <label>Motion playhead (seconds) <input type="range" data-dmi-seek min="0" max="1" value="0" step=".01"></label>
+              <output data-dmi-sync>0.00s</output></div>
+            <canvas data-dmi-waveform width="900" height="120" aria-label="Local WAV amplitude overview"></canvas>
+            <p data-dmi-length class="muted">The soundtrack path from the imported settings is informational only.</p>
+          </div>
+          <p class="notice subtle">DMI2 is preview-only. Apply/import into an existing project will be added in DMI3 after safety validation.</p>
+        </div>
+      </div>`;
+    const file=panel.querySelector('[data-dmi-file]');
+    const status=panel.querySelector('[data-dmi-status]');
+    const results=panel.querySelector('[data-dmi-results]');
+    const axis=panel.querySelector('[data-dmi-axis]');
+    const graph=panel.querySelector('[data-dmi-chart]');
+    const player=panel.querySelector('[data-dmi-player]');
+    const wav=panel.querySelector('[data-dmi-wav]');
+    const lengthText=panel.querySelector('[data-dmi-length]');
+    const offset=panel.querySelector('[data-dmi-offset]');
+    const seek=panel.querySelector('[data-dmi-seek]');
+    const sync=panel.querySelector('[data-dmi-sync]');
+    let report=null, objectUrl=null, wavDuration=0;
+    const draw=()=>{
+      if (!report) return;
+      const values=report.samples.map(s=>Number(s[axis.value])||0);
+      const low=Math.min(...values),high=Math.max(...values);
+      const range=Math.max(1e-6,high-low);
+      const d=values.map((v,i)=>(i?'L':'M')+(i*790/Math.max(1,values.length-1)+5).toFixed(2)+' '+
+        (190-(v-low)/range*170).toFixed(2)).join(' ');
+      graph.replaceChildren();
+      const ns='http://www.w3.org/2000/svg';
+      const path=document.createElementNS(ns,'path');
+      path.setAttribute('d',d);path.setAttribute('fill','none');
+      path.setAttribute('stroke','#79c8ed');path.setAttribute('stroke-width','2.4');
+      graph.appendChild(path);
+      const ruler=document.createElementNS(ns,'text');
+      ruler.setAttribute('x','9');ruler.setAttribute('y','14');
+      ruler.setAttribute('font-size','12');ruler.setAttribute('fill','currentColor');
+      ruler.textContent=axis.value.replaceAll('_',' ')+' · '+low.toFixed(4)+' to '+high.toFixed(4);
+      graph.appendChild(ruler);
+    };
+    const updateSync=()=>{
+      if (!report) return;
+      const motionTime=Number(seek.value)||0;
+      const delay=Number(offset.value)||0;
+      if (player.src && Number.isFinite(player.duration)) {
+        player.currentTime=Math.max(0,Math.min(player.duration,motionTime+delay));
+      }
+      sync.textContent='Motion '+motionTime.toFixed(2)+'s · audio '+Math.max(0,motionTime+delay).toFixed(2)+'s';
+    };
+    file.addEventListener('change',async()=>{
+      const selected=file.files?.[0];
+      if (!selected) return;
+      if (!state.project?.id) {status.textContent='Open a project before inspecting settings.';return;}
+      if(selected.size>1024*1024){status.textContent='Settings exceed 1 MiB.';return;}
+      status.textContent='Inspecting Deforum motion…';results.hidden=true;
+      try{
+        const response=await api('/api/animation/projects/'+encodeURIComponent(state.project.id)+'/motion-import/preview',{
+          method:'POST',body:JSON.stringify({content:await selected.text(),filename:selected.name}),
+        });
+        report=response;results.hidden=false;
+        const source=response.source,compare=response.project_comparison;
+        const summary=panel.querySelector('[data-dmi-summary]');
+        summary.replaceChildren();
+        for(const [label,value] of [['Source FPS',source.fps],['Source frames',source.max_frames],
+          ['Source cadence',source.cadence??'Scheduled'],['Duration',source.duration_seconds.toFixed(2)+'s'],
+          ['Project FPS',compare.fps],['Project frames',compare.max_frames]]){
+          const item=document.createElement('div');item.className='dmi-stat';
+          const strong=document.createElement('strong');strong.textContent=String(value);
+          const small=document.createElement('span');small.textContent=label;
+          item.append(small,strong);summary.appendChild(item);
+        }
+        const warnings=panel.querySelector('[data-dmi-warnings]');
+        warnings.replaceChildren();
+        for(const message of response.warnings){
+          const p=document.createElement('p');p.textContent=message;warnings.appendChild(p);
+        }
+        status.textContent=selected.name+' · '+(response.can_apply_unchanged?'Timing matches project':'Timing requires review');
+        seek.max=String(source.duration_seconds);seek.value='0';draw();updateSync();
+        lengthText.textContent='Settings soundtrack: '+(source.soundtrack_filename||'none')+
+          '. Select a local WAV to inspect alignment; the imported Windows file path is never accessed.';
+      }catch(error){status.textContent='Preview failed: '+error.message;report=null;results.hidden=true;}
+    });
+    axis.addEventListener('change',draw);
+    const syncChange=()=>updateSync();
+    seek.addEventListener('input',syncChange);offset.addEventListener('input',syncChange);
+    wav.addEventListener('change',async()=>{
+      const selected=wav.files?.[0];if(!selected)return;
+      if(objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl=URL.createObjectURL(selected);player.src=objectUrl;
+      player.onloadedmetadata=()=>{
+        wavDuration=player.duration;
+        lengthText.textContent='WAV '+wavDuration.toFixed(2)+'s · motion '+
+          Number(report?.source?.duration_seconds||0).toFixed(2)+'s. Adjust audio offset for synchronization.';
+        updateSync();
+      };
+      // Local amplitude overview, no upload or server-side filesystem mutation.
+      try {
+        if(selected.size>40*1024*1024)throw new Error('WAV exceeds 40 MiB preview limit.');
+        const ctx=new (window.AudioContext||window.webkitAudioContext)();
+        try {
+          const buffer=await ctx.decodeAudioData(await selected.arrayBuffer());
+          const channel=buffer.getChannelData(0);
+          const canvas=panel.querySelector('[data-dmi-waveform]');
+          const c=canvas.getContext('2d');c.clearRect(0,0,canvas.width,canvas.height);
+          c.strokeStyle='#79c8ed';c.beginPath();
+          for(let x=0;x<canvas.width;x++){
+            const start=Math.floor(x*channel.length/canvas.width);
+            const end=Math.min(channel.length,Math.floor((x+1)*channel.length/canvas.width));
+            let peak=0;
+            for(let i=start;i<end;i++) peak=Math.max(peak,Math.abs(channel[i]));
+            c.moveTo(x,60-peak*57);c.lineTo(x,60+peak*57);
+          }
+          c.stroke();
+        } finally {await ctx.close();}
+      }catch(error){lengthText.textContent='WAV waveform preview failed: '+error.message;}
+    });
+  }
+
   function setupAnimationWorkspaceTabs() {
     const layout = qs('#view-animation .animation-layout');
     const root = qs('#view-animation');
@@ -6714,9 +6856,10 @@
       motion: 'Overview', wizard: 'New Project Wizard', projects: 'Project Manager', editor: 'Project Editor',
       composer: 'Camera Composer', recording: 'Live Recording',
       curves: 'Motion Curves', preview: 'Camera Preview',
-      audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
+      'motion-import': 'Import Motion Settings', audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
     };
     for (const [name, label] of Object.entries(names)) {
+      if (name === 'audio') continue;
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.animationTab = name;
@@ -6748,7 +6891,7 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs']) {
+    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -6798,7 +6941,7 @@
       ['recording', 'Live Motion Recording', 'Perform and edit a six-axis camera take.'],
       ['curves', 'Motion Curves & Camera Path', 'Edit frame-aligned keyframes using the full-width plots.'],
       ['preview', 'Camera Motion Preview', 'Inspect 2D or 3D camera motion before rendering.'],
-      ['audio', 'Audio-Reactive Motion', 'Turn WAV beats and frequency bands into camera movement.'],
+      ['motion-import', 'Import Motion Settings', 'Preview Deforum Motion Studio schedules and align soundtrack audio.'],
       ['monitor', 'Render Monitor', 'Watch progress, frame previews, and job diagnostics.'],
       ['projects', 'Project Manager', 'Search, review, rename, and safely archive your animation projects.'],
       ['editor', 'Project Editor', 'Configure projects, prompts, resolution, and timelines.'],
@@ -6928,6 +7071,12 @@
       legacyDetails.appendChild(audioPreview);
       analysisWorkspace.appendChild(legacyDetails);
     }
+    const hiddenAudioPanel = document.createElement('section');
+    hiddenAudioPanel.hidden=true;
+    hiddenAudioPanel.id='animation-panel-audio';
+    hiddenAudioPanel.dataset.animationPanel='audio';
+    panels['motion-import'].after(hiddenAudioPanel);
+    panels.audio=hiddenAudioPanel;
     panels.audio.appendChild(analysisWorkspace);
     // Parseq-inspired workflow: source first, full-width waveform next,
     // detection and motion response below. Keep original live controls.
@@ -6979,6 +7128,7 @@
       if (apply && !apply.disabled) apply.click();
     });
 
+    setupDeforumMotionImport(panels['motion-import']);
     motionLabSetupQuickActions(panels.motion);
     motionLabSyncQuickActions();
     const history = qs('.animation-render-history-row');
