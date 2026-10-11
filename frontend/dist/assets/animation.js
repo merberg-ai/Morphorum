@@ -4873,6 +4873,72 @@
     ['dolly_out','Dolly Out'],['shake','Shake'],['ripple','Ripple'],
     ['reveal_drift','Reveal Drift'],['fly_through','Fly-through'],
   ];
+  let motionDirectorBulkUndo = null;
+  function motionDirectorFindCandidates() {
+    const panel = qs('#animation-audio-motion-director');
+    const analysis = motionLabAudioAnalysis;
+    if (!panel || !analysis) return [];
+    const kind = panel.querySelector('[data-beat-kind]')?.value || 'kick';
+    const minStrength = Number(panel.querySelector('[data-beat-strength]')?.value ?? .35);
+    const minGap = Number(panel.querySelector('[data-beat-gap]')?.value ?? .1);
+    const start = Number(panel.querySelector('[data-beat-start]')?.value ?? 0);
+    const end = Number(panel.querySelector('[data-beat-end]')?.value ?? analysis.duration_seconds);
+    const every = Number(panel.querySelector('[data-beat-every]')?.value ?? 1);
+    if (![minStrength,minGap,start,end,every].every(Number.isFinite) ||
+        minStrength<0 || minStrength>1 || minGap<0 || minGap>2 ||
+        start<0 || end<=start || end>analysis.duration_seconds + .001 ||
+        !Number.isInteger(every) || every<1 || every>16) return [];
+    let last = -Infinity;
+    const candidates = [];
+    for (const event of motionLabEditedEvents || []) {
+      if (event.enabled === false || event.kind !== kind ||
+          Number(event.strength ?? 1)<minStrength ||
+          event.time_seconds<start || event.time_seconds>=end ||
+          event.time_seconds-last<minGap) continue;
+      last = event.time_seconds;
+      candidates.push(event);
+    }
+    return candidates.filter((_,i)=>i%every===0);
+  }
+  function motionDirectorFindStatus() {
+    const panel=qs('#animation-audio-motion-director');
+    if (!panel) return;
+    const status=panel.querySelector('[data-beat-summary]');
+    const candidates=motionDirectorFindCandidates();
+    if (status) status.textContent=candidates.length+' eligible detected or manually corrected hit(s). Review before assigning.';
+    const undo=panel.querySelector('[data-beat-undo]');
+    if (undo) undo.disabled=!motionDirectorBulkUndo;
+  }
+  function motionDirectorAssignBeats() {
+    const panel=qs('#animation-audio-motion-director');
+    if (!panel || !motionLabAudioAnalysis) return;
+    const events=motionDirectorFindCandidates();
+    if (!events.length) {motionLabNotify('No matching hits in this range.');return;}
+    const preset=panel.querySelector('[data-beat-preset]').value;
+    const alternate=panel.querySelector('[data-beat-alternate]').checked;
+    const intensity=.5, duration=.6;
+    const existing=new Set(motionDirectorCues.filter(c=>c.source_event_id)
+      .map(c=>c.source_event_id+'|'+c.preset));
+    const additions=[];
+    for (const event of events) {
+      const chosen=alternate ? (additions.length%2 ? 'roll_left_right' : 'roll_right_left') : preset;
+      if (existing.has(event.id+'|'+chosen)) continue;
+      const id='beatcue-'+Date.now().toString(36)+'-'+(motionDirectorCues.length+additions.length);
+      additions.push({id,preset:chosen,time_seconds:event.time_seconds,
+        duration_seconds:duration,intensity,easing:'ease_in_out',enabled:true,
+        source_event_id:event.id});
+      existing.add(event.id+'|'+chosen);
+    }
+    if (!additions.length) {motionLabNotify('Those hits already have matching cues.');return;}
+    if (motionDirectorCues.length+additions.length>3000) {
+      motionLabNotify('Cue limit is 3000. Narrow the beat range.');return;
+    }
+    motionDirectorBulkUndo=motionDirectorCues.map(c=>({...c}));
+    motionDirectorCues.push(...additions);
+    motionDirectorDirty=true;
+    motionDirectorPanel();motionLabStereoWaveform();
+    motionLabNotify('Added '+additions.length+' camera cues. Save cues to keep them.');
+  }
   function motionDirectorPanel() {
     let panel = qs('#animation-audio-motion-director');
     const waveform = qs('#animation-audio-stereo-timeline');
@@ -4898,6 +4964,20 @@
         '<div class="animation-audio-director-actions"><button type="button" data-cue-update>Update selected</button>' +
         '<button type="button" data-cue-delete>Delete selected</button></div>' +
         '<div data-cue-list class="animation-audio-director-list"></div>' +
+        '<details class="animation-audio-find-beats"><summary>Find Beats · Optional batch cues</summary>' +
+        '<div class="animation-audio-beat-grid">' +
+        '<label>Find<select data-beat-kind><option value="kick">Kick</option><option value="snare">Snare</option><option value="highs">Highs</option></select></label>' +
+        '<label>Minimum strength<input data-beat-strength type="number" min="0" max="1" step=".05" value=".35"></label>' +
+        '<label>Min gap (s)<input data-beat-gap type="number" min="0" max="2" step=".025" value=".1"></label>' +
+        '<label>From (s)<input data-beat-start type="number" min="0" step=".1" value="0"></label>' +
+        '<label>To (s)<input data-beat-end type="number" min="0" step=".1"></label>' +
+        '<label>Every Nth hit<input data-beat-every type="number" min="1" max="16" step="1" value="1"></label>' +
+        '<label>Motion preset<select data-beat-preset></select></label>' +
+        '<label class="animation-audio-beat-check"><input data-beat-alternate type="checkbox"> Alternate right/left rolls</label></div>' +
+        '<div class="animation-audio-director-actions"><button type="button" data-beat-preview>Preview matches</button>' +
+        '<button type="button" data-beat-assign>Assign cues to matches</button>' +
+        '<button type="button" data-beat-undo disabled>Undo batch</button></div>' +
+        '<p data-beat-summary class="muted">Review candidate hits before assigning.</p></details>' +
         '<p class="muted">Cues save with this WAV. Native camera preview and motion application arrive in DA4.5.</p>';
       waveform.after(panel);
       const options = panel.querySelector('[data-cue-preset]');
@@ -4905,6 +4985,18 @@
         const option = document.createElement('option');
         option.value = key; option.textContent = label; options.appendChild(option);
       }
+      const beatOptions=panel.querySelector('[data-beat-preset]');
+      for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
+        const option=document.createElement('option');option.value=key;
+        option.textContent=label;beatOptions.appendChild(option);
+      }
+      panel.querySelector('[data-beat-preview]').addEventListener('click',motionDirectorFindStatus);
+      panel.querySelector('[data-beat-assign]').addEventListener('click',motionDirectorAssignBeats);
+      panel.querySelector('[data-beat-undo]').addEventListener('click',()=>{
+        if (!motionDirectorBulkUndo) return;
+        motionDirectorCues=motionDirectorBulkUndo;motionDirectorBulkUndo=null;
+        motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
+      });
       panel.querySelector('[data-cue-add]').addEventListener('click', () => {
         const time = Math.max(0,Math.min(motionLabAudioAnalysis.duration_seconds-.000001,
           Number(motionLabAudioElement?.currentTime)||0));
@@ -4960,6 +5052,9 @@
         motionDirectorPanel();
       });
     }
+    const beatEnd=panel.querySelector('[data-beat-end]');
+    if (beatEnd && !beatEnd.value) beatEnd.value=motionLabAudioAnalysis.duration_seconds.toFixed(3);
+    motionDirectorFindStatus();
     const selected=motionDirectorCues.find(c=>c.id===motionDirectorSelected);
     for (const [attr,key] of [['data-cue-preset','preset'],['data-cue-time','time_seconds'],
         ['data-cue-duration','duration_seconds'],['data-cue-intensity','intensity'],
@@ -5543,7 +5638,7 @@
         motionLabEditedEvents = overrides.events.map(e => ({...e}));
       }
       motionLabAudioProjectId = projectId;
-      motionDirectorCues=[];motionDirectorSelected=null;motionDirectorDirty=false;
+      motionDirectorCues=[];motionDirectorSelected=null;motionDirectorDirty=false;motionDirectorBulkUndo=null;
       const storedCues=await api('/api/animation/projects/'+encodeURIComponent(projectId)+
         '/motion-lab/audio-cues/'+encodeURIComponent(analysis.source_sha256));
       if (storedCues?.cues) {
