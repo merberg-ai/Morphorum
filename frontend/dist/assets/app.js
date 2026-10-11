@@ -13,7 +13,10 @@
   ];
 
   const THEME_OPTIONS = [
-    ['midnight-glass', 'Midnight Glass'],
+    ['midnight-glass', 'Midnight Glass · Black'],
+    ['deep-ocean', 'Deep Ocean · Dark Blue'],
+    ['amethyst-night', 'Amethyst Night · Dark Purple'],
+    ['slate-graphite', 'Slate Graphite · Grey'],
   ];
   const FONT_STYLE_OPTIONS = [
     ['modern', 'Modern'],
@@ -202,15 +205,23 @@
 
   function applyAppearance(ui = {}) {
     const root = document.documentElement;
-    const theme = String(ui.theme || 'midnight-glass');
-    const fontStyle = String(ui.font_style || 'modern');
-    const monoStyle = String(ui.mono_font_style || 'modern-mono');
-    const uiScale = String(ui.ui_scale || 'compact');
+    const requestedTheme = String(ui.theme || 'midnight-glass');
+    const theme = THEME_OPTIONS.some(([id]) => id === requestedTheme)
+      ? requestedTheme : 'midnight-glass';
+    const fontStyle = UI_FONT_FACES[ui.font_style] ? ui.font_style : 'modern';
+    const monoStyle = MONO_FONT_FACES[ui.mono_font_style] ? ui.mono_font_style : 'modern-mono';
+    const uiScale = UI_SCALE_OPTIONS.some(([id]) => id === ui.ui_scale)
+      ? ui.ui_scale : 'compact';
 
     root.dataset.theme = theme;
     root.dataset.fontStyle = fontStyle;
     root.dataset.monoStyle = monoStyle;
     root.dataset.uiScale = uiScale;
+    // A single document-level contract controls body text, dialogs, form
+    // widgets, editors, and dynamically injected Motion Lab panels.
+    const themeColor = getComputedStyle(root).getPropertyValue('--bg').trim();
+    const metaTheme = qs('meta[name="theme-color"]');
+    if (metaTheme && themeColor) metaTheme.setAttribute('content', themeColor);
 
     try {
       localStorage.setItem('morphorum.ui.theme', theme);
