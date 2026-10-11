@@ -68,5 +68,5 @@ test('DMI3 soundtrack attachment is explicit and separate from camera import',()
   assert.match(js,/data-dmi-save-offset/);
   assert.match(js,/\/motion-import\/soundtrack/);
   assert.match(js,/X-Audio-Offset-Seconds/);
-  assert.match(js,/Attachment does not automatically change the exported video/);
+  assert.match(js,/Attached audio is frozen into new animation renders and muxed during MP4\/WebM export/);
 });

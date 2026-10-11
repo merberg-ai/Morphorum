@@ -6737,7 +6737,7 @@
             <p data-dmi-length class="muted">The soundtrack path from the imported settings is informational only.</p>
             <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-attach>Attach selected audio to project</button>
               <button type="button" class="secondary-button compact" data-dmi-save-offset>Save audio offset</button></div>
-            <p data-dmi-attachment class="muted">Audio preview stays local until you explicitly attach it. Attachment does not automatically change the exported video.</p>
+            <p data-dmi-attachment class="muted">Audio preview stays local until you explicitly attach it. Attached audio is frozen into new animation renders and muxed during MP4/WebM export; existing renders keep their original soundtrack snapshot.</p>
           </div>
           <div class="dmi-apply-review"><strong>Import camera motion into this project</strong>
             <p class="muted">This replaces six camera schedules only. It does not change FPS, cadence, frames, model, prompts or audio. Projects with existing Motion Lab layers require a clean project instead.</p>
@@ -6814,7 +6814,7 @@
         attachmentText.textContent='Attached: '+result.soundtrack.filename+
           ' · offset '+result.soundtrack.offset_seconds.toFixed(2)+'s.';
         offsetButton.disabled=false;
-        progress('Soundtrack attached',result.soundtrack.filename+' saved with this project.','success');
+        progress('Soundtrack attached',result.soundtrack.filename+' saved. New renders will freeze it for video export.','success');
       }catch(error){
         attachmentText.textContent='Attachment failed: '+error.message;
         progress('Soundtrack attachment failed',error.message,'error');
