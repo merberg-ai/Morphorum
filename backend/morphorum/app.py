@@ -358,6 +358,26 @@ def api_motion_lab_presets() -> dict[str, Any]:
     return {"presets": list(MOTION_LAB_PRESETS)}
 
 
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio-markers/{source_sha256}")
+def api_get_audio_markers(project_id: str, source_sha256: str) -> dict[str, Any]:
+    from .audio_marker_overrides import read_marker_overrides
+    try:
+        load_animation_project(project_id)
+        return {"markers": read_marker_overrides(project_id, source_sha256)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}/motion-lab/audio-markers")
+def api_save_audio_markers(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .audio_marker_overrides import write_marker_overrides
+    try:
+        load_animation_project(project_id)
+        return {"status": "saved", "markers": write_marker_overrides(project_id, payload)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/projects/{project_id}/motion-lab/audio-analyze")
 async def api_motion_lab_audio_analyze(project_id: str, request: Request) -> dict[str, Any]:
     """Decode and retain bounded project-owned WAV, without modifying camera tracks."""
