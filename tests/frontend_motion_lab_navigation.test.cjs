@@ -11,9 +11,9 @@ const js = fs.readFileSync(path.join(dist, 'assets', 'animation.js'), 'utf8');
 const css = fs.readFileSync(path.join(dist, 'assets', 'animation.css'), 'utf8');
 const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
 
-test('Motion Lab includes Project Manager and ten shared-state tool panels', () => {
-  const names = ['motion','projects','editor','composer','recording','curves','preview','audio','monitor','outputs'];
-  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['motion', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'\]/);
+test('Motion Lab includes Project Manager, New Project Wizard and eleven shared-state tool panels', () => {
+  const names = ['motion','wizard','projects','editor','composer','recording','curves','preview','audio','monitor','outputs'];
+  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'\]/);
   assert.match(js, /const names = \{/);
   for (const name of names) assert.match(js, new RegExp(name + ":", 'm'));
   assert.match(js, /panels\.motion\.appendChild\(motionIntro\)/);
@@ -30,7 +30,7 @@ test('Tool switching highlights the desktop sidebar, preserves selections, and s
   const start = js.indexOf('  const ANIMATION_TAB_KEY = ');
   const end = js.indexOf('  function setupAnimationWorkspaceTabs() {', start);
   assert.ok(start >= 0 && end > start);
-  const keys = ['motion','projects','editor','composer','recording','curves','preview','audio','monitor','outputs'];
+  const keys = ['motion','wizard','projects','editor','composer','recording','curves','preview','audio','monitor','outputs'];
   const item = key => ({ dataset: { animationTab:key, animationPanel:key, motionNav:key },
     tabIndex:-1, hidden:false, attrs:{},
     classList: { active:false, toggle(_,v) {this.active=v;} },
@@ -49,13 +49,13 @@ test('Tool switching highlights the desktop sidebar, preserves selections, and s
   };
   vm.runInNewContext(js.slice(start,end)+'\nthis.selectTab=showAnimationTab;',context);
   context.selectTab('curves');
-  assert.equal(panels[5].hidden,false);
-  assert.equal(sidebar[5].attrs['aria-current'],'page');
+  assert.equal(panels[6].hidden,false);
+  assert.equal(sidebar[6].attrs['aria-current'],'page');
   assert.equal(previewPaused,1);
   context.motionLabRecorder.active=true;
   context.selectTab('monitor');
   assert.equal(stopReason,'tab-change');
-  assert.equal(sidebar[8].attrs['aria-current'],'page');
+  assert.equal(sidebar[9].attrs['aria-current'],'page');
   assert.equal(stored.at(-1)[1],'monitor');
   context.motionLabRecorder.active=false;
   context.selectTab('media');

@@ -434,6 +434,9 @@
     try {
       const payload = await api('/api/models?limit=2000');
       state.models = Array.isArray(payload.models) ? payload.models : [];
+      window.dispatchEvent(new CustomEvent('morphorum:models-updated', {
+        detail: { models: state.models, loaded: true },
+      }));
       updateSummary();
       renderModels();
       populateImageModelSelect();
@@ -449,6 +452,9 @@
           empty.append(title, detail);
           list.replaceChildren(empty);
         }
+      window.dispatchEvent(new CustomEvent('morphorum:models-updated', {
+        detail: { models: [], loaded: false },
+      }));
       toast('Model index unavailable', error.message, 'error', 6500);
     }
   }

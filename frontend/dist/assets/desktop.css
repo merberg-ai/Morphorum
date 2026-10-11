@@ -13,6 +13,15 @@
   padding: 16px 22px 72px;
 }
 .topbar { grid-area: top; }
+/* Only allocate a banner row when the server has confirmed no checkpoints. */
+.app-shell:has(> .model-setup-banner:not([hidden])) {
+  grid-template-areas:
+    "top top"
+    "banner banner"
+    "nav main";
+}
+.model-setup-banner {grid-area:banner;min-width:0;margin:0;}
+
 .main-nav {
   grid-area: nav;
   position: sticky;

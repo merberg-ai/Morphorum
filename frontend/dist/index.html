@@ -57,6 +57,11 @@
             <div><strong>Version</strong><code id="runtime-version-full">Checking…</code></div>
             <div><strong>Git branch</strong><code id="runtime-branch-full">Checking…</code></div>
             <div><strong>Commit</strong><code id="runtime-commit">Checking…</code></div>
+            <div class="runtime-source-links">
+              <a id="runtime-repository-link" href="https://github.com/merberg-ai/Morphorum" target="_blank" rel="noopener noreferrer">View repository ↗</a>
+              <a id="runtime-branch-link" hidden target="_blank" rel="noopener noreferrer">View branch ↗</a>
+              <a id="runtime-commit-link" hidden target="_blank" rel="noopener noreferrer">View commit ↗</a>
+            </div>
           </div>
         </details>
       </div>
@@ -65,12 +70,37 @@
         <span class="global-job-progress" role="progressbar" aria-label="Active generation overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="global-job-progress-fill"></span></span>
       </button>
     </header>
+    <section class="model-setup-banner glass" id="model-setup-banner" role="status" aria-live="polite" hidden>
+      <div class="model-setup-banner-copy"><strong>⚠ No generation models available</strong>
+        <span>Configure a model directory or download Z-Image-Turbo to begin creating images and animations.</span>
+      </div>
+      <button class="secondary-button compact" type="button" id="model-setup-help-open">Configure Models / Help</button>
+    </section>
+    <dialog class="model-setup-help" id="model-setup-help" aria-labelledby="model-setup-help-heading">
+      <div class="model-setup-help-body">
+        <div class="model-setup-help-heading"><h2 id="model-setup-help-heading">Get your first image model ready</h2>
+          <button type="button" class="icon-button" id="model-setup-help-close" aria-label="Close model help">✕</button></div>
+        <p>Morphorum needs at least one usable SDXL, FLUX, or Z-Image checkpoint to generate pictures or render animations. LoRAs customize a checkpoint, but are not standalone generation models.</p>
+        <ol>
+          <li><strong>Fastest option:</strong> Open <b>Models</b> and download the official managed <b>Z-Image-Turbo</b> package (approximately 33 GB). Click <b>Use Model</b> after the download finishes.</li>
+          <li><strong>Existing checkpoints:</strong> Open <b>Settings → Model &amp; LoRA folders</b>. Add the host computer's SDXL or FLUX checkpoint folder, then click <b>Save Settings</b>.</li>
+          <li><strong>LoRA library:</strong> Add your compatible LoRA directories under the same Settings section. LoRAs are optional and must match your selected base model family.</li>
+          <li><strong>Refresh:</strong> Open <b>Models</b>, click <b>Scan Models</b>, and select a checkpoint to generate with.</li>
+        </ol>
+        <p class="muted">Paths must exist on the computer running Morphorum, not on the phone or remote browser. Large AI models need additional disk space and suitable GPU memory.</p>
+        <div class="model-setup-help-actions">
+          <button type="button" class="secondary-button" id="model-setup-help-settings">Open Settings</button>
+          <button type="button" class="primary-button" id="model-setup-help-models">Open Models / Download</button>
+        </div>
+      </div>
+    </dialog>
 
     <nav class="main-nav glass" aria-label="Primary">
       <button class="nav-button active" data-view="image"><span class="nav-icon">▣</span><span>Image</span></button>
       <button class="nav-button" data-view="animation" type="button"><span class="nav-icon">◈</span><span>Motion Lab</span></button>
       <div class="motion-lab-sidebar" id="motion-lab-sidebar" role="group" aria-label="Motion Lab workspaces">
         <button type="button" data-motion-nav="motion">Overview</button>
+        <button type="button" data-motion-nav="wizard">New Project Wizard</button>
         <button type="button" data-motion-nav="projects">Project Manager</button>
         <button type="button" data-motion-nav="editor">Project Editor</button>
         <button type="button" data-motion-nav="composer">Camera Composer</button>
@@ -1280,6 +1310,7 @@
   <script src="/assets/motion-lab-visual.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-recording.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-frame-player.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/project-wizard.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>
