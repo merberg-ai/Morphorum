@@ -551,6 +551,18 @@ def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
     os.replace(temp, path)
 
 
+def new_animation_project_template() -> dict[str, Any]:
+    """Return fresh native defaults without creating or modifying a project.
+
+    Timeline tracks are generated from the finished wizard's legacy fields
+    when its project is first saved, keeping both formats synchronized.
+    """
+    template = _default_project("New Animation")
+    for key in ("id", "created_at", "updated_at", "tracks"):
+        template.pop(key, None)
+    return template
+
+
 def create_animation_project(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     ensure_runtime_dirs()
     payload = payload if isinstance(payload, dict) else {}
