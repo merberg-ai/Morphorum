@@ -4915,7 +4915,8 @@
         ['data-event-remove','remove'],['data-event-reset','reset']]) {
         editor.querySelector('['+attr+']')?.addEventListener('click', () => motionLabEventChange(action));
       }
-      section.querySelector('[data-wave-mode]')?.value = 'stereo';
+      const displayMode = section.querySelector('[data-wave-mode]');
+      if (displayMode) displayMode.value = 'stereo';
       section.querySelector('[data-wave-mode]')?.addEventListener('change', motionLabStereoWaveform);
       section.querySelector('[data-wave-zoom]')?.addEventListener('input', motionLabStereoWaveform);
       section.querySelector('[data-wave-start]')?.addEventListener('input', () => {
