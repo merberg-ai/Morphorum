@@ -15,7 +15,7 @@ test('Motion Lab includes Project Manager, New Project Wizard and eleven shared-
   const names = ['motion','wizard','projects','editor','composer','recording','curves','preview','motion-import','monitor','outputs'];
   assert.match(js, /const VISIBLE_ANIMATION_TABS = \['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs'\]/);
   assert.match(js, /const names = \{/);
-  for (const name of names) assert.match(js, new RegExp(name + ":", 'm'));
+  for (const name of names) assert.match(js, new RegExp((name === 'motion-import' ? "'motion-import'" : name) + ":", 'm'));
   assert.match(js, /panels\.motion\.appendChild\(motionIntro\)/);
   assert.match(js, /panels\[name\]\.appendChild\(card\)/);
   assert.match(js, /panels\.outputs\.appendChild\(wrapper\)/);
