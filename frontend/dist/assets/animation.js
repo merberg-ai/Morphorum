@@ -4883,7 +4883,10 @@
         '<output data-wave-time>0.00 / 0.00 s</output><span>Click or tap the waveform to seek</span></div>' +
         '<svg data-wave-svg viewBox="0 0 800 180" role="img" tabindex="0" aria-label="Stereo waveform, drum events and audio playhead; click or tap to seek"></svg>' +
         '<p class="muted" data-wave-description></p>';
-      preview.after(section);
+      const workspace = qs('#animation-audio-analysis-workspace');
+      const diagnostics = workspace?.querySelector('.animation-audio-legacy-envelope');
+      if (workspace && diagnostics) diagnostics.before(section);
+      else preview.before(section);
       const editor = document.createElement('div');
       editor.id = 'animation-audio-event-editor';
       editor.className = 'animation-audio-event-editor';
