@@ -6667,6 +6667,7 @@
   let animationTab = 'motion';
   let projectWizard = null;
   function showAnimationTab(name, { persist = true } = {}) {
+    if (name === 'audio') name = 'motion-import';
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'motion';
     if (name !== 'curves') motionLabVisual?.pause();
     if (name !== 'preview') motionFramePlayer?.pause();
@@ -6919,6 +6920,13 @@
     }
     const motionIntro = qs('#animation-motion-lab-intro');
     if (motionIntro) panels.motion.appendChild(motionIntro);
+    // Preserve legacy Audio Motion DOM and controls without exposing its tab.
+    const hiddenAudioPanel = document.createElement('section');
+    hiddenAudioPanel.hidden = true;
+    hiddenAudioPanel.id = 'animation-panel-audio';
+    hiddenAudioPanel.dataset.animationPanel = 'audio';
+    panels['motion-import'].after(hiddenAudioPanel);
+    panels.audio = hiddenAudioPanel;
     const cards = [
       ['composer', '#animation-motion-lab-composer'],
       ['recording', '#animation-motion-lab-recording'],
@@ -7071,12 +7079,6 @@
       legacyDetails.appendChild(audioPreview);
       analysisWorkspace.appendChild(legacyDetails);
     }
-    const hiddenAudioPanel = document.createElement('section');
-    hiddenAudioPanel.hidden=true;
-    hiddenAudioPanel.id='animation-panel-audio';
-    hiddenAudioPanel.dataset.animationPanel='audio';
-    panels['motion-import'].after(hiddenAudioPanel);
-    panels.audio=hiddenAudioPanel;
     panels.audio.appendChild(analysisWorkspace);
     // Parseq-inspired workflow: source first, full-width waveform next,
     // detection and motion response below. Keep original live controls.
