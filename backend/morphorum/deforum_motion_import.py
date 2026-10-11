@@ -106,6 +106,12 @@ def preview_motion_settings(
     animation = target.get("animation") or {}
     current_fps = float(animation.get("fps") or fps)
     current_frames = int(animation.get("max_frames") or frames)
+    raw_current_cadence = (target.get("cadence") or {}).get("diffusion", "0:(1)")
+    try:
+        current_cadence_keys = _parse_schedule(str(raw_current_cadence), "project cadence", current_frames)
+        current_cadence = int(current_cadence_keys[0][1]) if len(current_cadence_keys) == 1 else None
+    except DeforumImportError:
+        current_cadence = None
     source_cadence = int(cadence_keys[0][1]) if len(cadence_keys) == 1 else None
     warnings: list[str] = []
     if missing:
@@ -118,6 +124,8 @@ def preview_motion_settings(
         warnings.append("Frame count differs from current project; review duration and existing motion before applying.")
     if len(cadence_keys) > 1:
         warnings.append("Source cadence varies across frames; inspect its compatibility with project cadence.")
+    if source_cadence is None or current_cadence is None or source_cadence != current_cadence:
+        warnings.append("Cadence differs from the project or varies; review before importing.")
     raw_path = settings.get("soundtrack_path")
     if raw_path is not None and not isinstance(raw_path, str):
         raise DeforumImportError("soundtrack_path must be text.")
@@ -139,13 +147,16 @@ def preview_motion_settings(
         "project_comparison": {"fps": current_fps, "max_frames": current_frames,
                                "duration_seconds": current_frames / current_fps,
                                "fps_matches": math.isclose(current_fps, fps, rel_tol=0, abs_tol=1e-6),
-                               "frames_match": current_frames == frames},
+                               "frames_match": current_frames == frames,
+                               "cadence": current_cadence,
+                               "cadence_matches": source_cadence is not None and source_cadence == current_cadence},
         "axes": {axis: {"source_key": source, "keyframes": len(schedules[axis]),
                        "min": min(v for _, v in schedules[axis]),
                        "max": max(v for _, v in schedules[axis])}
                  for source, axis in SOURCE_AXIS.items()},
         "samples": samples, "warnings": warnings,
         "can_apply_unchanged": frames <= 3000 and not missing and current_frames == frames
-            and math.isclose(current_fps, fps, rel_tol=0, abs_tol=1e-6),
+            and math.isclose(current_fps, fps, rel_tol=0, abs_tol=1e-6)
+            and source_cadence is not None and source_cadence == current_cadence,
         "read_only": True,
     }
