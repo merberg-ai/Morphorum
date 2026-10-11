@@ -474,6 +474,16 @@
         delete payload.created_at;
         delete payload.updated_at;
         delete payload.wizard;
+        const checked = await getJson('/api/animation/validate-schedules', {
+          method: 'POST',
+          body: JSON.stringify({ project: { ...payload, id: 'wizard-validation' } }),
+        });
+        if (!checked.valid) {
+          const problem = checked.issues?.find(issue => issue.severity === 'error');
+          throw new Error(problem
+            ? (problem.field + ': ' + problem.message)
+            : 'One or more animation schedules are invalid. Review your settings.');
+        }
         const result = await getJson('/api/animation/projects', {
           method: 'POST', body: JSON.stringify(payload),
         });
@@ -481,8 +491,16 @@
         sessionStorage.removeItem(STORAGE_KEY);
         this.draft = null;
         this.ready = false;
-        await this.onSaved(result.project.id);
-        window.MorphorumToast?.('Project created', result.project.name + ' was saved. Open the Editor to refine advanced settings.', 'success');
+        try {
+          await this.onSaved(result.project.id);
+        } catch (error) {
+          window.MorphorumToast?.('Project saved', result.project.name +
+            ' was saved, but could not be opened automatically: ' + error.message,
+            'warning', 8000);
+          return;
+        }
+        window.MorphorumToast?.('Project created', result.project.name +
+          ' was saved. Open the Editor to refine advanced settings.', 'success');
       } catch (error) {
         this.fail(error.message);
       } finally {
