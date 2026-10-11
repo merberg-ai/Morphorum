@@ -50,7 +50,7 @@
   height: 100%;
   width: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), #8aeaff, var(--accent-2));
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-2));
   transition: width .22s ease-out;
 }
 .image-preview-card { min-height: 560px; }
