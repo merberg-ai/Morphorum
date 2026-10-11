@@ -6736,7 +6736,12 @@
             <canvas data-dmi-waveform width="900" height="120" aria-label="Local WAV amplitude overview"></canvas>
             <p data-dmi-length class="muted">The soundtrack path from the imported settings is informational only.</p>
           </div>
-          <p class="notice subtle">DMI2 is preview-only. Apply/import into an existing project will be added in DMI3 after safety validation.</p>
+          <div class="dmi-apply-review"><strong>Import camera motion into this project</strong>
+            <p class="muted">This replaces six camera schedules only. It does not change FPS, cadence, frames, model, prompts or audio. Projects with existing Motion Lab layers require a clean project instead.</p>
+            <div class="dmi-apply-actions"><button type="button" data-dmi-prepare>Review safe import</button>
+              <button type="button" data-dmi-apply disabled>Apply camera motion</button></div>
+            <p data-dmi-review class="muted">Review is required before Apply. Your project remains unchanged until confirmation.</p>
+          </div>
         </div>
       </div>`;
     const file=panel.querySelector('[data-dmi-file]');
@@ -6775,7 +6780,66 @@
     const offset=panel.querySelector('[data-dmi-offset]');
     const seek=panel.querySelector('[data-dmi-seek]');
     const sync=panel.querySelector('[data-dmi-sync]');
-    let report=null, objectUrl=null, wavDuration=0;
+    let report=null, objectUrl=null, wavDuration=0, sourceContent=null, sourceFilename='', prepared=null;
+    const prepareButton=panel.querySelector('[data-dmi-prepare]');
+    const applyButton=panel.querySelector('[data-dmi-apply]');
+    const review=panel.querySelector('[data-dmi-review]');
+    const invalidatePrepared=()=>{
+      prepared=null;applyButton.disabled=true;
+      review.textContent='Review is required before Apply. No project changes have been made.';
+    };
+    prepareButton.addEventListener('click',async()=>{
+      invalidatePrepared();
+      if (!state.project?.id || !sourceContent) return;
+      if (state.dirty) {
+        review.textContent='Save or discard unsaved Project Editor changes before preparing the import.';
+        return;
+      }
+      const projectId=state.project.id;
+      prepareButton.disabled=true;
+      try {
+        const result=await api('/api/animation/projects/'+encodeURIComponent(projectId)+'/motion-import/prepare',{
+          method:'POST',body:JSON.stringify({content:sourceContent,filename:sourceFilename}),
+        });
+        if(state.project?.id!==projectId) return;
+        prepared={...result,projectId};
+        applyButton.disabled=false;
+        review.textContent='Safe import prepared: '+result.changed_axes.join(', ')+
+          '. Existing timing and all non-camera project settings remain unchanged.';
+      }catch(error){
+        review.textContent='Import blocked: '+error.message;
+      }finally{prepareButton.disabled=false;}
+    });
+    applyButton.addEventListener('click',async()=>{
+      const ready=prepared;
+      if(!ready || state.dirty || ready.projectId!==state.project?.id) {
+        invalidatePrepared();return;
+      }
+      const approved=await window.MorphorumDialog.confirm({
+        title:'Replace six camera schedules?',
+        message:'This will replace all six native 3D camera motion schedules in the current project. Existing FPS, frame count, cadence, prompts, model and soundtrack stay unchanged. This cannot be undone from this dialog.',
+        confirmText:'Apply Imported Motion',cancelText:'Cancel',variant:'default',
+      });
+      if (!approved) return;
+      applyButton.disabled=true;
+      try{
+        const result=await api('/api/animation/projects/'+encodeURIComponent(ready.projectId)+'/motion-import/apply',{
+          method:'POST',body:JSON.stringify({
+            content:sourceContent,filename:sourceFilename,
+            source_sha256:ready.source_sha256,project_sha256:ready.project_sha256,
+          }),
+        });
+        if(state.project?.id!==ready.projectId)return;
+        state.project=result.project;
+        state.dirty=false;
+        fillForm();
+        await loadTimeline();
+        review.textContent='Imported six camera schedules. Project saved.';
+        toast('Motion imported','Six native camera schedules updated.','success');
+      }catch(error){
+        review.textContent='Apply failed: '+error.message;
+      }finally{invalidatePrepared();}
+    });
     const draw=()=>{
       if (!report) return;
       const values=report.samples.map(s=>Number(s[axis.value])||0);
@@ -6809,11 +6873,13 @@
       if (!selected) return;
       if (!state.project?.id) {status.textContent='Open a project before inspecting settings.';return;}
       if(selected.size>1024*1024){status.textContent='Settings exceed 1 MiB.';return;}
+      invalidatePrepared();sourceContent=null;sourceFilename='';
       status.textContent='Inspecting Deforum motion…';results.hidden=true;
       try{
         const response=await api('/api/animation/projects/'+encodeURIComponent(state.project.id)+'/motion-import/preview',{
           method:'POST',body:JSON.stringify({content:await selected.text(),filename:selected.name}),
         });
+        sourceContent=await selected.text();sourceFilename=selected.name;
         report=response;results.hidden=false;
         const source=response.source,compare=response.project_comparison;
         const embeddedPath=String(source.soundtrack_path||'');
