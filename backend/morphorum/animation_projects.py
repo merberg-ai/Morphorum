@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
