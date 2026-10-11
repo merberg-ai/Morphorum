@@ -31,26 +31,26 @@ External checkpoint and LoRA directories are never copied into Morphorum unless 
 
 ### Interactive Windows install
 
-Download [`bootstrap.bat`](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat) and run it. It prints the Morphorum banner, checks prerequisites, and prompts for the installation folder. **The default is `C:\\Morphorum`**. Press Enter to accept it, or enter a custom folder such as `D:\\Morphorum`.
+Download [`bootstrap.bat`](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat) and run it. It prints the Morphorum banner, checks prerequisites, and prompts for the installation folder. **The default is `C:\Morphorum`**. Press Enter to accept it, or enter a custom folder such as `D:\Morphorum`.
 
 PowerShell download/launch example:
 
 ```powershell
 curl.exe -fL -o bootstrap.bat https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat
-.\\bootstrap.bat
+.\bootstrap.bat
 ```
 
 Noninteractive install with an explicit location:
 
 ```powershell
-.\\bootstrap.bat -InstallDir 'D:\\Morphorum'
+.\bootstrap.bat -InstallDir 'D:\Morphorum'
 ```
 
 The new installer asks which **server port** to use (default `7865`). This is stored in `data/server-port.txt` and preserved by updates or repairs. To preselect a port, add `-Port 8080` to `bootstrap.bat` or `install.bat`. Normal launches load that preference, and you can override it temporarily:
 
 ```powershell
-.\\run.bat -Port 8080
-.\\run-lan.bat -Port 8080
+.\run.bat -Port 8080
+.\run-lan.bat -Port 8080
 ```
 
 The bootstrap also supports `-Branch` for testing an alternate Git branch. If you already have an installation at the requested path, it uses the guarded updater instead of overwriting your data.
@@ -61,7 +61,7 @@ The existing PowerShell bootstrap remains supported:
 irm https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1 | iex
 ```
 
-Selection precedence is an explicit `-InstallDir`, then `MORPHORUM_HOME`, then the interactive prompt defaulting to `C:\\Morphorum`. In an existing checkout, `install.bat` prepares that checkout in place. Use `bootstrap.bat` to choose a fresh location, not `install.bat` from a different directory.
+Selection precedence is an explicit `-InstallDir`, then `MORPHORUM_HOME`, then the interactive prompt defaulting to `C:\Morphorum`. In an existing checkout, `install.bat` prepares that checkout in place. Use `bootstrap.bat` to choose a fresh location, not `install.bat` from a different directory.
 
 The Windows bootstrap installs Git with `winget` when necessary, clones Morphorum, and hands off to `install.bat`. `run.bat`, `run-lan.bat`, and `update.bat` use the same colorized console UI.
 
