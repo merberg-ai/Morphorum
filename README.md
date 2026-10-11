@@ -41,6 +41,8 @@ For unattended or scripted installations:
 .\\bootstrap.bat -InstallDir 'D:\\Morphorum'
 ```
 
+The installer asks for a **server port** during the first installation, defaulting to **7865**. This is saved at `data/server-port.txt`. Normal launches reuse the saved port; `run.bat -Port 8080` or `run-lan.bat -Port 8080` overrides it for one launch. To preselect the port without a prompt, pass `-Port 8080` to `bootstrap.bat` along with `-InstallDir`.
+
 The previous PowerShell bootstrap still works. Both modes accept `MORPHORUM_HOME`, and an explicit `-InstallDir` takes precedence. A fresh install seeds the supplied **Default** 3D starter animation from `config/example-project.json` when the project library is empty; existing projects are never overwritten.
 
 ### Linux
