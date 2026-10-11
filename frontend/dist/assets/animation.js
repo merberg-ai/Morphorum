@@ -4981,7 +4981,7 @@
         '<button type="button" data-beat-assign>Assign cues to matches</button>' +
         '<button type="button" data-beat-undo disabled>Undo batch</button></div>' +
         '<p data-beat-summary class="muted">Review candidate hits before assigning.</p></details>' +
-        '<p class="muted">Cues save with this WAV. Native camera preview and motion application arrive in DA4.5.</p>';
+        '<p class="muted">Cues save with this WAV. Save cues, then Preview camera cues or Apply camera cues. Existing Motion Lab layers remain additive.</p>';
       waveform.after(panel);
       const options = panel.querySelector('[data-cue-preset]');
       for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
