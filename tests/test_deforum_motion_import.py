@@ -29,7 +29,8 @@ def test_dms_export_preview_is_nonmutating_and_audio_path_is_basename_only():
     assert result["read_only"]
     assert result["can_apply_unchanged"]
     assert result["source"]["soundtrack_filename"]=="riff.wav"
-    assert "Music" not in str(result)
+    assert result["source"]["soundtrack_path"] == r"C:\\Music\\riff.wav"
+    assert result["source"]["soundtrack_attached"] is True
     assert result["source"]["cadence"]==3
     assert len(result["samples"])==120
     assert result["axes"]["rotation_z"]["keyframes"]==3
