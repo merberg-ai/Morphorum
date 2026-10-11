@@ -39,6 +39,41 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Expanded Motion Lab navigation lives below its main entry. */
+.main-nav.motion-section-active #motion-lab-sidebar {
+  display: grid;
+  gap: 2px;
+  margin: 1px 0 8px 14px;
+  padding: 5px 0 5px 10px;
+  border-left: 1px solid var(--border-strong);
+}
+#motion-lab-sidebar button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 8px;
+  text-align: left;
+  font-size: .79rem;
+  line-height: 1.3;
+  padding: 9px 10px;
+  min-height: 35px;
+}
+#motion-lab-sidebar button:hover,
+#motion-lab-sidebar button:focus-visible {
+  color: var(--text);
+  background: rgba(65,217,255,.08);
+}
+#motion-lab-sidebar button.active {
+  color: var(--accent);
+  font-weight: 700;
+  background: rgba(65,217,255,.13);
+}
+.main-nav {
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
 .workspace { grid-area: main; margin-top: 0; min-width: 0; }
 .page-heading,
 .grid,
@@ -131,57 +166,54 @@
 #animation-panel-editor .animation-prompt-row { min-width: 0; }
 #animation-panel-editor .animation-timeline-scroll { max-width: 100%; }
 
-/* Motion Lab columns flow independently so recording doesn't leave a
-   towering blank rectangle under a shorter preview card. */
+/* Each native Motion Lab authoring tool owns the full content workspace.
+   This expands the editable curves instead of squashing them into a sidecard. */
+#view-animation .animation-workspace-nav { display: none; }
 #animation-panel-motion {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
-  grid-template-areas:
-    "intro intro"
-    "author review"
-    "actions actions";
-  align-items: start;
-  gap: 14px;
+  grid-template-columns: minmax(0,1fr);
+  gap: 15px;
 }
-#animation-panel-motion > #animation-motion-lab-intro { grid-area: intro; }
-#animation-panel-motion > .animation-motion-authoring-column {
-  display: flex;
-  flex-direction: column;
-  grid-area: author;
-  gap: 14px;
-  min-width: 0;
+#animation-panel-motion .motion-lab-tool-grid {
+  grid-template-columns: repeat(2,minmax(0,1fr));
 }
-#animation-panel-motion > .animation-motion-review-column {
-  display: flex;
-  flex-direction: column;
-  grid-area: review;
-  gap: 14px;
-  min-width: 0;
+#animation-panel-composer,
+#animation-panel-recording,
+#animation-panel-curves,
+#animation-panel-preview { width: 100%; min-width: 0; }
+#animation-panel-composer .animation-motion-lab-composer,
+#animation-panel-recording .animation-motion-lab-recording,
+#animation-panel-curves .animation-motion-lab-visual,
+#animation-panel-preview .animation-motion-preview-card {
+  padding: 22px;
+  max-width: none;
+  width: 100%;
 }
-#animation-panel-motion > #animation-motion-lab-quick-actions {
-  grid-area: actions;
-  justify-self: center;
+#animation-panel-composer .animation-motion-lab-fields,
+#animation-panel-recording .animation-motion-recording-controls {
+  grid-template-columns: repeat(4,minmax(0,1fr));
 }
-#animation-panel-motion .animation-motion-preview-card {
-  order: -1;
-  position: static;
-  min-width: 0;
+#animation-panel-recording .animation-motion-controller-grid {
+  grid-template-columns: minmax(190px,240px) minmax(190px,240px) minmax(220px,1fr);
+  gap: 20px;
 }
-#animation-panel-motion .animation-motion-lab-visual-grid {
-  grid-template-columns: minmax(0, 1fr);
+#animation-panel-recording .animation-motion-hold-controls {
+  grid-column: auto;
 }
-#animation-panel-motion .animation-motion-lab-fields,
-#animation-panel-motion .animation-motion-recording-controls {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+#animation-panel-recording .animation-motion-stick { max-width: 220px; }
+#animation-panel-curves .animation-motion-lab-curve-fields {
+  grid-template-columns: repeat(3,minmax(0,1fr));
 }
-#animation-panel-motion .animation-motion-controller-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+#animation-panel-curves .animation-motion-lab-visual-grid {
+  grid-template-columns: minmax(0,1.8fr) minmax(310px,1fr);
+  gap: 18px;
 }
-#animation-panel-motion .animation-motion-hold-controls { grid-column: 1 / -1; }
-#animation-panel-motion .animation-motion-lab-curve-fields {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+#animation-panel-curves .animation-motion-lab-svg-wrap { padding: 14px; }
+#animation-panel-preview .animation-motion-result,
+#animation-panel-preview .animation-motion-preview-card .animation-card-content {
+  width: 100%;
 }
-
+#animation-panel-preview .animation-motion-result img { max-width: 100%; }
 /* Concise, opt-in explanations: never obscure the working controls. */
 .motion-workflow-help,
 .motion-field-help {
