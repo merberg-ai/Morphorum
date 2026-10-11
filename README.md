@@ -93,6 +93,8 @@ See [First steps](docs/GETTING_STARTED.md) for a guided walkthrough of still ima
 | **Models / LoRAs** | Scan external model and LoRA folders, inspect metadata, and insert compatible LoRA tags into prompts. |
 | **Settings / Console** | Choose four dark themes, select UI/monospace fonts, manage model paths, and view diagnostic logs. |
 
+**Appearance themes:** **Midnight Glass** (near-black), **Deep Ocean** (dark blue), **Amethyst Night** (dark purple), and **Slate Graphite** (grey). Interface and technical/console fonts can be selected independently in Settings.
+
 Additional functionality includes Deforum-style timeline/schedule controls, selected legacy Deforum settings import, video-source inspection/extraction and hybrid-frame workflows. **Legacy imports are not guaranteed to reproduce every Deforum extension or unsupported setting.**
 
 > [!NOTE]
