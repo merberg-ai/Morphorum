@@ -442,3 +442,54 @@ def test_b52_legacy_project_without_temporal_settings_defaults_to_forward(
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     loaded = load_animation_project(created["id"])
     assert loaded["temporal"]["mode"] == "forward"
+
+
+def test_project_trash_preserves_files_and_hides_project_from_listing(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({
+        "name": "Keep My Assets",
+        "animation": {"mode": "3d", "max_frames": 180, "fps": 30},
+        "motion_lab": {"layers": []},
+    })
+    project_id = created["id"]
+    directory = tmp_path / project_id
+    asset = directory / "reference.txt"
+    asset.write_text("keep", encoding="utf-8")
+
+    before = next(item for item in list_animation_projects() if item["id"] == project_id)
+    assert before["mode"] == "3d"
+    assert before["motion_layers"] == 0
+    assert before["start_mode"] == "prompt"
+
+    moved = animation_projects.trash_animation_project(project_id)
+    assert moved["id"] == project_id
+    assert moved["name"] == "Keep My Assets"
+    trash = Path(moved["trash_path"])
+    assert trash.parent == tmp_path / ".trash"
+    assert trash.is_dir()
+    assert (trash / "project.json").is_file()
+    assert (trash / "reference.txt").read_text(encoding="utf-8") == "keep"
+    assert not directory.exists()
+    assert project_id not in {item["id"] for item in list_animation_projects()}
+
+    with pytest.raises(AnimationProjectError, match="not found"):
+        animation_projects.trash_animation_project(project_id)
+    with pytest.raises(AnimationProjectError, match="Invalid animation project id"):
+        animation_projects.trash_animation_project("../outside")
+
+
+def test_project_trash_refuses_symlinked_trash_folder(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "Protected"})
+    external = tmp_path / "external"
+    external.mkdir()
+    trash = tmp_path / ".trash"
+    try:
+        trash.symlink_to(external, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlinks are unavailable on this platform.")
+    with pytest.raises(AnimationProjectError, match="symlink"):
+        animation_projects.trash_animation_project(created["id"])
+    assert (tmp_path / created["id"] / "project.json").is_file()
