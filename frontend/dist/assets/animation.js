@@ -3885,6 +3885,162 @@
     }
   }
 
+
+  async function projectManagerOpen() {
+    const id = projectManagerState.selectedId;
+    if (!id || projectManagerState.busy) return;
+    projectManagerState.busy = true;
+    renderProjectManager();
+    try {
+      const opened = await loadProject(id);
+      if (opened) showAnimationTab('editor');
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
+  async function projectManagerRename() {
+    const item = state.projects.find(p => p.id === projectManagerState.selectedId);
+    if (!item || projectManagerState.busy) return;
+    if (item.id === state.project?.id && state.dirty) {
+      toast('Save changes before renaming',
+        'This project has unsaved Editor changes. Save it first.', 'warning', 6500);
+      return;
+    }
+    const value = await window.MorphorumDialog.prompt({
+      title: 'Rename project',
+      message: 'Change this project name without changing its ID or folder.',
+      initialValue: item.name, inputLabel: 'Project name', maxLength: 120,
+      validate: value => String(value || '').trim() ? '' : 'Enter a project name.',
+      confirmText: 'Rename Project',
+    });
+    if (value === null || String(value).trim() === item.name) return;
+    projectManagerState.busy = true;
+    renderProjectManager();
+    try {
+      const url = '/api/animation/projects/' + encodeURIComponent(item.id);
+      const original = await api(url);
+      const updated = await api(url, {
+        method: 'PUT',
+        body: JSON.stringify({ ...original.project, name: String(value).trim() }),
+      });
+      if (state.project?.id === item.id) {
+        state.project = updated.project;
+        state.path = updated.path || state.path;
+        fillForm();
+      }
+      await loadProjectList();
+      toast('Project renamed', 'The saved project name has been updated.', 'success');
+    } catch (error) {
+      toast('Could not rename project', error.message, 'error', 7000);
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
+  async function projectManagerTrash() {
+    const item = state.projects.find(p => p.id === projectManagerState.selectedId);
+    if (!item || projectManagerState.busy) return;
+    if (item.id === state.project?.id && (
+      state.dirty || motionLabRecorder?.active || motionLabBusy ||
+      state.motionJobId || motionPreviewStarting || renderIsActive() ||
+      animationRenderStarting
+    )) {
+      toast('Project is currently in use',
+        'Save changes and wait for any recordings or jobs to finish before deleting.',
+        'warning', 7000);
+      return;
+    }
+    const typed = await window.MorphorumDialog.prompt({
+      title: 'Move project to Trash?',
+      message: 'Move "' + item.name + '" into the managed .trash folder. ' +
+        'Rendered animations and exported videos are NOT deleted. ' +
+        'Type the exact project name to confirm.',
+      initialValue: '', inputLabel: 'Type project name', maxLength: 120,
+      confirmText: 'Move to Trash',
+      validate: value => String(value || '') === item.name
+        ? '' : 'Enter the exact project name to confirm.',
+    });
+    if (typed === null || String(typed) !== item.name) return;
+    projectManagerState.busy = true;
+    renderProjectManager();
+    try {
+      await api('/api/animation/projects/' + encodeURIComponent(item.id), { method: 'DELETE' });
+      if (state.project?.id === item.id) {
+        clearMotionPreviewResult();
+        resetRenderUi();
+        state.project = null;
+        state.path = '';
+        state.timeline = null;
+        state.timelineSelection = null;
+        state.depthPreview = null;
+        resetHybridForProject();
+        fillForm();
+      }
+      projectManagerState.selectedId = '';
+      await loadProjectList();
+      toast('Project moved to Trash',
+        'Project removed from the list. Rendered animations and exports remain intact.',
+        'success', 6500);
+    } catch (error) {
+      toast('Could not move project to Trash', error.message, 'error', 7500);
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
+  function setupProjectManager(panel) {
+    panel.innerHTML = [
+      '<div class="motion-tool-page-heading">',
+      '<div><p class="eyebrow">MOTION LAB / PROJECT MANAGER</p><h2>Project Manager</h2>',
+      '<p class="muted">Browse and organize projects. Open one in Editor to edit its animation settings.</p></div>',
+      '<button type="button" class="primary-button compact" id="animation-project-manager-new">+ New Project</button></div>',
+      '<div class="animation-project-manager-layout">',
+      '<section class="card glass animation-project-manager-browser" aria-label="Project browser">',
+      '<div class="animation-project-manager-toolbar">',
+      '<label><span>Search projects</span><input id="animation-project-manager-search" type="search" placeholder="Name, model or ID…"></label>',
+      '<label><span>Sort</span><select id="animation-project-manager-sort">',
+      '<option value="updated">Recently updated</option><option value="name">Name A–Z</option>',
+      '<option value="oldest">Least recently updated</option></select></label></div>',
+      '<div class="animation-project-manager-count-row"><strong>Projects</strong>',
+      '<span id="animation-project-manager-count" class="muted"></span>',
+      '<button type="button" id="animation-project-manager-refresh" class="secondary-button compact">Refresh</button></div>',
+      '<div class="animation-project-manager-list" id="animation-project-manager-list" aria-label="Animation projects"></div>',
+      '</section><section class="card glass animation-project-manager-info" aria-label="Project details">',
+      '<div class="card-header"><div><h2>Project Details</h2>',
+      '<p class="muted">Saved project information. Unsaved Editor changes are not included.</p></div></div>',
+      '<div id="animation-project-manager-details" aria-live="polite"></div>',
+      '<div class="animation-project-manager-actions">',
+      '<button type="button" id="animation-project-manager-open" class="primary-button" disabled>Open in Editor</button>',
+      '<button type="button" id="animation-project-manager-rename" class="secondary-button" disabled>Rename</button>',
+      '<button type="button" id="animation-project-manager-trash" class="secondary-button animation-project-manager-danger" disabled>Move to Trash</button>',
+      '</div><p class="muted animation-project-manager-help">Trash keeps the managed project folder for manual recovery.',
+      ' Rendered frames and video exports live separately and are not removed.</p></section></div>',
+    ].join('');
+    qs('#animation-project-manager-search')?.addEventListener('input', renderProjectManager);
+    qs('#animation-project-manager-sort')?.addEventListener('change', renderProjectManager);
+    qs('#animation-project-manager-refresh')?.addEventListener('click', async () => {
+      try { await loadProjectList(); }
+      catch (error) { toast('Could not refresh projects', error.message, 'error', 6500); }
+    });
+    qs('#animation-project-manager-open')?.addEventListener('click', () => void projectManagerOpen());
+    qs('#animation-project-manager-rename')?.addEventListener('click', () => void projectManagerRename());
+    qs('#animation-project-manager-trash')?.addEventListener('click', () => void projectManagerTrash());
+    qs('#animation-project-manager-new')?.addEventListener('click', async () => {
+      if (projectManagerState.busy) return;
+      if (state.dirty && !(await window.MorphorumDialog.confirm({
+        title: 'Create a new project?',
+        message: 'Unsaved changes in the current Editor will be discarded.',
+        variant: 'danger', confirmText: 'Discard & Create',
+        cancelText: 'Keep Editing',
+      }))) return;
+      const original = state.project?.id;
+      await createProject();
+      if (state.project?.id && state.project.id !== original) showAnimationTab('editor');
+    });
+    renderProjectManager();
+  }
+
   async function loadProjectList({ loadFirst = false } = {}) {
     const payload = await api('/api/animation/projects');
     state.projects = Array.isArray(payload.projects) ? payload.projects : [];
