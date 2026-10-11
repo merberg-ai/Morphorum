@@ -1918,8 +1918,8 @@ dialog#animation-deforum-dialog {
 /* dev-ui: one active Animation workspace panel with no duplicate render pollers. */
 .animation-workspace-nav {max-width:1260px;margin:0 auto 15px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;position:sticky;top:90px;z-index:15;padding:6px;border:1px solid var(--border);border-radius:13px;background:var(--panel-strong);}
 .animation-workspace-nav button {min-width:0;min-height:43px;padding:9px 11px;background:transparent;border:0;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:600;}
-.animation-workspace-nav button.active {color:#091016;background:linear-gradient(135deg,var(--accent),#85e5ff);}
-.animation-workspace-nav button[data-animation-tab="motion"]:not(.active) {color:var(--accent);background:rgba(40,185,218,.08);border:1px solid rgba(40,185,218,.22);}
+.animation-workspace-nav button.active {color:var(--button-primary-text);background:var(--button-primary-bg);box-shadow:var(--button-shadow);}
+.animation-workspace-nav button[data-animation-tab="motion"]:not(.active) {color:var(--accent);background:var(--button-secondary-bg);border:1px solid var(--border-strong);}
 .animation-workspace-nav button[data-animation-tab="motion"].active {font-weight:800;}
 #animation-media-vault {display:none!important;}
 #animation-panel-motion {display:grid;gap:14px;}
@@ -1972,7 +1972,7 @@ dialog#animation-deforum-dialog {
 .animation-motion-hold-controls {display:grid;gap:9px;justify-items:start;}
 .animation-motion-hold-controls > div {display:grid;grid-template-columns:repeat(2,minmax(74px,1fr));gap:8px;width:100%;max-width:280px;}
 .animation-motion-hold-controls button {min-height:48px;touch-action:none;}
-.animation-motion-hold-controls button.active {border-color:var(--accent);box-shadow:0 0 0 1px rgba(62,204,238,.28);}
+.animation-motion-hold-controls button.active {border-color:var(--accent);background:var(--button-secondary-active);box-shadow:0 0 0 1px var(--button-focus-ring);}
 .animation-motion-recording-help {display:grid;gap:4px;margin-top:10px;}
 .animation-motion-gamepad-status {margin:9px 0 0;font-size:.76rem;}
 @media(max-width:900px){.animation-motion-recording-controls {grid-template-columns:repeat(2,minmax(0,1fr));}.animation-motion-controller-grid {grid-template-columns:repeat(2,minmax(0,1fr));}.animation-motion-hold-controls {grid-column:1/-1;justify-items:center;}}
@@ -2121,8 +2121,8 @@ dialog#animation-deforum-dialog {
 .animation-motion-lab-quick-actions button {white-space:nowrap;min-height:36px;padding:7px 12px;}
 .animation-motion-lab-quick-actions .animation-motion-quick-render {
   margin-left: 6px;
-  border-color: rgba(65,217,255,.4);
-  box-shadow: 0 0 0 1px rgba(65,217,255,.08);
+  border-color: var(--button-hover-border);
+  box-shadow: var(--button-shadow);
 }
 /* These labels are interactive switches, not full-width form fields. */
 #animation-panel-curves .animation-motion-lab-edit-toggle {
@@ -2343,4 +2343,75 @@ dialog#animation-deforum-dialog {
   .motion-lab-tool-card {padding:14px;}
   .motion-tool-page-heading {flex-direction:column;align-items:flex-start;}
   .motion-tool-page-heading button {min-height:42px;}
+}
+
+/* Shared theme states for Motion Lab interactive surfaces. The active
+   Settings theme supplies every accent and panel tint through CSS tokens. */
+#view-animation :is(.animation-workspace-nav button,.motion-lab-tool-card) {
+  transition: background .17s ease,color .17s ease,border-color .17s ease,
+    box-shadow .17s ease,transform .17s ease;
+}
+#view-animation :is(.animation-workspace-nav button,.motion-lab-tool-card):hover:not(:disabled) {
+  color:var(--text);
+  border-color:var(--button-hover-border);
+  background:var(--button-secondary-hover);
+  box-shadow:var(--button-shadow);
+  transform:translateY(-1px);
+}
+#view-animation :is(.animation-workspace-nav button,.motion-lab-tool-card):active:not(:disabled) {
+  background:var(--button-secondary-active);
+  transform:scale(.985);
+  box-shadow:inset 0 1px 5px rgba(0,0,0,.19);
+}
+#view-animation :is(.animation-workspace-nav button,.motion-lab-tool-card):focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:3px;
+  box-shadow:0 0 0 5px var(--button-focus-ring);
+}
+#view-animation .motion-lab-tool-card {
+  background:var(--button-secondary-bg);
+  border-color:var(--border);
+}
+#view-animation .motion-lab-tool-card:hover:not(:disabled) {
+  background:var(--button-secondary-hover);
+  border-color:var(--button-hover-border);
+}
+#view-animation .animation-workspace-nav button.active,
+#view-animation .animation-workspace-nav button[aria-selected="true"] {
+  color:var(--button-primary-text);
+  background:var(--button-primary-bg);
+  border-color:var(--button-hover-border);
+  box-shadow:var(--button-shadow);
+}
+#view-animation .animation-workspace-nav button.active:hover:not(:disabled) {
+  color:var(--button-primary-text);
+  background:var(--button-primary-bg);
+}
+.animation-motion-lab-quick-actions button[data-running="true"] {
+  position:relative;
+  border-color:var(--accent);
+  box-shadow:0 0 0 1px var(--button-focus-ring);
+  filter:none;
+}
+.animation-motion-lab-quick-actions button[data-running="true"]::before {
+  content:"";
+  display:inline-block;
+  width:10px;
+  height:10px;
+  margin-right:7px;
+  border:2px solid currentColor;
+  border-right-color:transparent;
+  border-radius:50%;
+  vertical-align:-1px;
+  animation:motion-button-working .85s linear infinite;
+}
+@keyframes motion-button-working {to {transform:rotate(360deg);}}
+@media (prefers-reduced-motion:reduce) {
+  #view-animation :is(.animation-workspace-nav button,.motion-lab-tool-card) {transition:none;}
+  #view-animation :is(.animation-workspace-nav button,.motion-lab-tool-card):hover:not(:disabled),
+  #view-animation :is(.animation-workspace-nav button,.motion-lab-tool-card):active:not(:disabled) {transform:none;}
+  .animation-motion-lab-quick-actions button[data-running="true"]::before {
+    animation:none;
+    border-right-color:currentColor;
+  }
 }
