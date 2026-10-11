@@ -6735,6 +6735,9 @@
               <output data-dmi-sync>0.00s</output></div>
             <canvas data-dmi-waveform width="900" height="120" aria-label="Local WAV amplitude overview"></canvas>
             <p data-dmi-length class="muted">The soundtrack path from the imported settings is informational only.</p>
+            <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-attach>Attach selected audio to project</button>
+              <button type="button" class="secondary-button compact" data-dmi-save-offset>Save audio offset</button></div>
+            <p data-dmi-attachment class="muted">Audio preview stays local until you explicitly attach it. Attachment does not automatically change the exported video.</p>
           </div>
           <div class="dmi-apply-review"><strong>Import camera motion into this project</strong>
             <p class="muted">This replaces six camera schedules only. It does not change FPS, cadence, frames, model, prompts or audio. Projects with existing Motion Lab layers require a clean project instead.</p>
@@ -6783,6 +6786,56 @@
     let report=null, objectUrl=null, wavDuration=0, sourceContent=null, sourceFilename='', prepared=null;
     const prepareButton=panel.querySelector('[data-dmi-prepare]');
     const applyButton=panel.querySelector('[data-dmi-apply]');
+    const attachButton=panel.querySelector('[data-dmi-attach]');
+    const offsetButton=panel.querySelector('[data-dmi-save-offset]');
+    const attachmentText=panel.querySelector('[data-dmi-attachment]');
+    attachButton.disabled=true;
+    offsetButton.disabled=true;
+    const attachmentProject=()=>state.project?.id;
+    attachButton.addEventListener('click',async()=>{
+      const chosen=wav.files?.[0],projectId=attachmentProject();
+      if(!chosen || !projectId)return;
+      if(chosen.size>40*1024*1024){
+        progress('Soundtrack too large','Attachments must be 40 MiB or smaller.','error');return;
+      }
+      attachButton.disabled=true;
+      progress('Attaching soundtrack',chosen.name+' · saving a project-owned copy.');
+      try {
+        const response=await fetch('/api/animation/projects/'+encodeURIComponent(projectId)+'/motion-import/soundtrack',{
+          method:'POST',
+          headers:{'Content-Type':'application/octet-stream',
+            'X-Audio-Filename':encodeURIComponent(chosen.name),
+            'X-Audio-Offset-Seconds':String(Number(offset.value)||0)},
+          body:chosen,
+        });
+        const result=await response.json();
+        if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:'Upload failed ('+response.status+').');
+        if(attachmentProject()!==projectId)return;
+        attachmentText.textContent='Attached: '+result.soundtrack.filename+
+          ' · offset '+result.soundtrack.offset_seconds.toFixed(2)+'s.';
+        offsetButton.disabled=false;
+        progress('Soundtrack attached',result.soundtrack.filename+' saved with this project.','success');
+      }catch(error){
+        attachmentText.textContent='Attachment failed: '+error.message;
+        progress('Soundtrack attachment failed',error.message,'error');
+      }finally{attachButton.disabled=false;}
+    });
+    offsetButton.addEventListener('click',async()=>{
+      const projectId=attachmentProject();
+      if(!projectId)return;
+      offsetButton.disabled=true;
+      progress('Saving audio offset','Updating soundtrack synchronization metadata.');
+      try{
+        const result=await api('/api/animation/projects/'+encodeURIComponent(projectId)+'/motion-import/soundtrack-offset',{
+          method:'PUT',body:JSON.stringify({offset_seconds:Number(offset.value)}),
+        });
+        if(attachmentProject()!==projectId)return;
+        attachmentText.textContent='Attached: '+result.soundtrack.filename+
+          ' · offset '+result.soundtrack.offset_seconds.toFixed(2)+'s.';
+        progress('Audio offset saved',result.soundtrack.offset_seconds.toFixed(2)+' seconds.','success');
+      }catch(error){progress('Audio offset save failed',error.message,'error');}
+      finally{offsetButton.disabled=false;}
+    });
     const review=panel.querySelector('[data-dmi-review]');
     const progress=(heading,message,kind='info')=>toast(heading,message,kind);
     const invalidatePrepared=()=>{
@@ -6931,6 +6984,7 @@
     wav.addEventListener('change',async()=>{
       const selected=wav.files?.[0];if(!selected)return;
       if(objectUrl) URL.revokeObjectURL(objectUrl);
+      attachButton.disabled=false;
       objectUrl=URL.createObjectURL(selected);player.src=objectUrl;
       progress('Loading soundtrack',selected.name+' · preparing waveform and playback.');
       player.onloadedmetadata=()=>{
