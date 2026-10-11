@@ -2258,7 +2258,7 @@ dialog#animation-deforum-dialog {
 }
 .animation-audio-preview-placeholder strong { color:var(--text); }
 .animation-audio-preview-placeholder p { max-width:350px; font-size:.82rem; line-height:1.6; }
-#animation-panel-audio .animation-motion-lab-audio:has(.animation-motion-audio-preview:not([hidden]))
+#animation-panel-audio .animation-audio-analysis-workspace:has(.animation-motion-audio-preview:not([hidden]))
   .animation-audio-preview-placeholder { display:none; }
 #animation-panel-audio .animation-motion-lab-audio { min-width:0; }
 #animation-panel-audio .animation-motion-audio-controls > * { min-width:0; }
