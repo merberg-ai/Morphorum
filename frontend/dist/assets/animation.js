@@ -4871,17 +4871,18 @@
       section = document.createElement('section');
       section.id = 'animation-audio-stereo-timeline';
       section.className = 'animation-audio-stereo-timeline';
-      section.innerHTML = '<div class="animation-audio-wave-controls"><strong>Interactive audio timeline</strong>' +
+      section.innerHTML = '<div class="animation-audio-wave-controls"><strong>Audio reference · Events</strong>' +
         '<label class="animation-audio-wave-mode">Display <select data-wave-mode>' +
         '<option value="envelope">Envelope + markers</option>' +
         '<option value="stereo">Stereo waveform</option>' +
         '<option value="both">Envelope + stereo</option></select></label>' +
         '<label>Zoom <input type="range" min="1" max="12" value="1" step="1" data-wave-zoom></label>' +
-        '<label>Start <input type="range" min="0" max="1000" value="0" step="1" data-wave-start></label>' +
+        '<label>Pan <input type="range" min="0" max="1000" value="0" step="1" data-wave-start></label>' +
         '<label class="animation-audio-wave-follow"><input type="checkbox" data-wave-follow checked> Follow playhead</label></div>' +
         '<div class="animation-audio-wave-transport"><button type="button" data-wave-play>Play audio</button>' +
         '<output data-wave-time>0.00 / 0.00 s</output><span>Click or tap the waveform to seek</span></div>' +
-        '<svg data-wave-svg viewBox="0 0 800 180" role="img" tabindex="0" aria-label="Stereo waveform, drum events and audio playhead; click or tap to seek"></svg>' +
+        '<svg data-wave-svg viewBox="0 0 800 180" role="img" tabindex="0" aria-label="Audio waveform with editable kick and snare events"></svg>' +
+        '<div class="animation-audio-ruler"><span data-wave-left-time>0.00s</span><span data-wave-right-time>0.00s</span></div>' +
         '<p class="muted" data-wave-description></p>';
       const workspace = qs('#animation-audio-analysis-workspace');
       const diagnostics = workspace?.querySelector('.animation-audio-legacy-envelope');
@@ -4890,7 +4891,8 @@
       const editor = document.createElement('div');
       editor.id = 'animation-audio-event-editor';
       editor.className = 'animation-audio-event-editor';
-      editor.innerHTML = '<strong>Drum marker editor (draft only)</strong>' +
+      editor.innerHTML = '<div class="animation-audio-event-heading"><strong>Event detection & marker editing</strong>' +
+        '<span class="muted">Drag a marker to move · double-click empty waveform to add · Shift-click marker to remove</span></div>' +
         '<p data-event-selected>Select a marker on the waveform to edit it</p>' +
         '<div class="animation-audio-event-fields">' +
         '<label>Time (seconds)<input type="number" min="0" step="0.001" data-event-time disabled></label>' +
@@ -4913,6 +4915,7 @@
         ['data-event-remove','remove'],['data-event-reset','reset']]) {
         editor.querySelector('['+attr+']')?.addEventListener('click', () => motionLabEventChange(action));
       }
+      section.querySelector('[data-wave-mode]')?.value = 'stereo';
       section.querySelector('[data-wave-mode]')?.addEventListener('change', motionLabStereoWaveform);
       section.querySelector('[data-wave-zoom]')?.addEventListener('input', motionLabStereoWaveform);
       section.querySelector('[data-wave-start]')?.addEventListener('input', () => {
@@ -4936,6 +4939,24 @@
       };
       let dragMarker = null;
       const waveform = section.querySelector('[data-wave-svg]');
+      waveform?.addEventListener('dblclick', event => {
+        const time = positionToTime(event);
+        if (time === null || !motionLabEditedEvents) return;
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        const rect = waveform.getBoundingClientRect();
+        const closest = motionLabEditedEvents.some(e =>
+          Math.abs(e.time_seconds-time) < (end-begin)*10/Math.max(1,rect.width));
+        if (closest) return;
+        motionLabMarkerSnapshot();
+        const id = 'manual-' + String(Date.now()) + '-' + motionLabEditedEvents.length;
+        motionLabEditedEvents.push({id,kind:'kick',time_seconds:Math.max(0,Math.min(
+          motionLabAudioAnalysis.duration_seconds-.000001,Math.round(time*1000)/1000)),
+          enabled:true,strength:1,source:'manual'});
+        motionLabSelectedEvent = id;
+        motionLabMarkersDirty = true;
+        motionLabStereoWaveform();
+      });
       const positionToTime = event => {
         const rect = waveform.getBoundingClientRect();
         if (!rect.width) return null;
@@ -5008,6 +5029,7 @@
         }
         if (closest) {
           motionLabSelectedEvent = closest.id;
+          if (event.shiftKey) { motionLabEventChange('remove'); return; }
           motionLabStereoWaveform();
         } else {
           motionLabSelectedEvent = null;
@@ -5105,6 +5127,10 @@
     const tEnd = to / total * analysis.duration_seconds;
     section.dataset.waveStart = String(tStart);
     section.dataset.waveEnd = String(tEnd);
+    const left = section.querySelector('[data-wave-left-time]');
+    const right = section.querySelector('[data-wave-right-time]');
+    if (left) left.textContent = tStart.toFixed(2) + 's · frame ' + Math.round(tStart*analysis.fps);
+    if (right) right.textContent = tEnd.toFixed(2) + 's · frame ' + Math.round(tEnd*analysis.fps);
     const events = motionLabEditedEvents || analysis.events?.events || [];
     let visible = 0;
     for (const event of events) {
@@ -6571,6 +6597,12 @@
       analysisWorkspace.appendChild(legacyDetails);
     }
     panels.audio.appendChild(analysisWorkspace);
+    // Parseq-inspired workflow: source first, full-width waveform next,
+    // detection and motion response below. Keep original live controls.
+    const audioSourceDock = document.createElement('div');
+    audioSourceDock.className = 'animation-audio-source-dock';
+    audioSourceDock.innerHTML = '<strong>Audio source</strong>';
+    analysisWorkspace.prepend(audioSourceDock);
     // DA3.3a: keep editable timeline and inspector together; separate configuration
     // into source, detection and camera-response groups without cloning controls.
     const audioCard = qs('#animation-motion-lab-audio');
@@ -6593,6 +6625,10 @@
         for (const field of elements) if (field) grid.appendChild(field);
         details.append(summary,grid);
         controls.appendChild(details);
+        if (label === 'Audio source') {
+          details.open = true;
+          audioSourceDock.appendChild(details);
+        }
       }
     }
     const audioPlaceholder = document.createElement('div');
