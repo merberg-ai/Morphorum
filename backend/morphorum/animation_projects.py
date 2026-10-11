@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -652,7 +653,12 @@ def list_animation_projects() -> list[dict[str, Any]]:
                 "fps": animation.get("fps"),
                 "width": animation.get("width"),
                 "height": animation.get("height"),
+                "mode": animation.get("mode", "2d"),
+                "start_mode": animation.get("start_mode", "prompt"),
                 "model_id": project.get("model", {}).get("model_id", ""),
+                "model_family": project.get("model", {}).get("family", ""),
+                "motion_layers": len(project.get("motion_lab", {}).get("layers", [])),
+                "has_source_image": bool(animation.get("source_image")),
                 "prompt_keyframes": (
                     track_keyframe_count(project, group="prompts", name="positive")
                     or (len(prompts) if isinstance(prompts, dict) else 0)
@@ -662,6 +668,33 @@ def list_animation_projects() -> list[dict[str, Any]]:
 
     projects.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
     return projects
+
+
+def trash_animation_project(project_id: str) -> dict[str, str]:
+    """Move an existing project into .trash without deleting saved render outputs.
+
+    Projects use opaque validated IDs. The atomic rename is restricted to
+    the managed projects root and refuses symlinks.
+    """
+    ensure_runtime_dirs()
+    project_dir = _project_dir(project_id)
+    if project_dir.is_symlink() or not project_dir.is_dir():
+        raise AnimationProjectError("Animation project not found.")
+    if not (project_dir / "project.json").is_file():
+        raise AnimationProjectError("Animation project not found.")
+    title = load_animation_project(project_id)["name"]
+    trash_root = PROJECTS_DIR / ".trash"
+    if trash_root.is_symlink():
+        raise AnimationProjectError("Project trash folder cannot be a symlink.")
+    try:
+        trash_root.mkdir(parents=True, exist_ok=True)
+        destination = trash_root / (project_dir.name + "-" + uuid.uuid4().hex[:12])
+        project_dir.rename(destination)
+    except OSError as exc:
+        raise AnimationProjectError(f"Could not move project to Trash: {exc}") from exc
+    emit_console("info", "animation",
+                 f"Moved animation project {project_id}: {title} to Trash.")
+    return {"id": project_id, "name": title, "trash_path": str(destination)}
 
 
 def animation_project_directory(project_id: str) -> Path:
