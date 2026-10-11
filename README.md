@@ -86,12 +86,15 @@ See [First steps](docs/GETTING_STARTED.md) for a guided walkthrough of still ima
 | --- | --- |
 | **Image Generation** | SDXL, FLUX, and Z-Image generation; model-aware presets, prompts, seeds, batches, progress, and results. |
 | **Motion Lab** | Keyframed 2D/3D camera animation, six-axis motion, depth-aware previews, layered presets, and curve/path editing. |
+| **New Project Wizard** | Guided seven-step project creation with contextual help, model-specific defaults, prompts/keyframes, motion presets, and a final review and save. |
 | **Project Manager** | Search, inspect, create, open, rename, and move animation projects to Trash. |
 | **Live Recording** | Record camera movement with keyboard/touch controls and supported browser gamepads. |
 | **Audio Motion** | Analyze audio and map rhythm/frequency bands to camera movement; export sound with animation when configured. |
 | **Render Monitor / Outputs** | Monitor long renders; preview frames, pause/resume/cancel supported jobs, and export MP4/WebM. |
-| **Models / LoRAs** | Scan external model and LoRA folders, inspect metadata, and insert compatible LoRA tags into prompts. |
+| **Models / LoRAs** | Scan external model and LoRA folders, inspect metadata, and insert compatible LoRA tags into prompts. A no-model warning provides setup instructions when no checkpoint is available. |
 | **Settings / Console** | Choose four dark themes, select UI/monospace fonts, manage model paths, and view diagnostic logs. |
+
+The **version badge** in the top-right corner also links directly to this repository, the checked-out Git branch, and the exact Git commit, making it easier to find the code running on your machine.
 
 **Appearance themes:** **Midnight Glass** (near-black), **Deep Ocean** (dark blue), **Amethyst Night** (dark purple), and **Slate Graphite** (grey). Interface and technical/console fonts can be selected independently in Settings.
 
@@ -100,7 +103,13 @@ Additional functionality includes Deforum-style timeline/schedule controls, sele
 > [!NOTE]
 > **Model availability matters.** Morphorum does not ship SDXL, FLUX, or Z-Image checkpoints. Some advanced workflows need substantial NVIDIA GPU VRAM, disk space, or FFmpeg. A model must be downloaded or indexed before you can render an image or animation.
 
-## First animation: the included example
+## First animation: use the New Project Wizard
+
+For a new project, open **Motion Lab → New Project Wizard**. It guides you through **Name → Model → Animation Setup → Prompts & Keyframes → Camera Motion → Generation Settings → Review & Save**, with help hints and Back/Next controls. The wizard uses the same default-project schema as Project Editor, validates schedules, and **does not create a project until you select Save Project & Open Editor**. The final screen introduces optional Audio Motion. See the [complete wizard walkthrough](docs/NEW_PROJECT_WIZARD.md).
+
+If no checkpoints are available, a translucent **No generation models available** banner links to setup instructions for Z-Image-Turbo downloads and SDXL/FLUX/LoRA directories. Your selected model is required to complete the wizard.
+
+### Or explore the included Default project
 
 New installations with an empty project library include a **Default** example animation (3D, **120 frames at 24 FPS**, 1024 × 1024, with two keyframed cat prompts).
 
@@ -148,6 +157,7 @@ For detailed system preparation, troubleshooting, and an explanation of what the
 | Guide | Start here for |
 | --- | --- |
 | **[Getting started](docs/GETTING_STARTED.md)** | Your first image, animation, model, and export |
+| **[New Project Wizard](docs/NEW_PROJECT_WIZARD.md)** | Step-by-step project setup, motion presets, hints, validation, and saving |
 | **[Installation & maintenance](docs/INSTALLATION.md)** | Windows/Linux install, ports, update, repair, paths, logs |
 | **[Troubleshooting](docs/TROUBLESHOOTING.md)** | Common download, GPU, startup, port, and render problems |
 | **[Features & current status](docs/CURRENT_STATUS.md)** | What is implemented, limitations, and development branches |
