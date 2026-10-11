@@ -19,8 +19,10 @@ test('DA3.1 selection uses waveform time and a bounded click tolerance', () => {
   assert.match(js, /motionLabSelectedEvent = closest\.id/);
   assert.match(js, /motionLabStereoWaveform\(\)/);
 });
-test('DA3.1 panel explicitly warns unsaved edits and is responsive', () => {
-  assert.match(js, /Draft edits are not saved to the project or applied to camera motion yet/);
+test('DA3.2 marker panel exposes explicit persistence without changing camera motion', () => {
+  assert.match(js, /Marker edits are stored with this WAV in the project/);
+  assert.match(js, /data-event-persist/);
+  assert.match(js, /motionLabSaveMarkers/);
   assert.match(css, /\.animation-audio-event-fields/);
   assert.match(css, /@media\(max-width:620px\)/);
 });
