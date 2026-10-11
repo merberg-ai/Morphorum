@@ -29,7 +29,7 @@
   padding: 13px;
   border-radius: 11px;
   border: 1px solid var(--border);
-  background: rgba(4,7,10,.38);
+  background: color-mix(in srgb,var(--bg) 38%,transparent);
 }
 .progress-heading, .progress-meta {
   display: flex;
@@ -63,13 +63,13 @@
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border);
-  background: rgba(5,8,12,.48);
+  background: color-mix(in srgb,var(--bg) 48%,transparent);
   border-radius: 12px;
 }
 .result-image-wrap {
   position: relative;
   width: 100%;
-  background: #07090c;
+  background:var(--bg);
   display: grid;
   place-items: center;
   min-height: 190px;
