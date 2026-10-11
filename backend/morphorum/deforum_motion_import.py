@@ -79,7 +79,7 @@ def preview_motion_settings(
         raise DeforumImportError("max_frames must be an integer of at least 2.")
     frames = int(source_frames)
     fps = _positive_number(settings.get("fps"), "fps", 240)
-    if settings.get("animation_mode", "3D").lower() != "3d":
+    if str(settings.get("animation_mode", "3D")).strip().lower() != "3d":
         raise DeforumImportError("The six-axis motion importer requires Deforum 3D settings.")
     schedules: dict[str, list[tuple[int, float]]] = {}
     missing: list[str] = []
