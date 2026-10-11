@@ -696,6 +696,35 @@ def trash_animation_project(project_id: str) -> dict[str, str]:
     return {"id": project_id, "name": title, "trash_path": str(destination)}
 
 
+
+def seed_example_animation_project() -> dict[str, Any] | None:
+    """Install bundled example only if the user has no saved projects.
+
+    This is opt-in through the installer, not a side effect of API startup.
+    Existing projects are never modified, even after repairs or updates.
+    """
+    ensure_runtime_dirs()
+    if list_animation_projects():
+        return None
+    template = Path(__file__).resolve().parents[2] / "config" / "example-project.json"
+    if not template.is_file():
+        raise AnimationProjectError(f"Bundled example project is missing: {template}")
+    try:
+        payload = json.loads(template.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise AnimationProjectError(f"Could not read example project: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise AnimationProjectError("Example project template must be an object.")
+    sample_id = str(payload.get("id") or "").strip().lower()
+    project_file = _project_file(sample_id)
+    if project_file.exists():
+        return None
+    project = normalize_animation_project(payload, project_id=sample_id, prefer_tracks=True)
+    _write_atomic(project_file, project)
+    emit_console("info", "animation", f"Installed example animation project: {project['name']}.")
+    return project
+
+
 def animation_project_directory(project_id: str) -> Path:
     return _project_dir(project_id)
 
