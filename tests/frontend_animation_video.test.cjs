@@ -145,7 +145,11 @@ test('high-resolution animation submits immediately without a 512px confirmation
   let renderId = 0;
   const startButton = { disabled: false, classList: { add() {} } };
   const context = {
-    state: { project: { id: 'test' }, renderJobId: null },
+    state: { project: { id: 'test' }, renderJobId: null, motionJobId: null },
+    animationRenderStarting: false,
+    motionPreviewStarting: false,
+    motionLabSyncQuickActions() {},
+    renderSourceState() {},
     renderIsActive: () => false,
     collectProject: () => ({ id: 'test', animation: { width: 1024, height: 1024 } }),
     qs: selector => selector === '#animation-start-render' ? startButton : null,
@@ -175,6 +179,7 @@ test('high-resolution animation submits immediately without a 512px confirmation
   assert.equal(prompts, 0);
   assert.equal(startButton.disabled, true);
   assert.equal(context.state.renderJobId, 'job-1');
+  assert.equal(context.animationRenderStarting, false, 'pending render lock is released');
 });
 
 
