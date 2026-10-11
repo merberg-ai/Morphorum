@@ -4643,6 +4643,30 @@
   let motionLabAudioUrl = null;
   let motionLabEditedEvents = null;
   let motionLabSelectedEvent = null;
+  let motionLabMarkersDirty = false;
+  async function motionLabSaveMarkers() {
+    if (!motionLabAudioAnalysis || !motionLabEditedEvents || !state.project ||
+        motionLabAudioProjectId !== state.project.id) return;
+    const button = qs('[data-event-persist]');
+    if (button) button.disabled = true;
+    try {
+      const saved = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/motion-lab/audio-markers', {method:'PUT',body:JSON.stringify({
+          source_sha256:motionLabAudioAnalysis.source_sha256,
+          duration_seconds:motionLabAudioAnalysis.duration_seconds,
+          events:motionLabEditedEvents,
+        })});
+      if (!saved?.markers) throw new Error('Marker save was not confirmed.');
+      motionLabMarkersDirty = false;
+      motionLabEventEditor();
+      motionLabNotify('Drum marker edits saved for this WAV.');
+    } catch(error) {
+      motionLabNotify('Could not save markers: ' + (error?.message || error));
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
   function motionLabEventEditor() {
     const panel = qs('#animation-audio-event-editor');
     if (!panel || !motionLabAudioAnalysis) return;
@@ -4650,7 +4674,8 @@
     const selected = events.find(e => e.id === motionLabSelectedEvent);
     const output = panel.querySelector('[data-event-count]');
     if (output) output.textContent = events.filter(e => e.enabled).length +
-      ' active / ' + events.length + ' candidates';
+      ' active / ' + events.length + ' markers · ' +
+      (motionLabMarkersDirty ? 'Unsaved edits' : 'Saved or unmodified');
     const time = panel.querySelector('[data-event-time]');
     const kind = panel.querySelector('[data-event-kind]');
     const enabled = panel.querySelector('[data-event-enabled]');
@@ -4694,6 +4719,7 @@
       selected.enabled = Boolean(panel.querySelector('[data-event-enabled]').checked);
     }
     motionLabEditedEvents.sort((a,b)=>a.time_seconds-b.time_seconds);
+    motionLabMarkersDirty = true;
     motionLabStereoWaveform();
   }
   function motionLabWavePlayhead() {
@@ -4843,9 +4869,11 @@
         '<div class="animation-audio-event-actions"><button type="button" data-event-save>Update marker</button>' +
         '<button type="button" data-event-add>Add at playhead</button>' +
         '<button type="button" data-event-remove disabled>Remove marker</button>' +
-        '<button type="button" data-event-reset>Reset detections</button></div>' +
-        '<p data-event-count></p><p class="muted">Draft edits are not saved to the project or applied to camera motion yet.</p>';
+        '<button type="button" data-event-reset>Reset detections</button>' +
+        '<button type="button" data-event-persist>Save marker edits</button></div>' +
+        '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera motion until a later phase.</p>';
       section.after(editor);
+      editor.querySelector('[data-event-persist]')?.addEventListener('click', () => void motionLabSaveMarkers());
       for (const [attr, action] of [['data-event-save','update'],['data-event-add','add'],
         ['data-event-remove','remove'],['data-event-reset','reset']]) {
         editor.querySelector('['+attr+']')?.addEventListener('click', () => motionLabEventChange(action));
@@ -5060,6 +5088,7 @@
     motionLabAudioAnalysis = null;
     motionLabEditedEvents = null;
     motionLabSelectedEvent = null;
+    motionLabMarkersDirty = false;
     motionLabAudioProjectId = null;
     motionLabReleaseAudio();
     motionLabAudioPreview();
@@ -5174,6 +5203,16 @@
       motionLabAudioAnalysis = analysis;
       motionLabEditedEvents = (analysis.events?.events || []).map(e => ({...e, enabled:true}));
       motionLabSelectedEvent = null;
+      motionLabMarkersDirty = false;
+      const stored = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/audio-markers/' + encodeURIComponent(analysis.source_sha256));
+      if (stored?.markers) {
+        const overrides = stored.markers;
+        if (Math.abs(Number(overrides.duration_seconds) - Number(analysis.duration_seconds)) > .001) {
+          throw new Error('Saved markers have a mismatched WAV duration.');
+        }
+        motionLabEditedEvents = overrides.events.map(e => ({...e}));
+      }
       motionLabAudioProjectId = projectId;
       motionLabAudioUrl = URL.createObjectURL(file);
       motionLabAudioElement = new Audio(motionLabAudioUrl);
