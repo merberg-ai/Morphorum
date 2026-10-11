@@ -64,6 +64,32 @@ Starting with `run.bat` or `./run.sh` permits local host access only. To use ano
 - If you downloaded managed Z-Image-Turbo, wait for it to show **Installed** and **Use Model**.
 - Check that the model matches the intended family and file format.
 
+## "No generation models available" banner stays visible
+
+The translucent warning appears only after Morphorum successfully checks the model index and finds **no usable checkpoint**.
+
+1. Select **Configure Models / Help** in the banner.
+2. For the fastest setup, open **Models**, download managed **Z-Image-Turbo**, wait for the package to be verified, and click **Use Model**.
+3. For existing SDXL/FLUX files, open **Settings**, add checkpoint directories on the **host computer**, save settings, return to **Models**, and select **Scan Models**.
+4. LoRAs are optional additions to a compatible checkpoint. A LoRA-only directory does not clear the banner.
+5. If models exist but the banner is still visible, rescan and check the **Console** for model-index errors. Refresh the browser after the scan if necessary.
+
+The warning automatically disappears once the model index contains a usable checkpoint. See [New Project Wizard](NEW_PROJECT_WIZARD.md#before-you-start).
+
+## New Project Wizard will not advance or save
+
+Open **Motion Lab → New Project Wizard** and check the message on the current step.
+
+- **Step 1:** The project must have a nonempty name (up to 120 characters).
+- **Step 2:** Select an available generation checkpoint. Use **Refresh Models** after scanning, or open **Models / Download** or **Settings** from the wizard.
+- **Step 3:** Choose valid frame count/FPS and dimensions divisible by eight. Large dimensions may still exceed your GPU's VRAM.
+- **Step 4:** Enter an opening prompt. A second prompt, when supplied, needs a valid later frame inside the project.
+- **Step 6 / Save:** Invalid generation schedules are rejected by Morphorum's existing backend validator. Review the field named in the error.
+- A running preview, render, or recording can block switching to a newly created project. Finish the operation and retry.
+- If your existing project has unsaved **Project Editor** changes, the wizard asks whether you want to discard them before creating and opening a new project.
+
+**Save Project & Open Editor** creates the project only after validation. **Back** and **Next** don't create files. An unfinished wizard is only a browser-session draft, not a project saved in Project Manager. **Start Over** clears the draft after confirmation. See [New Project Wizard](NEW_PROJECT_WIZARD.md) for a full walkthrough.
+
 ## Z-Image-Turbo download is slow, incomplete, or unexpectedly large
 
 - The full package is **about 33 GB**, not a tiny model file. Check your disk space and internet connection.
