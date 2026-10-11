@@ -29,3 +29,17 @@ Deforum Motion Studio (chicodog530/Deforum-Motion-Studio) exports an ordinary JS
 
 ## Safety
 No default application or overwrite. Never silently retime projects. Model and generation configuration unchanged. Existing Motion Lab and motion-linked audio project data preserved. Do not merge without user approval.
+
+## DMI1 backend increment (2026-10-11)
+
+Implemented `backend/morphorum/deforum_motion_import.py` and read-only endpoint:
+`POST /api/animation/projects/{project_id}/motion-import/preview`
+with JSON body `{"content":"<the entire JSON .txt/.json file>","filename":"example.txt"}`.
+Response: source timing (FPS, max_frames, duration), source cadence, safe soundtrack basename (never open referenced Windows host path), six-axis summaries, at most 241 downsampled numeric preview samples, project-timing comparisons, warnings and conservative `can_apply_unchanged`. The endpoint loads the specified project for comparison but never saves, applies, or changes it. Supports literal numeric `frame:(value)` keyframes exported by Deforum Motion Studio. Formula schedules are deliberately rejected in this motion-only path, and files are bounded by the existing 1 MiB Deforum parser. A full `.dms.json` session file is not supported; export **Export to Deforum** from your friend's app.
+
+Regression file `tests/test_deforum_motion_import.py` covers six axes, frame interpolation, host path privacy, timing mismatches, source >3000 frames, unsafe expressions, malformed cadence, missing axes and side-effect-free preview.
+
+**CI limitation:** existing GitHub Actions workflow triggers appear limited to `dev-audio`/other specified branches, so this new feature branch does not automatically produce workflow runs. Run locally:
+`python -m pytest tests/test_deforum_motion_import.py -v` and `python -m pytest tests/test_deforum_import.py -v`. Do not claim CI green without run evidence.
+
+DMI1 does not yet provide UI, WAV uploading, offset correction, timing adoption or project mutation. These remain DMI2/DMI3 work. Audio Motion navigation is deliberately still visible until replacement UI is ready, preventing a dead-end menu.
