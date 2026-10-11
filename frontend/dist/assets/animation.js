@@ -4847,7 +4847,11 @@
       section = document.createElement('section');
       section.id = 'animation-audio-stereo-timeline';
       section.className = 'animation-audio-stereo-timeline';
-      section.innerHTML = '<div class="animation-audio-wave-controls"><strong>Stereo waveform & drum events</strong>' +
+      section.innerHTML = '<div class="animation-audio-wave-controls"><strong>Interactive audio timeline</strong>' +
+        '<label class="animation-audio-wave-mode">Display <select data-wave-mode>' +
+        '<option value="envelope">Envelope + markers</option>' +
+        '<option value="stereo">Stereo waveform</option>' +
+        '<option value="both">Envelope + stereo</option></select></label>' +
         '<label>Zoom <input type="range" min="1" max="12" value="1" step="1" data-wave-zoom></label>' +
         '<label>Start <input type="range" min="0" max="1000" value="0" step="1" data-wave-start></label>' +
         '<label class="animation-audio-wave-follow"><input type="checkbox" data-wave-follow checked> Follow playhead</label></div>' +
@@ -4878,6 +4882,7 @@
         ['data-event-remove','remove'],['data-event-reset','reset']]) {
         editor.querySelector('['+attr+']')?.addEventListener('click', () => motionLabEventChange(action));
       }
+      section.querySelector('[data-wave-mode]')?.addEventListener('change', motionLabStereoWaveform);
       section.querySelector('[data-wave-zoom]')?.addEventListener('input', motionLabStereoWaveform);
       section.querySelector('[data-wave-start]')?.addEventListener('input', () => {
         const follow = section.querySelector('[data-wave-follow]');
@@ -4950,8 +4955,9 @@
       return el;
     };
     const count = channels.length;
+    const mode = section.querySelector('[data-wave-mode]')?.value || 'envelope';
     const height = count === 2 ? 64 : 120;
-    channels.forEach((channel, index) => {
+    if (mode !== 'envelope') channels.forEach((channel, index) => {
       const center = count === 2 ? 45 + index * 81 : 88;
       make('line', {x1:0,y1:center,x2:800,y2:center,stroke:'currentColor','stroke-opacity':'.16'});
       const d = [];
@@ -4966,6 +4972,27 @@
       make('text', {x:5,y:center-25,fill:'currentColor','font-size':11}).textContent =
         count === 2 ? (index ? 'R' : 'L') : 'Mono';
     });
+    if (mode !== 'stereo') {
+      const values = motionLabAudioSignal();
+      const fps = Number(analysis.fps) || 12;
+      const startTime = from / total * analysis.duration_seconds;
+      const endTime = to / total * analysis.duration_seconds;
+      const peak = Math.max(.05,...values);
+      const points = [];
+      for (let i = 0; i < values.length; i++) {
+        const time = (i + .5) / fps;
+        if (time < startTime || time > endTime) continue;
+        const x = (time - startTime) * 800 / Math.max(1e-9,endTime-startTime);
+        const y = 164 - Math.max(0,values[i]) / peak * 140;
+        points.push((points.length?'L':'M') + x.toFixed(2) + ' ' + y.toFixed(2));
+      }
+      if (points.length) make('path', {d:points.join(' '),fill:'none',
+        stroke:'#73d5ed','stroke-width':2.4,'vector-effect':'non-scaling-stroke'});
+      const gate = Math.max(0,Math.min(1,Number(qs('#animation-motion-lab-audio-threshold')?.value)||0));
+      const y = 164 - gate / peak * 140;
+      make('line',{x1:0,x2:800,y1:y,y2:y,stroke:'#ff857c',
+        'stroke-width':1.5,'stroke-dasharray':'7 5'});
+    }
     const tStart = from / total * analysis.duration_seconds;
     const tEnd = to / total * analysis.duration_seconds;
     section.dataset.waveStart = String(tStart);
@@ -4987,7 +5014,9 @@
     motionLabWavePlayhead();
     motionLabEventEditor();
     const desc = section.querySelector('[data-wave-description]');
-    if (desc) desc.textContent = (count === 2?'Separate L/R channels':'Mono channel') +
+    if (desc) desc.textContent = (mode === 'envelope'?'Frame-aligned energy envelope':
+      mode === 'both'?'Envelope over separate L/R channels':
+      count === 2?'Separate L/R channels':'Mono channel') +
       ' · ' + tStart.toFixed(2) + '–' + tEnd.toFixed(2) + ' s · ' + visible +
       ' attack candidates in view (orange kick, pink snare, gray highs). ' +
       'Markers represent spectral candidates, not isolated instruments.';
@@ -6419,7 +6448,13 @@
       '<p class="muted">Full-width envelope, stereo waveform, playback and marker editing.</p>';
     analysisWorkspace.appendChild(analysisHeading);
     const audioPreview = qs('#animation-motion-lab-audio-preview');
-    if (audioPreview) analysisWorkspace.appendChild(audioPreview);
+    if (audioPreview) {
+      const legacyDetails = document.createElement('details');
+      legacyDetails.className = 'animation-audio-legacy-envelope';
+      legacyDetails.innerHTML = '<summary>Additional envelope diagnostics</summary>';
+      legacyDetails.appendChild(audioPreview);
+      analysisWorkspace.appendChild(legacyDetails);
+    }
     panels.audio.appendChild(analysisWorkspace);
     // DA3.3a: keep editable timeline and inspector together; separate configuration
     // into source, detection and camera-response groups without cloning controls.
