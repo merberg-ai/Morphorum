@@ -108,3 +108,16 @@ A collapsed **Find Beats · Optional batch cues** panel inside Camera Motion Cue
 - Existing Motion Lab layer UI recognizes the Director layer, offers navigation back to the Audio tab instead of misleading preset editing, and permits toggling/removal/reordering like ordinary layers.
 - Integration tests in `tests/test_audio_director_integration.py` check native motion compilation, forward-only zoom, balanced roll, additive existing preset, deterministic reapply, project serialization, source hash and replace guardrails, and changed-track conflict protection.
 - **Required Windows gate before DA4.6**: open 3D animation and WAV, create/save Push Zoom In at first guitar riff and Roll Right → Left on later kick; press Preview and confirm actual six-axis motion and synchronized audio; inspect Curves, make sure existing layers remain; Apply and inspect Editor schedules, render a brief sequence with audio and confirm movement direction and net forward travel; reapply and verify no doubled motion; test cancel/rebase conflict, disabled cues, clipping warnings, saved/reopened project, and other existing audio layers. Verify no preview/runtime or export regressions. Do not merge to main or dev-ui until user acceptance.
+
+## Development pause: 2026-10-11
+
+**Status: PAUSED BY USER REQUEST. No further Motion Lab / Audio Motion Director feature development until explicitly resumed.**
+
+- Last Windows physical test: **DA4.5 passed**, user confirmed that native cue preview/apply and the tested choreography workflow were working as expected.
+- Immutable checkpoint branch: `checkpoint/audio-motion-director-da4-5-windows-verified-20261011`.
+- Verified implementation SHA: `c025f3db98a52be2a1959b1e4cfa5533161a5db3`.
+- GitHub Actions **Syntax checks** and **Backend tests** both completed successfully for that SHA.
+- Working development branch: `dev-audio`; keep the checkpoint unchanged. `main` and `dev-ui` were not merged or modified for this checkpoint.
+- Completed: DA1 timestamped events; DA2 stereo waveform playback; DA3 marker editing/persistence and UI redesign; DA4.1 source-bound cues; DA4.2 cue editor; DA4.3 native preset math; DA4.4 optional Find Beats/bulk assignments; DA4.5 additive native six-axis compile, preview and apply.
+- **Remaining upon resumption:** DA4.6 integration polish, extended Windows/mobile regression passes, documentation and any user-reported tuning or issues. Do not label DA4.6 completed and do not merge without explicit approval.
+- The user is switching attention to a different idea. Treat that as a separate workstream and retain this exact restore point.
