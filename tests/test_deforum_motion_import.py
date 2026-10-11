@@ -86,3 +86,34 @@ def test_missing_all_axes_rejected():
         del data[name]
     with pytest.raises(DeforumImportError):
         preview_motion_settings(json.dumps(data))
+
+def test_prepare_import_only_changes_six_camera_axes():
+    from morphorum.animation_projects import normalize_animation_project
+    from morphorum.deforum_motion_import import prepare_motion_import
+    p=normalize_animation_project({
+        "name":"Import target", "animation":{"mode":"3d","fps":24,"max_frames":120},
+        "cadence":{"diffusion":"0:(3)"},
+    },project_id="deforum-motion-import-test")
+    imported, report=prepare_motion_import(source(),filename="motion.txt",project=p)
+    assert imported["tracks"]["camera_3d"]["translation_z"]["schedule"]=="0:(0),24:(1),119:(1)"
+    assert imported["animation"]==p["animation"]
+    assert imported["cadence"]==p["cadence"]
+    assert imported["prompts"]==p["prompts"]
+    assert imported["model"]==p["model"]
+    assert imported["motion_lab"]==p["motion_lab"]
+    assert p["tracks"]["camera_3d"]["translation_z"]!=imported["tracks"]["camera_3d"]["translation_z"]
+    assert report["source_sha256"]
+
+
+def test_prepare_rejects_incompatible_and_existing_motion_layers():
+    from morphorum.animation_projects import normalize_animation_project
+    from morphorum.deforum_motion_import import prepare_motion_import
+    p=normalize_animation_project({
+        "name":"Import target","animation":{"mode":"3d","fps":24,"max_frames":120},
+        "cadence":{"diffusion":"0:(3)"},
+    },project_id="deforum-motion-import-test")
+    with pytest.raises(DeforumImportError,match="FPS"):
+        prepare_motion_import(source(fps=30),filename="motion.txt",project=p)
+    p["motion_lab"]["layers"]=[{"id":"existing"}]
+    with pytest.raises(DeforumImportError,match="Motion Lab"):
+        prepare_motion_import(source(),filename="motion.txt",project=p)
