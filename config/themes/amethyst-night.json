@@ -1,0 +1,28 @@
+{
+  "id": "amethyst-night",
+  "name": "Amethyst Night",
+  "appearance": "dark",
+  "colors": {
+    "background": "#140C20",
+    "surface": "rgba(36,24,54,0.86)",
+    "surfaceStrong": "rgba(29,19,46,0.96)",
+    "border": "rgba(205,176,240,0.18)",
+    "text": "#F5EDFF",
+    "textMuted": "#BEA9D2",
+    "accent": "#C59AFF",
+    "accentSecondary": "#F09BD5",
+    "success": "#85E4B5",
+    "warning": "#F4CC87",
+    "danger": "#FFA0B1"
+  },
+  "glass": {
+    "enabled": true,
+    "blurPx": 14,
+    "opacity": 0.84
+  },
+  "radiusPx": 12,
+  "motion": {
+    "enabled": true,
+    "durationMs": 170
+  }
+}
