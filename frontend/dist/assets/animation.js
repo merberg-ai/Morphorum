@@ -2392,6 +2392,9 @@
       const hasModel = Boolean(qs('#animation-model')?.value);
       renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive || state.depthBusy;
     }
+    // Keep the floating Render Animation shortcut synchronized with the
+    // existing guarded render button as models, sources, and jobs change.
+    motionLabSyncQuickActions();
   }
 
   let motionFramePlayer = null;
@@ -4241,18 +4244,31 @@
       ['animation-motion-lab-update-curves', '↻ Curves'],
       ['animation-motion-lab-preview-draft', '▶ Preview'],
       ['animation-motion-lab-apply', 'Apply'],
+      ['animation-start-render', 'Render Animation'],
     ];
     for (const [id, label] of specs) {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = label;
       button.dataset.motionQuickTarget = id;
-      button.className = id.endsWith('-apply') ? 'primary-button compact' : 'secondary-button compact';
+      button.className = id === 'animation-start-render'
+        ? 'primary-button compact animation-motion-quick-render'
+        : id.endsWith('-apply') ? 'primary-button compact' : 'secondary-button compact';
       button.disabled = true;
       button.addEventListener('click', () => {
         const original = qs('#' + id);
         if (!original || original.disabled) return;
+        // Navigate first so recording controls, live graphs, and the
+        // preview player are mounted in their visible workspace.
+        const destination = {
+          'animation-motion-lab-record': 'recording',
+          'animation-motion-lab-update-curves': 'curves',
+          'animation-motion-lab-preview-draft': 'preview',
+          'animation-start-render': 'monitor',
+        }[id];
+        if (destination) showAnimationTab(destination);
         original.click();
+        motionLabSyncQuickActions();
       });
       dock.appendChild(button);
     }
