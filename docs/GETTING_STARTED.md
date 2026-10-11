@@ -62,24 +62,36 @@ After your first success, experiment with **seed behavior**, **batch count**, **
 
 Lower resolution, batch size, or the number of competing GPU applications first. Very large images and some models need considerably more VRAM. See [Troubleshooting](TROUBLESHOOTING.md#out-of-memory-or-extremely-slow-generation).
 
-## 4. Open the starter animation
+## 4. Create your first animation with the wizard
 
-If this is a fresh installation with no pre-existing projects, Morphorum adds the **Default** animation:
+The easiest way to start a new animation is **Motion Lab → New Project Wizard**, available in the desktop sidebar or Motion Lab workspace navigation.
 
-- 120 frames at 24 FPS, about 5 seconds of animation
-- 1024 × 1024 resolution, 3D animation mode
+The wizard has seven guided pages, with explanations and **?** hints beside individual settings:
+
+1. **Welcome & Name:** name your new animation.
+2. **Choose a Model:** select an installed SDXL, FLUX, or Z-Image checkpoint. The wizard chooses model-aware starting values for resolution, sampler, steps, and guidance.
+3. **Animation Setup:** choose 2D/3D, frame count, FPS, and dimensions. The wizard displays approximate duration.
+4. **Prompts & Keyframes:** write an opening prompt and, optionally, a second scene starting at a later frame.
+5. **Camera Motion:** start with Still, Pan, Zoom, Orbit, or Spiral. Orbit/Spiral select 3D.
+6. **Generation Settings:** review sampler, steps, guidance, img2img denoising strength, cadence, and seeds.
+7. **Review & Save:** examine your choices, learn about the optional Audio Motion workspace, then select **Save Project & Open Editor**.
+
+Use **Back** and **Next** freely; the wizard preserves your choices and can restore a modified draft after a browser refresh in the same session. **Nothing is created until the final Save**. The server validates the schedules first and prevents replacing unsaved Editor edits without confirmation.
+
+If no checkpoints are available, use the translucent **No generation models available** banner and its **Configure Models / Help** dialog to set your checkpoint/LoRA folders or download Z-Image-Turbo. A LoRA by itself is not a base generation model.
+
+Read the [complete New Project Wizard guide](NEW_PROJECT_WIZARD.md) for field explanations, example presets, safe defaults, and troubleshooting.
+
+### Alternative: Open the bundled Default example
+
+A fresh installation with no existing projects also includes a **Default** animation:
+
+- 120 frames at 24 FPS, approximately 5 seconds
+- 1024 × 1024 resolution, 3D mode
 - Two positive-prompt keyframes with cat/top-hat scenes
 - No model selected until you choose one
 
-To open it:
-
-1. Open **Motion Lab** in the main menu.
-2. Select **Project Manager** from the Motion Lab sidebar or subsection navigation.
-3. Select **Default**, then **Open in Editor**.
-4. Pick a compatible image model. Review the frame count, FPS, resolution, prompts, and motion schedules.
-5. **Save** your changes.
-
-The example is a starting point, not an indication that your hardware can render every setting at full resolution. If you're new, start by reducing the frame count and using a model-recommended size.
+Open **Motion Lab → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. For an early GPU test, try fewer frames and a model-supported resolution.
 
 ## 5. Explore the Motion Lab workspaces
 
@@ -88,6 +100,7 @@ Motion Lab divides the animation workflow into separate pages so the editing too
 | Workspace | When to use it |
 | --- | --- |
 | **Overview** | Choose what to do next. |
+| **New Project Wizard** | Create a new project through seven explained setup and review steps. |
 | **Project Manager** | Find, rename, inspect, or move projects to Trash. |
 | **Project Editor** | Edit prompts, timing, resolution, schedules, and model. |
 | **Camera Composer** | Build six-axis camera movement with presets and layers. |

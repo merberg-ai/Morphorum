@@ -53,6 +53,8 @@ On a Windows 10/11 system with sufficient disk space and ideally an NVIDIA CUDA 
 1. Open **Models** and check an already installed Z-Image-Turbo package, or download it if storage allows (approximately **33 GB**).
 2. Render **one text-to-image** sample and **one image-to-image** frame. Both should reuse the same Z-Image model folder.
 3. Open the starter project, choose the model, and confirm prompts, resolution, frame count, and mode.
+   Also test **Motion Lab → New Project Wizard** end-to-end using a disposable project. Verify all seven steps and help hints, that the chosen model updates sampler/steps/guidance, that two keyframed prompts and 2D/3D camera preset schedules survive Save and reopen, and that missing-model or invalid-schedule errors prevent creation. Test Back/Next, refreshing to recover a session draft, Start Over, and the warning for unsaved Editor changes. See [New Project Wizard](NEW_PROJECT_WIZARD.md).
+   With an empty disposable model index, verify the transparent **No generation models available** banner and its Models/Settings links; confirm LoRA-only lists still warn and a scanned checkpoint hides it. Test top-right Version Info's repository, branch and full-commit links.
 4. Use Camera Composer, editable Motion Curves, Camera Preview, and the floating quick-action toolbar.
 5. Test Live Recording/Stop; verify conflicting controls correctly disable during active operations.
 6. Test Audio Motion and soundtrack export with a disposable project/audio source.

@@ -8,6 +8,7 @@ Welcome to the Morphorum documentation. Pick the guide that matches what you wan
 | --- | --- |
 | **[Main README](../README.md)** | What Morphorum does, the shortest install instructions, and the main links |
 | **[Getting started](GETTING_STARTED.md)** | Open the app, select a model, generate an image, try Motion Lab, export a video |
+| **[New Project Wizard](NEW_PROJECT_WIZARD.md)** | All seven guided setup steps, model choices, motion presets, help hints, validation and safe saving |
 | **[Installation and maintenance](INSTALLATION.md)** | Detailed setup on Windows/Linux, port settings, LAN access, updates, repair and file locations |
 | **[Troubleshooting](TROUBLESHOOTING.md)** | Startup, model downloads, CUDA, RAM/VRAM, video encoding, and update errors |
 | **[Current features and status](CURRENT_STATUS.md)** | Implemented capabilities, known limitations and branch/checkpoint policy |

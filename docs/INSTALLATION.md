@@ -130,6 +130,10 @@ A clean installation with an empty project library gets a **Default** animation 
 
 The installer **does not replace existing projects** during repair or update. Open **Motion Lab → Project Manager → Default**, choose **Open in Editor**, and select a model before rendering.
 
+**Starting your own animation:** open **Motion Lab → New Project Wizard**. It walks through naming the project, selecting an available model, animation dimensions and timing, prompts, camera movement, and generation settings before the final Review & Save. It starts from Morphorum's canonical default-project schema and creates nothing until you save. The bundled Default example and new wizard projects are separate. See [New Project Wizard](NEW_PROJECT_WIZARD.md).
+
+On a new installation with **no usable generation checkpoint**, a translucent warning banner at the top of the interface provides a **Configure Models / Help** dialog. This explains checkpoint directory settings, optional LoRA paths, downloading managed Z-Image-Turbo, and scanning. The banner appears only after the model index successfully loads, and disappears when a usable checkpoint is indexed.
+
 For a first model, open **Models** and use the managed **Z-Image-Turbo** download. It is an approximately **33 GB** model package and supports both txt2img and img2img. Existing compatible SDXL and FLUX checkpoints can be indexed from folders selected under **Settings**. See [Getting started](GETTING_STARTED.md#2-download-or-locate-an-image-model).
 
 ## Updating Morphorum

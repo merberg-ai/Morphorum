@@ -1075,11 +1075,31 @@
     const versionFull = qs('#runtime-version-full');
     const branchFull = qs('#runtime-branch-full');
     const commitFull = qs('#runtime-commit');
+    const repoLink = qs('#runtime-repository-link');
+    const branchLink = qs('#runtime-branch-link');
+    const commitLink = qs('#runtime-commit-link');
+    const repoUrl = 'https://github.com/merberg-ai/Morphorum';
+    if (repoLink) repoLink.href = repoUrl;
     try {
       const health = await api('/api/health');
       const buildVersion = String(health.version || 'unknown');
       const branch = String(health.git_branch || 'Unknown branch');
-      const commit = String(health.git_commit || 'Unavailable').slice(0, 12);
+      const fullCommit = String(health.git_commit_full || health.git_commit || '');
+      const commit = fullCommit.slice(0, 12);
+      const validBranch = branch && !['Unknown branch', 'HEAD', 'detached'].includes(branch)
+        && !/[?#\\]/.test(branch) && !/[.]{2}/.test(branch);
+      const validCommit = /^[0-9a-f]{40}$/i.test(fullCommit);
+      if (branchLink) {
+        branchLink.hidden = !validBranch;
+        if (validBranch) branchLink.href = repoUrl + '/tree/' +
+          branch.split('/').map(encodeURIComponent).join('/');
+        else branchLink.removeAttribute('href');
+      }
+      if (commitLink) {
+        commitLink.hidden = !validCommit;
+        if (validCommit) commitLink.href = repoUrl + '/commit/' + fullCommit;
+        else commitLink.removeAttribute('href');
+      }
       const displayVersion = buildVersion.startsWith('v') ? buildVersion : `v${buildVersion}`;
       dot?.classList.add('ok');
       dot?.classList.remove('bad');
@@ -1100,6 +1120,9 @@
       if (branchFull) branchFull.textContent = 'Unavailable';
       if (commitFull) commitFull.textContent = 'Unavailable';
       if (pill) pill.title = 'Morphorum server unavailable';
+      for (const link of [branchLink, commitLink]) {
+        if (link) { link.hidden = true; link.removeAttribute('href'); }
+      }
     }
   }
 
@@ -1118,7 +1141,45 @@
       (keyboard ? 0 : Math.min(110, Math.round(obstructed))) + 'px');
   }
 
+  function updateModelSetupBanner(models, loaded = true) {
+    const banner = qs('#model-setup-banner');
+    if (!banner) return;
+    const usable = Array.isArray(models) && models.some(model =>
+      model.kind === 'checkpoints' && model.id);
+    banner.hidden = !loaded || usable;
+  }
+
+  function openModelSetupHelp() {
+    const dialog = qs('#model-setup-help');
+    if (!dialog) return;
+    if (typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
+    else if (typeof dialog.showModal !== 'function') {
+      toast('Help is unavailable', 'Open Models or Settings to configure model paths.', 'warning');
+    }
+  }
+
+  function bindModelSetupHelp() {
+    window.addEventListener('morphorum:models-updated', event => {
+      updateModelSetupBanner(event.detail?.models, event.detail?.loaded === true);
+    });
+    qs('#model-setup-help-open')?.addEventListener('click', openModelSetupHelp);
+    qs('#model-setup-help-close')?.addEventListener('click', () => qs('#model-setup-help')?.close());
+    for (const [id, view] of [
+      ['model-setup-help-settings', 'settings'],
+      ['model-setup-help-models', 'models'],
+    ]) {
+      qs('#' + id)?.addEventListener('click', () => {
+        qs('#model-setup-help')?.close();
+        switchView(view);
+      });
+    }
+    qs('#model-setup-help')?.addEventListener('click', event => {
+      if (event.target.id === 'model-setup-help') event.target.close();
+    });
+  }
+
   function bindUi() {
+    bindModelSetupHelp();
     qsa('.nav-button').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
     qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');

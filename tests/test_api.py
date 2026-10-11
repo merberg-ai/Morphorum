@@ -965,3 +965,23 @@ def test_project_manager_trash_api_preserves_outputs_and_blocks_active_render(
         assert client.get(f"/api/animation/projects/{project_id}").status_code == 404
         assert client.delete(f"/api/animation/projects/{project_id}").status_code == 404
         assert client.delete("/api/animation/projects/..%2Foutside").status_code in (400, 404)
+
+
+def test_new_project_wizard_template_endpoint_is_read_only(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    with TestClient(app) as client:
+        response = client.get("/api/animation/project-template")
+        assert response.status_code == 200
+        project = response.json()["project"]
+        assert project["name"] == "New Animation"
+        assert project["animation"]["max_frames"] == 120
+        assert project["generation"]["seed"] == -1
+        assert project["prompts"] == {"0": ""}
+        assert "tracks" not in project
+        assert "id" not in project
+        checked = client.post("/api/animation/validate-schedules", json={
+            "project": {**project, "id": "wizard-validation", "prompts": {"0": "a moonlit forest"}}
+        })
+        assert checked.status_code == 200
+        assert checked.json()["valid"] is True
+        assert client.get("/api/animation/projects").json()["projects"] == []

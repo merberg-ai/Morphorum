@@ -2537,3 +2537,69 @@ dialog#animation-deforum-dialog {
   .animation-project-manager-item:hover:not(:disabled),
   .animation-project-manager-item:active:not(:disabled) {transform:none;}
 }
+
+/* Guided project creation is a standalone Motion Lab workspace, sharing
+   current theme tokens and never cloning the advanced Editor controls. */
+#animation-panel-wizard {display:grid;gap:14px;min-width:0;align-content:start;}
+.project-wizard-heading .eyebrow {margin:0 0 7px;}
+.project-wizard-heading h2 {margin:0;font-size:1.35rem;}
+.project-wizard-card {padding:clamp(15px,2.8vw,28px);min-width:0;max-width:1020px;width:100%;}
+.project-wizard-loading,.project-wizard-error {padding:24px;}
+.project-wizard-counter {color:var(--accent);font-size:.83rem;font-weight:700;margin-bottom:10px;}
+.project-wizard-progress {display:flex;gap:5px;margin-bottom:24px;max-width:720px;}
+.project-wizard-progress span {height:6px;background:var(--border-strong);border-radius:6px;flex:1 1 0;}
+.project-wizard-progress span.complete {background:var(--accent);box-shadow:var(--button-shadow);}
+.project-wizard-card h3 {font-size:1.18rem;margin:0 0 7px;}
+.project-wizard-card > p.muted {font-size:.84rem;line-height:1.5;max-width:730px;}
+.project-wizard-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin-top:23px;}
+.project-wizard-field {display:grid;gap:8px;min-width:0;}
+.project-wizard-field:has(textarea),.project-wizard-info,.project-wizard-shortcuts,.project-wizard-review {grid-column:1/-1;}
+.project-wizard-field-heading {display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;}
+.project-wizard-field-heading strong {font-size:.83rem;font-weight:600;color:var(--text);}
+.project-wizard-field input,.project-wizard-field select,.project-wizard-field textarea {
+  width:100%;min-width:0;font-family:var(--font-ui);color:var(--text);
+}
+.project-wizard-field textarea {min-height:102px;resize:vertical;}
+.project-wizard-hint {position:relative;font-size:.75rem;}
+.project-wizard-hint summary {
+  list-style:none;display:grid;place-items:center;width:25px;height:25px;
+  border:1px solid var(--border-strong);border-radius:50%;cursor:pointer;
+  color:var(--accent);font-weight:750;background:var(--button-secondary-bg);
+  transition:background .16s ease,border-color .16s ease;
+}
+.project-wizard-hint summary::-webkit-details-marker {display:none;}
+.project-wizard-hint summary:hover {background:var(--button-secondary-hover);border-color:var(--accent);}
+.project-wizard-hint summary:focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
+.project-wizard-hint p {
+  position:absolute;top:calc(100% + 6px);right:0;z-index:3;
+  width:min(320px,70vw);max-width:unset;
+  padding:12px 14px;margin:0;border:1px solid var(--border-strong);
+  border-radius:9px;background:var(--panel-strong);box-shadow:var(--shadow);
+  color:var(--text);line-height:1.5;
+}
+.project-wizard-info {font-size:.83rem;line-height:1.55;color:var(--muted);margin:4px 0;}
+.project-wizard-info.warning {
+  border:1px solid color-mix(in srgb,var(--warn) 45%,var(--border));
+  background:color-mix(in srgb,var(--warn) 7%,var(--panel));
+  color:var(--text);padding:14px;border-radius:10px;
+}
+.project-wizard-shortcuts {display:flex;gap:9px;flex-wrap:wrap;}
+.project-wizard-shortcuts button {min-height:39px;}
+.project-wizard-review {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0;}
+.project-wizard-review div {border:1px solid var(--border);border-radius:9px;padding:10px;min-width:0;background:var(--button-secondary-bg);}
+.project-wizard-review dt {font-size:.72rem;color:var(--muted);margin-bottom:5px;}
+.project-wizard-review dd {margin:0;overflow-wrap:anywhere;font-size:.84rem;}
+.project-wizard-error-text {color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 45%,var(--border));padding:10px 12px;border-radius:9px;}
+.project-wizard-footer {display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:18px;margin-top:23px;}
+.project-wizard-footer button {min-height:41px;}
+.project-wizard-footer-spacer {flex:1 1 10px;}
+@media(max-width:720px) {
+  .project-wizard-fields,.project-wizard-review {grid-template-columns:minmax(0,1fr);}
+  .project-wizard-card {padding:15px;}
+  .project-wizard-card h3 {font-size:1.08rem;}
+  .project-wizard-footer {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .project-wizard-footer-spacer {display:none;}
+  .project-wizard-footer button:last-child {grid-column:1/-1;}
+  .project-wizard-shortcuts button {flex:1 1 100%;}
+}
+@media(prefers-reduced-motion:reduce) {.project-wizard-hint summary {transition:none;}}
