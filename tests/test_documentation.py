@@ -10,6 +10,7 @@ GUIDES = [
     "README.md",
     "docs/README.md",
     "docs/GETTING_STARTED.md",
+    "docs/NEW_PROJECT_WIZARD.md",
     "docs/INSTALLATION.md",
     "docs/TROUBLESHOOTING.md",
     "docs/CURRENT_STATUS.md",
@@ -62,3 +63,26 @@ def test_example_and_model_docs_match_packaged_descriptors() -> None:
     assert "120 frames" in guide
     assert "24 FPS" in guide
     assert "Motion Lab" in guide
+
+
+def test_first_project_wizard_user_docs_track_actual_flow() -> None:
+    guide = (ROOT / "docs/NEW_PROJECT_WIZARD.md").read_text(encoding="utf-8")
+    wizard = (ROOT / "frontend/dist/assets/project-wizard.js").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for step in (
+        "Welcome & Name",
+        "Choose a Model",
+        "Animation Setup",
+        "Prompts & Keyframes",
+        "Camera Motion",
+        "Generation Settings",
+        "Review & Save",
+    ):
+        assert step in guide
+        assert step in wizard
+    for feature in ("Audio Motion", "Back", "Next", "Start Over", "Save Project & Open Editor"):
+        assert feature in guide
+    assert "New Project Wizard" in readme
+    assert "NEW_PROJECT_WIZARD.md" in readme
+    assert "No generation models available" in readme
+    assert "model-setup-banner" in (ROOT / "frontend/dist/index.html").read_text(encoding="utf-8")
