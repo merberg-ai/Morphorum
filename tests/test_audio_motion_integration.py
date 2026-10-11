@@ -37,7 +37,11 @@ def test_wav_analysis_project_bound_and_frame_aligned(tmp_path, monkeypatch):
     assert analyze_managed_wav(project_id, audio, fps=12, frames=8)["source_sha256"] == result["source_sha256"]
 
 
-@pytest.mark.parametrize("content", [b"", b"not a wav", b"x" * (20 * 1024 * 1024 + 1)])
+@pytest.mark.parametrize(
+    "content",
+    [b"", b"not a wav", b"x" * (20 * 1024 * 1024 + 1)],
+    ids=["empty", "invalid-header", "oversized"],
+)
 def test_reject_bad_wav(content, tmp_path, monkeypatch):
     from morphorum import animation_projects
     monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
