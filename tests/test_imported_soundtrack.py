@@ -42,3 +42,35 @@ def test_missing_audio_rejected(tmp_path,monkeypatch):
     monkeypatch.setattr(audio,"animation_project_directory",lambda project_id:tmp_path)
     with pytest.raises(audio.ImportedSoundtrackError):
         audio.update_offset("test",0)
+
+
+def test_freeze_soundtrack_pins_attachment_and_offset_for_render(tmp_path, monkeypatch):
+    monkeypatch.setattr(audio, "animation_project_directory", lambda project_id: tmp_path)
+    original = b"ID3" + b"original-audio" * 8
+    first = audio.store_soundtrack(
+        "test", original, filename="first.mp3", offset_seconds=1.25
+    )
+    render_dir = tmp_path / "render"
+    snapshot = audio.freeze_soundtrack("test", render_dir)
+    assert snapshot["sha256"] == first["sha256"]
+    assert snapshot["offset_seconds"] == pytest.approx(1.25)
+    frozen = render_dir / snapshot["render_filename"]
+    assert frozen.read_bytes() == original
+
+    replacement = b"ID3" + b"replacement-audio" * 8
+    audio.store_soundtrack(
+        "test", replacement, filename="second.mp3", offset_seconds=-0.75
+    )
+    assert frozen.read_bytes() == original
+    assert snapshot["offset_seconds"] == pytest.approx(1.25)
+
+
+def test_freeze_soundtrack_rejects_changed_attachment_bytes(tmp_path, monkeypatch):
+    monkeypatch.setattr(audio, "animation_project_directory", lambda project_id: tmp_path)
+    record = audio.store_soundtrack(
+        "test", b"fLaC" + b"audio" * 8, filename="clip.flac", offset_seconds=0
+    )
+    path = tmp_path / "imported_soundtrack" / (record["sha256"] + ".flac")
+    path.write_bytes(b"fLaC" + b"tampered")
+    with pytest.raises(audio.ImportedSoundtrackError, match="checksum changed"):
+        audio.freeze_soundtrack("test", tmp_path / "render")

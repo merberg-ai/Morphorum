@@ -1559,3 +1559,51 @@ def test_hybrid_video_anchors_use_time_aligned_frozen_pngs_and_resume(
     finished = wait_for(new_manager, resumed["id"])
     assert finished["status"] == "completed", finished
     assert fake.input_pixels[-1] == (120, 0, 0)
+
+
+def test_render_submission_freezes_imported_soundtrack_snapshot(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+    frozen = {
+        "schema_version": 1,
+        "sha256": "b" * 64,
+        "format": "mp3",
+        "filename": "track.mp3",
+        "bytes": 1234,
+        "offset_seconds": -0.5,
+        "render_filename": "imported-soundtrack.mp3",
+    }
+    calls = []
+    monkeypatch.setattr(
+        animation_render,
+        "freeze_soundtrack",
+        lambda project_id, render_dir: (
+            calls.append((project_id, Path(render_dir))) or dict(frozen)
+        ),
+    )
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "orange").save(source)
+    project = sample_project(max_frames=1)
+    project["_imported_soundtrack_snapshot"] = {"stale": True}
+
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+    assert finished["status"] == "completed", finished
+    assert finished["imported_soundtrack"] == {
+        "enabled": True,
+        "filename": "track.mp3",
+        "offset_seconds": -0.5,
+        "sha256": "b" * 64,
+    }
+    assert calls and calls[0][0] == "render-test"
+    manifest_path = (
+        tmp_path / "outputs" / "animations" / "render-test" / started["id"]
+        / "render-manifest.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["project"]["_imported_soundtrack_snapshot"] == frozen
