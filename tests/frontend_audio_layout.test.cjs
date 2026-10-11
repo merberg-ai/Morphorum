@@ -8,7 +8,7 @@ const css = fs.readFileSync(path.join(__dirname,'..','frontend/dist/assets/anima
 test('DA3 analysis graphs are reparented into independent full-width workspace', () => {
   assert.match(js, /legacyDetails\.appendChild\(audioPreview\)/);
   assert.match(js, /panels\.audio\.appendChild\(analysisWorkspace\)/);
-  assert.match(js, /preview\.after\(section\)/);
+  assert.match(js, /diagnostics\.before\(section\)/);
   assert.match(js, /section\.after\(editor\)/);
   assert.match(css, /#animation-panel-audio\s*\{\s*display:flex;flex-direction:column/);
   assert.match(css, /\.animation-audio-analysis-workspace/);
