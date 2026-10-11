@@ -69,6 +69,7 @@
       this.nextFrame = 30;
       this.errors = '';
       this.ready = false;
+      this.dirtyDraft = false;
       window.addEventListener('morphorum:models-updated', event => {
         if (event.detail?.loaded === true) {
           this.models = (event.detail.models || []).filter(m => m.kind === 'checkpoints');
@@ -76,7 +77,7 @@
         }
       });
       window.addEventListener('beforeunload', event => {
-        if (this.draft && !this.saved) {
+        if (this.draft && this.dirtyDraft && !this.saved) {
           event.preventDefault();
           event.returnValue = '';
         }
@@ -115,6 +116,7 @@
           if (restored?.draft && !restored.draft.id && restored.draft.animation &&
               restored.draft.generation && restored.draft.motion) {
             this.draft = restored.draft;
+            this.dirtyDraft = true;
             this.step = Math.min(STEPS.length - 1, Math.max(0, Number(restored.step) || 0));
             this.preset = restored.preset || 'still';
             this.nextPrompt = String(restored.nextPrompt || '');
@@ -181,6 +183,7 @@
         if (options.onChange) options.onChange(value);
         else writePath(this.draft, dotted, value);
         this.errors = '';
+        this.dirtyDraft = true;
         this.remember();
       });
       block.append(control);
@@ -216,6 +219,7 @@
         this.draft.animation.width = cap.default_resolution?.width || 1024;
         this.draft.animation.height = cap.default_resolution?.height || 1024;
       }
+      this.dirtyDraft = true;
       this.remember();
       this.render();
     }
@@ -242,6 +246,7 @@
         this.draft.camera_3d.translation_z = '0:(0), ' + total + ':(3)';
         this.draft.camera_3d.rotation_z = '0:(0), ' + total + ':(8)';
       }
+      this.dirtyDraft = true;
       this.remember();
       this.render();
     }
@@ -453,6 +458,7 @@
       this.nextPrompt = '';
       this.nextFrame = 30;
       this.preset = 'still';
+      this.dirtyDraft = false;
       await this.open();
     }
 
