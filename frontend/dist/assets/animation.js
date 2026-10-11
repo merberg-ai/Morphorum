@@ -4907,7 +4907,7 @@
         const cue = {id,preset:'push_zoom_in',time_seconds:time,duration_seconds:.6,
           intensity:.5,easing:'ease_in_out',enabled:true,source_event_id:null};
         motionDirectorCues.push(cue);motionDirectorSelected=id;motionDirectorDirty=true;
-        motionDirectorPanel();
+        motionDirectorPanel();motionLabStereoWaveform();
       });
       panel.querySelector('[data-cue-update]').addEventListener('click', () => {
         const cue = motionDirectorCues.find(c => c.id === motionDirectorSelected);
@@ -4924,11 +4924,11 @@
           time_seconds:time,duration_seconds:duration,intensity,
           easing:panel.querySelector('[data-cue-easing]').value,
           enabled:panel.querySelector('[data-cue-enabled]').checked});
-        motionDirectorDirty=true;motionDirectorPanel();
+        motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
       });
       panel.querySelector('[data-cue-delete]').addEventListener('click', () => {
         motionDirectorCues=motionDirectorCues.filter(c=>c.id!==motionDirectorSelected);
-        motionDirectorSelected=null;motionDirectorDirty=true;motionDirectorPanel();
+        motionDirectorSelected=null;motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
       });
       panel.querySelector('[data-cue-save]').addEventListener('click', async () => {
         const projectId=state.project?.id;
@@ -5089,6 +5089,12 @@
         return begin + ratio * (end - begin);
       };
       waveform?.addEventListener('pointerdown', event => {
+        const cueHit=event.target.closest?.('[data-timeline-cue]');
+        if (cueHit) {
+          motionDirectorSelected=cueHit.getAttribute('data-timeline-cue');
+          motionDirectorPanel();
+          return;
+        }
         if (event.button !== 0 || !motionLabEditedEvents?.length) return;
         const target = positionToTime(event);
         if (target === null) return;
@@ -5132,6 +5138,11 @@
       waveform?.addEventListener('pointerup',finishDrag);
       waveform?.addEventListener('pointercancel',finishDrag);
       section.querySelector('[data-wave-svg]')?.addEventListener('click', event => {
+        const cueHit=event.target.closest?.('[data-timeline-cue]');
+        if (cueHit) {
+          motionDirectorSelected=cueHit.getAttribute('data-timeline-cue');
+          motionDirectorPanel(); return;
+        }
         if (section.dataset.waveSuppressClick === '1') {
           delete section.dataset.waveSuppressClick;
           return;
@@ -5264,6 +5275,23 @@
         'stroke-width':event.id===motionLabSelectedEvent?3:1.5,
         'stroke-opacity':event.enabled===false?'.2':'.85'});
       visible++;
+    }
+    // Explicit cue lane is separate from detected transient markers.
+    const cueColors = {push_zoom_in:'#75d9b5',roll_right_left:'#c99cf2',
+      roll_left_right:'#c99cf2',push_return:'#73d5ed',dolly_out:'#73d5ed',
+      shake:'#ffb76b',ripple:'#ff96bd',reveal_drift:'#a8d4f5',
+      fly_through:'#75d9b5'};
+    for (const cue of motionDirectorCues) {
+      if (cue.time_seconds < tStart || cue.time_seconds > tEnd) continue;
+      const x=(cue.time_seconds-tStart)*800/Math.max(1e-9,tEnd-tStart);
+      const band=make('rect',{x:Math.max(0,x-5),y:153,width:11,height:22,rx:2,
+        fill:cueColors[cue.preset]||'#fff','fill-opacity':cue.enabled?'.96':'.35',
+        'data-timeline-cue':cue.id,role:'button',
+        'aria-label':'Motion cue '+cue.preset+' at '+cue.time_seconds.toFixed(3)+' seconds',
+        stroke:cue.id===motionDirectorSelected?'#fff':'none','stroke-width':2});
+      const tip=document.createElementNS(ns,'title');
+      tip.textContent=cue.preset.replaceAll('_',' ')+' · '+cue.time_seconds.toFixed(3)+'s';
+      band.appendChild(tip);
     }
     make('line', {x1:0,x2:0,y1:0,y2:180,stroke:'#ffed81','stroke-width':3,
       'vector-effect':'non-scaling-stroke','pointer-events':'none',
