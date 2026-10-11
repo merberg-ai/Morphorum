@@ -2119,6 +2119,16 @@ dialog#animation-deforum-dialog {
   backdrop-filter:blur(12px);
 }
 .animation-motion-lab-quick-actions button {white-space:nowrap;min-height:36px;padding:7px 12px;}
+.animation-motion-lab-quick-actions .animation-motion-quick-render {
+  margin-left: 6px;
+  border-color: rgba(65,217,255,.4);
+  box-shadow: 0 0 0 1px rgba(65,217,255,.08);
+}
+/* These labels are interactive switches, not full-width form fields. */
+#animation-panel-curves .animation-motion-lab-edit-toggle {
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
 .animation-motion-lab-quick-actions #animation-motion-lab-quick-status {font-size:.73rem;white-space:nowrap;}
 @media(max-width:640px) {
   .animation-motion-lab-quick-actions {bottom:4px;gap:5px;padding:8px;width:calc(100% - 8px);}
