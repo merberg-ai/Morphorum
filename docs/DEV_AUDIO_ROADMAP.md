@@ -75,3 +75,7 @@ Inspected upstream `main` on 2026-10-11 (README, motion.py, controller.py, app.p
 - Upstream repo has **no declared GitHub license / LICENSE file** as of inspection; friend has granted informal permission as reported by user. Avoid verbatim source copying unless permission terms and attribution are documented for Morphorum's Unlicense repository. Prefer independently implemented ideas and attribute the inspiration in documentation.
 
 **Roadmap supersedes** DA4 direct frequency→axis and unifies DA5 tuning and DA6 render checks under DA4.4-DA4.6. Preserve all prior DA1-DA3 code and test gates. Do not change `main` or `dev-ui`.
+
+### DA4.1 initial backend increment committed (CI/Windows gate pending)
+
+`backend/morphorum/audio_motion_cues.py` implements bounded source-bound motion cue validation, chronological ordering, explicit preset and easing identifiers, cue timestamps in seconds and atomic project-sidecar saving under `motion_lab_audio/<sha256>.cues.json`. New project-scoped read/save API endpoints in `app.py` and `tests/test_audio_motion_cues.py` cover no-detection manual cues, concurrent triggers, invalid source/cue fields and FPS mapping. This is **backend-only groundwork**; no editor UI, preset compilation, frame scheduling or renderer changes have been made in DA4.1 yet. The next task is to run CI, resolve any failure, then add the cue-first editor and controlled Windows test gate.
