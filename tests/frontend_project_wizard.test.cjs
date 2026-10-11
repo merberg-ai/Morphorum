@@ -115,6 +115,11 @@ test('wizard validates missing name and model; preset edits native schedules', (
   assert.match(instance.draft.camera_3d.rotation_y,/119/);
   instance.configureCamera('still');
   assert.equal(instance.draft.camera_3d.translation_z,'0:(0)');
+  instance.configureCamera('pan');
+  assert.match(instance.draft.camera_3d.translation_x,/119/);
+  assert.equal(instance.draft.motion.translation_x,'0:(0)');
+  instance.configureCamera('zoom');
+  assert.match(instance.draft.camera_3d.translation_z,/119/);
 });
 test('wizard is not persisted until final create and validates before POST', async () => {
   const posted=[];
