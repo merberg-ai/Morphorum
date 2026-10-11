@@ -6721,8 +6721,14 @@
             <option value="translation_y">Translation Y</option><option value="rotation_x">Pitch X</option>
             <option value="rotation_y">Yaw Y</option></select></label></div>
           <svg data-dmi-chart viewBox="0 0 800 210" role="img" aria-label="Selected imported camera motion curve"></svg>
-          <div class="dmi-audio"><strong>Optional WAV synchronization</strong>
-            <label>Choose local WAV <input type="file" accept=".wav,audio/wav" data-dmi-wav></label>
+          <div class="dmi-audio"><strong>Optional soundtrack synchronization</strong>
+            <div class="dmi-soundtrack-ref">
+              <label>Referenced soundtrack path <input data-dmi-source-path type="text" readonly placeholder="No soundtrack path in settings"></label>
+              <button type="button" data-dmi-copy-path class="secondary-button compact" disabled>Copy path</button>
+              <button type="button" data-dmi-copy-folder class="secondary-button compact" disabled>Copy folder</button>
+            </div>
+            <p class="muted" data-dmi-path-note>Browsers cannot open a local file picker at an arbitrary path from imported settings. Copy the folder path to navigate there in your system's file picker.</p>
+            <label>Choose local audio (WAV / MP3 / OGG / FLAC where supported) <input type="file" accept=".wav,.mp3,.ogg,.flac,audio/*" data-dmi-wav></label>
             <audio data-dmi-player controls preload="metadata"></audio>
             <div class="dmi-align"><label>Audio offset (seconds) <input type="number" data-dmi-offset step=".01" min="-30" max="30" value="0"></label>
               <label>Motion playhead (seconds) <input type="range" data-dmi-seek min="0" max="1" value="0" step=".01"></label>
@@ -6740,6 +6746,31 @@
     const graph=panel.querySelector('[data-dmi-chart]');
     const player=panel.querySelector('[data-dmi-player]');
     const wav=panel.querySelector('[data-dmi-wav]');
+    const sourcePath=panel.querySelector('[data-dmi-source-path]');
+    const copyPath=panel.querySelector('[data-dmi-copy-path]');
+    const copyFolder=panel.querySelector('[data-dmi-copy-folder]');
+    const pathNote=panel.querySelector('[data-dmi-path-note]');
+    const directoryOf=path=>String(path||'').replace(/[\\/][^\\/]*$/, '');
+    const copyText=async text=>{
+      if (!text) return;
+      try {
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+        else {
+          const temporary=document.createElement('textarea');
+          temporary.value=text;temporary.readOnly=true;
+          temporary.style.position='fixed';temporary.style.left='-9999px';
+          document.body.appendChild(temporary);temporary.select();
+          if (!document.execCommand('copy')) throw new Error('Clipboard unavailable');
+          temporary.remove();
+        }
+        pathNote.textContent='Copied. Paste the path into your file picker’s address bar to find the soundtrack.';
+      } catch(error) {
+        sourcePath.focus();sourcePath.select();
+        pathNote.textContent='Clipboard permission unavailable. The path is selected for manual copying.';
+      }
+    };
+    copyPath.addEventListener('click',()=>copyText(sourcePath.value));
+    copyFolder.addEventListener('click',()=>copyText(directoryOf(sourcePath.value)));
     const lengthText=panel.querySelector('[data-dmi-length]');
     const offset=panel.querySelector('[data-dmi-offset]');
     const seek=panel.querySelector('[data-dmi-seek]');
@@ -6785,6 +6816,16 @@
         });
         report=response;results.hidden=false;
         const source=response.source,compare=response.project_comparison;
+        const embeddedPath=String(source.soundtrack_path||'');
+        sourcePath.value=embeddedPath;
+        copyPath.disabled=!embeddedPath;
+        copyFolder.disabled=!directoryOf(embeddedPath);
+        pathNote.textContent=embeddedPath
+          ? 'Referenced by the export only. The browser cannot set this folder as the default browse location; use Copy folder and paste it into your file picker’s address bar.'
+          : 'No soundtrack path in these settings. Choose a local audio file to inspect synchronization.';
+        wav.title=source.soundtrack_filename
+          ? 'Look for '+source.soundtrack_filename+' when browsing for soundtrack audio'
+          : 'Choose an audio file';
         const summary=panel.querySelector('[data-dmi-summary]');
         summary.replaceChildren();
         for(const [label,value] of [['Source FPS',source.fps],['Source frames',source.max_frames],
@@ -6803,7 +6844,7 @@
         status.textContent=selected.name+' · '+(response.can_apply_unchanged?'Timing matches project':'Timing requires review');
         seek.max=String(source.duration_seconds);seek.value='0';draw();updateSync();
         lengthText.textContent='Settings soundtrack: '+(source.soundtrack_filename||'none')+
-          '. Select a local WAV to inspect alignment; the imported Windows file path is never accessed.';
+          '. Choose the local audio file manually to inspect alignment. Embedded paths are never accessed automatically.';
       }catch(error){status.textContent='Preview failed: '+error.message;report=null;results.hidden=true;}
     });
     axis.addEventListener('change',draw);
@@ -6815,13 +6856,13 @@
       objectUrl=URL.createObjectURL(selected);player.src=objectUrl;
       player.onloadedmetadata=()=>{
         wavDuration=player.duration;
-        lengthText.textContent='WAV '+wavDuration.toFixed(2)+'s · motion '+
+        lengthText.textContent='Audio '+wavDuration.toFixed(2)+'s · motion '+
           Number(report?.source?.duration_seconds||0).toFixed(2)+'s. Adjust audio offset for synchronization.';
         updateSync();
       };
       // Local amplitude overview, no upload or server-side filesystem mutation.
       try {
-        if(selected.size>40*1024*1024)throw new Error('WAV exceeds 40 MiB preview limit.');
+        if(selected.size>40*1024*1024)throw new Error('Audio exceeds 40 MiB waveform preview limit.');
         const ctx=new (window.AudioContext||window.webkitAudioContext)();
         try {
           const buffer=await ctx.decodeAudioData(await selected.arrayBuffer());
@@ -6838,7 +6879,7 @@
           }
           c.stroke();
         } finally {await ctx.close();}
-      }catch(error){lengthText.textContent='WAV waveform preview failed: '+error.message;}
+      }catch(error){lengthText.textContent='Audio waveform preview unavailable: '+error.message;}
     });
   }
 
