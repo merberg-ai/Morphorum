@@ -6,7 +6,7 @@ const path = require('node:path');
 const js = fs.readFileSync(path.join(__dirname,'..','frontend/dist/assets/animation.js'),'utf8');
 const css = fs.readFileSync(path.join(__dirname,'..','frontend/dist/assets/animation.css'),'utf8');
 test('DA3 analysis graphs are reparented into independent full-width workspace', () => {
-  assert.match(js, /analysisWorkspace\.appendChild\(audioPreview\)/);
+  assert.match(js, /legacyDetails\.appendChild\(audioPreview\)/);
   assert.match(js, /panels\.audio\.appendChild\(analysisWorkspace\)/);
   assert.match(js, /preview\.after\(section\)/);
   assert.match(js, /section\.after\(editor\)/);
