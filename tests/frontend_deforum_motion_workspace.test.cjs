@@ -42,3 +42,15 @@ test('DMI2 exposes source soundtrack path with copy controls and browser picker 
   assert.match(js,/\.mp3,\.ogg,\.flac,audio\/\*/);
   assert.match(css,/\.dmi-soundtrack-ref/);
 });
+
+test('DMI3 requires safe review before explicit import and respects project edits',()=>{
+  assert.match(js,/data-dmi-prepare/);
+  assert.match(js,/data-dmi-apply disabled/);
+  assert.match(js,/\/motion-import\/prepare/);
+  assert.match(js,/\/motion-import\/apply/);
+  assert.match(js,/project_sha256:ready\.project_sha256/);
+  assert.match(js,/source_sha256:ready\.source_sha256/);
+  assert.match(js,/if \(state\.dirty\)/);
+  assert.match(js,/Replace six camera schedules\?/);
+  assert.match(js,/window\.MorphorumDialog\.confirm/);
+});
