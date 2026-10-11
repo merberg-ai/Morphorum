@@ -529,3 +529,31 @@ def test_installer_does_not_seed_example_when_a_different_project_exists(
     assert animation_projects.seed_example_animation_project() is None
     items = list_animation_projects()
     assert [item["id"] for item in items] == [existing["id"]]
+
+
+def test_wizard_default_template_is_nonpersistent_and_matches_project_defaults(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    template = animation_projects.new_animation_project_template()
+    assert not list(tmp_path.iterdir())
+    assert template["name"] == "New Animation"
+    assert template["animation"]["mode"] == "2d"
+    assert template["animation"]["max_frames"] == 120
+    assert template["generation"]["strength"] == "0:(0.65)"
+    assert template["prompts"] == {"0": ""}
+    assert "tracks" not in template
+    assert "id" not in template
+    assert "created_at" not in template
+
+    template["name"] = "Wizard Project"
+    template["prompts"] = {"0": "A fat orange cat", "30": "A black cat"}
+    template["model"] = {"model_id": "managed:zimage-turbo", "family": "zimage", "variant": "turbo"}
+    template["animation"]["mode"] = "3d"
+    template["camera_3d"]["rotation_y"] = "0:(0), 119:(12)"
+    saved = create_animation_project(template)
+    assert saved["name"] == "Wizard Project"
+    assert saved["animation"]["mode"] == "3d"
+    assert saved["prompts"]["30"] == "A black cat"
+    assert saved["tracks"]["prompts"]["positive"]["keyframes"][1]["frame"] == 30
+    assert saved["tracks"]["camera_3d"]["rotation_y"]["schedule"] == "0:(0), 119:(12)"
