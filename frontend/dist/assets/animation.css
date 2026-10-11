@@ -2659,3 +2659,13 @@ dialog#animation-deforum-dialog {
 #animation-panel-audio .animation-audio-stereo-timeline [data-wave-svg]:focus-visible {
   outline:2px solid var(--accent);outline-offset:3px;
 }
+
+
+#animation-panel-audio .animation-audio-wave-controls .animation-audio-wave-follow {
+  display:flex;flex-direction:row;align-items:center;gap:8px;
+  grid-column:1/-1;width:max-content;max-width:100%;
+  cursor:pointer;color:var(--text);
+}
+#animation-panel-audio .animation-audio-wave-follow input[type="checkbox"] {
+  width:16px;height:16px;min-width:16px;flex:none;margin:0;
+}
