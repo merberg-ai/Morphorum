@@ -48,7 +48,7 @@
   border-left: 1px solid var(--border-strong);
 }
 #motion-lab-sidebar button {
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -58,16 +58,32 @@
   line-height: 1.3;
   padding: 9px 10px;
   min-height: 35px;
+  transition: background .17s ease,color .17s ease,border-color .17s ease,
+    box-shadow .17s ease,transform .17s ease;
 }
-#motion-lab-sidebar button:hover,
-#motion-lab-sidebar button:focus-visible {
+#motion-lab-sidebar button:hover:not(:disabled) {
   color: var(--text);
-  background: rgba(65,217,255,.08);
+  background: var(--button-secondary-hover);
+  border-color: var(--button-hover-border);
+}
+#motion-lab-sidebar button:active:not(:disabled) {
+  background:var(--button-secondary-active);
+  transform:scale(.985);
+}
+#motion-lab-sidebar button:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+  box-shadow:0 0 0 4px var(--button-focus-ring);
 }
 #motion-lab-sidebar button.active {
   color: var(--accent);
+  border-color:var(--border-strong);
   font-weight: 700;
-  background: rgba(65,217,255,.13);
+  background: var(--button-secondary-active);
+}
+@media (prefers-reduced-motion:reduce) {
+  #motion-lab-sidebar button {transition:none;}
+  #motion-lab-sidebar button:active:not(:disabled) {transform:none;}
 }
 .main-nav {
   max-height: calc(100dvh - 120px);
