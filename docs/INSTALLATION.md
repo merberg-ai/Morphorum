@@ -46,6 +46,13 @@ Noninteractive install with an explicit location:
 .\\bootstrap.bat -InstallDir 'D:\\Morphorum'
 ```
 
+The new installer asks which **server port** to use (default `7865`). This is stored in `data/server-port.txt` and preserved by updates or repairs. To preselect a port, add `-Port 8080` to `bootstrap.bat` or `install.bat`. Normal launches load that preference, and you can override it temporarily:
+
+```powershell
+.\\run.bat -Port 8080
+.\\run-lan.bat -Port 8080
+```
+
 The bootstrap also supports `-Branch` for testing an alternate Git branch. If you already have an installation at the requested path, it uses the guarded updater instead of overwriting your data.
 
 The existing PowerShell bootstrap remains supported:
