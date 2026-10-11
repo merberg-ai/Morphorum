@@ -121,14 +121,16 @@ try {
         } elseif (-not $ExistingPort) {
             Write-Host '  Choose the port Morphorum should listen on.' -ForegroundColor Gray
             Write-Host '  Press ENTER for 7865 (recommended).' -ForegroundColor DarkGray
-            $choice = (Read-Host '  Server port').Trim()
-            if ($choice) {
+            while ($true) {
+                $choice = (Read-Host '  Server port').Trim()
+                if (-not $choice) { break }
                 $requested = 0
-                if (-not [int]::TryParse($choice, [ref]$requested) -or
-                    $requested -lt 1 -or $requested -gt 65535) {
-                    throw 'Invalid server port. Enter a number between 1 and 65535.'
+                if ([int]::TryParse($choice, [ref]$requested) -and
+                    $requested -ge 1 -and $requested -le 65535) {
+                    $ServerPort = $requested
+                    break
                 }
-                $ServerPort = $requested
+                Warn 'Enter a valid port between 1 and 65535, or press Enter for 7865.'
             }
             $SavePort = $true
         }
