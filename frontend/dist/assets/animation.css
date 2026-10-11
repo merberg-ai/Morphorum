@@ -76,8 +76,8 @@
   line-height: 1.4;
 }
 .animation-prompt-row textarea:focus {
-  border-color: rgba(65,217,255,.48);
-  box-shadow: 0 0 0 3px rgba(65,217,255,.07);
+  border-color: color-mix(in srgb,var(--accent) 48%,transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb,var(--accent) 7%,transparent);
 }
 .animation-remove-prompt {
   align-self: end;
@@ -287,7 +287,7 @@
   stroke: var(--accent);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 5px rgba(65,217,255,.22));
+  filter: drop-shadow(0 0 5px color-mix(in srgb,var(--accent) 22%,transparent));
 }
 .animation-curve-meta {
   display: flex;
@@ -343,7 +343,7 @@
   background: rgba(6,9,13,.32);
 }
 .animation-prompt-resolution-text {
-  color: #cbd3da;
+  color: var(--text);
   font-size: .73rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -459,7 +459,7 @@
 .animation-motion-progress .progress-fill {
   width: 0;
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), rgba(65,217,255,.55));
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb,var(--accent) 55%,transparent));
   transition: width .18s ease;
 }
 .animation-motion-result {
@@ -536,9 +536,9 @@
 .animation-render-state.loading_model,
 .animation-render-state.queued,
 .animation-render-state.finalizing {
-  color: #9edcf0;
-  border-color: rgba(65,217,255,.24);
-  background: rgba(65,217,255,.05);
+  color: var(--accent);
+  border-color: color-mix(in srgb,var(--accent) 24%,transparent);
+  background: color-mix(in srgb,var(--accent) 5%,transparent);
 }
 
 .animation-render-progress {
@@ -699,9 +699,9 @@
 .animation-model-load-progress {
   margin-top: 12px;
   padding: 10px 11px;
-  border: 1px solid rgba(65,217,255,.18);
+  border: 1px solid color-mix(in srgb,var(--accent) 18%,transparent);
   border-radius: var(--radius-sm);
-  background: rgba(65,217,255,.035);
+  background: color-mix(in srgb,var(--accent) 3.5%,transparent);
 }
 .animation-model-load-progress .progress-row {
   display: flex;
@@ -867,7 +867,7 @@
   border-bottom: 0;
 }
 .animation-timeline-track-row.selected {
-  background: rgba(65,217,255,.025);
+  background: color-mix(in srgb,var(--accent) 2.5%,transparent);
 }
 .animation-timeline-track-label {
   display: flex;
@@ -912,9 +912,9 @@
   width: 15px;
   height: 15px;
   padding: 0;
-  border: 1px solid rgba(65,217,255,.65);
+  border: 1px solid color-mix(in srgb,var(--accent) 65%,transparent);
   border-radius: 3px;
-  background: rgba(65,217,255,.22);
+  background: color-mix(in srgb,var(--accent) 22%,transparent);
   box-shadow: 0 0 0 2px rgba(3,5,8,.78);
   transform: translate(-50%, -50%) rotate(45deg);
   cursor: grab;
@@ -926,7 +926,7 @@
 .animation-timeline-keyframe.selected {
   border-color: var(--accent);
   background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(65,217,255,.14);
+  box-shadow: 0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent);
 }
 .animation-timeline-keyframe.required {
   border-radius: 50%;
@@ -937,7 +937,7 @@
   bottom: 0;
   width: 2px;
   background: var(--accent);
-  box-shadow: 0 0 8px rgba(65,217,255,.35);
+  box-shadow: 0 0 8px color-mix(in srgb,var(--accent) 35%,transparent);
   pointer-events: none;
   z-index: 3;
 }
@@ -1122,9 +1122,9 @@
 .animation-render-prompt-telemetry {
   margin-top: 10px;
   padding: 10px;
-  border: 1px solid rgba(65,217,255,.18);
+  border: 1px solid color-mix(in srgb,var(--accent) 18%,transparent);
   border-radius: var(--radius-sm);
-  background: rgba(65,217,255,.035);
+  background: color-mix(in srgb,var(--accent) 3.5%,transparent);
 }
 .animation-render-prompt-heading {
   display: flex;
@@ -1335,8 +1335,8 @@
   font-family: var(--font-mono);
 }
 .animation-timeline-keyframe-chip.selected {
-  border-color: rgba(65,217,255,.55);
-  background: rgba(65,217,255,.12);
+  border-color: color-mix(in srgb,var(--accent) 55%,transparent);
+  background: color-mix(in srgb,var(--accent) 12%,transparent);
   color: var(--text);
 }
 
@@ -1620,7 +1620,7 @@
   width: min(980px, calc(100vw - 32px));
   max-height: min(880px, calc(100vh - 32px));
   padding: 0;
-  border: 1px solid rgba(65,217,255,.3);
+  border: 1px solid color-mix(in srgb,var(--accent) 30%,transparent);
   border-radius: var(--radius);
   background: rgba(8,12,17,.98);
   color: var(--text);
@@ -1674,9 +1674,9 @@
 .animation-import-safety { margin: 0; }
 .animation-import-summary {
   padding: 10px 12px;
-  border: 1px solid rgba(65,217,255,.22);
+  border: 1px solid color-mix(in srgb,var(--accent) 22%,transparent);
   border-radius: var(--radius-sm);
-  background: rgba(65,217,255,.045);
+  background: color-mix(in srgb,var(--accent) 4.5%,transparent);
   font-family: var(--font-mono);
   font-size: .76rem;
   line-height: 1.55;
@@ -2087,7 +2087,7 @@ dialog#animation-deforum-dialog {
 #animation-panel-monitor .animation-render-visuals {grid-template-columns:minmax(0,1fr);max-width:800px;margin:12px auto;}
 #animation-panel-monitor .animation-render-frame-wrap img {max-height:min(58dvh,680px);object-fit:contain;}
 #animation-panel-monitor .animation-render-progress {max-width:950px;margin:8px auto 0;}
-.animation-step-progress {margin:12px 0 0;padding:10px 12px;background:rgba(164,108,255,.035);border:1px solid var(--border);border-radius:10px;}
+.animation-step-progress {margin:12px 0 0;padding:10px 12px;background:color-mix(in srgb,var(--accent-2) 3.5%,transparent);border:1px solid var(--border);border-radius:10px;}
 .animation-step-progress .progress-fill {background:linear-gradient(90deg,var(--accent-2),var(--accent));}
 .animation-monitor-diagnostics {border-top:1px solid var(--border);margin-top:15px;padding-top:14px;min-width:0;}
 .animation-monitor-diagnostics > summary {cursor:pointer;color:var(--muted);font-size:.8rem;}
@@ -2179,7 +2179,7 @@ dialog#animation-deforum-dialog {
 .motion-audio-help summary {display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:.8rem;width:22px;height:22px;border:1px solid currentColor;border-radius:50%;list-style:none;opacity:.83;}
 .motion-audio-help summary::-webkit-details-marker {display:none;}
 .motion-audio-help[open] {z-index:30;}
-.motion-audio-help p {position:absolute;left:0;top:100%;z-index:40;width:min(290px,78vw);padding:12px;border:1px solid #4e748f;border-radius:10px;background:#182431;color:#ecf3fb;box-shadow:0 8px 25px rgba(0,0,0,.55);font-size:.83rem;font-weight:normal;line-height:1.5;}
+.motion-audio-help p {position:absolute;left:0;top:100%;z-index:40;width:min(290px,78vw);padding:12px;border:1px solid var(--border-strong);border-radius:10px;background:var(--panel-strong);color:var(--text);box-shadow:0 8px 25px rgba(0,0,0,.55);font-size:.83rem;font-weight:normal;line-height:1.5;}
 @media(max-width:540px) {.motion-audio-help p {left:auto;right:-10px;max-width:75vw;}}
 
 /* Duration-match checkbox is a compact boolean control, never an auto-sized grid input. */
@@ -2196,7 +2196,7 @@ dialog#animation-deforum-dialog {
 .animation-motion-player-actions {display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
 .animation-motion-player-actions label {display:inline-flex;align-items:center;gap:6px;}
 .animation-motion-player-actions input[type=checkbox] {width:16px;height:16px;}
-#animation-motion-frame-scrub {display:block;width:100%;min-width:0;accent-color:#63d4e9;}
+#animation-motion-frame-scrub {display:block;width:100%;min-width:0;accent-color:var(--accent);}
 @media(max-width:540px) {.animation-motion-player-actions button {min-height:42px;}}
 
 /* ML3.4: preview quality selection does not widen the Motion Lab card. */
@@ -2232,11 +2232,11 @@ dialog#animation-deforum-dialog {
 .animation-audio-workflow span {
   display:inline-flex; align-items:center; gap:8px; padding:7px 10px;
   border:1px solid var(--border); border-radius:9px;
-  background:rgba(65,217,255,.035); color:var(--muted); font-size:.8rem;
+  background:color-mix(in srgb,var(--accent) 3.5%,transparent); color:var(--muted); font-size:.8rem;
 }
 .animation-audio-workflow strong {
   display:inline-grid; place-items:center; width:20px; height:20px;
-  border-radius:50%; background:rgba(65,217,255,.14); color:var(--accent);
+  border-radius:50%; background:color-mix(in srgb,var(--accent) 14%,transparent); color:var(--accent);
 }
 .animation-audio-workspace-actions {
   display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-top:14px;
@@ -2327,7 +2327,7 @@ dialog#animation-deforum-dialog {
 .motion-lab-tool-card span {font-size:.8rem;line-height:1.5;color:var(--muted);}
 .motion-lab-tool-card:hover,.motion-lab-tool-card:focus-visible {
   border-color:var(--accent);
-  background:rgba(65,217,255,.075);
+  background:color-mix(in srgb,var(--accent) 7.5%,transparent);
   outline-offset:3px;
 }
 .motion-tool-page-heading {
