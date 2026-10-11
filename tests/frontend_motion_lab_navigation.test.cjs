@@ -79,7 +79,7 @@ test('Motion Lab preserves its introduction and preview without redundant Editor
 
 test('Motion Lab preview is usable without a separately uploaded image', () => {
   assert.match(js, /if \(preview\) preview\.disabled = !state\.project \|\| Boolean\(state\.motionJobId\)/);
-  assert.match(js, /if \(!state\.project \|\| state\.motionJobId\) return;/);
+  assert.match(js, /if \(!state\.project \|\| state\.motionJobId \|\| motionPreviewStarting/);
   assert.match(js, /animationMode\(\) !== '3d'/);
   assert.match(html, /built-in calibration grid immediately/);
   assert.match(html, /built-in calibration grid immediately/);
