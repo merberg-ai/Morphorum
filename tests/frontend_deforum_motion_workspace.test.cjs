@@ -54,3 +54,19 @@ test('DMI3 requires safe review before explicit import and respects project edit
   assert.match(js,/Replace six camera schedules\?/);
   assert.match(js,/window\.MorphorumDialog\.confirm/);
 });
+
+test('DMI3 importer buttons use theme styles and progress through shared toast system',()=>{
+  assert.match(js,/class="secondary-button compact" data-dmi-prepare/);
+  assert.match(js,/class="primary-button compact" data-dmi-apply disabled/);
+  assert.match(js,/progress\('Loading Deforum settings'/);
+  assert.match(js,/progress\('Reviewing motion import'/);
+  assert.match(js,/progress\('Applying motion'/);
+  assert.match(js,/progress\('Motion import blocked'/);
+});
+test('DMI3 soundtrack attachment is explicit and separate from camera import',()=>{
+  assert.match(js,/data-dmi-attach/);
+  assert.match(js,/data-dmi-save-offset/);
+  assert.match(js,/\/motion-import\/soundtrack/);
+  assert.match(js,/X-Audio-Offset-Seconds/);
+  assert.match(js,/Attachment does not automatically change the exported video/);
+});
