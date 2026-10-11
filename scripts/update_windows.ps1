@@ -13,12 +13,13 @@ Write-MorphorumSection 'WORKTREE CHECKS'
 Write-MorphorumDetail 'Install folder' $Root
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    throw 'Git is required to update Morphorum.'
+    Fail 'Git is required to update Morphorum. Install Git for Windows and retry.'
+    exit 1
 }
 
 $dirty = git -C $Root status --porcelain --untracked-files=no
 if ($dirty) {
-    Write-Host '[X] Tracked Morphorum files have local changes. Update aborted to avoid overwriting them.' -ForegroundColor Red
+    Fail 'Tracked application files have local changes. Update stopped to protect those changes.'
     Write-Host $dirty
     exit 1
 }
@@ -31,18 +32,23 @@ Write-MorphorumDetail 'Target branch' $targetBranch
 Write-MorphorumDetail 'Current commit' $previous.Substring(0, [Math]::Min(12, $previous.Length))
 
 if (-not $targetBranch -or $targetBranch -eq 'HEAD') {
-    throw 'Morphorum is in detached HEAD state. Specify a branch explicitly, for example: update.bat main'
+    Fail 'Detached Git HEAD. Specify a branch, for example: update.bat main'
+    exit 1
 }
 
 if ($Branch) {
     Write-MorphorumSection 'REMOTE BRANCH'
     Step "Fetching branch information from origin..."
     git -C $Root fetch origin --prune
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if ($LASTEXITCODE -ne 0) {
+        Fail 'Could not fetch branches from GitHub. Check the connection and retry.'
+        exit $LASTEXITCODE
+    }
 
     git -C $Root show-ref --verify --quiet "refs/remotes/origin/$targetBranch"
     if ($LASTEXITCODE -ne 0) {
-        throw "Remote branch 'origin/$targetBranch' was not found."
+        Fail "Branch 'origin/$targetBranch' was not found. Confirm the branch name."
+        exit 1
     }
 }
 
@@ -101,25 +107,25 @@ catch {
     if ($previousBranch -and $previousBranch -ne 'HEAD') {
         git -C $Root switch $previousBranch
         if ($LASTEXITCODE -ne 0) {
-            Write-Host '[X] Automatic branch rollback failed. Resolve the Git error, then run repair.bat.' -ForegroundColor Red
+            Fail 'Automatic branch rollback failed. Resolve the Git error, then run repair.bat.'
             exit 1
         }
     }
     else {
         git -C $Root checkout --detach $previous
         if ($LASTEXITCODE -ne 0) {
-            Write-Host '[X] Automatic detached-HEAD rollback failed. Resolve the Git error, then run repair.bat.' -ForegroundColor Red
+            Fail 'Automatic detached-HEAD rollback failed. Resolve the Git error, then run repair.bat.'
             exit 1
         }
     }
 
     git -C $Root reset --hard $previous
     if ($LASTEXITCODE -ne 0) {
-        Write-Host '[X] Automatic source rollback failed. Run repair.bat after resolving the Git error.' -ForegroundColor Red
+        Fail 'Automatic source rollback failed. Run repair.bat after resolving the Git error.'
         exit 1
     }
     & (Join-Path $Root 'scripts\install_windows.ps1') -Repair
-    Write-Host '[X] The update was rolled back. Morphorum should be back on the previous version.' -ForegroundColor Red
-    Write-Host "Backup: $backup"
+    Fail 'Update rolled back. Your previous Morphorum source version was restored.'
+    Write-MorphorumDetail 'Backup' $backup
     exit 1
 }
