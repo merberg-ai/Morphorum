@@ -71,10 +71,14 @@ test('Desktop has an independent wide-screen layout without replacing mobile sty
   assert.match(html, /href="\/assets\/desktop\.css\?v=__MORPHORUM_ASSET_VERSION__" media="\(min-width: 1181px\) and \(hover: hover\) and \(pointer: fine\)"/);
   assert.match(desktop, /grid-template-areas:\s*"top top"\s*"nav main"/);
   assert.match(desktop, /\.main-nav\s*\{[^}]*flex-direction:\s*column/);
+  assert.match(desktop, /#view-animation \.animation-workspace-nav\s*\{[^}]*display:\s*inline-flex/);
+  assert.match(desktop, /#view-animation \.animation-workspace-nav button\s*\{[^}]*flex:\s*0 0 auto/);
+  assert.match(desktop, /#animation-panel-editor \.animation-layout\s*\{[^}]*grid-template-columns:\s*repeat\(12/);
   assert.match(desktop, /#animation-panel-motion\s*\{[^}]*grid-template-areas:/);
-  assert.match(desktop, /"composer visual"/);
-  assert.match(desktop, /"recording preview"/);
-  assert.match(desktop, /\.animation-motion-preview-card\s*\{[^}]*position:\s*sticky/);
+  assert.match(desktop, /"author review"/);
+  assert.match(desktop, /"audio audio"/);
+  assert.match(desktop, /\.animation-motion-preview-card\s*\{[^}]*order:\s*-1/);
+  assert.match(read('assets/animation.css'), /\.animation-motion-authoring-column,\s*#animation-panel-motion > \.animation-motion-review-column\s*\{\s*display:\s*contents;/);
   assert.match(mobile, /@media \(max-width: 640px\)/);
   assert.match(mobile, /\.main-nav\s*\{\s*position: fixed/);
 });
@@ -87,4 +91,20 @@ test('Motion Lab explains its workflow without displaying internal milestone nam
   assert.doesNotMatch(html, /<h2>[^<]+\s+<small class="muted">ML\d/);
   assert.doesNotMatch(html, /Controller recording and audio-reactive movement are coming later/);
   assert.doesNotMatch(html, /Full-band RMS in this first release/);
+});
+
+test('Motion Lab uses existing DOM controls in mobile-transparent desktop columns', () => {
+  const js = read('assets/animation.js');
+  const html = read('index.html');
+  const desktop = read('assets/desktop.css');
+  assert.match(js, /const motionAuthoringColumn = document\.createElement\('div'\)/);
+  assert.match(js, /for \(const node of \[composer, recording\]\)/);
+  assert.match(js, /for \(const node of \[visual, motionPreview\]\)/);
+  assert.match(js, /if \(audio\) audio\.after\(motionReviewColumn\)/);
+  assert.match(desktop, /#animation-panel-motion > \.animation-motion-authoring-column\s*\{\s*display:\s*flex/);
+  assert.match(desktop, /#animation-panel-motion > \.animation-motion-review-column\s*\{\s*display:\s*flex/);
+  assert.match(desktop, /\.animation-layout:has\(\.animation-depth-card\[hidden\]\)/);
+  assert.match(html, /class="card glass animation-generation-state-card"/);
+  assert.match(html, /id="animation-timeline-card"/);
+  assert.match(html, /id="animation-motion-lab-recording"/);
 });
