@@ -1,5 +1,8 @@
 # Morphorum Motion Lab — implementation roadmap
 
+> [!IMPORTANT]
+> **Historical implementation log.** The original status immediately below was written during ML2 development and is retained for traceability. Motion Lab's Composer, Recording, Curves, Preview, Audio Motion, Render Monitor and dedicated navigation were subsequently integrated into `dev-ui` with PR [#20](https://github.com/merberg-ai/Morphorum/pull/20). For the current build use [Current status](CURRENT_STATUS.md) or the [user walkthrough](GETTING_STARTED.md); do **not** use the old branch/base instructions below to start new work.
+
 **Status:** ML0, ML1a, ML1b and the ML1b smoothing/checkbox polish physically accepted on Windows (2026-10-09). Latest protected checkpoint remains `checkpoint/motion-lab-ml1b-smoothing-windows-verified-20261009` at `c0e5f90a692e14e32b48155f71d0a8afc923c6ae`. **ML2.0–ML2.2 are now implemented on `feature/motion-lab` and awaiting Windows/phone physical acceptance; they are not checkpointed or merged.** The ML2 code candidate before documentation updates is `47b614f10993cfae0eb249b94ee94b932d693149`, with Syntax and Backend CI green. ML3 audio is not implemented.
 **Branch:** `feature/motion-lab`
 **Branch base:** `dev-ui` at `bc40d18d4f5968904afedc798ecd3efdef71761a` (B6.3.2 physical acceptance)
