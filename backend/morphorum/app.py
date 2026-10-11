@@ -234,6 +234,20 @@ def api_animation_projects() -> dict[str, Any]:
     return {"projects": list_animation_projects()}
 
 
+@app.post("/api/animation/projects/{project_id}/motion-import/preview")
+def api_preview_project_motion_import(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Read-only Deforum motion inspection; never changes project or loads WAV paths."""
+    from .deforum_motion_import import preview_motion_settings
+    try:
+        project = load_animation_project(project_id)
+        return preview_motion_settings(
+            payload.get("content"), filename=str(payload.get("filename") or ""),
+            project=project,
+        )
+    except (AnimationProjectError, DeforumImportError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/import/deforum/preview")
 def api_preview_deforum_import(payload: dict[str, Any]) -> dict[str, Any]:
     try:
