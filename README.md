@@ -26,19 +26,19 @@ Core goals:
 
 ### Windows (recommended: `bootstrap.bat`)
 
-Download [bootstrap.bat](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat), then double-click it or run it from Command Prompt/PowerShell. It displays a colored welcome screen and asks for the installation folder. **Press Enter for `C:\\Morphorum`**, or enter any other path (for example `D:\\Morphorum`).
+Download [bootstrap.bat](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat), then double-click it or run it from Command Prompt/PowerShell. It displays a colored welcome screen and asks for the installation folder. **Press Enter for `C:\Morphorum`**, or enter any other path (for example `D:\Morphorum`).
 
 To fetch and start it from a Windows terminal:
 
 ```powershell
 curl.exe -fL -o bootstrap.bat https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat
-.\\bootstrap.bat
+.\bootstrap.bat
 ```
 
 For unattended or scripted installations:
 
 ```powershell
-.\\bootstrap.bat -InstallDir 'D:\\Morphorum'
+.\bootstrap.bat -InstallDir 'D:\Morphorum'
 ```
 
 The installer asks for a **server port** during the first installation, defaulting to **7865**. This is saved at `data/server-port.txt`. Normal launches reuse the saved port; `run.bat -Port 8080` or `run-lan.bat -Port 8080` overrides it for one launch. To preselect the port without a prompt, pass `-Port 8080` to `bootstrap.bat` along with `-InstallDir`.
