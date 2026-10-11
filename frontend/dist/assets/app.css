@@ -134,6 +134,24 @@ button, input, select, textarea, dialog, option, optgroup,
 button, input, select, textarea { font-size: inherit; }
 pre, code, kbd, samp { font-family: var(--font-mono); }
 svg text { font-family: var(--font-ui); }
+/* Native widgets use the same selected theme as custom buttons and cards. */
+html { accent-color: var(--accent); scrollbar-color: var(--border-strong) var(--bg-soft); }
+input[type="checkbox"], input[type="radio"], input[type="range"], progress {
+  accent-color: var(--accent);
+}
+::selection { color: var(--text); background: color-mix(in srgb,var(--accent) 33%,var(--bg)); }
+input::file-selector-button {
+  font-family: var(--font-ui);
+  color: var(--text);
+  background: var(--button-secondary-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 11px;
+  margin-right: 10px;
+  cursor: pointer;
+}
+input::file-selector-button:hover { border-color: var(--button-hover-border); background: var(--button-secondary-hover); }
+
 
 button { color: inherit; }
 code { color: var(--accent); font-family: var(--font-mono); }
