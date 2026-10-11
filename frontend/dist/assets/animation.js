@@ -4829,7 +4829,7 @@
         '<output data-wave-time>0.00 / 0.00 s</output><span>Click or tap the waveform to seek</span></div>' +
         '<svg data-wave-svg viewBox="0 0 800 180" role="img" tabindex="0" aria-label="Stereo waveform, drum events and audio playhead; click or tap to seek"></svg>' +
         '<p class="muted" data-wave-description></p>';
-      preview.before(section);
+      preview.after(section);
       const editor = document.createElement('div');
       editor.id = 'animation-audio-event-editor';
       editor.className = 'animation-audio-event-editor';
@@ -6368,10 +6368,24 @@
       </div>
     `;
     panels.audio.prepend(audioIntro);
+    // DA3 layout: wide analysis displays are independent of the compact
+    // configuration card. Reparenting preserves existing element IDs,
+    // event listeners, SVG rendering and draft-marker state.
+    const analysisWorkspace = document.createElement('article');
+    analysisWorkspace.id = 'animation-audio-analysis-workspace';
+    analysisWorkspace.className = 'card glass animation-audio-analysis-workspace';
+    const analysisHeading = document.createElement('div');
+    analysisHeading.className = 'animation-audio-analysis-heading';
+    analysisHeading.innerHTML = '<h2>Audio analysis & drum timeline</h2>' +
+      '<p class="muted">Full-width envelope, stereo waveform, playback and marker editing.</p>';
+    analysisWorkspace.appendChild(analysisHeading);
+    const audioPreview = qs('#animation-motion-lab-audio-preview');
+    if (audioPreview) analysisWorkspace.appendChild(audioPreview);
+    panels.audio.appendChild(analysisWorkspace);
     const audioPlaceholder = document.createElement('div');
     audioPlaceholder.className = 'animation-audio-preview-placeholder';
     audioPlaceholder.innerHTML = '<strong>Beat analysis preview</strong><p>Choose a WAV file and select Analyze WAV. Your detected beats and audio levels will appear here before you add any motion.</p>';
-    qs('#animation-motion-lab-audio-preview')?.before(audioPlaceholder);
+    analysisWorkspace.querySelector('#animation-motion-lab-audio-preview')?.before(audioPlaceholder);
     qs('#animation-audio-back-motion')?.addEventListener('click', () => showAnimationTab('motion'));
     qs('#animation-audio-review-motion')?.addEventListener('click', () => showAnimationTab('curves'));
     qs('#animation-audio-apply')?.addEventListener('click', () => {
