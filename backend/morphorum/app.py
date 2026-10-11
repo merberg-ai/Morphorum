@@ -358,6 +358,46 @@ def api_motion_lab_presets() -> dict[str, Any]:
     return {"presets": list(MOTION_LAB_PRESETS)}
 
 
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio-cues/{source_sha256}")
+def api_get_audio_cues(project_id: str, source_sha256: str) -> dict[str, Any]:
+    from .audio_motion_cues import load_motion_cues
+    try:
+        load_animation_project(project_id)
+        return {"cues": load_motion_cues(project_id, source_sha256)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}/motion-lab/audio-cues")
+def api_save_audio_cues(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .audio_motion_cues import save_motion_cues
+    try:
+        load_animation_project(project_id)
+        return {"status": "saved", "cues": save_motion_cues(project_id, payload)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio-markers/{source_sha256}")
+def api_get_audio_markers(project_id: str, source_sha256: str) -> dict[str, Any]:
+    from .audio_marker_overrides import read_marker_overrides
+    try:
+        load_animation_project(project_id)
+        return {"markers": read_marker_overrides(project_id, source_sha256)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}/motion-lab/audio-markers")
+def api_save_audio_markers(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .audio_marker_overrides import write_marker_overrides
+    try:
+        load_animation_project(project_id)
+        return {"status": "saved", "markers": write_marker_overrides(project_id, payload)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/projects/{project_id}/motion-lab/audio-analyze")
 async def api_motion_lab_audio_analyze(project_id: str, request: Request) -> dict[str, Any]:
     """Decode and retain bounded project-owned WAV, without modifying camera tracks."""
