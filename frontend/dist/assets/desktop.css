@@ -205,10 +205,14 @@
   grid-template-columns: repeat(3,minmax(0,1fr));
 }
 #animation-panel-curves .animation-motion-lab-visual-grid {
-  grid-template-columns: minmax(0,1.8fr) minmax(310px,1fr);
+  grid-template-columns: minmax(0,1fr);
   gap: 18px;
 }
 #animation-panel-curves .animation-motion-lab-svg-wrap { padding: 14px; }
+#animation-panel-curves .animation-motion-lab-svg-wrap:last-child {
+  width: min(100%, 780px);
+  justify-self: center;
+}
 #animation-panel-preview .animation-motion-result,
 #animation-panel-preview .animation-motion-preview-card .animation-card-content {
   width: 100%;
