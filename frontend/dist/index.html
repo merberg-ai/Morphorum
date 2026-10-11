@@ -68,7 +68,18 @@
 
     <nav class="main-nav glass" aria-label="Primary">
       <button class="nav-button active" data-view="image"><span class="nav-icon">▣</span><span>Image</span></button>
-      <button class="nav-button" data-view="animation"><span class="nav-icon">▶</span><span>Animation</span></button>
+      <button class="nav-button" data-view="animation" type="button"><span class="nav-icon">◈</span><span>Motion Lab</span></button>
+      <div class="motion-lab-sidebar" id="motion-lab-sidebar" role="group" aria-label="Motion Lab workspaces">
+        <button type="button" data-motion-nav="motion">Overview</button>
+        <button type="button" data-motion-nav="editor">Project Editor</button>
+        <button type="button" data-motion-nav="composer">Camera Composer</button>
+        <button type="button" data-motion-nav="recording">Live Recording</button>
+        <button type="button" data-motion-nav="curves">Motion Curves &amp; Path</button>
+        <button type="button" data-motion-nav="preview">Camera Preview</button>
+        <button type="button" data-motion-nav="audio">Audio Motion</button>
+        <button type="button" data-motion-nav="monitor">Render Monitor</button>
+        <button type="button" data-motion-nav="outputs">Outputs</button>
+      </div>
       <button class="nav-button" data-view="models"><span class="nav-icon">◫</span><span>Models</span></button>
       <button class="nav-button" data-view="loras"><span class="nav-icon">◇</span><span>LoRAs</span></button>
       <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
@@ -161,9 +172,9 @@
       <section class="view" id="view-animation">
         <div class="page-heading animation-heading">
           <div>
-            <p class="eyebrow">ANIMATION STUDIO</p>
-            <h1>Animation</h1>
-            <p class="muted">Create a project in Editor, design camera motion in Motion Lab, and follow your render in Monitor.</p>
+            <p class="eyebrow">MOTION LAB / IMAGE ANIMATION</p>
+            <h1>Motion Lab</h1>
+            <p class="muted">Create animation projects, compose camera movement, edit curves, and monitor renders in focused workspaces.</p>
           </div>
           <div class="button-row animation-project-actions">
             <button class="secondary-button compact" id="animation-collapse-all" type="button">Collapse Sections</button>
