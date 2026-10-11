@@ -300,6 +300,28 @@ def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any
                 raw, index=index, count=count, start=start, end=end, mode=mode,
             ))
             continue
+        if kind == "audio_cues":
+            from .audio_motion_cues import validate_cues
+            from .audio_motion_presets import cue_velocity_tracks
+            from .audio_motion import AudioMotionError
+            try:
+                document = validate_cues(raw.get("cue_document"))
+                if raw.get("sha256") != document["source_sha256"]:
+                    raise AudioMotionError("Motion cue layer source hash does not match its cues.")
+                if mode != "add":
+                    raise AudioMotionError("Motion cue layers must use additive blending.")
+                velocity = cue_velocity_tracks(document, fps, count)
+            except AudioMotionError as exc:
+                raise MotionLabError(str(exc)) from exc
+            output.append({
+                "id": str(raw.get("id") or f"layer-{index + 1}")[:64],
+                "type": "audio_cues", "enabled": raw.get("enabled", True) is True,
+                "blend": "add", "start_frame": start, "end_frame": end,
+                "sha256": document["source_sha256"],
+                "name": str(raw.get("name") or "Audio Motion Director cues")[:96],
+                "cue_document": document, "velocities": velocity,
+            })
+            continue
         if kind == "audio":
             output.append(_normalize_audio_layer(
                 raw, index=index, start=start, end=end, mode=mode, fps=fps,
@@ -597,6 +619,9 @@ def compile_motion_lab(
             elif layer["type"] == "audio":
                 pulse = layer["pulses"][frame - layer["start_frame"]]
                 values = {layer["axis"]: pulse} if pulse else {}
+            elif layer["type"] == "audio_cues":
+                values = {axis: track[frame] for axis, track in layer["velocities"].items()
+                          if track[frame]}
             else:
                 values = _preset_frame(layer, frame, fps)
             for axis, delta in values.items():
