@@ -5502,15 +5502,14 @@
   // Audio Motion is a dedicated Motion Lab workspace using the same draft
   // camera layers, project, and render controls.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['editor', 'motion', 'audio', 'monitor', 'outputs'];
-  let animationTab = 'editor';
+  const VISIBLE_ANIMATION_TABS = ['motion', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'];
+  const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
+  let animationTab = 'motion';
   function showAnimationTab(name, { persist = true } = {}) {
-    if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'editor';
-    if (name !== 'motion') {
-      motionLabVisual?.pause();
-      motionFramePlayer?.pause();
-      if (motionLabRecorder?.active) motionLabStopRecording('tab-change');
-    }
+    if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'motion';
+    if (name !== 'curves') motionLabVisual?.pause();
+    if (name !== 'preview') motionFramePlayer?.pause();
+    if (name !== 'recording' && motionLabRecorder?.active) motionLabStopRecording('tab-change');
     animationTab = name;
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
@@ -5523,6 +5522,19 @@
       panel.hidden = !selected;
       panel.classList.toggle('active', selected);
     });
+    qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => {
+      const selected = button.dataset.motionNav === name;
+      button.classList.toggle('active', selected);
+      if (selected) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    // This dock is the same set of real buttons on every Motion Lab page.
+    // Moving one element (not cloning it) keeps actions and status coherent.
+    const dock = qs('#animation-motion-lab-quick-actions');
+    if (dock && MOTION_LAB_TOOL_TABS.has(name)) {
+      qs('#animation-panel-' + name)?.appendChild(dock);
+    }
+    if (dock) dock.hidden = !MOTION_LAB_TOOL_TABS.has(name);
     if (persist) try { localStorage.setItem(ANIMATION_TAB_KEY, name); } catch (_) {}
   }
   function setupAnimationWorkspaceTabs() {
@@ -5533,10 +5545,15 @@
     const nav = document.createElement('nav');
     nav.id = 'animation-workspace-nav';
     nav.className = 'animation-workspace-nav';
-    nav.setAttribute('aria-label', 'Animation workspace');
+    nav.setAttribute('aria-label', 'Motion Lab workspaces');
     nav.setAttribute('role', 'tablist');
     const panels = {};
-    const names = { editor: 'Editor', motion: 'Motion Lab', audio: 'Audio Motion', monitor: 'Monitor', outputs: 'Outputs' };
+    const names = {
+      motion: 'Overview', editor: 'Project Editor',
+      composer: 'Camera Composer', recording: 'Live Recording',
+      curves: 'Motion Curves', preview: 'Camera Preview',
+      audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
+    };
     for (const [name, label] of Object.entries(names)) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -5562,14 +5579,14 @@
       panel.dataset.animationPanel = name;
       panel.setAttribute('role', 'tabpanel');
       panel.setAttribute('aria-labelledby', button.id);
-      panel.hidden = name !== 'editor';
+      panel.hidden = name !== 'motion';
       panels[name] = panel;
     }
     layout.parentNode.insertBefore(nav, layout);
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'audio', 'monitor', 'outputs']) {
+    for (const name of ['motion', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -5597,33 +5614,69 @@
     }
     const motionIntro = qs('#animation-motion-lab-intro');
     if (motionIntro) panels.motion.appendChild(motionIntro);
-    const composer = qs('#animation-motion-lab-composer');
-    if (composer) panels.motion.appendChild(composer);
-    const recording = qs('#animation-motion-lab-recording');
-    if (recording) panels.motion.appendChild(recording);
-    const audio = qs('#animation-motion-lab-audio');
-    if (audio) panels.audio.appendChild(audio);
-    const visual = qs('#animation-motion-lab-visual');
-    if (visual) panels.motion.appendChild(visual);
-    const motionPreview = qs('.animation-motion-preview-card');
-    if (motionPreview) panels.motion.appendChild(motionPreview);
+    const cards = [
+      ['composer', '#animation-motion-lab-composer'],
+      ['recording', '#animation-motion-lab-recording'],
+      ['curves', '#animation-motion-lab-visual'],
+      ['preview', '.animation-motion-preview-card'],
+      ['audio', '#animation-motion-lab-audio'],
+    ];
+    for (const [name, selector] of cards) {
+      const card = qs(selector);
+      if (card) panels[name].appendChild(card);
+    }
 
-    // One DOM, two layouts: transparent on mobile, independent workspace
-    // columns on desktop. Move the existing nodes rather than cloning them
-    // so project state, media playback, and event handlers stay shared.
-    const motionAuthoringColumn = document.createElement('div');
-    motionAuthoringColumn.className = 'animation-motion-authoring-column';
-    for (const node of [composer, recording]) {
-      if (node) motionAuthoringColumn.appendChild(node);
+    // The landing page is a concise tool selector. Original controls live in
+    // exactly one dedicated panel, never copied or recreated.
+    const toolGrid = document.createElement('div');
+    toolGrid.className = 'motion-lab-tool-grid';
+    const toolCards = [
+      ['composer', 'Camera Motion Composer', 'Layer motion presets, timing, and blend settings.'],
+      ['recording', 'Live Motion Recording', 'Perform and edit a six-axis camera take.'],
+      ['curves', 'Motion Curves & Camera Path', 'Edit frame-aligned keyframes using the full-width plots.'],
+      ['preview', 'Camera Motion Preview', 'Inspect 2D or 3D camera motion before rendering.'],
+      ['audio', 'Audio-Reactive Motion', 'Turn WAV beats and frequency bands into camera movement.'],
+      ['monitor', 'Render Monitor', 'Watch progress, frame previews, and job diagnostics.'],
+      ['editor', 'Project Editor', 'Configure projects, prompts, resolution, and timelines.'],
+      ['outputs', 'Outputs', 'Review completed animations and export videos.'],
+    ];
+    for (const [name, title, description] of toolCards) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'motion-lab-tool-card';
+      button.dataset.motionOpen = name;
+      const heading = document.createElement('strong');
+      heading.textContent = title;
+      const hint = document.createElement('span');
+      hint.textContent = description;
+      button.append(heading, hint);
+      button.addEventListener('click', () => showAnimationTab(name));
+      toolGrid.appendChild(button);
     }
-    const motionReviewColumn = document.createElement('div');
-    motionReviewColumn.className = 'animation-motion-review-column';
-    for (const node of [visual, motionPreview]) {
-      if (node) motionReviewColumn.appendChild(node);
+    panels.motion.appendChild(toolGrid);
+    for (const [name, label] of [
+      ['composer', 'Camera Motion Composer'],
+      ['recording', 'Live Motion Recording'],
+      ['curves', 'Motion Curves & Camera Path'],
+      ['preview', 'Camera Motion Preview'],
+    ]) {
+      const heading = document.createElement('div');
+      heading.className = 'motion-tool-page-heading';
+      const breadcrumb = document.createElement('div');
+      const eyebrow = document.createElement('p');
+      eyebrow.className = 'eyebrow';
+      eyebrow.textContent = 'MOTION LAB / ' + label.toUpperCase();
+      const title = document.createElement('h2');
+      title.textContent = label;
+      breadcrumb.append(eyebrow, title);
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'secondary-button compact';
+      back.textContent = '← All Motion Lab Tools';
+      back.addEventListener('click', () => showAnimationTab('motion'));
+      heading.append(breadcrumb, back);
+      panels[name].prepend(heading);
     }
-    if (motionIntro) motionIntro.after(motionAuthoringColumn);
-    else panels.motion.prepend(motionAuthoringColumn);
-    motionAuthoringColumn.after(motionReviewColumn);
 
     // Audio remains a Motion Lab tool. Provide the audio-specific workflow
     // without duplicating any input, API, or motion-layer state.
@@ -5686,8 +5739,8 @@
     inner.appendChild(expert);
     qs('#animation-collapse-all')?.setAttribute('title', 'Collapse Editor cards');
     qs('#animation-expand-all')?.setAttribute('title', 'Expand Editor cards');
-    let previous = 'editor';
-    try { previous = localStorage.getItem(ANIMATION_TAB_KEY) || 'editor'; } catch (_) {}
+    let previous = 'motion';
+    try { previous = localStorage.getItem(ANIMATION_TAB_KEY) || 'motion'; } catch (_) {}
     showAnimationTab(previous, { persist: false });
   }
 
