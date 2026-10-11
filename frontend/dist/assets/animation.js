@@ -1,6 +1,8 @@
 (() => {
   'use strict';
 
+  let motionPreviewStarting = false;
+  let animationRenderStarting = false;
   const state = {
     project: null,
     projects: [],
@@ -2390,7 +2392,9 @@
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
-      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) || renderActive || state.depthBusy;
+      renderButton.disabled = !state.project || !hasModel || (requiresSource && !hasSource) ||
+        renderActive || Boolean(state.motionJobId) || motionPreviewStarting ||
+        animationRenderStarting || state.depthBusy;
     }
     // Keep the floating Render Animation shortcut synchronized with the
     // existing guarded render button as models, sources, and jobs change.
@@ -2631,7 +2635,10 @@
   }
 
   async function generateMotionPreview(projectOverride = null) {
-    if (!state.project || state.motionJobId) return;
+    if (!state.project || state.motionJobId || motionPreviewStarting ||
+        animationRenderStarting || renderIsActive()) return;
+    motionPreviewStarting = true;
+    motionLabSyncQuickActions();
     const button = qs('#animation-generate-motion-preview');
     if (button) {
       button.classList.add('busy');
@@ -2660,6 +2667,7 @@
       });
       state.motionJobId = job.id;
       updateMotionProgress(job);
+      motionLabSyncQuickActions();
       renderSourceState();
       pollMotionPreview(job.id);
     } catch (error) {
@@ -2671,6 +2679,9 @@
       }
       renderSourceState();
       toast('Could not start motion preview', error.message, 'error', 7500);
+    } finally {
+      motionPreviewStarting = false;
+      renderSourceState();
     }
   }
   function renderIsActive(job = state.renderJob) {
@@ -3335,7 +3346,10 @@
   }
 
   async function startAnimationRender() {
-    if (!state.project || renderIsActive()) return;
+    if (!state.project || renderIsActive() || animationRenderStarting ||
+        state.motionJobId || motionPreviewStarting) return;
+    animationRenderStarting = true;
+    motionLabSyncQuickActions();
     const project = collectProject();
     const button = qs('#animation-start-render');
     if (button) { button.classList.add('busy'); button.disabled = true; }
@@ -3350,6 +3364,9 @@
     } catch (error) {
       renderAnimationJob(null);
       toast('Could not start animation render', error.message, 'error', 8000);
+    } finally {
+      animationRenderStarting = false;
+      renderSourceState();
     }
   }
 
@@ -4081,6 +4098,7 @@
   let motionLabProjectId = '';
   let motionLabDraftLayers = [];
   let motionLabBusy = false;
+  let motionLabBusyAction = null;
   let motionLabEditingIndex = -1;
   let motionLabVisual = null;
   let motionLabHistory = [[]];
@@ -4219,17 +4237,40 @@
   }
   function motionLabSyncQuickActions() {
     const active = Boolean(motionLabRecorder?.active);
+    const motionPreviewBusy = motionPreviewStarting || Boolean(state.motionJobId);
+    const renderBusy = animationRenderStarting || renderIsActive();
+    const locked = motionLabBusy || motionPreviewBusy || renderBusy;
+    const working = motionLabBusyAction || (motionPreviewBusy ? 'preview' :
+      renderBusy ? 'render' : active ? 'record' : null);
+    const workingLabels = {
+      record: '● Recording…', curves: '↻ Updating…',
+      preview: '▶ Previewing…', apply: 'Applying…',
+      render: 'Rendering…',
+    };
+    const workingTargets = {
+      record: 'animation-motion-lab-record',
+      curves: 'animation-motion-lab-update-curves',
+      preview: 'animation-motion-lab-preview-draft',
+      apply: 'animation-motion-lab-apply',
+      render: 'animation-start-render',
+    };
     for (const button of qsa('[data-motion-quick-target]')) {
-      const original = qs('#' + button.dataset.motionQuickTarget);
-      // Stop must remain available during a take. Other toolbar actions
-      // still obey the recording lock and their original control guards.
-      const isStop = button.dataset.motionQuickTarget === 'animation-motion-lab-stop-recording';
-      button.disabled = (!isStop && active) || !original || original.disabled;
-      button.setAttribute('aria-busy', String(Boolean(motionLabBusy)));
+      const id = button.dataset.motionQuickTarget;
+      const original = qs('#' + id);
+      // Stop remains available during a take; all other actions honor
+      // preview, curves/apply, render and live-recording operation locks.
+      const isStop = id === 'animation-motion-lab-stop-recording';
+      const running = id === workingTargets[working];
+      button.disabled = (!isStop && (active || locked)) || !original || original.disabled;
+      button.dataset.running = String(running);
+      button.setAttribute('aria-busy', String(running));
+      button.textContent = running ? workingLabels[working] : button.dataset.label;
     }
     const status = qs('#animation-motion-lab-quick-status');
     if (status) status.textContent = active ? '● Recording' :
-      motionLabBusy ? 'Updating motion…' :
+      renderBusy ? 'Rendering animation…' :
+      motionPreviewBusy ? 'Generating camera preview…' :
+      motionLabBusy ? 'Updating camera motion…' :
       motionLabDraftLayers.length + ' draft layer(s)';
     const audioStatus = qs('#animation-audio-workspace-status');
     if (audioStatus) audioStatus.textContent = !state.project ? 'Open a project in Editor first.' :
@@ -4253,6 +4294,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = label;
+      button.dataset.label = label;
       button.dataset.motionQuickTarget = id;
       button.className = id === 'animation-start-render'
         ? 'primary-button compact animation-motion-quick-render'
@@ -5438,6 +5480,7 @@
     if (!state.project?.id || !motionLabDraftLayers.length || motionLabBusy) return;
     const projectId = state.project.id;
     motionLabBusy = true;
+    motionLabBusyAction = apply ? 'apply' : curvesOnly ? 'curves' : 'preview';
     renderMotionLabDraft();
     try {
       if (apply && state.dirty) {
@@ -5515,6 +5558,7 @@
         error.message, 'error', 7000);
     } finally {
       motionLabBusy = false;
+      motionLabBusyAction = null;
       renderMotionLabDraft();
     }
   }
