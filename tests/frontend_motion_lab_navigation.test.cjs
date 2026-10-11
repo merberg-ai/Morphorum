@@ -11,9 +11,9 @@ const js = fs.readFileSync(path.join(dist, 'assets', 'animation.js'), 'utf8');
 const css = fs.readFileSync(path.join(dist, 'assets', 'animation.css'), 'utf8');
 const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
 
-test('Motion Lab is first-class; unfinished Media is absent from visible navigation', () => {
-  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['editor', 'motion', 'monitor', 'outputs'\]/);
-  assert.match(js, /const names = \{ editor: 'Editor', motion: 'Motion Lab', monitor: 'Monitor', outputs: 'Outputs' \}/);
+test('Motion Lab and Audio Motion have separate visible panels sharing the same state', () => {
+  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['editor', 'motion', 'audio', 'monitor', 'outputs'\]/);
+  assert.match(js, /const names = \{ editor: 'Editor', motion: 'Motion Lab', audio: 'Audio Motion', monitor: 'Monitor', outputs: 'Outputs' \}/);
   assert.doesNotMatch(js, /const names = \{[^}]*media:\s*'Media'/);
   assert.match(js, /mediaVault\.hidden = true/);
   assert.match(js, /mediaVault\.inert = true/);
@@ -25,11 +25,11 @@ test('Motion Lab is first-class; unfinished Media is absent from visible navigat
   assert.match(js, /panels\.motion\.appendChild\(motionIntro\)/);
 });
 
-test('Old persisted Media tab safely routes to Editor; Motion Lab selection persists', () => {
+test('Legacy Media tab routes to Editor while Audio and Motion Lab tabs persist', () => {
   const start = js.indexOf('  const ANIMATION_TAB_KEY = ');
   const end = js.indexOf('  function bind() {', start);
   assert.ok(start >= 0 && end > start);
-  const buttons = ['editor', 'motion', 'monitor', 'outputs'].map(name => ({
+  const buttons = ['editor', 'motion', 'audio', 'monitor', 'outputs'].map(name => ({
     dataset: { animationTab: name }, tabIndex: -1, attrs: {},
     classList: { active: false, toggle(_, value) { this.active = value; } },
     setAttribute(k, v) { this.attrs[k] = v; },
@@ -42,6 +42,8 @@ test('Old persisted Media tab safely routes to Editor; Motion Lab selection pers
   const context = {
     qsa: selector => selector.includes('[data-animation-tab]') ? buttons : panels,
     localStorage: { setItem: (k, v) => stored.push([k, v]) },
+    motionLabVisual: { pause() {} }, motionFramePlayer: null,
+    motionLabRecorder: { active: false },
   };
   vm.runInNewContext(js.slice(start, end) +
     '\nthis.selectTab = showAnimationTab;', context);
@@ -49,6 +51,10 @@ test('Old persisted Media tab safely routes to Editor; Motion Lab selection pers
   assert.equal(buttons[1].classList.active, true);
   assert.equal(panels[1].hidden, false);
   assert.equal(stored.at(-1)[1], 'motion');
+  context.selectTab('audio');
+  assert.equal(buttons[2].classList.active, true);
+  assert.equal(panels[2].hidden, false);
+  assert.equal(stored.at(-1)[1], 'audio');
   context.selectTab('media');
   assert.equal(buttons[0].classList.active, true);
   assert.equal(panels[0].hidden, false);
@@ -56,14 +62,14 @@ test('Old persisted Media tab safely routes to Editor; Motion Lab selection pers
   assert.equal(stored.at(-1)[1], 'editor');
 });
 
-test('Motion Lab preserves original CPU camera preview and gives functional navigation', () => {
+test('Motion Lab preserves its introduction and preview without redundant Editor shortcuts', () => {
   assert.match(html, /id="animation-motion-lab-intro"/);
-  assert.match(html, /id="animation-motion-lab-edit-3d"/);
-  assert.match(html, /id="animation-motion-lab-edit-timeline"/);
+  assert.doesNotMatch(html, /id="animation-motion-lab-edit-3d"/);
+  assert.doesNotMatch(html, /id="animation-motion-lab-edit-timeline"/);
   assert.equal((html.match(/class="card glass animation-motion-preview-card"/g) || []).length, 1);
   assert.equal((html.match(/id="animation-generate-motion-preview"/g) || []).length, 1);
-  assert.match(js, /showAnimationTab\('editor'\);\s*qs\('#animation-3d-camera-card'\)\?\.scrollIntoView/);
-  assert.match(js, /showAnimationTab\('editor'\);\s*qs\('#animation-timeline-card'\)\?\.scrollIntoView/);
+  assert.doesNotMatch(js, /#animation-motion-lab-edit-3d/);
+  assert.doesNotMatch(js, /#animation-motion-lab-edit-timeline/);
   assert.match(css, /#animation-panel-motion \{display:grid;gap:14px;/);
   assert.match(css, /@media\(max-width:640px\)\s*\{[^}]*\.animation-motion-lab-intro/);
 });
@@ -176,4 +182,19 @@ test('ML1 draft layers support undo, redo, enable/disable and reordering', () =>
   assert.match(js, /motionLabHistory\.slice\(0, motionLabHistoryIndex \+ 1\)/);
   assert.match(js, /motionLabHistoryIndex = motionLabHistory\.length - 1/);
   assert.match(js, /input\.id\.startsWith\('animation-motion-lab-'\)/);
+});
+
+test('Audio Motion workspace reuses one analysis card and the real Motion Lab apply action', () => {
+  assert.match(js, /if \(audio\) panels\.audio\.appendChild\(audio\)/);
+  assert.doesNotMatch(js, /if \(audio\) panels\.motion\.appendChild\(audio\)/);
+  assert.match(js, /panels\.audio\.prepend\(audioIntro\)/);
+  assert.match(js, /id="animation-audio-back-motion"/);
+  assert.match(js, /id="animation-audio-review-motion"/);
+  assert.match(js, /data-motion-quick-target="animation-motion-lab-apply"/);
+  assert.match(js, /if \(apply && !apply\.disabled\) apply\.click\(\)/);
+  assert.match(js, /if \(card\.id === 'animation-motion-lab-audio'\) return/);
+  assert.equal((html.match(/id="animation-motion-lab-audio"/g) || []).length, 1);
+  assert.match(js, /motionAuthoringColumn\.after\(motionReviewColumn\)/);
+  assert.match(css, /grid-template-columns:\s*repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(css, /overflow-x:auto/);
 });
