@@ -4221,7 +4221,10 @@
     const active = Boolean(motionLabRecorder?.active);
     for (const button of qsa('[data-motion-quick-target]')) {
       const original = qs('#' + button.dataset.motionQuickTarget);
-      button.disabled = active || !original || original.disabled;
+      // Stop must remain available during a take. Other toolbar actions
+      // still obey the recording lock and their original control guards.
+      const isStop = button.dataset.motionQuickTarget === 'animation-motion-lab-stop-recording';
+      button.disabled = (!isStop && active) || !original || original.disabled;
       button.setAttribute('aria-busy', String(Boolean(motionLabBusy)));
     }
     const status = qs('#animation-motion-lab-quick-status');
