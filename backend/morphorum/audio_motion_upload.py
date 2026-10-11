@@ -13,10 +13,37 @@ from pathlib import Path
 import wave
 
 from .audio_motion import AudioMotionError, frame_envelope, spectral_band_envelopes
+from .audio_events import detect_audio_events
 from .animation_projects import animation_project_directory
 
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
 MAX_SECONDS = 180
+MAX_PROJECT_FRAMES = 3000
+FPS_CHOICES = (12, 24, 30, 60)
+
+
+def audio_fps_recommendations(duration_seconds: float, *, current_fps: float) -> dict:
+    """Offer safe choices; never mutate a project's FPS or its timeline."""
+    import math
+    if not math.isfinite(duration_seconds) or duration_seconds <= 0:
+        raise AudioMotionError("Invalid audio duration.")
+    if not math.isfinite(current_fps) or not 1 <= current_fps <= 240:
+        raise AudioMotionError("Invalid project FPS.")
+    choices = []
+    for fps in FPS_CHOICES:
+        frames = math.ceil(duration_seconds * fps)
+        choices.append({"fps": fps, "max_frames": frames,
+                        "supported": frames <= MAX_PROJECT_FRAMES,
+                        "frame_ms": round(1000 / fps, 4)})
+    current_frames = math.ceil(duration_seconds * current_fps)
+    preferred = next((c["fps"] for c in reversed(choices)
+                      if c["supported"] and c["fps"] <= 30), None)
+    return {"recommended_fps": preferred, "current_fps": current_fps,
+            "current_required_frames": current_frames,
+            "current_supported": current_frames <= MAX_PROJECT_FRAMES,
+            "options": choices,
+            "requires_explicit_project_update": True,
+            "existing_motion_requires_manual_retiming": True}
 
 
 def analyze_managed_wav(project_id: str, data: bytes, *, fps: float, frames: int) -> dict:
@@ -68,4 +95,6 @@ def analyze_managed_wav(project_id: str, data: bytes, *, fps: float, frames: int
     result["filename"] = destination.name
     result["duration_seconds"] = count / rate
     result["channels"] = channels
+    result["events"] = detect_audio_events(pcm, sample_rate=rate)
+    result["fps_recommendations"] = audio_fps_recommendations(count / rate, current_fps=fps)
     return result
