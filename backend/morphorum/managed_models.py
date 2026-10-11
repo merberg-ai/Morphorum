@@ -174,7 +174,10 @@ class ManagedModelManager:
             return False
         # A completion marker alone is not proof of a full download.
         # Reject obvious size regressions (e.g. truncated weight shards).
-        recorded_size = int(payload.get("installed_bytes") or 0)
+        try:
+            recorded_size = int(payload.get("installed_bytes") or 0)
+        except (ValueError, TypeError, OverflowError):
+            return False
         if recorded_size > 0 and cls._materialized_size(destination) < int(recorded_size * 0.995):
             return False
         return True
