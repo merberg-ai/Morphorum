@@ -5635,7 +5635,12 @@
         if (Math.abs(Number(overrides.duration_seconds) - Number(analysis.duration_seconds)) > .001) {
           throw new Error('Saved markers have a mismatched WAV duration.');
         }
-        motionLabEditedEvents = overrides.events.map(e => ({...e}));
+        const originalById=new Map((analysis.events?.events || []).map(e=>[e.id,e]));
+        motionLabEditedEvents = overrides.events.map(e => ({
+          ...originalById.get(e.id), ...e,
+          strength:originalById.get(e.id)?.strength ?? e.strength ?? 1,
+          source:originalById.get(e.id)?.source ?? (e.id.startsWith('manual-')?'manual':'saved'),
+        }));
       }
       motionLabAudioProjectId = projectId;
       motionDirectorCues=[];motionDirectorSelected=null;motionDirectorDirty=false;motionDirectorBulkUndo=null;
