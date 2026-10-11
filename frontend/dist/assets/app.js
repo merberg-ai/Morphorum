@@ -146,6 +146,7 @@
 
   function switchView(name) {
     qsa('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === name));
+    qs('.main-nav')?.classList.toggle('motion-section-active', name === 'animation');
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
     refreshNavMore(name);
     if (name === 'console') renderConsole();
@@ -1108,6 +1109,10 @@
 
   function bindUi() {
     qsa('.nav-button').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
+    qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => button.addEventListener('click', () => {
+      switchView('animation');
+      qs('#animation-tab-' + button.dataset.motionNav)?.click();
+    }));
     const moreToggle = qs('#nav-more-toggle');
     moreToggle?.addEventListener('click', () => {
       const menu = qs('#nav-more-menu');
