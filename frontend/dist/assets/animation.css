@@ -2708,3 +2708,41 @@ dialog#animation-deforum-dialog {
     flex:1 1 120px;
   }
 }
+
+
+/* DA3 usability: stacked, full-width audio review, not a squeezed config card. */
+#animation-panel-audio {
+  display:flex;flex-direction:column;align-items:stretch;gap:16px;
+  width:100%;max-width:1400px;box-sizing:border-box;
+}
+#animation-panel-audio > .animation-motion-lab-audio,
+#animation-panel-audio > .animation-audio-analysis-workspace,
+#animation-panel-audio > .animation-audio-workspace-intro {
+  width:100%;max-width:none;min-width:0;box-sizing:border-box;margin:0;
+}
+#animation-panel-audio .animation-audio-analysis-workspace {
+  display:flex;flex-direction:column;gap:15px;padding:20px;
+}
+#animation-panel-audio .animation-audio-analysis-heading h2 {
+  margin:0 0 5px;font-size:1.1rem;
+}
+#animation-panel-audio .animation-audio-analysis-heading p {margin:0;}
+#animation-panel-audio .animation-audio-analysis-workspace .animation-motion-audio-preview,
+#animation-panel-audio .animation-audio-analysis-workspace .animation-audio-stereo-timeline,
+#animation-panel-audio .animation-audio-analysis-workspace .animation-audio-event-editor {
+  width:100%;min-width:0;max-width:none;box-sizing:border-box;margin:0;
+}
+#animation-panel-audio .animation-audio-analysis-workspace #animation-motion-lab-audio-plot {
+  height:260px;width:100%;min-width:0;
+}
+#animation-panel-audio .animation-audio-analysis-workspace [data-wave-svg] {
+  width:100%;height:auto;min-width:0;
+}
+#animation-panel-audio .animation-audio-event-fields {
+  grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) auto;
+}
+@media(max-width:720px) {
+  #animation-panel-audio .animation-audio-analysis-workspace {padding:12px;gap:12px;}
+  #animation-panel-audio .animation-audio-analysis-workspace #animation-motion-lab-audio-plot {height:180px;}
+  #animation-panel-audio .animation-audio-event-fields {grid-template-columns:minmax(0,1fr);}
+}
