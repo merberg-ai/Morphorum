@@ -2911,3 +2911,34 @@ dialog#animation-deforum-dialog {
   #animation-panel-audio .animation-audio-motion-director {padding:11px;}
   #animation-panel-audio .animation-audio-director-fields {grid-template-columns:repeat(2,minmax(0,1fr));}
 }
+
+
+/* DA4.4 optional automatic hit discovery, kept below manual cue authoring. */
+#animation-panel-audio .animation-audio-find-beats {
+  border-top:1px solid var(--border);padding-top:10px;min-width:0;
+}
+#animation-panel-audio .animation-audio-find-beats > summary {
+  cursor:pointer;font-weight:600;padding:8px 0;
+}
+#animation-panel-audio .animation-audio-beat-grid {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));
+  gap:10px;padding:10px 0;
+}
+#animation-panel-audio .animation-audio-beat-grid label {
+  display:flex;flex-direction:column;gap:5px;min-width:0;font-size:.8rem;
+}
+#animation-panel-audio .animation-audio-beat-grid input,
+#animation-panel-audio .animation-audio-beat-grid select {
+  width:100%;box-sizing:border-box;min-width:0;min-height:36px;
+}
+#animation-panel-audio .animation-audio-beat-grid .animation-audio-beat-check {
+  display:flex;flex-direction:row;align-items:center;gap:9px;
+}
+#animation-panel-audio .animation-audio-beat-check input[type=checkbox] {
+  width:16px;height:16px;min-width:16px;
+}
+@media(max-width:620px) {
+  #animation-panel-audio .animation-audio-beat-grid {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
