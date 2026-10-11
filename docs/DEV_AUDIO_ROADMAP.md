@@ -29,3 +29,11 @@ Do not modify `main` or `dev-ui`. Stop before merging.
 The existing project WAV analysis endpoint now adds `analysis.events` with high-resolution candidate hit timestamps (seconds and original sample index), label and strength. The original `values` and `bands` remain intact for legacy audio-motion UI and rendering. An `analysis.fps_recommendations` object lists duration-matched frame counts for 12/24/30/60 FPS and indicates which respect the 3000-frame limit. This is a **proposal only**: FPS and max_frames are never changed by analysis, because recorded/keyframed content may be invalidated by retiming. A future UI must require explicit confirmation and reject/retime existing motion safely. Unit tests exercise the API helper and WAV analysis.
 
 **Gate:** verify backend tests and that old audio motion still behaves as before. A Windows WAV analysis response should contain events and recommendations. Stereo waveform and user-facing FPS selection come in DA2 / UI wiring.
+
+## DA3.2 marker persistence (Windows physical testing pending)
+
+- Project-owned `motion_lab_audio/<source_sha256>.markers.json` stores explicitly saved marker edits separately from immutable detector outputs. Schema version 1, strict validation, bounded events, duration and source hash.
+- `GET /api/animation/projects/{id}/motion-lab/audio-markers/{sha256}` returns saved edits or null; `PUT /api/animation/projects/{id}/motion-lab/audio-markers` validates ownership of the referenced WAV and atomically saves.
+- The Audio Motion marker editor now has **Save marker edits**. Re-analyzing the same WAV for the same project restores saved edits. Switching to a different WAV does not import old markers. Re-open the project and reselect/reanalyze the WAV to restore them; audio is still selected with the browser file picker.
+- Edits do not affect the existing composer, native camera tracks or output rendering. Re-analysis creates the detector baseline, and Reset returns to that baseline locally until Save is clicked.
+- **Windows acceptance:** change/disable/add markers, Save, reload/reopen and reanalyze same WAV; confirm edits restore. Reanalyze a different WAV and confirm marker sets do not mix. Test Reset + Save, missing marker sidecar, mobile editing, normal Pulse & Return audio layers and MP4 soundtrack export. No main/dev-ui merge.
