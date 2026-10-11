@@ -5,6 +5,7 @@
   --ui-root-size: 14px;
   --bg: #0d0f13;
   --bg-soft: #12151b;
+  --surface: var(--panel-strong);
   --panel: rgba(24, 27, 34, .74);
   --panel-strong: rgba(20, 23, 30, .94);
   --border: rgba(255, 255, 255, .085);
@@ -19,6 +20,60 @@
   --shadow: 0 18px 55px rgba(0, 0, 0, .35);
   --radius: 16px;
   --radius-sm: 11px;
+}
+
+/* Four true themes. Midnight Glass keeps the original near-black design;
+   three new palettes override every shared color and button token. */
+html[data-theme="deep-ocean"] {
+  --bg: #081528;
+  --bg-soft: #11223a;
+  --panel: rgba(17, 35, 60, .84);
+  --panel-strong: rgba(14, 29, 51, .96);
+  --border: rgba(160, 193, 231, .17);
+  --border-strong: rgba(110, 167, 240, .38);
+  --text: #ecf4ff;
+  --muted: #a9bfd9;
+  --accent: #78b4ff;
+  --accent-2: #73dce9;
+  --ok: #75dfb0;
+  --warn: #f0ca82;
+  --danger: #ff929e;
+  --shadow: 0 18px 55px rgba(2, 9, 25, .55);
+  --button-primary-text: #08172c;
+}
+html[data-theme="amethyst-night"] {
+  --bg: #140c20;
+  --bg-soft: #21162f;
+  --panel: rgba(36, 24, 54, .86);
+  --panel-strong: rgba(29, 19, 46, .96);
+  --border: rgba(205, 176, 240, .18);
+  --border-strong: rgba(187, 131, 244, .40);
+  --text: #f5edff;
+  --muted: #bea9d2;
+  --accent: #c59aff;
+  --accent-2: #f09bd5;
+  --ok: #85e4b5;
+  --warn: #f4cc87;
+  --danger: #ffa0b1;
+  --shadow: 0 18px 55px rgba(12, 3, 26, .58);
+  --button-primary-text: #231031;
+}
+html[data-theme="slate-graphite"] {
+  --bg: #191b1e;
+  --bg-soft: #25282c;
+  --panel: rgba(42, 46, 50, .87);
+  --panel-strong: rgba(34, 38, 42, .97);
+  --border: rgba(211, 220, 230, .17);
+  --border-strong: rgba(209, 221, 235, .36);
+  --text: #f2f5f7;
+  --muted: #b2bcc5;
+  --accent: #d3dbe4;
+  --accent-2: #a9bacb;
+  --ok: #9cdfb5;
+  --warn: #eccf92;
+  --danger: #ff9ba1;
+  --shadow: 0 18px 55px rgba(0, 0, 0, .46);
+  --button-primary-text: #171b20;
 }
 html[data-font-style="modern"] {
   --font-ui: "Inter", "Segoe UI Variable", "Segoe UI", Roboto, ui-sans-serif, system-ui, sans-serif;
@@ -62,15 +117,24 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 15% -10%, rgba(65, 217, 255, .09), transparent 34%),
-    radial-gradient(circle at 90% 5%, rgba(164, 108, 255, .08), transparent 28%),
+    radial-gradient(circle at 15% -10%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 34%),
+    radial-gradient(circle at 90% 5%, color-mix(in srgb, var(--accent-2) 8%, transparent), transparent 28%),
     var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
   font-size: .95rem;
   line-height: 1.45;
 }
-button, input, select, textarea { font: inherit; }
+/* Font choices must reach every native and dynamically injected control,
+   including dialogs (whose browser defaults otherwise override body fonts). */
+button, input, select, textarea, dialog, option, optgroup,
+[role="dialog"], [contenteditable="true"] {
+  font-family: var(--font-ui);
+}
+button, input, select, textarea { font-size: inherit; }
+pre, code, kbd, samp { font-family: var(--font-mono); }
+svg text { font-family: var(--font-ui); }
+
 button { color: inherit; }
 code { color: var(--accent); font-family: var(--font-mono); }
 
@@ -107,9 +171,9 @@ code { color: var(--accent); font-family: var(--font-mono); }
   width: 42px; height: 42px; border-radius: 12px;
   display: grid; place-items: center;
   font-weight: 800; font-size: 1.15rem;
-  color: #071017;
-  background: linear-gradient(135deg, var(--accent), #8feaff 55%, var(--accent-2));
-  box-shadow: 0 0 28px rgba(65, 217, 255, .16);
+  color: var(--button-primary-text);
+  background: var(--button-primary-bg);
+  box-shadow: var(--button-shadow);
 }
 .brand { font-size: 1.18rem; font-weight: 700; letter-spacing: .005em; }
 .subtitle { color: var(--muted); font-size: .82rem; margin-top: 2px; }
@@ -356,7 +420,7 @@ code { color: var(--accent); font-family: var(--font-mono); }
   white-space: nowrap;
 }
 
-.field-label, label > span { display: block; color: #b5bec8; font-size: .78rem; font-weight: 550; margin-bottom: 6px; }
+.field-label, label > span { display: block; color: var(--muted); font-size: .78rem; font-weight: 550; margin-bottom: 6px; }
 .text-area, input, select {
   width: 100%;
   color: var(--text);
@@ -447,7 +511,7 @@ button[aria-busy="true"]:disabled { opacity: .7; }
 .button-note { opacity: .58; margin-left: 6px; font-size: .8em; font-weight: 600; }
 .button-row { display: flex; gap: 9px; align-items: center; }
 .compact { min-height: 34px; padding: 6px 9px; font-size: .78rem; }
-.danger { color: #ffabab; }
+.danger { color: var(--danger); }
 
 .preview-card { min-height: 500px; }
 .preview-placeholder, .empty-state {
@@ -475,7 +539,7 @@ button[aria-busy="true"]:disabled { opacity: .7; }
   gap: 10px;
   box-shadow: none;
 }
-.notice.subtle { background: rgba(65,217,255,.035); border-color: rgba(65,217,255,.11); }
+.notice.subtle { background: color-mix(in srgb,var(--accent) 3.5%,transparent); border-color: color-mix(in srgb,var(--accent) 11%,transparent); }
 .notice strong { white-space: nowrap; color: var(--accent); }
 .notice span { color: var(--muted); line-height: 1.45; }
 
