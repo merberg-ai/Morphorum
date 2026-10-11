@@ -47,3 +47,37 @@ def test_first_run_template_contains_the_complete_user_example() -> None:
     assert "if (-not $Repair -and -not $Update)" in installer
     linux = (ROOT / "scripts" / "install_linux.sh").read_text(encoding="utf-8")
     assert '"$MODE" == "install"' in linux
+
+
+
+def test_windows_bootstrap_uses_subroutine_and_passes_nonempty_script_path() -> None:
+    """Regression for CMD early percent expansion inside a parenthesized IF."""
+    wrapper = (ROOT / "bootstrap.bat").read_text(encoding="utf-8")
+    assert 'call :fetch_bootstrap' in wrapper
+    assert ':fetch_bootstrap' in wrapper
+    assert 'set "MORPHORUM_BOOTSTRAP_TEMP=%TEMP%' in wrapper
+    assert 'set "MORPHORUM_BOOTSTRAP_SCRIPT=%MORPHORUM_BOOTSTRAP_TEMP%"' in wrapper
+    assert '-File "%MORPHORUM_BOOTSTRAP_SCRIPT%" %*' in wrapper
+    assert 'Invoke-WebRequest' in wrapper
+    assert '| Out-Null' in wrapper
+    # The standalone fetch must not run inside the parenthesized existence IF.
+    assert 'if not exist "%MORPHORUM_BOOTSTRAP_SCRIPT%" call :fetch_bootstrap' in wrapper
+
+
+def test_windows_port_preference_is_saved_and_runners_accept_overrides() -> None:
+    installer = (ROOT / "scripts" / "install_windows.ps1").read_text(encoding="utf-8")
+    runner = (ROOT / "scripts" / "run_windows.ps1").read_text(encoding="utf-8")
+    bootstrap = (ROOT / "scripts" / "bootstrap.ps1").read_text(encoding="utf-8")
+    for name, data in [("bootstrap", bootstrap), ("install", installer), ("run", runner)]:
+        assert "ValidateRange(1, 65535)" in data, name
+    assert "Read-Host '  Server port'" in installer
+    assert "server-port.txt" in installer
+    assert "Set-Content -LiteralPath $PortFile" in installer
+    assert "if (-not $Repair -and -not $Update)" in installer
+    assert "server-port.txt" in runner
+    assert "PortSource" in runner
+    assert "PSBoundParameters.ContainsKey('Port')" in runner
+    assert 'if ($PSBoundParameters.ContainsKey(\'Port\')) { & $installer -Port $Port }' in bootstrap
+    for bat in ("install.bat", "run.bat", "run-lan.bat"):
+        assert "%*" in (ROOT / bat).read_text(encoding="utf-8"), bat
+    assert "-Lan %*" in (ROOT / "run-lan.bat").read_text(encoding="utf-8")
