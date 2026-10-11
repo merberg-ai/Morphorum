@@ -55,3 +55,27 @@ def test_wav_analysis_retains_legacy_envelope_and_adds_events(tmp_path, monkeypa
 def test_proposals_reject_invalid_parameters(duration, fps):
     with pytest.raises(AudioMotionError):
         audio_fps_recommendations(duration, current_fps=fps)
+
+def test_stereo_waveform_preserves_channel_identity_and_bounds(tmp_path, monkeypatch):
+    from morphorum import audio_motion_upload
+    monkeypatch.setattr(audio_motion_upload, "animation_project_directory", lambda _: tmp_path)
+    rate = 12000
+    out = BytesIO()
+    with wave.open(out, "wb") as audio:
+        audio.setnchannels(2)
+        audio.setsampwidth(2)
+        audio.setframerate(rate)
+        pcm = []
+        for i in range(rate):
+            left = 16000 if i == 2000 else 0
+            right = -15000 if i == 7000 else 0
+            pcm.append(struct.pack("<hh", left, right))
+        audio.writeframes(b"".join(pcm))
+    result = analyze_managed_wav("stereo", out.getvalue(), fps=12, frames=12)
+    waveform = result["waveform"]
+    assert waveform["bins"] <= 1200
+    assert len(waveform["channels"]) == 2
+    assert max(peak for _, peak in waveform["channels"][0]) > .4
+    assert min(low for low, _ in waveform["channels"][1]) < -.4
+    assert max(peak for _, peak in waveform["channels"][1]) == 0
+    assert min(low for low, _ in waveform["channels"][0]) == 0
