@@ -359,7 +359,7 @@
           this.field(container, 'Guidance schedule', 'generation.guidance',
             'How strongly the prompt guides each frame; Z-Image Turbo normally uses 0, FLUX often 1, SDXL uses CFG.');
           this.field(container, 'Image preservation strength schedule', 'generation.strength',
-            'Higher Deforum-style strength tends to keep more of the previous frame. Default 0:(0.65).');
+            'Higher denoising strength typically changes more of the previous frame; lower strength preserves more of it. Default 0:(0.65).');
           this.field(container, 'Diffusion cadence schedule', 'cadence.diffusion',
             'How often to run diffusion. 0:(1) means every frame. Higher cadence may increase speed, with different motion blending.');
           this.field(container, 'Seed behavior', 'generation.seed_behavior',
