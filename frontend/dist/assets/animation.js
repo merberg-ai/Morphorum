@@ -4715,7 +4715,7 @@
     if (!motionLabAudioAnalysis || !motionLabEditedEvents) return;
     const panel = qs('#animation-audio-event-editor');
     const selected = motionLabEditedEvents.find(e => e.id === motionLabSelectedEvent);
-    if (action === 'add' || action === 'remove' || action === 'reset' ||
+    if (action === 'add' || action === 'remove' || action === 'reset' || action === 'clear-detected' ||
         (action === 'update' && selected)) motionLabMarkerSnapshot();
     if (action === 'add') {
       const duration = motionLabAudioAnalysis.duration_seconds;
@@ -4725,6 +4725,11 @@
       motionLabEditedEvents.push({id, kind:'kick', time_seconds:time,
         strength:1, source:'manual',enabled:true});
       motionLabSelectedEvent = id;
+    } else if (action === 'clear-detected') {
+      // Preserve user-created manual markers and all camera motion cues.
+      motionLabEditedEvents = motionLabEditedEvents.filter(e => e.source === 'manual' ||
+        String(e.id).startsWith('manual-'));
+      motionLabSelectedEvent = null;
     } else if (action === 'reset') {
       motionLabEditedEvents = (motionLabAudioAnalysis.events?.events || []).map(
         e => ({...e, enabled:true}));
@@ -5027,6 +5032,7 @@
         '<button type="button" data-event-undo disabled>Undo</button>' +
         '<button type="button" data-event-redo disabled>Redo</button>' +
         '<button type="button" data-event-reset>Reset detections</button>' +
+        '<button type="button" data-event-clear-detected>Clear all detected markers</button>' +
         '<button type="button" data-event-persist>Save marker edits</button></div>' +
         '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera motion until a later phase.</p>';
       section.after(editor);
@@ -5034,7 +5040,8 @@
       editor.querySelector('[data-event-undo]')?.addEventListener('click', () => motionLabMarkerHistory(false));
       editor.querySelector('[data-event-redo]')?.addEventListener('click', () => motionLabMarkerHistory(true));
       for (const [attr, action] of [['data-event-save','update'],['data-event-add','add'],
-        ['data-event-remove','remove'],['data-event-reset','reset']]) {
+        ['data-event-remove','remove'],['data-event-reset','reset'],
+        ['data-event-clear-detected','clear-detected']]) {
         editor.querySelector('['+attr+']')?.addEventListener('click', () => motionLabEventChange(action));
       }
       const displayMode = section.querySelector('[data-wave-mode]');
