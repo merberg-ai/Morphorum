@@ -265,7 +265,8 @@ async def api_attach_imported_soundtrack(project_id: str, request: Request) -> d
     )
     try:
         load_animation_project(project_id)
-        filename = request.headers.get("x-audio-filename", "")
+        from urllib.parse import unquote
+        filename = unquote(request.headers.get("x-audio-filename", ""))
         offset = request.headers.get("x-audio-offset-seconds", "0")
         data = bytearray()
         async for chunk in request.stream():
