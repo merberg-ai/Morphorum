@@ -6944,6 +6944,24 @@
         });
         sourceContent=await selected.text();sourceFilename=selected.name;
         report=response;results.hidden=false;
+        // Attachment metadata belongs to this project, not the exported path.
+        try {
+          const stored=await api('/api/animation/projects/'+encodeURIComponent(state.project.id)+
+            '/motion-import/soundtrack');
+          if (stored?.soundtrack) {
+            const attachment=stored.soundtrack;
+            offset.value=String(attachment.offset_seconds);
+            attachmentText.textContent='Attached: '+attachment.filename+
+              ' · saved offset '+Number(attachment.offset_seconds).toFixed(2)+'s.';
+            offsetButton.disabled=false;
+          } else {
+            attachmentText.textContent='No project soundtrack attached. Choose audio and attach explicitly.';
+            offsetButton.disabled=true;offset.value='0';
+          }
+        } catch(error) {
+          attachmentText.textContent='Could not load saved soundtrack status: '+error.message;
+          offsetButton.disabled=true;
+        }
         const source=response.source,compare=response.project_comparison;
         const embeddedPath=String(source.soundtrack_path||'');
         sourcePath.value=embeddedPath;
