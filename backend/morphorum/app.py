@@ -92,6 +92,7 @@ from .system_info import (
     doctor_report,
     git_branch,
     git_commit,
+    git_commit_full,
     install_manifest,
     live_telemetry,
     windows_gpu_process_memory,
@@ -189,6 +190,7 @@ def health() -> dict:
         "version": __version__,
         "git_branch": git_branch(),
         "git_commit": git_commit(),
+        "git_commit_full": git_commit_full(),
         "frontend_asset_version": FRONTEND_ASSET_VERSION,
         "root": str(ROOT),
     }
