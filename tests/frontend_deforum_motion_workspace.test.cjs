@@ -31,3 +31,14 @@ test('DMI2 WAV locally previews offset without invoking project mutation',()=>{
   assert.match(js,/DMI2 is preview-only/);
   assert.match(css,/\.dmi-align/);
 });
+
+test('DMI2 exposes source soundtrack path with copy controls and browser picker limits',()=>{
+  assert.match(js,/data-dmi-source-path/);
+  assert.match(js,/data-dmi-copy-path/);
+  assert.match(js,/data-dmi-copy-folder/);
+  assert.match(js,/source\.soundtrack_path/);
+  assert.match(js,/navigator\.clipboard\?\.writeText/);
+  assert.match(js,/cannot set this folder as the default browse location/);
+  assert.match(js,/\.mp3,\.ogg,\.flac,audio\/\*/);
+  assert.match(css,/\.dmi-soundtrack-ref/);
+});
