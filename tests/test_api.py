@@ -979,4 +979,9 @@ def test_new_project_wizard_template_endpoint_is_read_only(tmp_path, monkeypatch
         assert project["prompts"] == {"0": ""}
         assert "tracks" not in project
         assert "id" not in project
+        checked = client.post("/api/animation/validate-schedules", json={
+            "project": {**project, "id": "wizard-validation", "prompts": {"0": "a moonlit forest"}}
+        })
+        assert checked.status_code == 200
+        assert checked.json()["valid"] is True
         assert client.get("/api/animation/projects").json()["projects"] == []
