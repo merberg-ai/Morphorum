@@ -33,3 +33,15 @@ test('DA3.3 timeline view and editing history stay integrated', () => {
   assert.match(css, /\.animation-audio-config-grid/);
   assert.match(js, /diagnostics\.before\(section\)/);
 });
+
+test('Parseq-inspired layout places source and actions before waveform, controls after', () => {
+  assert.match(js, /analysisWorkspace\.prepend\(audioSourceDock\)/);
+  assert.match(js, /audioSourceDock\.appendChild\(audioActions\)/);
+  assert.match(js, /panels\.audio\.appendChild\(audioCard\)/);
+  assert.match(js, /data-wave-left-time/);
+  assert.match(js, /data-wave-right-time/);
+  assert.match(js, /addEventListener\('dblclick'/);
+  assert.match(js, /event\.shiftKey/);
+  assert.match(css, /\.animation-audio-source-dock/);
+  assert.match(css, /\.animation-audio-ruler/);
+});
