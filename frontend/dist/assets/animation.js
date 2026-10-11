@@ -4534,6 +4534,12 @@
     };
     for (const button of qsa('[data-motion-quick-target]')) {
       const id = button.dataset.motionQuickTarget;
+      // Audio Motion's inline Apply button also mirrors the quick-action
+      // target. Preserve its visible label before any busy-state repaint.
+      // Only dock buttons populate data-label during construction.
+      if (!button.dataset.label) button.dataset.label =
+        button.textContent.trim() || (id === 'animation-motion-lab-apply'
+          ? 'Apply to Animation' : '');
       const original = qs('#' + id);
       // Stop remains available during a take; all other actions honor
       // preview, curves/apply, render and live-recording operation locks.
