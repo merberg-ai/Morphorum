@@ -236,8 +236,16 @@
         'rotation_x', 'rotation_y', 'rotation_z']) {
         this.draft.camera_3d[axis] = '0:(0)';
       }
-      if (preset === 'pan') this.draft.motion.translation_x = '0:(0), ' + total + ':(30)';
-      if (preset === 'zoom') this.draft.motion.zoom = '0:(1.0), ' + total + ':(1.08)';
+      if (preset === 'pan') {
+        if (this.draft.animation.mode === '3d')
+          this.draft.camera_3d.translation_x = '0:(0), ' + total + ':(3)';
+        else this.draft.motion.translation_x = '0:(0), ' + total + ':(30)';
+      }
+      if (preset === 'zoom') {
+        if (this.draft.animation.mode === '3d')
+          this.draft.camera_3d.translation_z = '0:(0), ' + total + ':(3)';
+        else this.draft.motion.zoom = '0:(1.0), ' + total + ':(1.08)';
+      }
       if (preset === 'orbit' || preset === 'spiral') {
         this.draft.animation.mode = '3d';
         this.draft.camera_3d.rotation_y = '0:(0), ' + total + ':(12)';
