@@ -1,7 +1,8 @@
 """Project-owned soundtrack attachment metadata for Deforum imports.
 
-This is separate from project.json and existing Motion Lab WAV files. No export
-changes are made until DMI3 synchronization testing establishes correct behavior.
+This is separate from project.json and existing Motion Lab WAV files. Attached
+audio can be frozen into a render snapshot so later project changes cannot alter
+an already-rendered animation's eventual video soundtrack.
 """
 from __future__ import annotations
 import hashlib
@@ -121,3 +122,42 @@ def update_offset(project_id: str, offset_seconds: float) -> dict:
         if os.path.exists(temp):
             os.unlink(temp)
     return record
+
+
+def freeze_soundtrack(project_id: str, render_dir: Path) -> dict | None:
+    """Copy the current attachment into a render-local immutable snapshot."""
+    record = read_soundtrack(project_id)
+    if record is None:
+        return None
+    offset = _valid_offset(record.get("offset_seconds", 0.0))
+    source = _directory(project_id) / (record["sha256"] + "." + record["format"])
+    try:
+        data = source.read_bytes()
+    except OSError as exc:
+        raise ImportedSoundtrackError("Stored soundtrack file could not be read.") from exc
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != record["sha256"]:
+        raise ImportedSoundtrackError(
+            "Stored soundtrack checksum changed; reattach the local audio before rendering."
+        )
+    render_dir = Path(render_dir)
+    render_dir.mkdir(parents=True, exist_ok=True)
+    render_filename = "imported-soundtrack." + record["format"]
+    destination = render_dir / render_filename
+    fd, temp = tempfile.mkstemp(prefix=".soundtrack-", dir=render_dir)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+        os.replace(temp, destination)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+    return {
+        "schema_version": 1,
+        "sha256": digest,
+        "format": record["format"],
+        "filename": str(record.get("filename") or "")[:160],
+        "bytes": len(data),
+        "offset_seconds": offset,
+        "render_filename": render_filename,
+    }
