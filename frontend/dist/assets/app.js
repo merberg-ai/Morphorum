@@ -1084,7 +1084,7 @@
       const health = await api('/api/health');
       const buildVersion = String(health.version || 'unknown');
       const branch = String(health.git_branch || 'Unknown branch');
-      const fullCommit = String(health.git_commit || '');
+      const fullCommit = String(health.git_commit_full || health.git_commit || '');
       const commit = fullCommit.slice(0, 12);
       const validBranch = branch && !['Unknown branch', 'HEAD', 'detached'].includes(branch)
         && !/[?#\\]/.test(branch) && !/[.]{2}/.test(branch);
