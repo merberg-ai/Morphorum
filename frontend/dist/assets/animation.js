@@ -5701,7 +5701,7 @@
       </div>
       <div class="animation-audio-workspace-actions">
         <button class="secondary-button compact" type="button"
-          id="animation-audio-review-motion">Review in Motion Lab</button>
+          id="animation-audio-review-motion">Review Motion Curves</button>
         <button class="primary-button compact" type="button"
           id="animation-audio-apply" data-motion-quick-target="animation-motion-lab-apply"
           disabled>Apply to Animation</button>
@@ -5715,7 +5715,7 @@
     audioPlaceholder.innerHTML = '<strong>Beat analysis preview</strong><p>Choose a WAV file and select Analyze WAV. Your detected beats and audio levels will appear here before you add any motion.</p>';
     qs('#animation-motion-lab-audio-preview')?.before(audioPlaceholder);
     qs('#animation-audio-back-motion')?.addEventListener('click', () => showAnimationTab('motion'));
-    qs('#animation-audio-review-motion')?.addEventListener('click', () => showAnimationTab('motion'));
+    qs('#animation-audio-review-motion')?.addEventListener('click', () => showAnimationTab('curves'));
     qs('#animation-audio-apply')?.addEventListener('click', () => {
       const apply = qs('#animation-motion-lab-apply');
       if (apply && !apply.disabled) apply.click();
