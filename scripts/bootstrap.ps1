@@ -1,11 +1,26 @@
 param(
     [Parameter(Position = 0)]
     [string]$InstallDir,
-    [string]$Branch
+    [string]$Branch,
+    [switch]$Help
 )
 
 $ErrorActionPreference = 'Stop'
 $repo = 'https://github.com/merberg-ai/Morphorum.git'
+
+if ($Help) {
+    Write-Host ''
+    Write-Host '  MORPHORUM - WINDOWS INSTALLER' -ForegroundColor Cyan
+    Write-Host '  ------------------------------------------' -ForegroundColor DarkGray
+    Write-Host '  bootstrap.bat [-InstallDir PATH] [-Branch NAME] [-Help]' -ForegroundColor White
+    Write-Host ''
+    Write-Host '  No path supplied: prompt for an install location (default C:\Morphorum).' -ForegroundColor Gray
+    Write-Host '  -InstallDir:       install to a specific folder without a prompt.' -ForegroundColor Gray
+    Write-Host '  -Branch:           clone/update the selected GitHub branch.' -ForegroundColor Gray
+    Write-Host '  -Help:             show this help without installing anything.' -ForegroundColor Gray
+    Write-Host ''
+    return
+}
 
 # This file also runs alone when fetched by bootstrap.bat, so its UI is
 # self-contained. Scripts inside a checkout use ui_windows.ps1.
