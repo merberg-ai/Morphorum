@@ -36,6 +36,8 @@ _KNOWN_TOP_LEVEL = {
     "generation",
     "cadence",
     "temporal",
+    "hybrid",
+    "motion_lab",
     "tracks",
     "notes",
 }
@@ -153,6 +155,13 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "mode": "forward",
             "mix": 0.65,
             "contrast_threshold": 96,
+        },
+        "hybrid": {
+            "enabled": False,
+            "offset_frames": 0,
+            "end_policy": "hold-last",
+            "composite_enabled": False,
+            "composite_opacity": "0:(0.35)",
         },
         "notes": "",
     }
@@ -346,6 +355,13 @@ def normalize_animation_project(
     animation["source_image_name"] = str(animation.get("source_image_name") or "").strip()
     project["animation"] = animation
 
+    # Hybrid source input is opt-in. Preserve the validated schema alongside
+    # existing native animation settings without changing B5 behavior.
+    from .animation_hybrid_render import normalize_hybrid_settings
+    project["hybrid"] = normalize_hybrid_settings(
+        payload.get("hybrid", project.get("hybrid"))
+    )
+
     model_source = payload.get("model", project.get("model", {}))
     model_source = model_source if isinstance(model_source, dict) else {}
     model = dict(project.get("model", {}))
@@ -512,6 +528,13 @@ def normalize_animation_project(
     else:
         project["tracks"] = build_tracks_from_legacy(project)
 
+    # Motion Lab authoring state is inert until explicitly compiled/applied
+    # to canonical native tracks. Older projects default to empty layers.
+    from .motion_lab import normalize_motion_lab
+    project["motion_lab"] = normalize_motion_lab(
+        payload.get("motion_lab", project.get("motion_lab")), project,
+    )
+
     # Native projects are forward-compatible: unknown top-level fields survive
     # a load/edit/save round trip just like future imported compatibility data.
     for key, value in payload.items():
@@ -629,7 +652,12 @@ def list_animation_projects() -> list[dict[str, Any]]:
                 "fps": animation.get("fps"),
                 "width": animation.get("width"),
                 "height": animation.get("height"),
+                "mode": animation.get("mode", "2d"),
+                "start_mode": animation.get("start_mode", "prompt"),
                 "model_id": project.get("model", {}).get("model_id", ""),
+                "model_family": project.get("model", {}).get("family", ""),
+                "motion_layers": len(project.get("motion_lab", {}).get("layers", [])),
+                "has_source_image": bool(animation.get("source_image")),
                 "prompt_keyframes": (
                     track_keyframe_count(project, group="prompts", name="positive")
                     or (len(prompts) if isinstance(prompts, dict) else 0)
@@ -639,6 +667,62 @@ def list_animation_projects() -> list[dict[str, Any]]:
 
     projects.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
     return projects
+
+
+def trash_animation_project(project_id: str) -> dict[str, str]:
+    """Move an existing project into .trash without deleting saved render outputs.
+
+    Projects use opaque validated IDs. The atomic rename is restricted to
+    the managed projects root and refuses symlinks.
+    """
+    ensure_runtime_dirs()
+    project_dir = _project_dir(project_id)
+    if project_dir.is_symlink() or not project_dir.is_dir():
+        raise AnimationProjectError("Animation project not found.")
+    if not (project_dir / "project.json").is_file():
+        raise AnimationProjectError("Animation project not found.")
+    title = load_animation_project(project_id)["name"]
+    trash_root = PROJECTS_DIR / ".trash"
+    if trash_root.is_symlink():
+        raise AnimationProjectError("Project trash folder cannot be a symlink.")
+    try:
+        trash_root.mkdir(parents=True, exist_ok=True)
+        destination = trash_root / (project_dir.name + "-" + uuid.uuid4().hex[:12])
+        project_dir.rename(destination)
+    except OSError as exc:
+        raise AnimationProjectError(f"Could not move project to Trash: {exc}") from exc
+    emit_console("info", "animation",
+                 f"Moved animation project {project_id}: {title} to Trash.")
+    return {"id": project_id, "name": title, "trash_path": str(destination)}
+
+
+
+def seed_example_animation_project() -> dict[str, Any] | None:
+    """Install bundled example only if the user has no saved projects.
+
+    This is opt-in through the installer, not a side effect of API startup.
+    Existing projects are never modified, even after repairs or updates.
+    """
+    ensure_runtime_dirs()
+    if list_animation_projects():
+        return None
+    template = Path(__file__).resolve().parents[2] / "config" / "example-project.json"
+    if not template.is_file():
+        raise AnimationProjectError(f"Bundled example project is missing: {template}")
+    try:
+        payload = json.loads(template.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise AnimationProjectError(f"Could not read example project: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise AnimationProjectError("Example project template must be an object.")
+    sample_id = str(payload.get("id") or "").strip().lower()
+    project_file = _project_file(sample_id)
+    if project_file.exists():
+        return None
+    project = normalize_animation_project(payload, project_id=sample_id, prefer_tracks=True)
+    _write_atomic(project_file, project)
+    emit_console("info", "animation", f"Installed example animation project: {project['name']}.")
+    return project
 
 
 def animation_project_directory(project_id: str) -> Path:

@@ -42,6 +42,26 @@ jobs:
           }
           if ($failed) { exit 1 }
 
+      - name: Smoke test standalone bootstrap.bat via real Windows CMD
+        shell: pwsh
+        env:
+          MORPHORUM_BOOTSTRAP_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'morphorum-standalone-bat-smoke'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item bootstrap.bat (Join-Path $target 'bootstrap.bat') -Force
+          # Running outside the checkout forces the remote PS1 download
+          # and catches CMD expansion failures that a PowerShell parser misses.
+          $output = & (Join-Path $target 'bootstrap.bat') -Help 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -ne 0) { throw "Standalone bootstrap.bat exited $LASTEXITCODE" }
+          if ($output -notmatch 'MORPHORUM - WINDOWS INSTALLER') {
+            throw 'The downloaded bootstrap script did not run its help page.'
+          }
+          if ($output -match "Processing -File|StatusCode\s+:\s+200") {
+            throw 'Unexpected PowerShell download output or empty -File path.'
+          }
+
   bash-syntax:
     runs-on: ubuntu-latest
     steps:

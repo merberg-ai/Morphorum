@@ -139,6 +139,16 @@ async def store_managed_video(project_id: str, filename: str, chunks: Any) -> di
         # Probe temp file directly before replacing the current accepted source.
         info = _probe_file(temporary)
         os.replace(temporary, destination)
+        # A successfully replaced source invalidates its previous extraction.
+        # Render jobs already have their own frozen copies of input frames.
+        # An unsuccessful upload never reaches this point and preserves them.
+        import shutil
+        import uuid
+        frames_dir = destination.parent / "frames"
+        if frames_dir.exists():
+            retired = destination.parent / (".retired-frames-" + uuid.uuid4().hex)
+            frames_dir.rename(retired)
+            shutil.rmtree(retired, ignore_errors=True)
         info.update({
             "size_bytes": total,
             "filename": Path(filename).name[:160],

@@ -143,6 +143,12 @@ else
   fi
 fi
 
+# Match Windows first-run behavior without touching existing project libraries.
+if [[ "$MODE" == "install" ]]; then
+  step "Preparing the bundled Default starter project (empty libraries only)..."
+  "$VENV_PYTHON" -m morphorum seed-example
+fi
+
 if (( SKIP_SELF_TEST == 0 )); then
   step "Running Morphorum self-test..."
   "$VENV_PYTHON" -m morphorum self-test

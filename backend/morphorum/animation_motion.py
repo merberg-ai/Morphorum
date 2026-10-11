@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 from scipy.ndimage import map_coordinates
 
 from .animation_resolution import resolve_project_frame
@@ -21,7 +21,13 @@ from .console import emit_console
 from .paths import OUTPUTS_DIR
 
 PREVIEW_MAX_DIMENSION = 512
-PREVIEW_MAX_CAPTURE_FRAMES = 72
+PREVIEW_MAX_CAPTURE_FRAMES = 144
+PREVIEW_QUALITY = {
+    'fast': (192, 36),
+    'balanced': (320, 72),
+    'detailed': (320, 144),
+}
+PREVIEW_MAX_3D_SOURCE_FRAMES = 3000
 SOURCE_MAX_BYTES = 32 * 1024 * 1024
 SUPPORTED_BORDER_MODES = {"replicate", "wrap"}
 
@@ -104,6 +110,35 @@ def prepare_preview_source(
         method=Image.Resampling.LANCZOS,
         centering=(0.5, 0.5),
     )
+
+
+def create_motion_reference_grid(width: int, height: int) -> Image.Image:
+    """Small, visible calibration pattern for source-free Motion Lab previews.
+
+    Build directly at bounded preview resolution rather than allocating a
+    full-resolution image on large animation projects.
+    """
+    width, height = _preview_dimensions(width, height, max_dimension=320)
+    image = Image.new("RGB", (width, height), (13, 20, 32))
+    draw = ImageDraw.Draw(image)
+    spacing = max(12, min(width, height) // 12)
+    for x in range(spacing // 2, width, spacing):
+        draw.line((x, 0, x, height - 1), fill=(40, 87, 105), width=1)
+    for y in range(spacing // 2, height, spacing):
+        draw.line((0, y, width - 1, y), fill=(40, 87, 105), width=1)
+    cx, cy = width // 2, height // 2
+    for radius in (min(width, height) // 6, min(width, height) // 3):
+        if radius > 1:
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius),
+                         outline=(100, 213, 218), width=2)
+    draw.line((max(0, cx - spacing), cy, min(width - 1, cx + spacing), cy),
+              fill=(245, 181, 92), width=2)
+    draw.line((cx, max(0, cy - spacing), cx, min(height - 1, cy + spacing)),
+              fill=(245, 181, 92), width=2)
+    if width >= 48 and height >= 48:
+        draw.rectangle((6, 6, width - 7, height - 7),
+                       outline=(184, 110, 229), width=2)
+    return image
 
 
 def _frame_transform_matrix(
@@ -222,10 +257,10 @@ def _render_3d_motion_preview(
     """
     animation = project.get("animation", {})
     max_frames = max(1, int(animation.get("max_frames", 120)))
-    if max_frames > 180:
+    if max_frames > PREVIEW_MAX_3D_SOURCE_FRAMES:
         raise MotionPreviewError(
-            "3D camera preview supports up to 180 frames. "
-            "Reduce the frame count to preview the camera movement."
+            f"3D camera preview supports up to {PREVIEW_MAX_3D_SOURCE_FRAMES} "
+            "project frames. Reduce the frame count for this diagnostic preview."
         )
     fps = max(1.0, float(animation.get("fps", 24.0)))
     base = prepare_preview_source(
@@ -299,6 +334,7 @@ def _render_3d_motion_preview(
         depth_manager.unload()
 
     _save_motion_preview_gif(captured, destination, fps)
+    _save_motion_preview_samples(captured, destination)
     counts = [float(item["projected_coverage"]) for item in coverage]
     worst = min(coverage, key=lambda item: item["projected_coverage"])
     return {
@@ -319,6 +355,18 @@ def _render_3d_motion_preview(
         "last_coverage": counts[-1],
         "per_frame_coverage": coverage,
     }
+
+
+def _save_motion_preview_samples(
+    captured: list[tuple[int, Image.Image]], destination: Path
+) -> None:
+    """Save the exact captured frames, even when GIF encoding coalesces duplicates."""
+    if len(captured) > PREVIEW_MAX_CAPTURE_FRAMES:
+        raise MotionPreviewError("Preview captured too many frames.")
+    folder = destination.parent / "frames"
+    folder.mkdir(parents=True, exist_ok=True)
+    for index, (_frame, picture) in enumerate(captured):
+        picture.convert("RGB").save(folder / f"{index:04d}.png", "PNG")
 
 
 def _save_motion_preview_gif(
@@ -447,6 +495,7 @@ def render_motion_preview(
         disposal=2,
     )
     temp.replace(destination)
+    _save_motion_preview_samples(captured, destination)
 
     return {
         "preview_width": preview_width,
@@ -500,20 +549,23 @@ class MotionPreviewManager:
         self,
         *,
         project: dict[str, Any],
-        source_path: Path,
+        source_path: Path | None,
         highlight_holes: bool = False,
+        quality: str = 'balanced',
     ) -> dict[str, Any]:
+        if quality not in PREVIEW_QUALITY:
+            raise MotionPreviewError('Preview quality must be fast, balanced or detailed.')
         project_id = str(project.get("id") or "").strip()
         if not project_id:
             raise MotionPreviewError("Animation project id is required.")
-        if not source_path.is_file():
-            raise MotionPreviewError("Upload a source image before creating a motion preview.")
+        if source_path is not None and not source_path.is_file():
+            raise MotionPreviewError("Selected preview source image is missing.")
         if (
             str(project.get("animation", {}).get("mode") or "2d").strip().lower() == "3d"
-            and int(project.get("animation", {}).get("max_frames", 120)) > 180
+            and int(project.get("animation", {}).get("max_frames", 120)) > PREVIEW_MAX_3D_SOURCE_FRAMES
         ):
             raise MotionPreviewError(
-                "3D camera previews support up to 180 frames. "
+                f"3D camera previews support up to {PREVIEW_MAX_3D_SOURCE_FRAMES} frames. "
                 "Shorten the project for this diagnostic preview."
             )
 
@@ -527,7 +579,7 @@ class MotionPreviewManager:
 
         thread = threading.Thread(
             target=self._run,
-            args=(job.id, deepcopy(project), source_path, highlight_holes),
+            args=(job.id, deepcopy(project), source_path, highlight_holes, quality),
             daemon=True,
             name=f"Morphorum-{job.id}",
         )
@@ -542,6 +594,15 @@ class MotionPreviewManager:
                 raise MotionPreviewError("Motion preview job not found.")
             return job.public()
 
+    def frame_path(self, job_id: str, index: int) -> Path:
+        if not isinstance(index, int) or not 0 <= index < PREVIEW_MAX_CAPTURE_FRAMES:
+            raise MotionPreviewError("Preview frame index out of range.")
+        self.result_path(job_id)
+        frame = OUTPUTS_DIR / "motion-previews" / job_id / "frames" / f"{index:04d}.png"
+        if not frame.is_file():
+            raise MotionPreviewError("Preview sample frame not found.")
+        return frame
+
     def result_path(self, job_id: str) -> Path:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -555,18 +616,20 @@ class MotionPreviewManager:
         self,
         job_id: str,
         project: dict[str, Any],
-        source_path: Path,
+        source_path: Path | None,
         highlight_holes: bool = False,
+        quality: str = 'balanced',
     ) -> None:
         with self._render_lock:
-            self._run_serialized(job_id, project, source_path, highlight_holes)
+            self._run_serialized(job_id, project, source_path, highlight_holes, quality)
 
     def _run_serialized(
         self,
         job_id: str,
         project: dict[str, Any],
-        source_path: Path,
+        source_path: Path | None,
         highlight_holes: bool = False,
+        quality: str = 'balanced',
     ) -> None:
         with self._lock:
             job = self._jobs[job_id]
@@ -574,8 +637,17 @@ class MotionPreviewManager:
             job.message = "Preparing source image"
 
         try:
-            with Image.open(source_path) as opened:
-                source = ImageOps.exif_transpose(opened).convert("RGB").copy()
+            if source_path is None:
+                animation = project.get("animation") or {}
+                source = create_motion_reference_grid(
+                    int(animation.get("width", 1024)),
+                    int(animation.get("height", 1024)),
+                )
+                source_kind = "calibration-grid"
+            else:
+                with Image.open(source_path) as opened:
+                    source = ImageOps.exif_transpose(opened).convert("RGB").copy()
+                source_kind = "uploaded-image"
 
             output = OUTPUTS_DIR / "motion-previews" / job_id / "preview.gif"
 
@@ -596,7 +668,13 @@ class MotionPreviewManager:
                 output,
                 progress_callback=progress,
                 highlight_holes=highlight_holes,
+                max_dimension=PREVIEW_QUALITY[quality][0],
+                max_capture_frames=PREVIEW_QUALITY[quality][1],
             )
+            result['preview_quality'] = quality
+            # Expose the existing bounded preview samples as seekable frames.
+            result["frame_player_samples"] = result["captured_frames"]
+            result["source_kind"] = source_kind
             with self._lock:
                 job = self._jobs[job_id]
                 job.status = "completed"

@@ -1,17 +1,16 @@
 param(
     [switch]$Repair,
     [switch]$Update,
-    [switch]$SkipSelfTest
+    [switch]$SkipSelfTest,
+    [ValidateRange(1, 65535)]
+    [int]$Port = 7865
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
-function Step($text) { Write-Host "[Morphorum] $text" -ForegroundColor Cyan }
-function Okay($text) { Write-Host "[OK] $text" -ForegroundColor Green }
-function Warn($text) { Write-Host "[!] $text" -ForegroundColor Yellow }
-function Fail($text) { Write-Host "[X] $text" -ForegroundColor Red }
+. (Join-Path $PSScriptRoot 'ui_windows.ps1')
 
 function Download-File([string]$Uri, [string]$Destination) {
     if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
@@ -94,8 +93,50 @@ $logPath = Join-Path $Root "logs\$mode.log"
 Start-Transcript -Path $logPath -Append | Out-Null
 
 try {
-    Step "Mode: $mode"
-    Step "Installation root: $Root"
+    Show-MorphorumBanner -Mode $mode
+    Write-MorphorumSection 'SYSTEM CHECKS'
+    Write-MorphorumDetail 'Mode' $mode
+    Write-MorphorumDetail 'Location' $Root
+
+    Write-MorphorumSection 'SERVER PREFERENCES'
+    $PortFile = Join-Path $Root 'data\server-port.txt'
+    $ServerPort = 7865
+    $ExistingPort = $false
+    if (Test-Path $PortFile) {
+        $rawPort = (Get-Content -LiteralPath $PortFile -Raw).Trim()
+        $parsedPort = 0
+        if ([int]::TryParse($rawPort, [ref]$parsedPort) -and
+            $parsedPort -ge 1 -and $parsedPort -le 65535) {
+            $ServerPort = $parsedPort
+            $ExistingPort = $true
+        } else {
+            Warn 'The saved server port is invalid. Using 7865 until corrected.'
+        }
+    }
+    $SavePort = $false
+    if (-not $Repair -and -not $Update) {
+        if ($PSBoundParameters.ContainsKey('Port')) {
+            $ServerPort = $Port
+            $SavePort = $true
+        } elseif (-not $ExistingPort) {
+            Write-Host '  Choose the port Morphorum should listen on.' -ForegroundColor Gray
+            Write-Host '  Press ENTER for 7865 (recommended).' -ForegroundColor DarkGray
+            while ($true) {
+                $choice = (Read-Host '  Server port').Trim()
+                if (-not $choice) { break }
+                $requested = 0
+                if ([int]::TryParse($choice, [ref]$requested) -and
+                    $requested -ge 1 -and $requested -le 65535) {
+                    $ServerPort = $requested
+                    break
+                }
+                Warn 'Enter a valid port between 1 and 65535, or press Enter for 7865.'
+            }
+            $SavePort = $true
+        }
+    }
+    Write-MorphorumDetail 'Server port' ([string]$ServerPort)
+    if ($ExistingPort -and -not $SavePort) { Okay 'Existing server port setting preserved.' }
 
     try {
         $driveRoot = [System.IO.Path]::GetPathRoot($Root)
@@ -116,6 +157,7 @@ try {
         } else { throw 'Git is required and neither Git nor winget is available.' }
     } else { Okay "$(git --version)" }
 
+    Write-MorphorumSection 'PYTHON RUNTIME'
     if (-not (Test-Path $UvExe)) {
         Step 'Installing Morphorum-owned uv runtime manager...'
         Install-UvStandalone $UvDir $UvExe
@@ -146,6 +188,7 @@ try {
     # Let uv select the most compatible PyTorch backend for the installed hardware.
     # This also applies while resolving Morphorum dependencies such as accelerate.
     $env:UV_TORCH_BACKEND = 'auto'
+    Write-MorphorumSection 'AI DEPENDENCIES'
     Step 'Installing/updating Morphorum Python dependencies...'
     & $UvExe pip install --python $VenvPython --upgrade --editable .
     if ($LASTEXITCODE -ne 0) { throw 'Morphorum dependency installation failed.' }
@@ -175,6 +218,7 @@ try {
         Okay "CUDA smoke test: $cudaSmoke"
     }
 
+    Write-MorphorumSection 'USER SETTINGS + MEDIA TOOLS'
     $userConfig = Join-Path $Root 'data\config.yaml'
     if (-not (Test-Path $userConfig)) {
         Copy-Item (Join-Path $Root 'config\default.yaml') $userConfig
@@ -190,6 +234,18 @@ try {
         } else { Warn 'FFmpeg not found and winget is unavailable. Video encoding will require FFmpeg.' }
     } else { Okay 'FFmpeg found.' }
 
+    # Seed from the bundled Default.json only for brand-new installs.
+    # Repairs and updates must never create or overwrite user projects.
+    if (-not $Repair -and -not $Update) {
+        Write-MorphorumSection 'STARTER PROJECT'
+        Step 'Checking whether a starter project is needed...'
+        & $VenvPython -m morphorum seed-example
+        if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the Default starter project.' }
+    } else {
+        Okay 'Existing animation projects preserved.'
+    }
+
+    Write-MorphorumSection 'INSTALLATION VERIFICATION'
     if (-not $SkipSelfTest) {
         Step 'Running Morphorum self-test...'
         & $VenvPython -m morphorum self-test
@@ -197,12 +253,20 @@ try {
         Okay 'Morphorum self-test passed.'
     }
 
+    if ($SavePort) {
+        Set-Content -LiteralPath $PortFile -Value ([string]$ServerPort) -Encoding ASCII
+        Okay 'Server port preference saved for future launches.'
+    }
+
+    Write-MorphorumSection 'MORPHORUM IS READY'
+    Okay 'Installation successful.'
+    Write-MorphorumDetail 'Server port' ([string]$ServerPort)
+    Write-MorphorumNext 'Local launch' "$Root\run.bat"
+    Write-MorphorumNext 'LAN launch' "$Root\run-lan.bat"
+    Write-MorphorumNext 'Update' "$Root\update.bat"
+    Write-MorphorumNext 'Diagnostics' "$Root\repair.bat"
+    Write-MorphorumDetail 'Install log' $logPath
     Write-Host ''
-    Okay 'Morphorum installation is ready.'
-    Write-Host "Local launch:  $Root\run.bat"
-    Write-Host "LAN launch:    $Root\run-lan.bat"
-    Write-Host "Diagnostics:   $Root\repair.bat"
-    Write-Host "Log:           $logPath"
 }
 catch {
     Write-Host ''

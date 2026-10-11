@@ -19,6 +19,8 @@ test('hybrid upload state is refreshed after project load and file selection', (
   const js = fs.readFileSync(path.join(base, 'assets', 'animation.js'), 'utf8');
   const load = js.slice(js.indexOf('async function loadProject(projectId'), js.indexOf('async function createProject'));
   assert.match(load, /state\.project = payload\.project;\s*resetHybridForProject\(\)/);
-  assert.match(js, /animation-hybrid-file'\)\?\.addEventListener\('change', hybridButtons\)/);
+  assert.match(js, /animation-hybrid-file'\)\?\.addEventListener\('change', \(\) => \{/);
+  assert.match(js, /hybridClearPreview\(\)/);
+  assert.match(js, /New video selected\. Upload & inspect, then extract its frames/);
   assert.match(js, /input\.id\.startsWith\('animation-hybrid-'\)/);
 });

@@ -113,7 +113,12 @@ def test_frontend_and_health() -> None:
         assert app_js.status_code == 200
         assert "health.git_branch" in app_js.text
         assert "health.git_commit" in app_js.text
-        assert "Connected" in app_js.text
+        assert "version.textContent = displayVersion" in app_js.text
+        assert "branchLabel.textContent = branch" in app_js.text
+        assert "commitFull.textContent = commit" in app_js.text
+        assert 'id="runtime-branch-full"' in frontend.text
+        assert 'id="runtime-version"' in frontend.text
+        assert "Connected" not in app_js.text
 
         animation_js = client.get("/assets/animation.js")
         assert animation_js.status_code == 200
@@ -775,13 +780,36 @@ def test_lora_manager_server_audit_logs_and_validation(monkeypatch) -> None:
     assert any("DonMCr33pyD0115XL" in event["message"] for event in lora_lines)
 
 
+def test_motion_lab_source_free_api_selects_reference_grid(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path / "projects")
+    seen = []
+
+    def fake_start(*, project, source_path, highlight_holes=False, quality='balanced'):
+        seen.append((project, source_path, highlight_holes))
+        return {"id": "motion-grid", "status": "queued"}
+
+    monkeypatch.setattr(animation_motion.motion_preview_manager, "start", fake_start)
+    with TestClient(app) as client:
+        created = client.post("/api/animation/projects", json={"name": "Motion Lab Grid"})
+        assert created.status_code == 201
+        project = created.json()["project"]
+        project["animation"]["max_frames"] = 12
+        response = client.post(
+            "/api/animation/motion-preview", json={"project": project},
+        )
+        assert response.status_code == 202, response.text
+    assert len(seen) == 1
+    assert seen[0][1] is None
+    assert seen[0][0]["animation"]["max_frames"] == 12
+
+
 def test_b53_3d_preview_api_forwards_red_overlay_to_manager(
     tmp_path, monkeypatch,
 ) -> None:
     monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path / "projects")
     seen = []
 
-    def fake_start(*, project, source_path, highlight_holes=False):
+    def fake_start(*, project, source_path, highlight_holes=False, quality='balanced'):
         seen.append((project, source_path, highlight_holes))
         return {"id": "b53-preview-test", "status": "queued"}
 
@@ -891,3 +919,49 @@ def test_deforum_import_route_rejects_python_text() -> None:
         )
     assert response.status_code == 400
     assert "not JSON-serialized" in response.json()["detail"]
+
+
+def test_project_manager_trash_api_preserves_outputs_and_blocks_active_render(
+    tmp_path, monkeypatch
+) -> None:
+    from types import SimpleNamespace
+    import morphorum.animation_render as render_module
+
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path / "projects")
+    with TestClient(app) as client:
+        created = client.post("/api/animation/projects", json={
+            "name": "Trash API Test",
+            "animation": {"mode": "3d", "max_frames": 210, "fps": 30},
+        })
+        assert created.status_code == 201
+        project_id = created.json()["project"]["id"]
+        listed = client.get("/api/animation/projects")
+        assert listed.status_code == 200
+        summary = next(p for p in listed.json()["projects"] if p["id"] == project_id)
+        assert summary["mode"] == "3d"
+        assert summary["max_frames"] == 210
+        assert summary["model_family"] == ""
+        assert summary["motion_layers"] == 0
+
+        outputs = tmp_path / "saved-outputs"
+        outputs.mkdir()
+        (outputs / "finished.mp4").write_bytes(b"saved")
+        manager = render_module.animation_render_manager
+        with monkeypatch.context() as m:
+            m.setattr(manager, "_jobs", {
+                "test-active": SimpleNamespace(
+                    id="test-active", project_id=project_id, status="rendering")
+            })
+            blocked = client.delete(f"/api/animation/projects/{project_id}")
+            assert blocked.status_code == 409
+            assert "active operation" in blocked.json()["detail"]
+        moved = client.delete(f"/api/animation/projects/{project_id}")
+        assert moved.status_code == 200
+        assert moved.json()["status"] == "trashed"
+        assert moved.json()["id"] == project_id
+        assert (tmp_path / "projects" / ".trash").is_dir()
+        assert not (tmp_path / "projects" / project_id).exists()
+        assert (outputs / "finished.mp4").read_bytes() == b"saved"
+        assert client.get(f"/api/animation/projects/{project_id}").status_code == 404
+        assert client.delete(f"/api/animation/projects/{project_id}").status_code == 404
+        assert client.delete("/api/animation/projects/..%2Foutside").status_code in (400, 404)

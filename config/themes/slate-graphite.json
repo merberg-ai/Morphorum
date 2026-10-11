@@ -1,0 +1,28 @@
+{
+  "id": "slate-graphite",
+  "name": "Slate Graphite",
+  "appearance": "dark",
+  "colors": {
+    "background": "#191B1E",
+    "surface": "rgba(42,46,50,0.87)",
+    "surfaceStrong": "rgba(34,38,42,0.97)",
+    "border": "rgba(211,220,230,0.17)",
+    "text": "#F2F5F7",
+    "textMuted": "#B2BCC5",
+    "accent": "#D3DBE4",
+    "accentSecondary": "#A9BACB",
+    "success": "#9CDFB5",
+    "warning": "#ECCF92",
+    "danger": "#FF9BA1"
+  },
+  "glass": {
+    "enabled": true,
+    "blurPx": 14,
+    "opacity": 0.84
+  },
+  "radiusPx": 12,
+  "motion": {
+    "enabled": true,
+    "durationMs": 170
+  }
+}

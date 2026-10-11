@@ -1,101 +1,88 @@
-# Morphorum installer test checklist
+# Testing Morphorum before release
 
-This checklist is for the first real Windows/Linux validation pass. The installer already contains a built-in API self-test; these steps validate the surrounding bootstrap, filesystem, maintenance, and launch behavior.
+This checklist is for maintainers and testers. **New users do not need to run the automated tests**; follow [Getting started](GETTING_STARTED.md) instead.
 
-## Windows clean install
+> [!NOTE]
+> A successful CI run checks syntax, APIs, and scripted behavior. A real NVIDIA GPU and browser test is still important for validating large model downloads, performance, camera previews, and video export.
 
-Recommended first target: Windows 10/11 with an NVIDIA GPU.
+## Automated checks
 
-1. Choose an empty location such as `D:\Morphorum-test`.
-2. Run:
+The repository runs three GitHub Actions workflow suites on pull requests and selected branch pushes:
 
-```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.ps1'))) -InstallDir 'D:\Morphorum-test'
-```
+| Workflow | Checks |
+| --- | --- |
+| **Syntax checks** | Python compilation, browser JavaScript syntax, frontend behavior/regression suites |
+| **Backend tests** | Python/pytest model, project, rendering, settings and API tests |
+| **Installer checks** | Windows PowerShell parser, Linux shell syntax, actual Windows standalone `bootstrap.bat -Help` download/launch smoke test |
 
-3. Confirm the installer reports:
-   - Git available;
-   - Morphorum-owned `uv` installed;
-   - managed Python 3.12 installed;
-   - `.venv` created;
-   - Morphorum dependencies installed;
-   - NVIDIA GPU details when applicable;
-   - FFmpeg present or installed;
-   - API self-test passed.
-4. Confirm these exist:
-   - `.runtime/uv/uv.exe`
-   - `.runtime/python/`
-   - `.venv/Scripts/python.exe`
-   - `data/config.yaml`
-   - `data/install.json`
-   - `logs/install.log`
-5. Run `run.bat` and open `http://127.0.0.1:7865/`.
-6. Open `http://127.0.0.1:7865/api/health` and confirm JSON reports `status: ok`.
-7. Stop the server with Ctrl+C.
-8. Run `repair.bat` and confirm the self-test and doctor complete.
-9. Run the bootstrap command again against the same directory and confirm it routes through the guarded updater rather than failing or reinstalling destructively.
+Review them at [GitHub Actions](https://github.com/merberg-ai/Morphorum/actions). Green runs on `dev-ui` are required before proposing promotion to `main`, and the `main` merge should be checked again afterward.
 
-## Windows path tests
-
-Repeat or spot-check with:
-
-- a path containing spaces, such as `D:\AI Apps\Morphorum`;
-- the default `$HOME\Morphorum` path;
-- a directory that already contains unrelated files, which should be rejected;
-- a drive with insufficient free space, if practical to simulate.
-
-## Linux clean install
-
-Recommended first target: Ubuntu/Debian, followed by another distro when convenient.
-
-1. Choose an empty location such as `/opt/morphorum-test` (with suitable permissions) or `$HOME/Morphorum-test`.
-2. Run:
+Developers who already have a virtual environment with **pytest** installed can run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash -s -- "$HOME/Morphorum-test"
+python -m pytest tests
 ```
 
-3. Confirm the same runtime/self-test milestones as Windows.
-4. Confirm executable wrappers work:
+The frontend behavior suites run with Node.js **22**, which is used for development/CI only (not for normal user installation).
 
-```bash
-./run.sh
-./repair.sh
-./update.sh
-```
+## Windows clean-install acceptance
 
-5. Confirm `./run-lan.sh` binds to `0.0.0.0` and is reachable from another machine on the LAN when the host firewall permits it.
+On a Windows 10/11 system with sufficient disk space and ideally an NVIDIA CUDA GPU:
 
-## Update rollback test
+1. Use a **new, disposable directory** such as `D:\Morphorum-test`, not the primary installation.
+2. Download a fresh `bootstrap.bat` from the [published main branch](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat).
+3. Open PowerShell and run the bootstrap with that disposable directory:
 
-After a known-good install:
+   ```powershell
+   .\bootstrap.bat -InstallDir "D:\Morphorum-test" -Port 7865
+   ```
 
-1. Note the current commit with `git rev-parse HEAD`.
-2. Confirm `update.bat` / `./update.sh` creates a timestamped directory under `backups/`.
-3. Confirm `data/config.yaml` survives the update unchanged.
-4. Later, once a deliberately broken test branch/release is available, verify that a failed installer/self-test causes the updater to reset to the previous commit and reinstall the previous runtime.
+4. Confirm installer prerequisite checks, managed Python 3.12 and PyTorch, optional Git/FFmpeg setup, and self-test.
+5. Confirm these exist after installation: `.venv`, `.runtime`, `data\config.yaml`, `data\server-port.txt`, `logs\install.log`, `projects`.
+6. Run `.\run.bat` from the installed folder and open **http://127.0.0.1:7865**.
+7. Confirm `http://127.0.0.1:7865/api/health` returns a healthy response.
+8. In **Motion Lab → Project Manager**, verify the **Default** starter project appears if the project library was previously empty.
+9. Run `.\run.bat -Port 8080` and confirm the URL changes for that session without modifying the port saved by the installer.
+10. Run `.\repair.bat` and verify the starter project and any edits remain intact.
+11. Run `.\update.bat` and verify the updater protects data and reports a successful self-test.
 
-Do not manufacture a broken `main` branch merely for entertainment. There are already enough ways to generate excitement in software development.
+**Safety:** Do not test deletion/Trash with valuable user projects. Use disposable projects.
 
-## Developer tests
+## Windows generation and Motion Lab acceptance
 
-Once the development dependency group has been installed, run:
+1. Open **Models** and check an already installed Z-Image-Turbo package, or download it if storage allows (approximately **33 GB**).
+2. Render **one text-to-image** sample and **one image-to-image** frame. Both should reuse the same Z-Image model folder.
+3. Open the starter project, choose the model, and confirm prompts, resolution, frame count, and mode.
+4. Use Camera Composer, editable Motion Curves, Camera Preview, and the floating quick-action toolbar.
+5. Test Live Recording/Stop; verify conflicting controls correctly disable during active operations.
+6. Test Audio Motion and soundtrack export with a disposable project/audio source.
+7. Render a short animation and confirm progress, preview/monitor, output files, and FFmpeg export.
+8. Test each theme and the interface/console font selectors. Save preferences, refresh, and verify persistence.
+9. Verify desktop and mobile browser layouts separately.
 
-```bash
-uv run --group dev pytest
-uv run --group dev ruff check backend tests
-```
+GPU performance and VRAM usage should be **measured rather than assumed**. Include model name, batch, resolution, steps, driver, and GPU in performance reports.
 
-A committed `uv.lock` should be generated and added after the first successful platform install confirms the selected dependency graph.
+## Linux acceptance
 
-## Information to capture on failure
+1. Install to a **new directory** using `scripts/bootstrap.sh`.
+2. Verify Git prerequisites, managed Python environment, and `./run.sh`.
+3. Confirm the default local URL and a one-run `MORPHORUM_PORT_OVERRIDE=8080 ./run.sh` override.
+4. Run `./repair.sh` and `./update.sh`.
+5. Check model indexing, one small render, and FFmpeg export with hardware actually available on that system.
+6. Check `./run-lan.sh` **only on a trusted private LAN**.
 
-Please preserve:
+## Release integration checklist
 
-- the console error;
-- `logs/install.log`, `logs/update.log`, or `logs/repair.log` as applicable;
-- `data/install.json` if it was created;
-- output of `.venv/bin/python -m morphorum doctor` on Linux or `.venv\Scripts\python.exe -m morphorum doctor` on Windows;
-- operating system/version;
-- GPU model/driver;
-- install path used.
+Before promoting `dev-ui` to `main`:
+
+- [ ] Source branch and target are up to date; changes are reviewable and conflict-free.
+- [ ] Recovery checkpoint recorded for existing `main`.
+- [ ] README, installation, getting-started, troubleshooting, and current-status documentation match the actual scripts/code.
+- [ ] All required CI checks pass.
+- [ ] Physical Windows/GPU and user-interface acceptance has been recorded for the promoted feature set.
+- [ ] PR targets `main` with its expected commit SHA.
+- [ ] Post-merge `main` CI is checked.
+- [ ] `main` installation URLs and beginner commands work after promotion.
+- [ ] Important `checkpoint/*` branches are preserved.
+
+For a bug report, copy the **first relevant error** rather than dumping an entire multi-megabyte log. Include version/branch, GPU, OS, exact reproduction steps, and whether the same problem occurs on `dev-ui` and `main`.

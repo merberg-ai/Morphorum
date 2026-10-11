@@ -46,3 +46,27 @@ def test_serve_can_enable_uvicorn_access_log(monkeypatch) -> None:
     monkeypatch.setenv("MORPHORUM_ACCESS_LOG", "1")
     cli.command_serve(_args())
     assert captured["access_log"] is True
+
+
+
+def test_seed_example_command_reports_creation_and_existing_library(
+    monkeypatch, capsys
+) -> None:
+    command = cli.build_parser().parse_args(["seed-example"])
+    assert command.func is cli.command_seed_example
+    example = {"name": "Default", "animation": {"mode": "3d", "max_frames": 120}}
+    monkeypatch.setattr(cli, "seed_example_animation_project", lambda: example)
+    assert command.func(command) == 0
+    assert "Created starter project: Default (3D, 120 frames)" in capsys.readouterr().out
+
+    monkeypatch.setattr(cli, "seed_example_animation_project", lambda: None)
+    assert command.func(command) == 0
+    assert "Existing animation projects preserved" in capsys.readouterr().out
+
+
+def test_seed_example_command_surfaces_template_errors(monkeypatch, capsys) -> None:
+    def broken():
+        raise RuntimeError("template malformed")
+    monkeypatch.setattr(cli, "seed_example_animation_project", broken)
+    assert cli.command_seed_example(argparse.Namespace()) == 1
+    assert "template malformed" in capsys.readouterr().err

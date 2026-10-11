@@ -1,18 +1,21 @@
-# Morphorum architecture baseline
+# Morphorum architecture and implementation
 
-This document records the initial architectural contract for Morphorum. It should change deliberately, not accidentally.
+This document describes the current application foundations alongside the long-term architecture contract. For newly supported features and open alpha limitations, see [Current status](CURRENT_STATUS.md).
 
 ## 1. Product shape
 
 Morphorum is a standalone local AI animation studio with a browser UI. The default server binds to localhost; LAN access is opt-in/configurable. The UI must work well on desktop and mobile browsers.
 
-Planned high-level stack:
+Current implementation:
 
-- Python backend with FastAPI-style HTTP APIs and WebSocket/event streaming
-- React + TypeScript + Vite-style frontend
-- FFmpeg media/encoding layer
-- SQLite for local indexes/job/project metadata where persistence is useful
-- swappable inference/model adapters
+- **Python 3.12 + FastAPI** for HTTP routes, model/project/job services, and server-owned generation and rendering
+- **Browser-native HTML/CSS/JavaScript** shipped under `frontend/dist/`, including responsive desktop and mobile layouts (no Node/React build step required for users)
+- **Model-aware Diffusers adapters** for supported SDXL, FLUX, and Z-Image pipelines
+- **Per-project JSON persistence** with managed project files under `projects/`; model and runtime metadata in local `data/`
+- **FFmpeg / FFprobe** for supported video extraction, analysis, and export
+- **Theme and font preferences** saved by the backend and reflected by CSS custom properties and document-level appearance settings
+
+Future frontend or storage approaches should be evaluated as proposals, not described as already deployed.
 
 The frontend must never own a render job. A browser may disconnect and reconnect while rendering continues server-side.
 

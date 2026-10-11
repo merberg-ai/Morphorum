@@ -13,7 +13,10 @@
   ];
 
   const THEME_OPTIONS = [
-    ['midnight-glass', 'Midnight Glass'],
+    ['midnight-glass', 'Midnight Glass · Black'],
+    ['deep-ocean', 'Deep Ocean · Dark Blue'],
+    ['amethyst-night', 'Amethyst Night · Dark Purple'],
+    ['slate-graphite', 'Slate Graphite · Grey'],
   ];
   const FONT_STYLE_OPTIONS = [
     ['modern', 'Modern'],
@@ -146,6 +149,7 @@
 
   function switchView(name) {
     qsa('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === name));
+    qs('.main-nav')?.classList.toggle('motion-section-active', name === 'animation');
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
     refreshNavMore(name);
     if (name === 'console') renderConsole();
@@ -201,15 +205,23 @@
 
   function applyAppearance(ui = {}) {
     const root = document.documentElement;
-    const theme = String(ui.theme || 'midnight-glass');
-    const fontStyle = String(ui.font_style || 'modern');
-    const monoStyle = String(ui.mono_font_style || 'modern-mono');
-    const uiScale = String(ui.ui_scale || 'compact');
+    const requestedTheme = String(ui.theme || 'midnight-glass');
+    const theme = THEME_OPTIONS.some(([id]) => id === requestedTheme)
+      ? requestedTheme : 'midnight-glass';
+    const fontStyle = UI_FONT_FACES[ui.font_style] ? ui.font_style : 'modern';
+    const monoStyle = MONO_FONT_FACES[ui.mono_font_style] ? ui.mono_font_style : 'modern-mono';
+    const uiScale = UI_SCALE_OPTIONS.some(([id]) => id === ui.ui_scale)
+      ? ui.ui_scale : 'compact';
 
     root.dataset.theme = theme;
     root.dataset.fontStyle = fontStyle;
     root.dataset.monoStyle = monoStyle;
     root.dataset.uiScale = uiScale;
+    // A single document-level contract controls body text, dialogs, form
+    // widgets, editors, and dynamically injected Motion Lab panels.
+    const themeColor = getComputedStyle(root).getPropertyValue('--bg').trim();
+    const metaTheme = qs('meta[name="theme-color"]');
+    if (metaTheme && themeColor) metaTheme.setAttribute('content', themeColor);
 
     try {
       localStorage.setItem('morphorum.ui.theme', theme);
@@ -1050,23 +1062,44 @@
     state.telemetryTimer = window.setTimeout(telemetryLoop, ok ? 2500 : 6000);
   }
 
+  function compactRuntimeBranch(branch) {
+    return branch.replace(/^(feature|fix|chore|checkpoint)\//, '');
+  }
+
   async function loadHealth() {
     const dot = qs('#runtime-dot');
-    const text = qs('#runtime-text');
+    const pill = qs('#runtime-pill');
+    const version = qs('#runtime-version');
+    const branchLabel = qs('#runtime-branch');
+    const shortBranchLabel = qs('#runtime-branch-short');
+    const versionFull = qs('#runtime-version-full');
+    const branchFull = qs('#runtime-branch-full');
+    const commitFull = qs('#runtime-commit');
     try {
       const health = await api('/api/health');
+      const buildVersion = String(health.version || 'unknown');
+      const branch = String(health.git_branch || 'Unknown branch');
+      const commit = String(health.git_commit || 'Unavailable').slice(0, 12);
+      const displayVersion = buildVersion.startsWith('v') ? buildVersion : `v${buildVersion}`;
       dot?.classList.add('ok');
       dot?.classList.remove('bad');
-      if (text) {
-        const branch = String(health.git_branch || 'detached');
-        const commit = String(health.git_commit || '').slice(0, 12);
-        text.textContent = 'Connected';
-        text.title = `Morphorum ${health.version} · Server connected`;
-      }
+      if (version) version.textContent = displayVersion;
+      if (branchLabel) branchLabel.textContent = branch;
+      if (shortBranchLabel) shortBranchLabel.textContent = compactRuntimeBranch(branch);
+      if (versionFull) versionFull.textContent = displayVersion;
+      if (branchFull) branchFull.textContent = branch;
+      if (commitFull) commitFull.textContent = commit;
+      if (pill) pill.title = `Morphorum ${displayVersion} · ${branch} @ ${commit} · Tap for details`;
     } catch (error) {
       dot?.classList.add('bad');
       dot?.classList.remove('ok');
-      if (text) text.textContent = 'Disconnected';
+      if (version) version.textContent = 'Offline';
+      if (branchLabel) branchLabel.textContent = 'Server unavailable';
+      if (shortBranchLabel) shortBranchLabel.textContent = 'Unavailable';
+      if (versionFull) versionFull.textContent = 'Unavailable';
+      if (branchFull) branchFull.textContent = 'Unavailable';
+      if (commitFull) commitFull.textContent = 'Unavailable';
+      if (pill) pill.title = 'Morphorum server unavailable';
     }
   }
 
@@ -1087,6 +1120,10 @@
 
   function bindUi() {
     qsa('.nav-button').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
+    qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => button.addEventListener('click', () => {
+      switchView('animation');
+      qs('#animation-tab-' + button.dataset.motionNav)?.click();
+    }));
     const moreToggle = qs('#nav-more-toggle');
     moreToggle?.addEventListener('click', () => {
       const menu = qs('#nav-more-menu');

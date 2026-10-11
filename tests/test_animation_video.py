@@ -189,3 +189,88 @@ def test_b54_legacy_2d_and_3d_video_use_original_pngs_only(
         assert video._validate_frames(project, render, checked) == 4
         assert video._validate_options(checked, format="webm", quality="compact", fps=None) == ("webm", "compact", 12)
     assert not (root / "exports").exists()  # No render triggered in this test.
+
+
+def test_ml41_frozen_audio_soundtrack_muxed_into_mp4_and_webm(tmp_path, monkeypatch):
+    project_id, render_id, root = _render_fixture(tmp_path, monkeypatch)
+    payload = json.loads((root / "render-manifest.json").read_text())
+    digest = "a" * 64
+    payload["project"]["motion_lab"] = {"layers": [{
+        "type": "audio", "enabled": True, "sha256": digest,
+    }]}
+    (root / "render-manifest.json").write_text(json.dumps(payload))
+    sound = tmp_path / "project" / "motion_lab_audio"
+    sound.mkdir(parents=True)
+    wav = sound / (digest + ".wav")
+    wav.write_bytes(b"test-wav")
+    monkeypatch.setattr(video, "animation_project_directory", lambda _p: sound.parent)
+    assert video._render_audio_source(project_id, payload) == wav
+    for fmt, codec in (("mp4", "aac"), ("webm", "libopus")):
+        cmd = video._command(
+            "ffmpeg", input_pattern=Path("frame_%06d.png"),
+            destination=Path("output." + fmt), frame_count=36,
+            format=fmt, quality="balanced", fps=12, audio_path=wav,
+        )
+        assert cmd[cmd.index("-c:a") + 1] == codec
+        assert cmd[cmd.index("-i") + 1] == "frame_%06d.png"
+        assert cmd[cmd.index("-i", cmd.index("-i") + 1) + 1] == str(wav)
+        assert cmd[cmd.index("-t") + 1] == "3.000000"
+        assert "-an" not in cmd
+        assert cmd[cmd.index("-map") + 1] == "0:v:0"
+        assert "1:a:0" in cmd
+    wav.unlink()
+    with pytest.raises(video.VideoExportError, match="missing"):
+        video._render_audio_source(project_id, payload)
+
+
+def test_ml41_missing_or_multiple_audio_sources_never_silently_mux_wrong_track(tmp_path, monkeypatch):
+    project_id, render_id, root = _render_fixture(tmp_path, monkeypatch)
+    payload = json.loads((root / "render-manifest.json").read_text())
+    assert video._render_audio_source(project_id, payload) is None
+    payload["project"]["motion_lab"] = {"layers": [
+        {"type": "audio", "sha256": "a" * 64},
+        {"type": "audio", "sha256": "b" * 64},
+    ]}
+    with pytest.raises(video.VideoExportError, match="Multiple audio"):
+        video._render_audio_source(project_id, payload)
+
+
+def test_ml41_real_ffmpeg_soundtrack_export_when_available(tmp_path):
+    import math
+    import shutil
+    import struct
+    import subprocess
+    import wave
+    from PIL import Image
+
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        pytest.skip("FFmpeg and ffprobe not installed on this runner")
+    folder = tmp_path / "frames"
+    folder.mkdir()
+    for frame in range(12):
+        Image.new("RGB", (32, 32), (frame * 12, 20, 40)).save(
+            folder / f"frame_{frame:06d}.png")
+    wav = tmp_path / "beat.wav"
+    with wave.open(str(wav), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(12000)
+        out.writeframes(b"".join(struct.pack("<h", int(5000 * math.sin(
+            2 * math.pi * 200 * n / 12000))) for n in range(12000)))
+    for fmt in ("mp4", "webm"):
+        destination = tmp_path / ("soundtrack." + fmt)
+        command = video._command(
+            ffmpeg, input_pattern=folder / "frame_%06d.png",
+            destination=destination, frame_count=12, format=fmt,
+            quality="compact", fps=12, audio_path=wav)
+        run = subprocess.run(command, capture_output=True, text=True, timeout=45)
+        assert run.returncode == 0, run.stderr
+        probe = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries",
+             "stream=codec_type", "-of", "csv=p=0", str(destination)],
+            capture_output=True, text=True, timeout=15)
+        assert probe.returncode == 0, probe.stderr
+        streams = probe.stdout.split()
+        assert "video" in streams and "audio" in streams

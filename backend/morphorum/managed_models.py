@@ -37,7 +37,10 @@ MANAGED_MODEL_CATALOG: dict[str, dict[str, Any]] = {
         "repo_id": "Tongyi-MAI/Z-Image-Turbo",
         "directory_name": "Z-Image-Turbo",
         "license": "Apache-2.0",
-        "description": "Official distilled Z-Image model for fast text-to-image generation.",
+        "description": (
+            "Official full Diffusers package for text-to-image and image-to-image. "
+            "Both tasks use the same downloaded model; no separate img2img weights."
+        ),
         "advertised_size_bytes": 32_900_000_000,
         "recommended_steps": 8,
         "recommended_guidance": 0.0,
@@ -80,17 +83,67 @@ class ManagedModelManager:
         normalized = relative.replace("\\", "/")
         return any(fnmatch.fnmatch(normalized, pattern) for pattern in _IGNORE_PATTERNS)
 
+    @staticmethod
+    def _nonempty_file(path: Path) -> bool:
+        try:
+            return path.is_file() and path.stat().st_size > 0
+        except OSError:
+            return False
+
+    @classmethod
+    def _sharded_weights_present(cls, component: Path, index_name: str) -> bool:
+        """Require every weight shard referenced by the official HF index.
+
+        Merely having component directories and a completion marker can mask
+        interrupted downloads. Diffusers needs all shards for both tasks.
+        """
+        index_path = component / index_name
+        if not cls._nonempty_file(index_path):
+            return False
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+            shards = set(index.get("weight_map", {}).values())
+        except (OSError, ValueError, TypeError, AttributeError):
+            return False
+        if not shards:
+            return False
+        for name in shards:
+            if not isinstance(name, str) or Path(name).name != name:
+                return False
+            if not name.endswith(".safetensors") or not cls._nonempty_file(component / name):
+                return False
+        return True
+
     @classmethod
     def _runtime_layout_present(cls, destination: Path) -> bool:
+        # Exact official Z-Image-Turbo Diffusers components, common to
+        # ZImagePipeline (txt2img) and ZImageImg2ImgPipeline (img2img).
         required = (
-            destination / "model_index.json",
-            destination / "scheduler",
-            destination / "text_encoder",
-            destination / "tokenizer",
-            destination / "transformer",
-            destination / "vae",
+            "model_index.json",
+            "scheduler/scheduler_config.json",
+            "text_encoder/config.json",
+            "tokenizer/tokenizer.json",
+            "tokenizer/tokenizer_config.json",
+            "transformer/config.json",
+            "vae/config.json",
+            "vae/diffusion_pytorch_model.safetensors",
         )
-        return all(path.exists() for path in required)
+        if not all(cls._nonempty_file(destination / part) for part in required):
+            return False
+        try:
+            manifest = json.loads((destination / "model_index.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return False
+        if manifest.get("_class_name") != "ZImagePipeline":
+            return False
+        return (
+            cls._sharded_weights_present(
+                destination / "text_encoder", "model.safetensors.index.json"
+            )
+            and cls._sharded_weights_present(
+                destination / "transformer", "diffusion_pytorch_model.safetensors.index.json"
+            )
+        )
 
     @classmethod
     def _has_incomplete_files(cls, destination: Path) -> bool:
@@ -113,7 +166,21 @@ class ManagedModelManager:
             payload = json.loads(marker.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError):
             return False
-        return payload.get("status") == "complete"
+        if payload.get("status") != "complete":
+            return False
+        if payload.get("repo_id", MANAGED_MODEL_CATALOG["zimage-turbo"]["repo_id"]) != (
+            MANAGED_MODEL_CATALOG["zimage-turbo"]["repo_id"]
+        ):
+            return False
+        # A completion marker alone is not proof of a full download.
+        # Reject obvious size regressions (e.g. truncated weight shards).
+        try:
+            recorded_size = int(payload.get("installed_bytes") or 0)
+        except (ValueError, TypeError, OverflowError):
+            return False
+        if recorded_size > 0 and cls._materialized_size(destination) < int(recorded_size * 0.995):
+            return False
+        return True
 
     @staticmethod
     def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
