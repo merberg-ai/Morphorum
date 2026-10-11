@@ -69,6 +69,7 @@ def detect_audio_events(
     hop = max(1, round(sample_rate * float(hop_ms) / 1000))
     fft_size = 4096 if sample_rate >= 32000 else 2048
     fft_size = min(fft_size, max(256, 2 ** int(math.ceil(math.log2(length)))))
+    hop = min(hop, max(1, fft_size // 2))
     if length < 256:
         return {"analysis_version": ANALYSIS_VERSION, "hop_ms": 1000 * hop / sample_rate,
                 "sample_rate": sample_rate, "channels": channels,
