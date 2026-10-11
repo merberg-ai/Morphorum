@@ -1,35 +1,75 @@
 param(
     [switch]$Lan,
+    [ValidateRange(1, 65535)]
     [int]$Port = 7865
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'ui_windows.ps1')
 Set-Location $Root
 $Python = Join-Path $Root '.venv\Scripts\python.exe'
 
 $env:HF_HUB_DISABLE_PROGRESS_BARS = '1'
 $env:HF_HUB_DISABLE_TELEMETRY = '1'
 
+Show-MorphorumBanner -Mode $(if ($Lan) { 'RUN / LAN' } else { 'RUN / LOCAL' })
+Write-MorphorumSection 'STARTUP CHECKS'
+Write-MorphorumDetail 'Location' $Root
+
 if (-not (Test-Path $Python)) {
-    Write-Host 'Morphorum is not installed yet. Run install.bat first.' -ForegroundColor Yellow
+    Fail 'Morphorum runtime is not installed. Run install.bat first.'
+    exit 1
+}
+try {
+    $version = & $Python --version
+    if ($LASTEXITCODE -ne 0) { throw 'Python runtime could not start.' }
+    Okay "Python: $version"
+} catch {
+    Fail $_.Exception.Message
     exit 1
 }
 
 $hostAddress = if ($Lan) { '0.0.0.0' } else { '127.0.0.1' }
-$displayAddress = if ($Lan) { 'this-computer-ip' } else { '127.0.0.1' }
-
 $branch = ''
 if (Get-Command git -ErrorAction SilentlyContinue) {
-    try { $branch = (git -C $Root rev-parse --abbrev-ref HEAD).Trim() } catch { $branch = '' }
+    try {
+        $branch = (& git -C $Root rev-parse --abbrev-ref HEAD 2>$null | Select-Object -First 1)
+        if ($branch) { $branch = $branch.Trim() }
+    } catch { $branch = '' }
 }
-Write-Host "Morphorum starting at http://${displayAddress}:$Port" -ForegroundColor Cyan
-if ($branch) {
-    Write-Host "Git branch: $branch" -ForegroundColor DarkGray
-}
+if ($branch) { Write-MorphorumDetail 'Git branch' $branch }
+
+Write-MorphorumSection 'ACCESS'
+Write-MorphorumNext 'This computer' "http://127.0.0.1:$Port"
 if ($Lan) {
-    Write-Host 'LAN mode is enabled. Morphorum will listen on all network interfaces.' -ForegroundColor Yellow
+    Warn 'LAN access enabled: Morphorum listens on all network interfaces.'
+    Warn 'Only run on a trusted private network. This service is not password-protected.'
+    try {
+        $addresses = @(
+            Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+              Where-Object { $_.IPAddress -notlike '169.254.*' -and $_.IPAddress -ne '127.0.0.1' } |
+              Select-Object -ExpandProperty IPAddress -Unique
+        )
+        foreach ($address in $addresses) {
+            Write-MorphorumNext 'From your LAN' "http://$($address):$Port"
+        }
+        if (-not $addresses.Count) {
+            Warn 'No LAN address detected. Use this computer IPv4 address to connect from another device.'
+        }
+    } catch {
+        Warn 'Could not discover LAN IP automatically. Find your IPv4 address with ipconfig.'
+    }
+} else {
+    Okay 'Local-only mode: the server is not available to other devices.'
 }
 
+Write-MorphorumSection 'SERVER'
+Step 'Starting Morphorum. Leave this window open while using the app.'
+Write-Host '  Press Ctrl+C to stop the server.' -ForegroundColor DarkGray
+Write-Host ''
 & $Python -m morphorum serve --host $hostAddress --port $Port
-exit $LASTEXITCODE
+$code = $LASTEXITCODE
+if ($code -ne 0) { Fail "Server stopped with exit code $code." }
+else { Okay 'Morphorum server stopped.' }
+exit $code
