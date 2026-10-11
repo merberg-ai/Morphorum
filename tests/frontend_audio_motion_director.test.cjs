@@ -26,3 +26,15 @@ test('DA4.2 separate cue lane and inspector is responsive', () => {
   assert.match(css,/\.animation-audio-motion-director/);
   assert.match(css,/@media\(max-width:620px\)/);
 });
+
+test('DA4.5 preview and apply stage native additive source-bound cues', () => {
+  assert.match(js,/data-cue-preview/);
+  assert.match(js,/data-cue-apply/);
+  assert.match(js,/type:'audio_cues'/);
+  assert.match(js,/blend:'add'/);
+  assert.match(js,/cue_document:cueDocument/);
+  assert.match(js,/motionDirectorDirty/);
+  assert.match(js,/motionLabPreviewOrApply\(apply,\{curvesOnly:false\}\)/);
+  assert.match(js,/Apply Audio Motion Director cues/);
+  assert.match(js,/layer\.type === 'audio_cues'/);
+});
