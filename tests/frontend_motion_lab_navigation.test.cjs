@@ -187,3 +187,84 @@ test('Audio Motion shares the Motion Lab layer stack, with direct route to curve
   assert.match(css, /overflow-x:auto/);
 });
 
+
+test('Floating Motion Lab shortcuts navigate before acting and keep Stop usable', () => {
+  const first = js.indexOf('  function motionLabSyncQuickActions() {');
+  const last = js.indexOf('  let motionLabPunchContext = null;', first);
+  assert.ok(first >= 0 && last > first, 'quick action functions must be present');
+  const calls = [];
+  const navigated = [];
+  const originals = new Map([
+    ['animation-motion-lab-record', {disabled:false}],
+    ['animation-motion-lab-stop-recording', {disabled:true}],
+    ['animation-motion-lab-update-curves', {disabled:false}],
+    ['animation-motion-lab-preview-draft', {disabled:false}],
+    ['animation-motion-lab-apply', {disabled:false}],
+    ['animation-start-render', {disabled:false}],
+  ]);
+  for (const [id, original] of originals) original.click = () => {
+    calls.push({id, page:navigated.at(-1) || null});
+  };
+  const makeElement = () => ({
+    dataset:{}, children:[], disabled:false, attrs:{},
+    appendChild(child) {this.children.push(child);},
+    addEventListener(type, handler) {if(type === 'click') this.click = handler;},
+    setAttribute(k,v) {this.attrs[k] = v;},
+  });
+  const dockPanel = makeElement();
+  const context = {
+    document: {createElement:makeElement},
+    motionLabRecorder: {active:false},
+    motionLabBusy:false,
+    motionLabDraftLayers:[],
+    state:{project:{id:'test'}},
+    showAnimationTab: name => navigated.push(name),
+    qsa: selector => selector === '[data-motion-quick-target]' ? dockPanel.children[0]?.children.filter(c=>c.dataset.motionQuickTarget) || [] : [],
+    qs: selector => originals.get(selector.slice(1)) || null,
+  };
+  vm.runInNewContext(js.slice(first,last)+
+    '\nthis.setupQuick = motionLabSetupQuickActions;'+
+    '\nthis.syncQuick = motionLabSyncQuickActions;',context);
+  context.setupQuick(dockPanel);
+  const buttons = dockPanel.children[0].children.filter(c=>c.dataset.motionQuickTarget);
+  const action = id => buttons.find(c=>c.dataset.motionQuickTarget === id);
+  assert.equal(buttons.length,6);
+  assert.equal(action('animation-start-render').textContent,'Render Animation');
+  for(const [id,page] of [
+    ['animation-motion-lab-record','recording'],
+    ['animation-motion-lab-update-curves','curves'],
+    ['animation-motion-lab-preview-draft','preview'],
+    ['animation-start-render','monitor'],
+  ]) {
+    action(id).click();
+    assert.deepEqual(calls.at(-1),{id,page});
+  }
+  assert.equal(navigated.length,4, 'actions navigate once each');
+  assert.equal(action('animation-motion-lab-apply').disabled,false);
+  originals.get('animation-start-render').disabled=true;
+  context.syncQuick();
+  assert.equal(action('animation-start-render').disabled,true,
+    'render shortcut obeys the same guarded render button');
+  context.motionLabRecorder.active=true;
+  originals.get('animation-motion-lab-stop-recording').disabled=false;
+  context.syncQuick();
+  assert.equal(action('animation-motion-lab-stop-recording').disabled,false);
+  assert.equal(action('animation-motion-lab-record').disabled,true);
+  assert.equal(action('animation-start-render').disabled,true);
+  action('animation-motion-lab-stop-recording').click();
+  assert.equal(calls.at(-1).id,'animation-motion-lab-stop-recording');
+  assert.equal(navigated.length,4,'Stop does not navigate away from live recording');
+});
+
+test('Curve toggles keep their native 16px dimensions after moving out of Overview', () => {
+  assert.match(css, /#view-animation \.animation-motion-lab-edit-toggle input\[type="checkbox"\]/);
+  assert.match(css, /#view-animation \.animation-motion-lab-loop input\[type="checkbox"\]/);
+  assert.match(css, /#view-animation \.animation-motion-lab-layer-toggle input\[type="checkbox"\]/);
+  assert.match(css, /width:16px;\s*height:16px;\s*min-width:16px;\s*min-height:16px;/);
+  assert.match(css, /padding:0;\s*margin:0;\s*flex:0 0 16px;/);
+  for(const id of ['animation-motion-lab-key-drag','animation-motion-lab-path-drag','animation-motion-lab-loop']) {
+    assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length,1);
+  }
+  assert.match(js, /\['animation-start-render', 'Render Animation'\]/);
+  assert.match(js, /motionLabSyncQuickActions\(\);\s*\}\s*let motionFramePlayer/);
+});
