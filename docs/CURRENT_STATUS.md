@@ -1,43 +1,55 @@
-# Morphorum current status (2026-10-09)
+# Morphorum: current features and development status
 
-> **Authoritative milestone snapshot.** Older `handoff.md`, `docs/ROADMAP.md`, and B6 planning passages record the state *when they were written*. Use this page and the actual source/tests when historical text disagrees.
+**Build version:** `0.1.0a1` (early alpha)  
+**Baseline:** `dev-ui` merge `aebb87e28a64ee8c2d131ae13c453bf742e1a01a` (PR [#20](https://github.com/merberg-ai/Morphorum/pull/20))  
+**Status reviewed:** 2026-10-10
 
-## Branches and verified checkpoints
+> [!NOTE]
+> This page summarizes the current implementation and physical-test history. Some documents under `docs/` contain **historical plans, research, and acceptance notes**; headings such as "not yet implemented" in an old roadmap should not be treated as a current feature list. For setup, use the [README](../README.md) and [Getting started](GETTING_STARTED.md).
 
-- `main`: promoted from the physically tested `dev-ui` baseline through [PR #14](https://github.com/merberg-ai/Morphorum/pull/14) on 2026-10-09; promotion merge `fc0ba653e7c265b1ea7b39c231ce2e1696f16ea9`.
-- `dev-ui`: ongoing integration branch, source for new B6.3 work. PR #13, SDXL full LoRA text-encoder loading repair, merged to `dev-ui` as `752de52069a34e22322988acd19b5a6a81a4edfa` before promotion.
-- B6.2 Windows-validated source-lab checkpoint: `checkpoint/b6-2-hybrid-source-lab-validated-20261008` (`5826d2d96eedbc6fcaa0243dc6dab6eaeb8366a0`).
-- SDXL FP16 GPU-verified recovery checkpoint: `checkpoint/sdxl-fp16-animation-gpu-verified-20261009` (`d22b385b4bf9ff67dd5d3419a6e6dfe1e009e8e1`).
-- B5.5 performance/stability GPU-verified recovery checkpoint: `checkpoint/b5-5-performance-stability-gpu-verified-20261008` (`e9ea6d0491b8ad57f1bc7539514fe8cb9c7063d3`).
-- Keep all `checkpoint/*` refs intact. Treat former feature branches and historical draft PRs as archival, not new starting points.
+## Available now
 
-## Implemented and working
+| Area | Implemented features |
+| --- | --- |
+| **Install and updates** | Windows standalone `bootstrap.bat` with directory and port prompts; Linux bootstrap; managed Python 3.12 environment; repair, diagnostics, and guarded branch-aware updates. |
+| **Models** | SDXL, FLUX, and Z-Image image generation; external checkpoint indexing and managed Z-Image-Turbo downloading; model-aware controls and recommended resolutions. |
+| **LoRAs** | Local LoRA indexing, metadata/trigger word inspection, prompt insertion, and compatible model-aware LoRA application and scheduling. |
+| **Image Generation** | Positive/negative prompts as supported; seed modes, batch count, resolution selection, progress and results. |
+| **Project Manager** | Project list, search/sort, summaries, open/create/rename, and name-confirmed Move to Trash. Existing saved renders are kept separate. |
+| **Motion Lab** | 2D and depth-aware 3D camera motion; six-axis composer; layers/presets; edit/view curves and camera path; frame-aware preview and rendering workflow. |
+| **Motion recording** | Keyboard/mobile touch controls, optional browser gamepad, deterministic recorded layers and take handling. |
+| **Audio Motion** | Audio import/analysis, frequency filtering and synchronized camera-motion mapping, waveform controls and supported soundtrack export. |
+| **Animation rendering** | Frame scheduling, temporal cadence, depth/warp transforms, image-to-image frame generation, render monitoring, pause/resume/cancel as supported, video export including MP4/WebM. |
+| **Deforum and video input** | Selected legacy Deforum JSON/TXT settings import with mapping diagnostics; upload/inspect/extract video-source frames for supported hybrid experiments. |
+| **Appearance** | Four dark themes (Midnight Glass, Deep Ocean, Amethyst Night, Slate Graphite) and independent interface/console font choices, responsive desktop and mobile layouts. |
+| **Diagnostics** | On-screen console, hardware/VRAM reporting when available, job progress, installer self-test and doctor commands. |
 
-- Windows/Linux self-managed Python install, diagnostics, LAN browser UI, settings, and SDXL/Flux/Z-Image image generation.
-- Model/LoRA indexing, metadata and trigger-word inspection, prompt insertion, scheduled LoRA activation; SDXL Transformers 5/Diffusers text-encoder compatibility repair has a verified UNet-only recovery path for problematic adapters.
-- Native project save/reopen; responsive Animation Editor / Monitor / Media / Outputs organization; 2D/3D keyframed motion, depth-aware projection, cadence, and temporal anchor blending.
-- Resumable image-sequence generation, performance telemetry, GIF previews, FFmpeg MP4/WebM export.
-- B6.1: safe legacy Deforum JSON/JSON-serialized TXT import, mapping preview, explicit model choice, new native project creation; unsupported settings reported as passive metadata.
-- **B6.2: hybrid-video Source Lab validated on Windows.** Browser-selected video upload to project-managed storage, FFprobe examination/metadata, bounded FFmpeg frame extraction with range/FPS controls, cancellation and preview/scrubbing of extracted frames. This is *video input and preparation*, **not hybrid diffusion/compositing**.
+## Verified testing and current caveats
 
-## Physical acceptance and caveats
+- The desktop Motion Lab layout, Project Manager, live controls and themes were iteratively tested on Windows during the `feature/desktop-ux-foundation` development cycle and merged into `dev-ui` in PR #20.
+- PR #20 passed the repository's **Syntax**, **Backend**, and **Installer** workflows before and after the `dev-ui` integration.
+- Z-Image-Turbo uses the official full **Tongyi-MAI/Z-Image-Turbo** Diffusers package for both txt2img and img2img, with component/shard validation. A user-confirmed Windows generation test followed.
+- Several Motion Lab and audio/synchronization operations were accepted on Windows after targeted UI and render testing. Hardware and checkpoint differences can still affect performance.
+- **Alpha limitations:** Large-resolution SDXL animation performance is hardware-dependent; a universal high-resolution benchmark has not been established. Video-source hybrid compositing/mask workflows and legacy Deforum feature coverage still need targeted compatibility and physical tests. Optical-flow/RAFT interpolation, unrestricted model support, and a general plugin SDK should **not** be assumed available.
+- Some Linux workflows are covered by CI/syntax checks but do not have the same breadth of reported physical GPU testing as the Windows configuration used during development.
+- Morphorum's local/LAN web server currently has **no built-in login/authentication**. Never expose its port to the public internet.
 
-- On 2026-10-09 the user accepted PR #13 after a 300-frame SDXL 3D cadence-3 run on an RTX 4080 SUPER, four active/scheduled LoRAs, stable reported CUDA allocation around 7.7 GiB across the provided latter portion of the render, and successful high-quality 30 FPS MP4 export.
-- This excerpt did not show initial text-encoder loading diagnostics or the generated frames' dimensions. Do not treat it as proof of universal full-text-encoder compatibility or an independently established 768/1024 high-resolution GPU profile.
-- `main` promotion PR #14 passed Syntax, Backend, and Installer checks, as did the post-merge `main` push.
+## Development workflow and recovery checkpoints
 
-## Next B6 implementation
+- `main` is the published/stable source branch.
+- `dev-ui` is the integration branch used to collect and test features before promotion to `main`.
+- New development normally starts on a **feature branch based on `dev-ui`**, with PR and CI checks prior to merging.
+- Desktop UX + Motion Lab checkpoint: `checkpoint/desktop-ux-motion-lab-themes-verified-20261010` at `c58d4571b2daf2c64b0b6702cac12ad8ae77d5b1`.
+- Pre-release main snapshot: `checkpoint/main-before-desktop-motionlab-promotion-20261010` at `4bc996be29104590a78ae84759a837a8a29a5135`.
+- Earlier B5/B6 and Motion Lab checkpoints remain in Git history. Do not delete them as part of a release.
 
-**B6.3 hybrid compositing and mask tracks** starts from the latest `dev-ui`, not the stale `feature/deforum-compatibility-hybrid-b6` tip. Wire selected extracted source frames to renderer-resolved state as an *opt-in* path, with explicit frame alignment, source-vs-generated blend, mask/opacity scheduling, provenance in manifests, deterministic resume, and regression/physical acceptance tests. Preserve existing B5/3D/cadence/LoRA behavior when disabled.
+For historical milestones see [Roadmap](ROADMAP.md), [Motion Lab implementation notes](MOTION_LAB_ROADMAP.md), and [B6 physical acceptance](B6_PHYSICAL_ACCEPTANCE.md). For the actual functionality and status of an API or model capability, the current source and automated tests take priority over older planning prose.
 
-Then B6.4 compatibility and delivery polish: export/preview integration, legacy option diagnostics, completed hybrid render validation, and long-run Windows checks.
+## Next development areas
 
-**Not yet implemented or fully verified:** hybrid video synthesis/compositing, optical-flow/RAFT cadence, a general extension SDK, ControlNet/RIFE/FILM integration, and unrestricted native large-resolution SDXL animation.
+- More desktop and mobile UX refinement; expanded theme/font physical checks.
+- Additional per-model performance and stability testing, especially higher resolution and long animations.
+- Further compatibility/hybrid composition and mask-workflow validation.
+- More first-run installation, model download/recovery, and documented Linux physical acceptance.
 
-## Development / repository hygiene
-
-- Use short-lived feature branches from `dev-ui` for new work; use PRs and green CI to integrate, then periodically promote the tested baseline into `main`.
-- Do not force-reset or delete verified `checkpoint/*` branches.
-- Keep `data/`, `outputs/`, `.venv/`, `.runtime/`, `backups/`, and local configuration out of Git.
-- Avoid copying GPL/AGPL Deforum implementation source into the Unlicensed Morphorum core. Reimplement compatible behavior independently.
-- CI push branch targets are `main` and `dev-ui`; PR checks run on new feature work.
+**See also:** [Installation](INSTALLATION.md) · [Getting started](GETTING_STARTED.md) · [Troubleshooting](TROUBLESHOOTING.md) · [Docs index](README.md)
