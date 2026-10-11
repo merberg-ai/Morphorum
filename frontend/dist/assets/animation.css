@@ -2192,3 +2192,10 @@ dialog#animation-deforum-dialog {
 .animation-motion-preview-quality {display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:.85rem;}
 .animation-motion-preview-quality select {min-width:210px;max-width:100%;}
 @media(max-width:540px) {.animation-motion-preview-quality select {width:100%;}}
+
+/* Keep existing Motion Lab card flow on mobile; desktop.css assigns these
+   transparent wrappers into two independently flowing tool columns. */
+#animation-panel-motion > .animation-motion-authoring-column,
+#animation-panel-motion > .animation-motion-review-column {
+  display: contents;
+}
