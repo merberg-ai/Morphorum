@@ -2669,3 +2669,42 @@ dialog#animation-deforum-dialog {
 #animation-panel-audio .animation-audio-wave-follow input[type="checkbox"] {
   width:16px;height:16px;min-width:16px;flex:none;margin:0;
 }
+
+
+/* DA3 draft marker editor: scoped controls, desktop/mobile sizes. */
+#animation-panel-audio .animation-audio-event-editor {
+  display:grid;gap:10px;min-width:0;padding:15px;margin:10px 0 18px;
+  border:1px solid var(--border);border-radius:12px;background:var(--panel);
+}
+#animation-panel-audio .animation-audio-event-editor > p {margin:0;line-height:1.45;}
+#animation-panel-audio .animation-audio-event-fields {
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+  gap:12px;align-items:end;
+}
+#animation-panel-audio .animation-audio-event-fields label {
+  display:flex;flex-direction:column;gap:6px;min-width:0;font-size:.83rem;
+}
+#animation-panel-audio .animation-audio-event-fields input[type="number"],
+#animation-panel-audio .animation-audio-event-fields select {
+  width:100%;max-width:100%;min-width:0;box-sizing:border-box;min-height:38px;
+}
+#animation-panel-audio .animation-audio-event-fields .animation-audio-event-checkbox {
+  flex-direction:row;align-items:center;padding-bottom:9px;
+}
+#animation-panel-audio .animation-audio-event-checkbox input[type="checkbox"] {
+  width:16px;height:16px;min-width:16px;margin:0;
+}
+#animation-panel-audio .animation-audio-event-actions {
+  display:flex;flex-wrap:wrap;gap:8px;
+}
+#animation-panel-audio .animation-audio-event-actions button {
+  width:auto;flex:0 1 auto;min-height:38px;
+}
+@media(max-width:620px) {
+  #animation-panel-audio .animation-audio-event-fields {
+    grid-template-columns:minmax(0,1fr);
+  }
+  #animation-panel-audio .animation-audio-event-actions button {
+    flex:1 1 120px;
+  }
+}
