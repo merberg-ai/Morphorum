@@ -2199,3 +2199,66 @@ dialog#animation-deforum-dialog {
 #animation-panel-motion > .animation-motion-review-column {
   display: contents;
 }
+ 
+/* Audio-Reactive Motion is a sibling Animation tab within the Motion Lab
+   workflow. Only the layout changes; analysis and camera-layer state are shared. */
+.animation-workspace-nav { grid-template-columns: repeat(5,minmax(0,1fr)); }
+.animation-workspace-nav button[data-animation-tab="audio"]:not(.active) {
+  color: var(--accent);
+  background: rgba(40,185,218,.055);
+}
+#animation-panel-audio { min-width:0; }
+#animation-panel-audio .animation-audio-workspace-intro { padding: 17px 20px; }
+.animation-audio-workspace-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.animation-audio-workspace-heading h2 { margin: 3px 0 5px; font-size: 1.25rem; }
+.animation-audio-workspace-heading p { max-width: 800px; line-height: 1.5; }
+.animation-audio-workflow { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
+.animation-audio-workflow span {
+  display:inline-flex; align-items:center; gap:8px; padding:7px 10px;
+  border:1px solid var(--border); border-radius:9px;
+  background:rgba(65,217,255,.035); color:var(--muted); font-size:.8rem;
+}
+.animation-audio-workflow strong {
+  display:inline-grid; place-items:center; width:20px; height:20px;
+  border-radius:50%; background:rgba(65,217,255,.14); color:var(--accent);
+}
+.animation-audio-workspace-actions {
+  display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-top:14px;
+}
+.animation-audio-workspace-actions #animation-audio-workspace-status {
+  font-size:.78rem; flex:1 1 220px;
+}
+.animation-audio-preview-placeholder {
+  display:grid; place-content:center; justify-items:center;
+  text-align:center; gap:7px; padding:22px;
+  min-height:200px; border:1px dashed var(--border-strong);
+  border-radius:12px; background:rgba(8,16,28,.4); color:var(--muted);
+}
+.animation-audio-preview-placeholder strong { color:var(--text); }
+.animation-audio-preview-placeholder p { max-width:350px; font-size:.82rem; line-height:1.6; }
+#animation-panel-audio .animation-motion-lab-audio:has(.animation-motion-audio-preview:not([hidden]))
+  .animation-audio-preview-placeholder { display:none; }
+#animation-panel-audio .animation-motion-lab-audio { min-width:0; }
+#animation-panel-audio .animation-motion-audio-controls > * { min-width:0; }
+@media(max-width:640px) {
+  /* Five labels need horizontal room rather than thumb-sized text. */
+  #view-animation .animation-workspace-nav {
+    display:flex; width:100%; max-width:100%; overflow-x:auto;
+    grid-template-columns:none; overscroll-behavior-x:contain;
+    scroll-snap-type:x proximity; scrollbar-width:thin;
+  }
+  #view-animation .animation-workspace-nav button {
+    flex:0 0 auto; min-width:72px; padding:9px 11px;
+    white-space:nowrap; scroll-snap-align:start;
+  }
+  .animation-audio-workspace-heading { flex-direction:column; gap:10px; }
+  .animation-audio-workspace-actions button { flex:1 1 140px; min-height:42px; }
+  .animation-audio-workflow span { flex:1 1 180px; }
+  #animation-panel-audio .animation-audio-workspace-intro { padding:14px; }
+  .animation-audio-preview-placeholder { min-height:160px; }
+}
