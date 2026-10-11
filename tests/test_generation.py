@@ -27,13 +27,32 @@ def fake_model(path: Path, family: str = "sdxl", variant: str | None = None) -> 
 
 
 def create_zimage_layout(path: Path, *, complete: bool = True) -> Path:
+    import json
+
     path.mkdir(parents=True, exist_ok=True)
-    (path / "model_index.json").write_text("{}", encoding="utf-8")
+    (path / "model_index.json").write_text(
+        json.dumps({"_class_name": "ZImagePipeline"}), encoding="utf-8"
+    )
     for name in ("scheduler", "text_encoder", "tokenizer", "transformer", "vae"):
         (path / name).mkdir()
+    for name in (
+        "scheduler/scheduler_config.json", "text_encoder/config.json",
+        "tokenizer/tokenizer.json", "tokenizer/tokenizer_config.json",
+        "transformer/config.json", "vae/config.json",
+    ):
+        (path / name).write_text("{}", encoding="utf-8")
+    (path / "vae/diffusion_pytorch_model.safetensors").write_bytes(b"vae")
+    for folder, idx, shard in (
+        ("text_encoder", "model.safetensors.index.json", "model-1.safetensors"),
+        ("transformer", "diffusion_pytorch_model.safetensors.index.json", "diffusion-1.safetensors"),
+    ):
+        (path / folder / idx).write_text(
+            json.dumps({"weight_map": {"layer.weight": shard}}), encoding="utf-8"
+        )
+        (path / folder / shard).write_bytes(b"shard-data")
     if complete:
         (path / ".morphorum-managed-complete.json").write_text(
-            '{"status":"complete"}',
+            '{"status":"complete","repo_id":"Tongyi-MAI/Z-Image-Turbo"}',
             encoding="utf-8",
         )
     return path
