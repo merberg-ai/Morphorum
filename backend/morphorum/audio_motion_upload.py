@@ -66,6 +66,7 @@ def analyze_managed_wav(project_id: str, data: bytes, *, fps: float, frames: int
     if len(audio_bytes) != count * stride:
         raise AudioMotionError("Incomplete WAV audio data.")
     pcm = []
+    stereo_samples = [[] for _ in range(channels)]
     for index in range(count):
         total = 0.0
         for channel in range(channels):
@@ -75,6 +76,7 @@ def analyze_managed_wav(project_id: str, data: bytes, *, fps: float, frames: int
                 value = (segment[0] - 128) / 128
             else:
                 value = int.from_bytes(segment, "little", signed=True) / (2 ** (width * 8 - 1))
+            stereo_samples[channel].append(value)
             total += value
         pcm.append(total / channels)
     result = frame_envelope(pcm, sample_rate=rate, fps=fps, max_frames=frames)
@@ -95,6 +97,20 @@ def analyze_managed_wav(project_id: str, data: bytes, *, fps: float, frames: int
     result["filename"] = destination.name
     result["duration_seconds"] = count / rate
     result["channels"] = channels
+    # Display-only waveform overview: bounded min/max bins retain transients,
+    # never send raw PCM or use these bins for drum detection.
+    bin_count = min(1200, max(1, count))
+    waveform = []
+    for channel in stereo_samples:
+        bounds = []
+        for index in range(bin_count):
+            begin = index * count // bin_count
+            end = max(begin + 1, (index + 1) * count // bin_count)
+            window = channel[begin:end]
+            bounds.append([round(min(window), 5), round(max(window), 5)])
+        waveform.append(bounds)
+    result["waveform"] = {"version": 1, "channels": waveform,
+                          "bins": bin_count, "duration_seconds": count / rate}
     result["events"] = detect_audio_events(pcm, sample_rate=rate)
     result["fps_recommendations"] = audio_fps_recommendations(count / rate, current_fps=fps)
     return result
