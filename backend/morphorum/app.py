@@ -248,6 +248,47 @@ def api_preview_project_motion_import(project_id: str, payload: dict[str, Any]) 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/projects/{project_id}/motion-import/soundtrack")
+def api_get_imported_soundtrack(project_id: str) -> dict[str, Any]:
+    from .imported_soundtrack import read_soundtrack, ImportedSoundtrackError
+    try:
+        load_animation_project(project_id)
+        return {"soundtrack": read_soundtrack(project_id)}
+    except (AnimationProjectError, ImportedSoundtrackError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-import/soundtrack")
+async def api_attach_imported_soundtrack(project_id: str, request: Request) -> dict[str, Any]:
+    from .imported_soundtrack import (
+        store_soundtrack, ImportedSoundtrackError, MAX_IMPORT_AUDIO_BYTES,
+    )
+    try:
+        load_animation_project(project_id)
+        filename = request.headers.get("x-audio-filename", "")
+        offset = request.headers.get("x-audio-offset-seconds", "0")
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > MAX_IMPORT_AUDIO_BYTES:
+                raise ImportedSoundtrackError("Audio exceeds the 40 MiB attachment limit.")
+        record = store_soundtrack(project_id, bytes(data), filename=filename,
+                                 offset_seconds=offset)
+        return {"status": "attached", "soundtrack": record}
+    except (AnimationProjectError, ImportedSoundtrackError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}/motion-import/soundtrack-offset")
+def api_update_imported_soundtrack_offset(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .imported_soundtrack import update_offset, ImportedSoundtrackError
+    try:
+        load_animation_project(project_id)
+        return {"soundtrack": update_offset(project_id, payload.get("offset_seconds"))}
+    except (AnimationProjectError, ImportedSoundtrackError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/projects/{project_id}/motion-import/prepare")
 def api_prepare_project_motion_import(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     import json
