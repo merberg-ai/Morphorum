@@ -104,7 +104,8 @@ test('Every Motion Lab tool has room of its own without cloning DOM controls', (
   assert.match(js, /\['preview', '\.animation-motion-preview-card'\]/);
   assert.match(js, /if \(card\) panels\[name\]\.appendChild\(card\)/);
   assert.match(desktop, /#animation-panel-curves \.animation-motion-lab-visual-grid/);
-  assert.match(desktop, /grid-template-columns:\s*minmax\(0,1\.8fr\) minmax\(310px,1fr\)/);
+  assert.match(desktop, /#animation-panel-curves \.animation-motion-lab-visual-grid\s*\{\s*grid-template-columns:\s*minmax\(0,1fr\)/);
+  assert.match(desktop, /#animation-panel-curves \.animation-motion-lab-svg-wrap:last-child/);
   assert.match(desktop, /#animation-panel-preview \.animation-motion-preview-card/);
   assert.match(html, /class="card glass animation-generation-state-card"/);
   for (const id of ['animation-motion-lab-visual','animation-motion-lab-composer','animation-motion-lab-recording']) {
