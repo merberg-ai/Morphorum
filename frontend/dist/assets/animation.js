@@ -6738,8 +6738,8 @@
           </div>
           <div class="dmi-apply-review"><strong>Import camera motion into this project</strong>
             <p class="muted">This replaces six camera schedules only. It does not change FPS, cadence, frames, model, prompts or audio. Projects with existing Motion Lab layers require a clean project instead.</p>
-            <div class="dmi-apply-actions"><button type="button" data-dmi-prepare>Review safe import</button>
-              <button type="button" data-dmi-apply disabled>Apply camera motion</button></div>
+            <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-prepare>Review safe import</button>
+              <button type="button" class="primary-button compact" data-dmi-apply disabled>Apply camera motion</button></div>
             <p data-dmi-review class="muted">Review is required before Apply. Your project remains unchanged until confirmation.</p>
           </div>
         </div>
@@ -6784,6 +6784,7 @@
     const prepareButton=panel.querySelector('[data-dmi-prepare]');
     const applyButton=panel.querySelector('[data-dmi-apply]');
     const review=panel.querySelector('[data-dmi-review]');
+    const progress=(heading,message,kind='info')=>toast(heading,message,kind);
     const invalidatePrepared=()=>{
       prepared=null;applyButton.disabled=true;
       review.textContent='Review is required before Apply. No project changes have been made.';
@@ -6793,10 +6794,13 @@
       if (!state.project?.id || !sourceContent) return;
       if (state.dirty) {
         review.textContent='Save or discard unsaved Project Editor changes before preparing the import.';
+        progress('Import review blocked',review.textContent,'warning');
         return;
       }
       const projectId=state.project.id;
       prepareButton.disabled=true;
+      review.textContent='Checking import compatibility…';
+      progress('Reviewing motion import','Validating schedules, project timing and existing layers.');
       try {
         const result=await api('/api/animation/projects/'+encodeURIComponent(projectId)+'/motion-import/prepare',{
           method:'POST',body:JSON.stringify({content:sourceContent,filename:sourceFilename}),
@@ -6806,8 +6810,10 @@
         applyButton.disabled=false;
         review.textContent='Safe import prepared: '+result.changed_axes.join(', ')+
           '. Existing timing and all non-camera project settings remain unchanged.';
+        progress('Motion import ready', 'Six camera axes validated; review the changes before applying.','success');
       }catch(error){
         review.textContent='Import blocked: '+error.message;
+        progress('Motion import blocked',error.message,'error');
       }finally{prepareButton.disabled=false;}
     });
     applyButton.addEventListener('click',async()=>{
@@ -6822,6 +6828,8 @@
       });
       if (!approved) return;
       applyButton.disabled=true;
+      review.textContent='Applying imported camera schedules…';
+      progress('Applying motion','Saving six validated camera schedules to the project.');
       try{
         const result=await api('/api/animation/projects/'+encodeURIComponent(ready.projectId)+'/motion-import/apply',{
           method:'POST',body:JSON.stringify({
@@ -6838,6 +6846,7 @@
         toast('Motion imported','Six native camera schedules updated.','success');
       }catch(error){
         review.textContent='Apply failed: '+error.message;
+        progress('Motion apply failed',error.message,'error');
       }finally{invalidatePrepared();}
     });
     const draw=()=>{
@@ -6871,10 +6880,11 @@
     file.addEventListener('change',async()=>{
       const selected=file.files?.[0];
       if (!selected) return;
-      if (!state.project?.id) {status.textContent='Open a project before inspecting settings.';return;}
-      if(selected.size>1024*1024){status.textContent='Settings exceed 1 MiB.';return;}
+      if (!state.project?.id) {status.textContent='Open a project before inspecting settings.';progress('Choose a project',status.textContent,'warning');return;}
+      if(selected.size>1024*1024){status.textContent='Settings exceed 1 MiB.';progress('Settings too large',status.textContent,'error');return;}
       invalidatePrepared();sourceContent=null;sourceFilename='';
       status.textContent='Inspecting Deforum motion…';results.hidden=true;
+      progress('Loading Deforum settings',selected.name+' · reading and validating motion tracks.');
       try{
         const response=await api('/api/animation/projects/'+encodeURIComponent(state.project.id)+'/motion-import/preview',{
           method:'POST',body:JSON.stringify({content:await selected.text(),filename:selected.name}),
@@ -6908,10 +6918,12 @@
           const p=document.createElement('p');p.textContent=message;warnings.appendChild(p);
         }
         status.textContent=selected.name+' · '+(response.can_apply_unchanged?'Timing matches project':'Timing requires review');
+        progress('Settings loaded',status.textContent,'success');
         seek.max=String(source.duration_seconds);seek.value='0';draw();updateSync();
         lengthText.textContent='Settings soundtrack: '+(source.soundtrack_filename||'none')+
           '. Choose the local audio file manually to inspect alignment. Embedded paths are never accessed automatically.';
-      }catch(error){status.textContent='Preview failed: '+error.message;report=null;results.hidden=true;}
+      }catch(error){status.textContent='Preview failed: '+error.message;report=null;results.hidden=true;
+        progress('Settings preview failed',error.message,'error');}
     });
     axis.addEventListener('change',draw);
     const syncChange=()=>updateSync();
@@ -6920,11 +6932,13 @@
       const selected=wav.files?.[0];if(!selected)return;
       if(objectUrl) URL.revokeObjectURL(objectUrl);
       objectUrl=URL.createObjectURL(selected);player.src=objectUrl;
+      progress('Loading soundtrack',selected.name+' · preparing waveform and playback.');
       player.onloadedmetadata=()=>{
         wavDuration=player.duration;
         lengthText.textContent='Audio '+wavDuration.toFixed(2)+'s · motion '+
           Number(report?.source?.duration_seconds||0).toFixed(2)+'s. Adjust audio offset for synchronization.';
         updateSync();
+        progress('Soundtrack ready',selected.name+' · '+wavDuration.toFixed(2)+' seconds.','success');
       };
       // Local amplitude overview, no upload or server-side filesystem mutation.
       try {
@@ -6945,7 +6959,8 @@
           }
           c.stroke();
         } finally {await ctx.close();}
-      }catch(error){lengthText.textContent='Audio waveform preview unavailable: '+error.message;}
+      }catch(error){lengthText.textContent='Audio waveform preview unavailable: '+error.message;
+        progress('Waveform unavailable',error.message,'warning');}
     });
   }
 
