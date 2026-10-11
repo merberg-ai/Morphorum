@@ -4641,6 +4641,61 @@
   let motionLabAudioProjectId = null;
   let motionLabAudioElement = null;
   let motionLabAudioUrl = null;
+  let motionLabEditedEvents = null;
+  let motionLabSelectedEvent = null;
+  function motionLabEventEditor() {
+    const panel = qs('#animation-audio-event-editor');
+    if (!panel || !motionLabAudioAnalysis) return;
+    const events = motionLabEditedEvents || [];
+    const selected = events.find(e => e.id === motionLabSelectedEvent);
+    const output = panel.querySelector('[data-event-count]');
+    if (output) output.textContent = events.filter(e => e.enabled).length +
+      ' active / ' + events.length + ' candidates';
+    const time = panel.querySelector('[data-event-time]');
+    const kind = panel.querySelector('[data-event-kind]');
+    const enabled = panel.querySelector('[data-event-enabled]');
+    if (time) { time.disabled = !selected; time.value = selected ? String(selected.time_seconds) : ''; }
+    if (kind) { kind.disabled = !selected; kind.value = selected?.kind || 'kick'; }
+    if (enabled) { enabled.disabled = !selected; enabled.checked = selected?.enabled !== false; }
+    const remove = panel.querySelector('[data-event-remove]');
+    if (remove) remove.disabled = !selected;
+    const summary = panel.querySelector('[data-event-selected]');
+    if (summary) summary.textContent = selected ?
+      'Selected ' + selected.kind + ' at ' + selected.time_seconds.toFixed(3) + ' s' :
+      'Select a marker on the waveform to edit it';
+  }
+  function motionLabEventChange(action) {
+    if (!motionLabAudioAnalysis || !motionLabEditedEvents) return;
+    const panel = qs('#animation-audio-event-editor');
+    const selected = motionLabEditedEvents.find(e => e.id === motionLabSelectedEvent);
+    if (action === 'add') {
+      const duration = motionLabAudioAnalysis.duration_seconds;
+      const time = Math.max(0, Math.min(duration - .000001,
+        Number(motionLabAudioElement?.currentTime) || 0));
+      const id = 'manual-' + String(Date.now()) + '-' + motionLabEditedEvents.length;
+      motionLabEditedEvents.push({id, kind:'kick', time_seconds:time,
+        strength:1, source:'manual',enabled:true});
+      motionLabSelectedEvent = id;
+    } else if (action === 'reset') {
+      motionLabEditedEvents = (motionLabAudioAnalysis.events?.events || []).map(
+        e => ({...e, enabled:true}));
+      motionLabSelectedEvent = null;
+    } else if (selected && action === 'remove') {
+      motionLabEditedEvents = motionLabEditedEvents.filter(e => e.id !== selected.id);
+      motionLabSelectedEvent = null;
+    } else if (selected && action === 'update') {
+      const time = Number(panel?.querySelector('[data-event-time]')?.value);
+      if (!Number.isFinite(time) || time < 0 || time >= motionLabAudioAnalysis.duration_seconds) {
+        motionLabNotify('Marker time must be within the audio duration.');
+        return;
+      }
+      selected.time_seconds = Math.round(time * 1000000) / 1000000;
+      selected.kind = panel.querySelector('[data-event-kind]').value;
+      selected.enabled = Boolean(panel.querySelector('[data-event-enabled]').checked);
+    }
+    motionLabEditedEvents.sort((a,b)=>a.time_seconds-b.time_seconds);
+    motionLabStereoWaveform();
+  }
   function motionLabWavePlayhead() {
     const section = qs('#animation-audio-stereo-timeline');
     const line = section?.querySelector('[data-wave-playhead]');
@@ -4775,6 +4830,26 @@
         '<svg data-wave-svg viewBox="0 0 800 180" role="img" tabindex="0" aria-label="Stereo waveform, drum events and audio playhead; click or tap to seek"></svg>' +
         '<p class="muted" data-wave-description></p>';
       preview.before(section);
+      const editor = document.createElement('div');
+      editor.id = 'animation-audio-event-editor';
+      editor.className = 'animation-audio-event-editor';
+      editor.innerHTML = '<strong>Drum marker editor (draft only)</strong>' +
+        '<p data-event-selected>Select a marker on the waveform to edit it</p>' +
+        '<div class="animation-audio-event-fields">' +
+        '<label>Time (seconds)<input type="number" min="0" step="0.001" data-event-time disabled></label>' +
+        '<label>Type<select data-event-kind disabled><option value="kick">Kick</option>' +
+        '<option value="snare">Snare</option><option value="highs">Highs</option></select></label>' +
+        '<label class="animation-audio-event-checkbox"><input type="checkbox" data-event-enabled disabled> Enabled</label></div>' +
+        '<div class="animation-audio-event-actions"><button type="button" data-event-save>Update marker</button>' +
+        '<button type="button" data-event-add>Add at playhead</button>' +
+        '<button type="button" data-event-remove disabled>Remove marker</button>' +
+        '<button type="button" data-event-reset>Reset detections</button></div>' +
+        '<p data-event-count></p><p class="muted">Draft edits are not saved to the project or applied to camera motion yet.</p>';
+      section.after(editor);
+      for (const [attr, action] of [['data-event-save','update'],['data-event-add','add'],
+        ['data-event-remove','remove'],['data-event-reset','reset']]) {
+        editor.querySelector('['+attr+']')?.addEventListener('click', () => motionLabEventChange(action));
+      }
       section.querySelector('[data-wave-zoom]')?.addEventListener('input', motionLabStereoWaveform);
       section.querySelector('[data-wave-start]')?.addEventListener('input', () => {
         const follow = section.querySelector('[data-wave-follow]');
@@ -4797,7 +4872,27 @@
       };
       section.querySelector('[data-wave-svg]')?.addEventListener('click', event => {
         const bounds = event.currentTarget.getBoundingClientRect();
-        if (bounds.width > 0) seekTo((event.clientX - bounds.left) / bounds.width);
+        if (bounds.width <= 0) return;
+        const ratio = Math.max(0, Math.min(1,(event.clientX - bounds.left) / bounds.width));
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        const target = begin + ratio * (end - begin);
+        const tolerance = (end - begin) * 12 / bounds.width;
+        let closest = null;
+        for (const candidate of motionLabEditedEvents || []) {
+          const distance = Math.abs(candidate.time_seconds - target);
+          if (distance <= tolerance && (!closest || distance < closest.distance)) {
+            closest = {id:candidate.id,distance};
+          }
+        }
+        if (closest) {
+          motionLabSelectedEvent = closest.id;
+          motionLabStereoWaveform();
+        } else {
+          motionLabSelectedEvent = null;
+          motionLabEventEditor();
+          seekTo(ratio);
+        }
       });
       section.querySelector('[data-wave-svg]')?.addEventListener('keydown', event => {
         if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
@@ -4847,19 +4942,22 @@
     const tEnd = to / total * analysis.duration_seconds;
     section.dataset.waveStart = String(tStart);
     section.dataset.waveEnd = String(tEnd);
-    const events = analysis.events?.events || [];
+    const events = motionLabEditedEvents || analysis.events?.events || [];
     let visible = 0;
     for (const event of events) {
       if (event.time_seconds < tStart || event.time_seconds > tEnd) continue;
       const x = (event.time_seconds - tStart) * 800 / Math.max(1e-9,tEnd-tStart);
       make('line', {x1:x,y1:4,x2:x,y2:176,stroke:event.kind === 'kick'?'#ffba66':
-        event.kind === 'snare'?'#f28fba':'#a0a0a0','stroke-width':1.5,'stroke-opacity':'.85'});
+        event.kind === 'snare'?'#f28fba':'#a0a0a0',
+        'stroke-width':event.id===motionLabSelectedEvent?3:1.5,
+        'stroke-opacity':event.enabled===false?'.2':'.85'});
       visible++;
     }
     make('line', {x1:0,x2:0,y1:0,y2:180,stroke:'#fff','stroke-width':2,
       'vector-effect':'non-scaling-stroke','pointer-events':'none',
       visibility:'hidden','data-wave-playhead':''});
     motionLabWavePlayhead();
+    motionLabEventEditor();
     const desc = section.querySelector('[data-wave-description]');
     if (desc) desc.textContent = (count === 2?'Separate L/R channels':'Mono channel') +
       ' · ' + tStart.toFixed(2) + '–' + tEnd.toFixed(2) + ' s · ' + visible +
@@ -4960,6 +5058,8 @@
       return;
     }
     motionLabAudioAnalysis = null;
+    motionLabEditedEvents = null;
+    motionLabSelectedEvent = null;
     motionLabAudioProjectId = null;
     motionLabReleaseAudio();
     motionLabAudioPreview();
@@ -5072,6 +5172,8 @@
         throw new Error('Audio frame alignment changed; analyze again.');
       }
       motionLabAudioAnalysis = analysis;
+      motionLabEditedEvents = (analysis.events?.events || []).map(e => ({...e, enabled:true}));
+      motionLabSelectedEvent = null;
       motionLabAudioProjectId = projectId;
       motionLabAudioUrl = URL.createObjectURL(file);
       motionLabAudioElement = new Audio(motionLabAudioUrl);
