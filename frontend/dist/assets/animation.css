@@ -2241,8 +2241,14 @@ dialog#animation-deforum-dialog {
 .animation-audio-workspace-actions {
   display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-top:14px;
 }
+.animation-audio-workspace-actions #animation-audio-apply {
+  flex:0 0 auto;
+  min-width:148px;
+  white-space:nowrap;
+  text-align:center;
+}
 .animation-audio-workspace-actions #animation-audio-workspace-status {
-  font-size:.78rem; flex:1 1 220px;
+  font-size:.78rem; flex:1 1 220px; min-width:0;
 }
 .animation-audio-preview-placeholder {
   display:grid; place-content:center; justify-items:center;
@@ -2269,6 +2275,10 @@ dialog#animation-deforum-dialog {
   }
   .animation-audio-workspace-heading { flex-direction:column; gap:10px; }
   .animation-audio-workspace-actions button { flex:1 1 140px; min-height:42px; }
+  .animation-audio-workspace-actions #animation-audio-apply {
+    flex:1 1 140px;
+    min-width:140px;
+  }
   .animation-audio-workflow span { flex:1 1 180px; }
   #animation-panel-audio .animation-audio-workspace-intro { padding:14px; }
   .animation-audio-preview-placeholder { min-height:160px; }
