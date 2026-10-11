@@ -13,6 +13,7 @@ from . import __version__
 from .animation_motion import _frame_transform_matrix, render_affine
 from .app import app
 from .paths import ensure_runtime_dirs
+from .animation_projects import seed_example_animation_project
 from .system_info import doctor_report, write_install_manifest
 
 
@@ -208,6 +209,19 @@ def command_self_test(_: argparse.Namespace) -> int:
     return 0
 
 
+def command_seed_example(_: argparse.Namespace) -> int:
+    try:
+        project = seed_example_animation_project()
+    except Exception as exc:
+        print(f"Unable to prepare starter project: {exc}", file=sys.stderr)
+        return 1
+    if project:
+        print(f"Created starter project: {project['name']} ({project['animation']['mode'].upper()}, {project['animation']['max_frames']} frames)")
+    else:
+        print("Existing animation projects preserved; no starter project needed.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="morphorum")
     parser.add_argument("--version", action="version", version=f"Morphorum {__version__}")
@@ -229,6 +243,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     self_test = sub.add_parser("self-test", help="Exercise the local API without opening a port.")
     self_test.set_defaults(func=command_self_test)
+
+    sample = sub.add_parser("seed-example", help="Install the bundled example if there are no projects.")
+    sample.set_defaults(func=command_seed_example)
     return parser
 
 
