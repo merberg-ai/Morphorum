@@ -102,7 +102,7 @@ test('Motion Lab uses existing DOM controls in mobile-transparent desktop column
   assert.match(js, /const motionAuthoringColumn = document\.createElement\('div'\)/);
   assert.match(js, /for \(const node of \[composer, recording\]\)/);
   assert.match(js, /for \(const node of \[visual, motionPreview\]\)/);
-  assert.match(js, /if \(audio\) audio\.after\(motionReviewColumn\)/);
+  assert.match(js, /motionAuthoringColumn\.after\(motionReviewColumn\)/);
   assert.match(desktop, /#animation-panel-motion > \.animation-motion-authoring-column\s*\{\s*display:\s*flex/);
   assert.match(desktop, /#animation-panel-motion > \.animation-motion-review-column\s*\{\s*display:\s*flex/);
   assert.match(desktop, /\.animation-layout:has\(\.animation-depth-card\[hidden\]\)/);
