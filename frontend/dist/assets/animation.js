@@ -3772,6 +3772,7 @@
     const payload = await api('/api/animation/projects');
     state.projects = Array.isArray(payload.projects) ? payload.projects : [];
     renderProjectSelect();
+    renderProjectManager();
     if (loadFirst && !state.project && state.projects.length) {
       await loadProject(state.projects[0].id, { confirmDirty: false });
     } else if (!state.project) {
@@ -5570,7 +5571,7 @@
   // Audio Motion is a dedicated Motion Lab workspace using the same draft
   // camera layers, project, and render controls.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['motion', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'];
+  const VISIBLE_ANIMATION_TABS = ['motion', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'];
   const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
   let animationTab = 'motion';
   function showAnimationTab(name, { persist = true } = {}) {
@@ -5617,7 +5618,7 @@
     nav.setAttribute('role', 'tablist');
     const panels = {};
     const names = {
-      motion: 'Overview', editor: 'Project Editor',
+      motion: 'Overview', projects: 'Project Manager', editor: 'Project Editor',
       composer: 'Camera Composer', recording: 'Live Recording',
       curves: 'Motion Curves', preview: 'Camera Preview',
       audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
@@ -5654,7 +5655,7 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs']) {
+    for (const name of ['motion', 'projects', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -5705,6 +5706,7 @@
       ['preview', 'Camera Motion Preview', 'Inspect 2D or 3D camera motion before rendering.'],
       ['audio', 'Audio-Reactive Motion', 'Turn WAV beats and frequency bands into camera movement.'],
       ['monitor', 'Render Monitor', 'Watch progress, frame previews, and job diagnostics.'],
+      ['projects', 'Project Manager', 'Search, review, rename, and safely archive your animation projects.'],
       ['editor', 'Project Editor', 'Configure projects, prompts, resolution, and timelines.'],
       ['outputs', 'Outputs', 'Review completed animations and export videos.'],
     ];
@@ -5722,6 +5724,7 @@
       toolGrid.appendChild(button);
     }
     panels.motion.appendChild(toolGrid);
+    setupProjectManager(panels.projects);
     for (const [name, label] of [
       ['composer', 'Camera Motion Composer'],
       ['recording', 'Live Motion Recording'],
