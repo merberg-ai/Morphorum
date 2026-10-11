@@ -11,17 +11,17 @@ Launch Morphorum from the folder where you installed it.
 
 **Windows, default location** (PowerShell):
 
-\`\`\`powershell
+```powershell
 cd C:\Morphorum
 .\run.bat
-\`\`\`
+```
 
 **Linux, default location** (terminal):
 
-\`\`\`bash
+```bash
 cd ~/Morphorum
 ./run.sh
-\`\`\`
+```
 
 Keep that window running, and visit **http://127.0.0.1:7865** in your browser. If you chose another port during installation, use that number instead.
 
@@ -113,7 +113,7 @@ The floating Motion Lab toolbar offers shortcuts to **Record**, **Stop**, **Curv
 4. Follow the job under **Render Monitor**. Supported jobs can be cancelled or resumed as indicated by the interface.
 5. Open **Outputs** after completion to preview the animation and export it as **MP4** or **WebM** where supported.
 
-**FFmpeg is required** for video encoding. If video export is unavailable, run \`ffmpeg -version\` in a terminal and see [Troubleshooting](TROUBLESHOOTING.md#video-export-fails-or-ffmpeg-is-missing).
+**FFmpeg is required** for video encoding. If video export is unavailable, run `ffmpeg -version` in a terminal and see [Troubleshooting](TROUBLESHOOTING.md#video-export-fails-or-ffmpeg-is-missing).
 
 Audio Motion can incorporate a soundtrack with supported exports. Confirm the audio source and resulting export settings before assuming every output has sound.
 
@@ -125,10 +125,10 @@ The four themes are **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, and 
 
 To update the installed source:
 
-- Windows: run \`.\update.bat\` in the installation directory.
-- Linux: run \`./update.sh\` in the installation directory.
+- Windows: run `.\update.bat` in the installation directory.
+- Linux: run `./update.sh` in the installation directory.
 
-**Keep your files safe:** the \`projects/\`, \`outputs/\`, and \`data/\` directories contain work and settings. Normal updates preserve them, but you should periodically copy the important ones to another drive. **Move to Trash** in Project Manager relocates project data into the application's project Trash area; it is not an automatic cloud backup or a permanent undo system.
+**Keep your files safe:** the `projects/`, `outputs/`, and `data/` directories contain work and settings. Normal updates preserve them, but you should periodically copy the important ones to another drive. **Move to Trash** in Project Manager relocates project data into the application's project Trash area; it is not an automatic cloud backup or a permanent undo system.
 
 ## Need help?
 
