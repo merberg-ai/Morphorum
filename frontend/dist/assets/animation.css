@@ -2415,3 +2415,115 @@ dialog#animation-deforum-dialog {
     border-right-color:currentColor;
   }
 }
+
+/* Project Manager: browser and saved-project inspector share the active
+   Motion Lab theme. No project names are interpolated as HTML. */
+#animation-panel-projects {min-width:0;}
+.animation-project-manager-layout {
+  display:grid;
+  grid-template-columns:minmax(0,1.03fr) minmax(0,.97fr);
+  gap:14px;align-items:start;
+}
+.animation-project-manager-browser,
+.animation-project-manager-info {padding:19px;min-width:0;}
+.animation-project-manager-toolbar {
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(145px,.6fr);
+  gap:10px;align-items:end;
+}
+.animation-project-manager-toolbar label {display:grid;gap:5px;min-width:0;}
+.animation-project-manager-toolbar label span {font-size:.78rem;color:var(--muted);}
+.animation-project-manager-toolbar input,
+.animation-project-manager-toolbar select {min-width:0;width:100%;}
+.animation-project-manager-count-row {
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  margin:15px 0 11px;
+}
+.animation-project-manager-count-row .muted {font-size:.78rem;}
+.animation-project-manager-count-row button {margin-left:auto;}
+.animation-project-manager-list {
+  display:grid;align-content:start;gap:7px;
+  max-height:min(68dvh,720px);overflow-y:auto;min-height:150px;
+  padding:3px 3px 5px 0;scrollbar-width:thin;
+}
+.animation-project-manager-empty {padding:28px 12px;text-align:center;}
+.animation-project-manager-item {
+  display:flex;flex-direction:column;align-items:flex-start;
+  gap:4px;min-width:0;width:100%;padding:13px 15px;
+  border:1px solid var(--border);border-radius:10px;
+  background:var(--button-secondary-bg);color:var(--text);
+  text-align:left;cursor:pointer;overflow-wrap:anywhere;
+  transition:background .17s ease,border-color .17s ease,
+    box-shadow .17s ease,transform .17s ease;
+}
+.animation-project-manager-item strong {font-size:.89rem;}
+.animation-project-manager-item span {font-size:.78rem;color:var(--muted);}
+.animation-project-manager-item small {font-size:.73rem;color:var(--muted);}
+.animation-project-manager-item:hover:not(:disabled) {
+  border-color:var(--button-hover-border);
+  background:var(--button-secondary-hover);
+  box-shadow:var(--button-shadow);
+  transform:translateY(-1px);
+}
+.animation-project-manager-item:active:not(:disabled) {
+  transform:scale(.99);background:var(--button-secondary-active);
+}
+.animation-project-manager-item.active {
+  border-color:var(--accent);
+  background:var(--button-secondary-active);
+  box-shadow:inset 3px 0 0 var(--accent);
+}
+.animation-project-manager-item:focus-visible {
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+#animation-project-manager-details h3 {
+  font-size:1.04rem;line-height:1.35;margin:10px 0 5px;
+  overflow-wrap:anywhere;
+}
+#animation-project-manager-details > p.muted {line-height:1.5;font-size:.82rem;}
+.animation-project-manager-facts {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;margin:17px 0;
+}
+.animation-project-manager-fact {
+  padding:9px 11px;border:1px solid var(--border);
+  border-radius:9px;min-width:0;
+  background:color-mix(in srgb,var(--panel-strong) 80%,transparent);
+}
+.animation-project-manager-fact dt {color:var(--muted);font-size:.73rem;margin-bottom:5px;}
+.animation-project-manager-fact dd {
+  margin:0;font-size:.83rem;overflow-wrap:anywhere;
+  font-variant-numeric:tabular-nums;
+}
+.animation-project-manager-active {
+  color:var(--accent);font-size:.8rem;margin:7px 0 14px;
+}
+.animation-project-manager-actions {
+  display:flex;flex-wrap:wrap;gap:8px;
+  margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--border);
+}
+.animation-project-manager-actions button {flex:1 1 135px;}
+.animation-project-manager-actions .animation-project-manager-danger {
+  border-color:color-mix(in srgb,var(--danger) 50%,var(--border));
+  color:var(--danger);
+}
+.animation-project-manager-actions .animation-project-manager-danger:hover:not(:disabled) {
+  background:color-mix(in srgb,var(--danger) 12%,var(--panel-strong));
+  border-color:var(--danger);
+}
+.animation-project-manager-help {margin-top:13px;font-size:.76rem;line-height:1.5;}
+@media(max-width:1030px) {
+  .animation-project-manager-layout {grid-template-columns:minmax(0,1fr);}
+  .animation-project-manager-list {max-height:370px;}
+}
+@media(max-width:540px) {
+  .animation-project-manager-browser,.animation-project-manager-info {padding:13px;}
+  .animation-project-manager-toolbar {grid-template-columns:minmax(0,1fr);}
+  .animation-project-manager-facts {grid-template-columns:minmax(0,1fr);}
+  .animation-project-manager-actions button {flex:1 1 100%;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .animation-project-manager-item {transition:none;}
+  .animation-project-manager-item:hover:not(:disabled),
+  .animation-project-manager-item:active:not(:disabled) {transform:none;}
+}
