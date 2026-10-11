@@ -7,10 +7,14 @@ from __future__ import annotations
 
 import math
 import re
+import hashlib
+from copy import deepcopy
 from typing import Any
 
 from .deforum_import import DeforumImportError, parse_deforum_source
 from .motion_lab import AXES
+from .animation_projects import save_animation_project
+from .animation_resolution import validate_project_schedules
 
 SOURCE_AXIS = {
     "translation_x": "translation_x", "translation_y": "translation_y",
@@ -164,3 +168,66 @@ def preview_motion_settings(
             and source_cadence is not None and source_cadence == current_cadence,
         "read_only": True,
     }
+
+
+def _source_digest(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def prepare_motion_import(
+    content: Any, *, filename: str, project: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Preview a copy of the changed project, rejecting unsafe timing conflicts.
+
+    Only six camera schedules are touched. FPS, frame count, cadence, models,
+    prompts, audio, Motion Lab layers and all other configuration stay unchanged.
+    """
+    report = preview_motion_settings(content, filename=filename, project=project)
+    if not report["can_apply_unchanged"]:
+        raise DeforumImportError(
+            "Imported FPS, frames, cadence or axes do not match this project. "
+            "Use a matching project for motion-only import; no automatic retiming."
+        )
+    if str(project.get("animation", {}).get("mode", "")).lower() != "3d":
+        raise DeforumImportError("Select a 3D project before importing 3D camera motion.")
+    lab = project.get("motion_lab") or {}
+    if lab.get("layers") or lab.get("last_applied_tracks"):
+        raise DeforumImportError(
+            "This project has Motion Lab layers or previously applied motion. "
+            "Import into a fresh 3D project to avoid overriding those layers."
+        )
+    source = parse_deforum_source(content, filename=filename)
+    changed = deepcopy(project)
+    for source_axis, target_axis in SOURCE_AXIS.items():
+        schedule = source[source_axis]
+        changed["tracks"]["camera_3d"][target_axis]["schedule"] = schedule
+        changed["tracks"]["camera_3d"][target_axis]["interpolation"] = "linear"
+        changed["camera_3d"][target_axis] = schedule
+    diagnostics = validate_project_schedules(changed)
+    if not diagnostics.get("valid", False):
+        raise DeforumImportError(
+            "Imported camera schedules failed Morphorum validation; no changes applied."
+        )
+    report["source_sha256"] = _source_digest(content)
+    report["changed_axes"] = list(AXES)
+    report["import_mode"] = "replace_camera_only"
+    return changed, report
+
+
+def apply_motion_import(
+    project_id: str, content: Any, *, filename: str,
+    expected_source_sha256: str, expected_project_sha256: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Explicitly guarded save, requiring matching source and current project."""
+    import json
+    from .animation_projects import load_animation_project
+
+    current = load_animation_project(project_id)
+    current_digest = hashlib.sha256(
+        json.dumps(current, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    if current_digest != expected_project_sha256 or _source_digest(content) != expected_source_sha256:
+        raise DeforumImportError("Project or import source changed since preview. Preview again.")
+    candidate, report = prepare_motion_import(content, filename=filename, project=current)
+    saved = save_animation_project(project_id, candidate, prefer_tracks=True)
+    return saved, report
