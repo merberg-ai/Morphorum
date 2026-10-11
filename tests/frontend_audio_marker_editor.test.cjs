@@ -26,3 +26,10 @@ test('DA3.2 marker panel exposes explicit persistence without changing camera mo
   assert.match(css, /\.animation-audio-event-fields/);
   assert.match(css, /@media\(max-width:620px\)/);
 });
+test('DA4.3 clear detected markers preserves manual markers and camera cues', () => {
+  assert.match(js, /data-event-clear-detected/);
+  assert.match(js, /action === 'clear-detected'/);
+  assert.match(js, /e\.source === 'manual'/);
+  assert.match(js, /String\(e\.id\)\.startsWith\('manual-'\)/);
+  assert.match(js, /motionLabMarkerSnapshot\(\)/);
+});
