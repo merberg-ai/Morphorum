@@ -110,6 +110,8 @@
     ]);
 
     qsa('#view-animation .animation-layout > article.card').forEach((card, index) => {
+      // Audio has its own workspace, and should not inherit Editor's accordion.
+      if (card.id === 'animation-motion-lab-audio') return;
       if (card.dataset.animationAccordionReady === '1') return;
       card.dataset.animationAccordionReady = '1';
       const key = animationCardKey(card, index);
@@ -4220,6 +4222,9 @@
     if (status) status.textContent = active ? '● Recording' :
       motionLabBusy ? 'Updating motion…' :
       motionLabDraftLayers.length + ' draft layer(s)';
+    const audioStatus = qs('#animation-audio-workspace-status');
+    if (audioStatus) audioStatus.textContent = !state.project ? 'Open a project in Editor first.' :
+      motionLabDraftLayers.length + ' Motion Lab draft layer(s) · Add audio, review, then apply.';
   }
   function motionLabSetupQuickActions(panel) {
     const dock = document.createElement('div');
@@ -5494,9 +5499,10 @@
 
   // Motion Lab is first-class; unfinished hybrid Media controls remain mounted
   // in a non-navigable vault so existing project and API semantics stay intact.
-  // Four visible views share the existing render controls and poller.
+  // Audio Motion is a dedicated Motion Lab workspace using the same draft
+  // camera layers, project, and render controls.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['editor', 'motion', 'monitor', 'outputs'];
+  const VISIBLE_ANIMATION_TABS = ['editor', 'motion', 'audio', 'monitor', 'outputs'];
   let animationTab = 'editor';
   function showAnimationTab(name, { persist = true } = {}) {
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'editor';
@@ -5530,7 +5536,7 @@
     nav.setAttribute('aria-label', 'Animation workspace');
     nav.setAttribute('role', 'tablist');
     const panels = {};
-    const names = { editor: 'Editor', motion: 'Motion Lab', monitor: 'Monitor', outputs: 'Outputs' };
+    const names = { editor: 'Editor', motion: 'Motion Lab', audio: 'Audio Motion', monitor: 'Monitor', outputs: 'Outputs' };
     for (const [name, label] of Object.entries(names)) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -5563,7 +5569,7 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'monitor', 'outputs']) {
+    for (const name of ['motion', 'audio', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -5596,7 +5602,7 @@
     const recording = qs('#animation-motion-lab-recording');
     if (recording) panels.motion.appendChild(recording);
     const audio = qs('#animation-motion-lab-audio');
-    if (audio) panels.motion.appendChild(audio);
+    if (audio) panels.audio.appendChild(audio);
     const visual = qs('#animation-motion-lab-visual');
     if (visual) panels.motion.appendChild(visual);
     const motionPreview = qs('.animation-motion-preview-card');
@@ -5617,10 +5623,53 @@
     }
     if (motionIntro) motionIntro.after(motionAuthoringColumn);
     else panels.motion.prepend(motionAuthoringColumn);
-    if (audio) audio.after(motionReviewColumn);
-    else panels.motion.appendChild(motionReviewColumn);
+    motionAuthoringColumn.after(motionReviewColumn);
+
+    // Audio remains a Motion Lab tool. Provide the audio-specific workflow
+    // without duplicating any input, API, or motion-layer state.
+    const audioIntro = document.createElement('article');
+    audioIntro.className = 'card glass animation-audio-workspace-intro';
+    audioIntro.innerHTML = `
+      <div class="animation-audio-workspace-heading">
+        <div>
+          <p class="eyebrow">MOTION LAB / AUDIO MOTION</p>
+          <h2>Make your camera move to the music</h2>
+          <p class="muted">Analyze a WAV, select the beats you want, and add
+          camera movement to your Motion Lab layers. Audio motion is part of
+          the same project, not a separate animation or render.</p>
+        </div>
+        <button class="secondary-button compact" type="button"
+          id="animation-audio-back-motion">← Motion Lab</button>
+      </div>
+      <div class="animation-audio-workflow">
+        <span><strong>1</strong> Choose WAV and analyze</span>
+        <span><strong>2</strong> Adjust beats and add a layer</span>
+        <span><strong>3</strong> Review curves and apply motion</span>
+      </div>
+      <div class="animation-audio-workspace-actions">
+        <button class="secondary-button compact" type="button"
+          id="animation-audio-review-motion">Review in Motion Lab</button>
+        <button class="primary-button compact" type="button"
+          id="animation-audio-apply" data-motion-quick-target="animation-motion-lab-apply"
+          disabled>Apply to Animation</button>
+        <span class="muted" id="animation-audio-workspace-status" role="status"
+          aria-live="polite">Select a 3D animation project to begin.</span>
+      </div>
+    `;
+    panels.audio.prepend(audioIntro);
+    const audioPlaceholder = document.createElement('div');
+    audioPlaceholder.className = 'animation-audio-preview-placeholder';
+    audioPlaceholder.innerHTML = '<strong>Beat analysis preview</strong><p>Choose a WAV file and select Analyze WAV. Your detected beats and audio levels will appear here before you add any motion.</p>';
+    qs('#animation-motion-lab-audio-preview')?.before(audioPlaceholder);
+    qs('#animation-audio-back-motion')?.addEventListener('click', () => showAnimationTab('motion'));
+    qs('#animation-audio-review-motion')?.addEventListener('click', () => showAnimationTab('motion'));
+    qs('#animation-audio-apply')?.addEventListener('click', () => {
+      const apply = qs('#animation-motion-lab-apply');
+      if (apply && !apply.disabled) apply.click();
+    });
 
     motionLabSetupQuickActions(panels.motion);
+    motionLabSyncQuickActions();
     const history = qs('.animation-render-history-row');
     if (history) panels.outputs.prepend(history);
     const completedPreview = qs('.animation-render-preview-wrap');
@@ -5637,14 +5686,6 @@
     inner.appendChild(expert);
     qs('#animation-collapse-all')?.setAttribute('title', 'Collapse Editor cards');
     qs('#animation-expand-all')?.setAttribute('title', 'Expand Editor cards');
-    qs('#animation-motion-lab-edit-3d')?.addEventListener('click', () => {
-      showAnimationTab('editor');
-      qs('#animation-3d-camera-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    qs('#animation-motion-lab-edit-timeline')?.addEventListener('click', () => {
-      showAnimationTab('editor');
-      qs('#animation-timeline-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
     let previous = 'editor';
     try { previous = localStorage.getItem(ANIMATION_TAB_KEY) || 'editor'; } catch (_) {}
     showAnimationTab(previous, { persist: false });
