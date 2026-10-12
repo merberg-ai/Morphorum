@@ -1,6 +1,6 @@
 # Morphorum API-only mode (DB1 test candidate)
 
-**Workstream:** `dev-backend` — never merge until Windows physical acceptance and CI are verified. This mode removes **browser UI serving only**; generation, animation, GPU telemetry, live completed-frame previews, console SSE, project/audio services and exports remain on the API.
+**Workstream:** `dev-backend` — keep isolated from `main` until full Windows SDXL render/preview acceptance. This mode removes **browser UI serving only**; generation, animation, GPU telemetry, live completed-frame previews, console SSE, project/audio services and exports remain on the API.
 
 ## Start
 
@@ -46,6 +46,18 @@ Invoke-RestMethod http://127.0.0.1:7866/api/health -Headers @{ Authorization = "
 Expected: JSON status ok, mode `backend-only`, `api_contract_version: 1`. Without the header, `/api/health` returns HTTP 401. `/`, `/assets/app.js`, `/docs`, and `/openapi.json` are not served in API-only mode.
 
 For remote clients: acquire the token through a trusted out-of-band mechanism; use the GPU computer's LAN address, open only the required Windows Firewall port for the private LAN as necessary, and **do not expose the port to the internet or an untrusted network**. Raw LAN HTTP does not encrypt the token or media in transit; for untrusted networks use an encrypted VPN/tunnel or future TLS termination. Loopback also requires authorization.
+
+## Verified Windows + Ubuntu Mini acceptance (2026-10-12)
+
+**User-reported physical tests passed** against backend-only mode on the Windows Omen at `D:\\Morphorum-test`, branch `dev-backend` commit `04100f7525b81c926299e9226c3a1da40b28ad3e`:
+
+- Windows local backend-only startup: authenticated `GET /api/health` returns `status=ok`, `mode=backend-only`, `api_contract_version=1`, no frontend asset version.
+- Windows `GET /api/system/telemetry` authenticated: CPU/RAM metrics returned and NVIDIA GPU backend detected.
+- Windows unauthenticated `GET /api/health` correctly returns HTTP 401; `GET /` returns HTTP 404 instead of browser UI.
+- Ubuntu Mini client on the trusted LAN successfully completed the seven instructed tests against `192.168.1.24:7866`: authenticated health, hardware telemetry, image-generation job endpoint, project-list endpoint, console SSE connection, unauthenticated HTTP 401 rejection, and web-root HTTP 404 rejection. No bearer token is stored in this report.
+- GitHub Actions at tested commit: **499 tests passed, 1 skipped** in backend workflow, plus successful syntax and installer workflow runs.
+
+**Still open:** a real authenticated SDXL generation/animation render initiated by a remote API client; tracking live completed frame images, prompt state, diffusion progress and ETA from another machine; retrieving final output; standard browser-mode GPU regression if not yet physically checked. No completed render or video export has been demonstrated by these checks. DB1's **transport/startup/authentication** acceptance is complete; the **end-to-end rendering parity** gate remains open. No merge to main.
 
 ## Physical DB1 acceptance checklist
 
