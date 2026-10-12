@@ -132,7 +132,7 @@ def test_audio_fixture_generates_real_sound_and_idempotent_manifest(tmp_path, mo
     assert frozen["format"] == "wav"
     assert frozen["bytes"] > 100
     assert all((output / "frames" / f"frame_{i:06d}.png").is_file() for i in range(12))
-    assert video._read_manifest(receipt["project_id"], receipt["render_id"])["status"] == "completed" if video._render_dir == render_mod._render_dir else True
+    assert video._read_manifest(receipt["project_id"], receipt["render_id"])["status"] == "completed"
     with pytest.raises(RuntimeError, match="already exists"):
         fixture.create()
     assert fixture.cleanup() == 0
