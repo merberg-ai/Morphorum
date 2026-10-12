@@ -106,3 +106,30 @@ Do not paste credentials in chat. For failures, the local test log includes per-
 GitHub CI includes all existing backend, standard browser frontend syntax, installer and new DB2.3 asset-contract tests. The source test verifies optional digest protection, upload limits, canonical PNG and WAV roundtrips, catalog ownership, range reads and 412 response, alongside backward-compatible unconditional browser saves.
 
 After CI + user-reported Ubuntu physical acceptance: checkpoint DB2.3, stop before DB2.4 and do not merge without explicit approval. Normal Windows browser-mode GPU smoke and physically validated MP4/audio mux remain outstanding.
+
+## DB2.3 verified physical acceptance (2026-10-12)
+
+**Status: PASSED by user report; 12/12 Ubuntu Mini physical acceptance checks.** The user ran `scripts/db2_assets_smoke.py` from Ubuntu Mini against the authenticated Windows Omen backend-only service at `http://192.168.1.24:7866` on branch `feature/db2-project-assets`.
+
+The terminal output explicitly confirmed all twelve steps:
+
+1. Authenticated DB2.3 capability discovery
+2. Disposable remote project creation
+3. Streamed PNG upload
+4. Streamed imported soundtrack upload
+5. Motion Lab WAV upload
+6. Project-owned asset catalog
+7. SHA-256-verified PNG download
+8. SHA-256-verified soundtrack WAV download
+9. SHA-256-verified analyzed WAV download
+10. Successful ETag-protected project save
+11. Stale concurrent save rejected
+12. Temporary project moved to Trash
+
+The user's terminal printed `RESULT: 12/12 PASSED`. The detailed physical test log remains on Ubuntu Mini at `~/tmp/db2-assets-test.log`. No GPU inference or video export was required to verify this workflow.
+
+**Automated acceptance:** GitHub Actions on implementation commit `c70b596ed90bc009d4afb01ce1d8cf1bde43fcec` completed successfully: **518 passed, 1 skipped, 0 failed** backend tests; Morphorum self-test, syntax/browser JS checks and installer checks all passed.
+
+**Accepted scope:** Project-owned image/soundtrack/WAV uploads and verified downloads, asset descriptors, transfer integrity, conditional project saves, and disposable project cleanup. DB2.3 is ready to checkpoint.
+
+**Not claimed:** Actual Windows browser-mode GPU regression, a real MP4/audio-mux export/download, interrupted transfer/retry physical test, nor DB2.4 mid-render disconnect/reattachment. They remain separate acceptance gates. No merge into `feature/db2-connection-manager`, `dev-backend` or `main` is authorized.
