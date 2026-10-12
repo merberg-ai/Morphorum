@@ -248,6 +248,44 @@ def test_native_session_prepares_before_submit_and_recovers_lost_response(
     assert len(calls) == 2  # never posts after ID is known
 
 
+def test_native_watch_reconnects_to_same_job(tmp_path, monkeypatch, recovery_modules):
+    import morphorum_client
+    import morphorum_recovery
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    class FakeClient:
+        base_url = "http://localhost:7866"
+        def __init__(self):
+            self.polls = 0
+            self.submits = 0
+        def handshake(self):
+            return {"instance_id": "a" * 32, "boot_id": "b" * 32}
+        def request(self, method, path, *, payload=None, headers=None):
+            if method == "GET" and "/projects/" in path:
+                return {"project": {"id": "verified-test"}}
+            if method == "POST":
+                self.submits += 1
+                return {"id": "anim-one", "status": "rendering"}
+            if method == "GET" and "/renders/" in path:
+                self.polls += 1
+                if self.polls == 1:
+                    raise morphorum_client.ClientError("Link dropped")
+                return {"id": "anim-one", "status": "completed",
+                        "preview_url": "/api/fake/preview"}
+            raise AssertionError(path)
+        def download(self, path, destination, **kwargs):
+            Path(destination).write_bytes(b"GIF89a-test")
+            return destination
+
+    client = FakeClient()
+    session = morphorum_recovery.SessionFile(tmp_path / "session.json")
+    morphorum_recovery.prepare(client, "verified-test", session)
+    result = morphorum_recovery.watch_session(client, session, interval=0, max_seconds=5)
+    assert result["status"] == "completed"
+    assert client.submits == 1
+    assert session.load()["render_id"] == "anim-one"
+
+
 def test_native_session_refuses_changed_backend(tmp_path, recovery_modules):
     RecoveryError, SessionFile, prepare, attach = recovery_modules
     class Client:
