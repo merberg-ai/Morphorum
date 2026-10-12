@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -14,7 +15,9 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .backend_access import authorized_backend_request
 from .animation_projects import (
+    AnimationProjectConflict,
     AnimationProjectError,
+    project_etag,
     animation_project_directory,
     animation_project_path,
     create_animation_project,
@@ -25,6 +28,14 @@ from .animation_projects import (
     save_animation_project,
     trash_animation_project,
 )
+from .project_assets import (
+    ProjectAssetError, ProjectAssetTooLarge, catalog as project_asset_catalog,
+    read_bounded, source_descriptor, soundtrack_descriptor, soundtrack_path,
+    motion_wav_descriptor, motion_wav_path,
+)
+from .animation_motion import SOURCE_MAX_BYTES
+from .imported_soundtrack import MAX_IMPORT_AUDIO_BYTES
+
 from .animation_resolution import (
     project_schedule_series,
     resolve_project_frame,
@@ -324,15 +335,19 @@ async def api_attach_imported_soundtrack(project_id: str, request: Request) -> d
         from urllib.parse import unquote
         filename = unquote(request.headers.get("x-audio-filename", ""))
         offset = request.headers.get("x-audio-offset-seconds", "0")
-        data = bytearray()
-        async for chunk in request.stream():
-            data.extend(chunk)
-            if len(data) > MAX_IMPORT_AUDIO_BYTES:
-                raise ImportedSoundtrackError("Audio exceeds the 40 MiB attachment limit.")
-        record = store_soundtrack(project_id, bytes(data), filename=filename,
+        data = await read_bounded(
+            request.stream(), limit=MAX_IMPORT_AUDIO_BYTES,
+            expected_digest=request.headers.get("x-content-sha256"),
+        )
+        record = store_soundtrack(project_id, data, filename=filename,
                                  offset_seconds=offset)
-        return {"status": "attached", "soundtrack": record}
-    except (AnimationProjectError, ImportedSoundtrackError) as exc:
+        return {
+            "status": "attached", "soundtrack": record,
+            "asset": soundtrack_descriptor(project_id),
+        }
+    except ProjectAssetTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except (AnimationProjectError, ImportedSoundtrackError, ProjectAssetError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -450,9 +465,10 @@ def api_create_animation_project(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.get("/api/animation/projects/{project_id}")
-def api_animation_project(project_id: str) -> dict[str, Any]:
+def api_animation_project(project_id: str, response: Response) -> dict[str, Any]:
     try:
         project = load_animation_project(project_id)
+        response.headers["ETag"] = project_etag(project_id)
         return {
             "project": project,
             "path": animation_project_path(project_id),
@@ -462,14 +478,22 @@ def api_animation_project(project_id: str) -> dict[str, Any]:
 
 
 @app.put("/api/animation/projects/{project_id}")
-def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def api_save_animation_project(
+    project_id: str, payload: dict[str, Any], request: Request, response: Response,
+) -> dict[str, Any]:
+    match = request.headers.get("if-match")
+    if match is not None and not re.fullmatch(r'"[0-9a-f]{64}"', match):
+        raise HTTPException(status_code=400, detail="If-Match must be one quoted project ETag.")
     try:
-        project = save_animation_project(project_id, payload)
+        project = save_animation_project(project_id, payload, expected_etag=match)
+        response.headers["ETag"] = project_etag(project_id)
         return {
             "status": "saved",
             "project": project,
             "path": animation_project_path(project_id),
         }
+    except AnimationProjectConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
@@ -863,11 +887,68 @@ def api_hybrid_frame_file(project_id: str, frame_number: int):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/projects/{project_id}/assets")
+def api_project_assets(project_id: str) -> dict[str, Any]:
+    """DB2.3 read-only project-owned media catalog. No server file paths."""
+    try:
+        load_animation_project(project_id)
+        return {"schema_version": 1, "assets": project_asset_catalog(project_id)}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/motion-import/soundtrack/file")
+def api_download_attached_soundtrack(project_id: str):
+    try:
+        load_animation_project(project_id)
+        asset = soundtrack_descriptor(project_id)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="No project soundtrack attached.")
+        path, record = soundtrack_path(project_id)
+        return FileResponse(
+            path, media_type=asset["media_type"], filename=record["filename"],
+            headers={
+                "Cache-Control": "private, no-store",
+                "ETag": '"' + asset["sha256"] + '"',
+                "X-Content-SHA256": asset["sha256"],
+            },
+        )
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio/{sha256}")
+def api_download_motion_lab_wav(project_id: str, sha256: str):
+    try:
+        load_animation_project(project_id)
+        asset = motion_wav_descriptor(project_id, sha256)
+        path = motion_wav_path(project_id, sha256)
+        return FileResponse(
+            path, media_type="audio/wav", filename=asset["filename"],
+            headers={
+                "Cache-Control": "private, no-store",
+                "ETag": '"' + asset["sha256"] + '"',
+                "X-Content-SHA256": asset["sha256"],
+            },
+        )
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/projects/{project_id}/source-image", status_code=201)
 async def api_upload_animation_source_image(project_id: str, request: Request) -> dict[str, Any]:
     try:
         project = load_animation_project(project_id)
-        data = await request.body()
+        data = await read_bounded(
+            request.stream(), limit=SOURCE_MAX_BYTES,
+            expected_digest=request.headers.get("x-content-sha256"),
+        )
         destination = animation_project_directory(project_id) / "assets" / "source.png"
         info = save_source_image(data, destination)
         filename = str(request.headers.get("x-filename") or "source-image").strip()[:255]
@@ -891,7 +972,12 @@ async def api_upload_animation_source_image(project_id: str, request: Request) -
                 "bytes": info["bytes"],
             },
             "project": saved,
+            "asset": source_descriptor(project_id),
         }
+    except ProjectAssetTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except MotionPreviewError as exc:

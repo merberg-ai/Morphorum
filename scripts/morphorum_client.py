@@ -8,6 +8,8 @@ Commands that submit jobs intentionally never auto-retry on network failures.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import http.client
 import json
 import os
 import sys
@@ -54,12 +56,15 @@ class MorphorumClient:
         except (UnicodeDecodeError, ValueError) as exc:
             raise ClientError("Backend did not return valid JSON.") from exc
 
-    def _http(self, method: str, path: str, *, payload: dict | None = None):
+    def _http(self, method: str, path: str, *, payload: dict | None = None,
+              extra_headers: dict[str, str] | None = None):
         if (not path.startswith("/api/") or path.startswith("//")
                 or "://" in path or "\\" in path or "#" in path):
             raise ClientError("Only same-backend /api/ routes are permitted.")
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         headers = {"Authorization": "Bearer " + self.token}
+        if extra_headers:
+            headers.update(extra_headers)
         if data is not None:
             headers["Content-Type"] = "application/json"
         request = Request(self.base_url + path, data=data, headers=headers, method=method)
@@ -83,7 +88,8 @@ class MorphorumClient:
         except TimeoutError as exc:
             raise ClientError("Request timed out. Check the job list before retrying any submit.") from exc
 
-    def download(self, path: str, destination: Path, *, file_type: str | None = None) -> Path:
+    def download(self, path: str, destination: Path, *, file_type: str | None = None,
+                 expected_sha256: str | None = None) -> Path:
         """Stream to a temporary file and replace only after validation."""
         if (not path.startswith("/api/") or path.startswith("//")
                 or "://" in path or "\\" in path or "#" in path):
@@ -95,13 +101,17 @@ class MorphorumClient:
         request = Request(self.base_url + path,
                           headers={"Authorization": "Bearer " + self.token})
         try:
+            digest = hashlib.sha256()
             with self._opener.open(request, timeout=max(self.timeout, 120)) as response:
                 with part.open("wb") as out:
                     while True:
                         block = response.read(1024 * 1024)
                         if not block:
                             break
+                        digest.update(block)
                         out.write(block)
+            if expected_sha256 is not None and digest.hexdigest() != expected_sha256:
+                raise ClientError("Downloaded asset SHA-256 does not match its descriptor.")
             if part.stat().st_size == 0:
                 raise ClientError("Downloaded file was empty.")
             if file_type:
@@ -119,6 +129,99 @@ class MorphorumClient:
             raise ClientError(f"Download connection failed: {exc.reason}") from exc
         finally:
             part.unlink(missing_ok=True)
+
+    def project_assets(self, project_id: str) -> list[dict]:
+        return self.request(
+            "GET", f"/api/animation/projects/{quote(project_id, safe='')}/assets"
+        )["assets"]
+
+    def get_project_with_etag(self, project_id: str) -> tuple[dict, str]:
+        raw, headers = self._http(
+            "GET", f"/api/animation/projects/{quote(project_id, safe='')}"
+        )
+        etag = headers.get("ETag")
+        if not etag:
+            raise ClientError("Backend did not provide a project revision ETag.")
+        return json.loads(raw)["project"], etag
+
+    def save_project_conditionally(
+        self, project_id: str, project: dict, etag: str,
+    ) -> tuple[dict, str]:
+        if not etag or not etag.startswith('"'):
+            raise ClientError("A project ETag is required to prevent conflicting saves.")
+        raw, headers = self._http(
+            "PUT", f"/api/animation/projects/{quote(project_id, safe='')}",
+            payload=project, extra_headers={"If-Match": etag},
+        )
+        if not headers.get("ETag"):
+            raise ClientError("Project save completed but no new ETag was returned.")
+        return json.loads(raw), headers["ETag"]
+
+    def upload_file(self, project_id: str, source: Path, *, kind: str) -> dict:
+        """Stream a bounded project-owned upload via HTTP(S), never redirect."""
+        kinds = {
+            "source-image": ("source-image", 32 * 1024 * 1024),
+            "motion-lab-wav": ("motion-lab/audio-analyze", 20 * 1024 * 1024),
+            "soundtrack": ("motion-import/soundtrack", 40 * 1024 * 1024),
+        }
+        if kind not in kinds:
+            raise ClientError("Unknown project asset kind.")
+        suffix, limit = kinds[kind]
+        source = Path(source).expanduser()
+        if not source.is_file() or source.is_symlink():
+            raise ClientError("Local upload file is missing or is a symlink.")
+        size = source.stat().st_size
+        if size < 1 or size > limit:
+            raise ClientError(f"Local upload exceeds its {limit // (1024 * 1024)} MiB limit.")
+        digest = hashlib.sha256()
+        with source.open("rb") as file:
+            for block in iter(lambda: file.read(1024 * 1024), b""):
+                digest.update(block)
+        path = f"/api/animation/projects/{quote(project_id, safe='')}/{suffix}"
+        parsed = urlsplit(self.base_url)
+        factory = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+        conn = factory(parsed.hostname, parsed.port, timeout=max(60, self.timeout))
+        try:
+            conn.putrequest("POST", path, skip_accept_encoding=True)
+            conn.putheader("Authorization", "Bearer " + self.token)
+            conn.putheader("Content-Type", "application/octet-stream")
+            conn.putheader("Content-Length", str(size))
+            conn.putheader("X-Content-SHA256", digest.hexdigest())
+            if kind == "soundtrack":
+                from urllib.parse import quote as urlquote
+                conn.putheader("X-Audio-Filename", urlquote(source.name, safe=""))
+                conn.putheader("X-Audio-Offset-Seconds", "0")
+            elif kind == "source-image":
+                conn.putheader("X-Filename", source.name)
+            conn.endheaders()
+            with source.open("rb") as file:
+                sent = 0
+                for block in iter(lambda: file.read(1024 * 1024), b""):
+                    conn.send(block)
+                    sent += len(block)
+            if sent != size or source.stat().st_size != size:
+                raise ClientError("Local file changed during upload; inspect remote asset before retry.")
+            response = conn.getresponse()
+            body = response.read(1024 * 1024)
+            if response.status >= 400:
+                try:
+                    error = json.loads(body)
+                    message = (error.get("error") or {}).get("message") or error.get("detail", "")
+                except ValueError:
+                    message = response.reason
+                raise ClientError(
+                    f"HTTP {response.status}: {message}", status=response.status
+                )
+            try:
+                return json.loads(body)
+            except ValueError as exc:
+                raise ClientError("Upload response was not JSON.") from exc
+        except (OSError, http.client.HTTPException) as exc:
+            raise ClientError(
+                "Upload connection interrupted. Check asset catalog before retrying."
+            ) from exc
+        finally:
+            conn.close()
 
     def handshake(self) -> dict:
         health = self.request("GET", "/api/health")

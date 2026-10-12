@@ -29,6 +29,7 @@ ERROR_CODES = {
     404: "NOT_FOUND",
     405: "METHOD_NOT_ALLOWED",
     409: "CONFLICT",
+    412: "PRECONDITION_FAILED",
     413: "PAYLOAD_TOO_LARGE",
     422: "VALIDATION_ERROR",
     429: "RATE_LIMITED",
@@ -103,10 +104,12 @@ def capabilities(*, mode: str, video_export: dict) -> dict:
             "source_image_upload": True,
             "motion_lab_wav_analysis_upload": True,
             "soundtrack_attachment_upload": True,
-            "soundtrack_attachment_download": False,
+            "soundtrack_attachment_download": True,
+            "motion_lab_wav_download": True,
+            "project_asset_listing": True,
             "job_events_sse": False,
             "idempotent_submissions": False,
-            "conditional_project_saves": False,
+            "conditional_project_saves": True,
         },
         "transfers": {
             "source_image": {
@@ -117,7 +120,7 @@ def capabilities(*, mode: str, video_export: dict) -> dict:
             },
             "motion_lab_audio": {
                 "upload": "/api/animation/projects/{project_id}/motion-lab/audio-analyze",
-                "download": None,
+                "download": "/api/animation/projects/{project_id}/motion-lab/audio/{sha256}",
                 "max_bytes": MAX_AUDIO_BYTES,
                 "max_duration_seconds": MAX_SECONDS,
                 "formats": ["pcm-wav"],
@@ -125,11 +128,12 @@ def capabilities(*, mode: str, video_export: dict) -> dict:
             "soundtrack_attachment": {
                 "upload": "/api/animation/projects/{project_id}/motion-import/soundtrack",
                 "metadata": "/api/animation/projects/{project_id}/motion-import/soundtrack",
-                "download": None,
+                "download": "/api/animation/projects/{project_id}/motion-import/soundtrack/file",
                 "max_bytes": MAX_IMPORT_AUDIO_BYTES,
                 "formats": ["wav", "mp3", "ogg", "flac"],
             },
         },
+        "project_assets": "/api/animation/projects/{project_id}/assets",
         "video": {
             "available": bool(video_export.get("available")),
             "formats": video_export.get("formats", []),
