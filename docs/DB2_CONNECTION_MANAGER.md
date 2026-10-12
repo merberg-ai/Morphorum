@@ -100,7 +100,7 @@ After provisioning an actual client token on Ubuntu, repeat using `--token-file 
 RESULT: 6/6 PASSED
 ```
 
-The detailed log remains on Ubuntu Mini at `~/tmp/db2-connection-test.log`. The subsequent operator attempted Windows PowerShell `clients issue/list` commands inside an Ubuntu Mini Bash session and received command-not-found errors. These do **not** indicate a credential-system failure: provisioning commands must run locally on the Windows Omen in a separate PowerShell terminal while the backend continues running. Follow-up per-client issue, authenticated use, revocation, and post-revocation HTTP 401 are **not yet tested**. No DB2.2 acceptance checkpoint or merge should be made until those tests pass.
+The detailed log remains on Ubuntu Mini at `~/tmp/db2-connection-test.log`. The subsequent operator attempted Windows PowerShell `clients issue/list` commands inside an Ubuntu Mini Bash session and received command-not-found errors. These do **not** indicate a credential-system failure: provisioning commands must run locally on the Windows Omen in a separate PowerShell terminal while the backend continues running. The user subsequently reported that the connection tests passed after receiving instructions for individual-client provisioning and revocation. The specific **post-revocation HTTP 401 / `1/1 PASSED`** result was not separately quoted, so confirm whether that security gate was included before marking full DB2.2 physical acceptance. No merge has been authorized.
 
 ## CI and physical acceptance gates
 
