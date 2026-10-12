@@ -51,9 +51,9 @@ def test_per_client_token_issue_revoke_and_legacy_compat(credential_registry):
 def test_expired_token_and_invalid_registry_fail_closed(credential_registry, monkeypatch):
     token, _ = cc.issue_client_token("Temporary", lifetime_days=1)
     assert cc.authorized_client_token(token)
-    monkeypatch.setattr(cc.time, "time", lambda: 9999999999.0)
-    assert not cc.authorized_client_token(token)
-    monkeypatch.undo()
+    with monkeypatch.context() as local_patch:
+        local_patch.setattr(cc.time, "time", lambda: 9999999999.0)
+        assert not cc.authorized_client_token(token)
     # Mutate only the real fixture registry, not any test-wide installation file.
     registry_file = credential_registry / "clients.json"
     registry_file.write_text("corrupt")
