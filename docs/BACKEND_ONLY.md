@@ -75,6 +75,14 @@ Code location: `animation_render.py` wraps `Camera3DError` from `animation_3d.re
 
 **Next controlled gate:** Inspect saved/normalized camera values around frames 80–84 using `POST /api/animation/resolve-frame` (note that the saved project may differ from the frozen render manifest if edited). Then render a **24-frame, neutral 3D-camera in-memory variant** of the project, with all camera-3D axes zero and a 40-degree FOV, avoiding edits to the saved project and retaining the prior 84 rendered PNGs. If that completes, retrieve the API's `preview_url` or direct authenticated `/preview` GIF. Separately test a motion-enabled configuration at bounded amplitudes. DB1 full animation-render parity remains **unverified**, and neither this issue nor the earlier model-ID/script-field mismatch implicates the LAN transport layer.
 
+## Follow-up: successful corrected remote animation (2026-10-12)
+
+**User-reported result:** After correcting the camera settings in the saved `api-test-short` project, the user reran the original Ubuntu Mini remote animation test script and **the render finished successfully**. This confirms remote API-driven SDXL animation submission and successful completion on the Windows GPU backend. The preceding 84-frame 3D projection failure was due to incorrect camera settings in that project. Do not interpret the earlier failure as proof of a rendering-engine or networking bug.
+
+**Deferred UI issue:** Investigate the Morphorum browser **New Project Wizard**. The user reports a camera-setting setup issue that led to the invalid 3D configuration. Reproduce and validate wizard defaults, applied 3D motion schedules and saved project camera values. Fix in the web UI workstream later, not as part of DB1 backend startup.
+
+**Not yet separately confirmed:** Successful authenticated download/playback of this completed run's `preview.gif` from Ubuntu Mini, MP4/WebM export and the usual browser-mode regression. The older script's `preview_url` download logic may need separate verification. Retain the original failed render and its 84 completed frames for diagnostics. Keep `dev-backend` isolated from `main` pending any outstanding acceptance gates.
+
 ## Physical DB1 acceptance checklist
 
 1. Switch the Morphorum installation to `dev-backend`. Start normal `run.bat`; verify browser loads and animation/model functionality remains available at its configured port.
