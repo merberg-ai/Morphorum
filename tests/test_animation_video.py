@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import time
@@ -274,3 +275,78 @@ def test_ml41_real_ffmpeg_soundtrack_export_when_available(tmp_path):
         assert probe.returncode == 0, probe.stderr
         streams = probe.stdout.split()
         assert "video" in streams and "audio" in streams
+
+
+def test_dmi3_imported_soundtrack_uses_frozen_render_copy_and_preview_offset(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    project_id, render_id, root = _render_fixture(tmp_path, monkeypatch, frames=24)
+    payload = json.loads((root / "render-manifest.json").read_text())
+    data = b"ID3" + b"frozen-track" * 12
+    digest = hashlib.sha256(data).hexdigest()
+    payload["project"]["_imported_soundtrack_snapshot"] = {
+        "schema_version": 1,
+        "sha256": digest,
+        "format": "mp3",
+        "filename": "song.mp3",
+        "bytes": len(data),
+        "offset_seconds": 1.25,
+        "render_filename": "imported-soundtrack.mp3",
+    }
+    (root / "render-manifest.json").write_text(json.dumps(payload))
+    frozen = root / "imported-soundtrack.mp3"
+    frozen.write_bytes(data)
+
+    path, offset, source = video._render_audio_plan(project_id, render_id, payload)
+    assert path == frozen
+    assert offset == pytest.approx(1.25)
+    assert source == "imported_soundtrack"
+
+    positive = video._command(
+        "ffmpeg", input_pattern=Path("frame_%06d.png"),
+        destination=Path("positive.mp4"), frame_count=24,
+        format="mp4", quality="balanced", fps=12, audio_path=frozen,
+        audio_offset_seconds=1.25,
+    )
+    assert positive[positive.index("-af") + 1] == (
+        "atrim=start=1.250000,asetpts=PTS-STARTPTS,apad"
+    )
+
+    negative = video._command(
+        "ffmpeg", input_pattern=Path("frame_%06d.png"),
+        destination=Path("negative.mp4"), frame_count=24,
+        format="mp4", quality="balanced", fps=12, audio_path=frozen,
+        audio_offset_seconds=-0.75,
+    )
+    assert negative[negative.index("-af") + 1] == "adelay=750:all=1,apad"
+
+
+def test_dmi3_video_export_refuses_imported_and_motion_lab_audio_conflict(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    project_id, render_id, root = _render_fixture(tmp_path, monkeypatch)
+    payload = json.loads((root / "render-manifest.json").read_text())
+    motion_digest = "a" * 64
+    payload["project"]["motion_lab"] = {
+        "layers": [{"type": "audio", "enabled": True, "sha256": motion_digest}]
+    }
+    project_root = tmp_path / "project"
+    motion_dir = project_root / "motion_lab_audio"
+    motion_dir.mkdir(parents=True)
+    (motion_dir / (motion_digest + ".wav")).write_bytes(b"motion")
+    monkeypatch.setattr(video, "animation_project_directory", lambda _p: project_root)
+
+    imported = b"OggS" + b"imported" * 8
+    imported_digest = hashlib.sha256(imported).hexdigest()
+    payload["project"]["_imported_soundtrack_snapshot"] = {
+        "schema_version": 1,
+        "sha256": imported_digest,
+        "format": "ogg",
+        "filename": "imported.ogg",
+        "bytes": len(imported),
+        "offset_seconds": 0,
+        "render_filename": "imported-soundtrack.ogg",
+    }
+    (root / "imported-soundtrack.ogg").write_bytes(imported)
+    with pytest.raises(video.VideoExportError, match="both Motion Lab audio"):
+        video._render_audio_plan(project_id, render_id, payload)
