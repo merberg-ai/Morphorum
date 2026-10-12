@@ -93,5 +93,5 @@ def test_windows_backend_only_wrapper_preserves_normal_launch() -> None:
     assert '"--lan"' in wrapper
     assert '"--port"' in wrapper
     assert '[switch]$BackendOnly' in runner
-    assert "if ($BackendOnly) { $Port = 7866 }" in runner
+    assert "if ($BackendOnly -and -not $PSBoundParameters.ContainsKey('Port')) { $Port = 7866 }" in runner
     assert "'--backend-only'" in runner
