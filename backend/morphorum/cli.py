@@ -11,7 +11,7 @@ from PIL import Image
 
 from . import __version__
 from .animation_motion import _frame_transform_matrix, render_affine
-from .app import app
+from .backend_access import backend_token_file, resolve_backend_token
 from .paths import ensure_runtime_dirs
 from .animation_projects import seed_example_animation_project
 from .system_info import doctor_report, write_install_manifest
@@ -19,8 +19,36 @@ from .system_info import doctor_report, write_install_manifest
 
 def command_serve(args: argparse.Namespace) -> int:
     ensure_runtime_dirs()
-    host = args.host or os.getenv("MORPHORUM_HOST_OVERRIDE", "127.0.0.1")
-    port = args.port or int(os.getenv("MORPHORUM_PORT_OVERRIDE", "7865"))
+    backend_only = bool(getattr(args, "backend_only", False))
+    lan = bool(getattr(args, "lan", False))
+    requested_host = getattr(args, "host", None)
+    if lan and requested_host and requested_host != "0.0.0.0":
+        print("--lan conflicts with --host (expected 0.0.0.0).", file=sys.stderr)
+        return 2
+
+    if backend_only:
+        # Do not inherit the standard browser server port or LAN defaults.
+        host = requested_host or ("0.0.0.0" if lan else
+                                  os.getenv("MORPHORUM_BACKEND_HOST_OVERRIDE", "127.0.0.1"))
+        port = args.port or int(os.getenv("MORPHORUM_BACKEND_PORT_OVERRIDE", "7866"))
+        try:
+            resolve_backend_token()
+        except (RuntimeError, OSError, ValueError) as exc:
+            print(f"Backend authentication initialization failed: {exc}", file=sys.stderr)
+            return 2
+        os.environ["MORPHORUM_BACKEND_ONLY"] = "1"
+        print(f"Morphorum backend-only API: {host}:{port} (authentication required)")
+        if os.getenv("MORPHORUM_BACKEND_TOKEN", "").strip():
+            print("Authentication: MORPHORUM_BACKEND_TOKEN environment variable.")
+        else:
+            print(f"Authentication token file: {backend_token_file()}")
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            print("LAN/API exposure enabled. Use only trusted networks or a VPN; never expose publicly.")
+    else:
+        host = requested_host or ("0.0.0.0" if lan else os.getenv("MORPHORUM_HOST_OVERRIDE", "127.0.0.1"))
+        port = args.port or int(os.getenv("MORPHORUM_PORT_OVERRIDE", "7865"))
+        os.environ.pop("MORPHORUM_BACKEND_ONLY", None)
+
     env_access_log = str(os.getenv("MORPHORUM_ACCESS_LOG", "")).strip().lower()
     access_log = bool(args.access_log) or env_access_log in {"1", "true", "yes", "on"}
     uvicorn.run(
@@ -50,6 +78,8 @@ def command_doctor(args: argparse.Namespace) -> int:
 
 
 def command_self_test(_: argparse.Namespace) -> int:
+    from .app import app
+
     ensure_runtime_dirs()
     try:
         try:
@@ -230,6 +260,10 @@ def build_parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="Start the Morphorum API server.")
     serve.add_argument("--host")
     serve.add_argument("--port", type=int)
+    serve.add_argument("--backend-only", action="store_true",
+                       help="Serve API endpoints only; bearer token required.")
+    serve.add_argument("--lan", action="store_true",
+                       help="Explicitly bind to 0.0.0.0 (LAN; authenticate clients).")
     serve.add_argument(
         "--access-log",
         action="store_true",
