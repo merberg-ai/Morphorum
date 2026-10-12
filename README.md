@@ -89,7 +89,7 @@ See [First steps](docs/GETTING_STARTED.md) for a guided walkthrough of still ima
 | **New Project Wizard** | Guided seven-step project creation with contextual help, model-specific defaults, prompts/keyframes, motion presets, and a final review and save. |
 | **Project Manager** | Search, inspect, create, open, rename, and move animation projects to Trash. |
 | **Live Recording** | Record camera movement with keyboard/touch controls and supported browser gamepads. |
-| **Audio Motion** | Analyze audio and map rhythm/frequency bands to camera movement; export sound with animation when configured. |
+| **Import Motion Settings** | Inspect Deforum Motion Studio `.txt`/`.json` camera schedules, apply compatible six-axis motion to a matching 3D project, and optionally synchronize exported audio. |
 | **Render Monitor / Outputs** | Monitor long renders; preview frames, pause/resume/cancel supported jobs, and export MP4/WebM. |
 | **Models / LoRAs** | Scan external model and LoRA folders, inspect metadata, and insert compatible LoRA tags into prompts. A no-model warning provides setup instructions when no checkpoint is available. |
 | **Settings / Console** | Choose four dark themes, select UI/monospace fonts, manage model paths, and view diagnostic logs. |
@@ -100,12 +100,14 @@ The **version badge** in the top-right corner also links directly to this reposi
 
 Additional functionality includes Deforum-style timeline/schedule controls, selected legacy Deforum settings import, video-source inspection/extraction and hybrid-frame workflows. **Legacy imports are not guaranteed to reproduce every Deforum extension or unsupported setting.**
 
+For an existing 3D project, use **Motion Lab → Import Motion Settings** to import camera curves from a Deforum Motion Studio export. The importer provides preview, camera compatibility conversion, 0–400% translation/rotation controls, guarded Apply, and optional soundtrack attachment for new renders. See the [Deforum Motion Settings Import guide](docs/DEFORUM_MOTION_SETTINGS_IMPORT.md).
+
 > [!NOTE]
 > **Model availability matters.** Morphorum does not ship SDXL, FLUX, or Z-Image checkpoints. Some advanced workflows need substantial NVIDIA GPU VRAM, disk space, or FFmpeg. A model must be downloaded or indexed before you can render an image or animation.
 
 ## First animation: use the New Project Wizard
 
-For a new project, open **Motion Lab → New Project Wizard**. It guides you through **Name → Model → Animation Setup → Prompts & Keyframes → Camera Motion → Generation Settings → Review & Save**, with help hints and Back/Next controls. The wizard uses the same default-project schema as Project Editor, validates schedules, and **does not create a project until you select Save Project & Open Editor**. The final screen introduces optional Audio Motion. See the [complete wizard walkthrough](docs/NEW_PROJECT_WIZARD.md).
+For a new project, open **Motion Lab → New Project Wizard**. It guides you through **Name → Model → Animation Setup → Prompts & Keyframes → Camera Motion → Generation Settings → Review & Save**, with help hints and Back/Next controls. The wizard uses the same default-project schema as Project Editor, validates schedules, and **does not create a project until you select Save Project & Open Editor**. The final screen notes optional advanced audio workflows, which are separate from the beginner wizard. See the [complete wizard walkthrough](docs/NEW_PROJECT_WIZARD.md).
 
 If no checkpoints are available, a translucent **No generation models available** banner links to setup instructions for Z-Image-Turbo downloads and SDXL/FLUX/LoRA directories. Your selected model is required to complete the wizard.
 
@@ -158,6 +160,7 @@ For detailed system preparation, troubleshooting, and an explanation of what the
 | --- | --- |
 | **[Getting started](docs/GETTING_STARTED.md)** | Your first image, animation, model, and export |
 | **[New Project Wizard](docs/NEW_PROJECT_WIZARD.md)** | Step-by-step project setup, motion presets, hints, validation, and saving |
+| **[Deforum Motion Settings Import](docs/DEFORUM_MOTION_SETTINGS_IMPORT.md)** | Import six-axis camera curves from Deforum Motion Studio, calibrate strengths, attach audio, and export |
 | **[Installation & maintenance](docs/INSTALLATION.md)** | Windows/Linux install, ports, update, repair, paths, logs |
 | **[Troubleshooting](docs/TROUBLESHOOTING.md)** | Common download, GPU, startup, port, and render problems |
 | **[Features & current status](docs/CURRENT_STATUS.md)** | What is implemented, limitations, and development branches |
