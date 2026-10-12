@@ -83,6 +83,8 @@ from .animation_video import (
 from .schedules import ScheduleError
 from .client_protocol import capabilities as client_capabilities, error_response
 from .client_submissions import SubmissionConflict, submit_once
+from .client_events import job_event_stream
+from .client_protocol import BOOT_ID
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -1739,18 +1741,54 @@ def generation_image(job_id: str, filename: str):
 
 @app.get("/api/console")
 def get_console(after_id: int = 0, limit: int = 500) -> dict[str, Any]:
-    return {"events": snapshot(after_id=after_id, limit=limit)}
+    return {"events": snapshot(after_id=after_id, limit=limit), "boot_id": BOOT_ID}
 
 
 @app.get("/api/console/stream")
-def stream_console(after_id: int = 0):
+def stream_console(after_id: int = 0, boot_id: str | None = None):
     return StreamingResponse(
-        sse_events(after_id),
+        sse_events(after_id, previous_boot_id=boot_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "X-Backend-Boot-ID": BOOT_ID,
+        },
+    )
+
+
+@app.get("/api/client/jobs/{kind}/{job_id}/events")
+def api_client_job_events(kind: str, job_id: str, boot_id: str | None = None):
+    if kind == "animation":
+        def get_job():
+            try:
+                return animation_render_manager.get(job_id)
+            except AnimationRenderError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+    elif kind == "image":
+        def get_job():
+            job = generation_manager.get(job_id)
+            if job is None:
+                raise HTTPException(status_code=404, detail="Generation job not found")
+            return job
+    elif kind == "video":
+        def get_job():
+            try:
+                return video_export_manager.get(job_id)
+            except VideoExportError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported job kind.")
+    get_job()  # Return 404 before streaming rather than after response starts.
+    return StreamingResponse(
+        job_event_stream(kind, get_job, previous_boot_id=boot_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "X-Backend-Boot-ID": BOOT_ID,
         },
     )
 
