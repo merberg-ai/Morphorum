@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
 import time
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from .backend_access import authorized_backend_request
 from .animation_projects import (
     AnimationProjectError,
     animation_project_directory,
@@ -98,6 +100,8 @@ from .system_info import (
     windows_gpu_process_memory,
 )
 
+BACKEND_ONLY = os.getenv("MORPHORUM_BACKEND_ONLY", "") == "1"
+
 FRONTEND_DIR = ROOT / "frontend" / "dist"
 FRONTEND_INDEX = FRONTEND_DIR / "index.html"
 ASSET_DIR = FRONTEND_DIR / "assets"
@@ -115,7 +119,7 @@ def _frontend_asset_version() -> str:
     return digest.hexdigest()[:12]
 
 
-FRONTEND_ASSET_VERSION = _frontend_asset_version()
+FRONTEND_ASSET_VERSION = None if BACKEND_ONLY else _frontend_asset_version()
 
 
 @asynccontextmanager
@@ -132,14 +136,28 @@ app = FastAPI(
     version=__version__,
     description="Morphorum local AI image and animation studio.",
     lifespan=lifespan,
+    docs_url=None if BACKEND_ONLY else "/docs",
+    redoc_url=None if BACKEND_ONLY else "/redoc",
+    openapi_url=None if BACKEND_ONLY else "/openapi.json",
 )
 
-if ASSET_DIR.exists():
+if not BACKEND_ONLY and ASSET_DIR.exists():
     app.mount("/assets", StaticFiles(directory=ASSET_DIR), name="assets")
 
 
 @app.middleware("http")
 async def api_console_middleware(request: Request, call_next):
+    # API-only mode has no browser shell; every API endpoint (including SSE,
+    # preview files, settings and status) requires the shared bearer token.
+    if BACKEND_ONLY and request.url.path.startswith("/api/"):
+        if request.headers.get("origin") is not None:
+            return JSONResponse({"detail": "Browser-origin API requests are disabled."}, status_code=403)
+        if not authorized_backend_request(request.headers.get("authorization")):
+            return JSONResponse(
+                {"detail": "Backend API authentication required."},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     started = time.perf_counter()
     try:
         response = await call_next(request)
@@ -170,7 +188,6 @@ async def api_console_middleware(request: Request, call_next):
     return response
 
 
-@app.get("/", include_in_schema=False)
 def root():
     if FRONTEND_INDEX.exists():
         html = FRONTEND_INDEX.read_text(encoding="utf-8")
@@ -180,6 +197,10 @@ def root():
         "<h1>Morphorum</h1><p>Frontend assets are missing. Run the Morphorum repair command.</p>",
         status_code=503,
     )
+
+
+if not BACKEND_ONLY:
+    app.add_api_route("/", root, methods=["GET"], include_in_schema=False)
 
 
 @app.get("/api/health")
@@ -192,6 +213,8 @@ def health() -> dict:
         "git_commit": git_commit(),
         "git_commit_full": git_commit_full(),
         "frontend_asset_version": FRONTEND_ASSET_VERSION,
+        "mode": "backend-only" if BACKEND_ONLY else "standard",
+        "api_contract_version": 1,
         "root": str(ROOT),
     }
 
