@@ -107,8 +107,10 @@ def capabilities(*, mode: str, video_export: dict) -> dict:
             "soundtrack_attachment_download": True,
             "motion_lab_wav_download": True,
             "project_asset_listing": True,
-            "job_events_sse": False,
-            "idempotent_submissions": False,
+            "job_events_sse": True,
+            "idempotent_submissions": True,
+            "job_events_replayable": False,
+            "console_gap_detection": True,
             "conditional_project_saves": True,
         },
         "transfers": {
@@ -140,7 +142,13 @@ def capabilities(*, mode: str, video_export: dict) -> dict:
             "qualities": video_export.get("qualities", []),
         },
         "models": {"families": ["sdxl", "flux", "zimage"]},
-        "events": {"console": "/api/console/stream", "job_events": None},
+        "events": {
+            "console": "/api/console/stream",
+            "job_events": "/api/client/jobs/{kind}/{job_id}/events",
+            "durable_replay": False,
+            "restart_indicator": "boot_id",
+        },
+        "submissions": {"idempotency_header": "Idempotency-Key", "pending_policy": "HTTP 409"},
     }
 
 

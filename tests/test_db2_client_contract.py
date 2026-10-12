@@ -69,8 +69,10 @@ def test_standard_client_capabilities_and_backward_compatible_error():
         assert info["authentication"]["required"] is False
         assert info["features"]["animation_render"]
         assert info["features"]["animation_gif_download"]
-        assert info["features"]["job_events_sse"] is False
-        assert info["features"]["idempotent_submissions"] is False
+        assert info["features"]["job_events_sse"] is True
+        assert info["features"]["job_events_replayable"] is False
+        assert info["features"]["idempotent_submissions"] is True
+        assert info["submissions"]["idempotency_header"] == "Idempotency-Key"
         assert info["features"]["soundtrack_attachment_download"] is True
         assert info["features"]["project_asset_listing"] is True
         assert info["features"]["conditional_project_saves"] is True
