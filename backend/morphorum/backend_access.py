@@ -12,6 +12,7 @@ import stat
 from functools import lru_cache
 from pathlib import Path
 
+from .client_credentials import authorized_client_token
 from .paths import DATA_DIR, ensure_runtime_dirs
 
 TOKEN_PATH = DATA_DIR / "backend-access-token"
@@ -59,4 +60,4 @@ def authorized_backend_request(header: str | None) -> bool:
     if not header or not header.startswith("Bearer "):
         return False
     offered = header.removeprefix("Bearer ").strip()
-    return bool(offered) and hmac.compare_digest(offered, resolve_backend_token())
+    return bool(offered) and (hmac.compare_digest(offered, resolve_backend_token()) or authorized_client_token(offered))

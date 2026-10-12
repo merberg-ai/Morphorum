@@ -84,6 +84,8 @@ def capabilities(*, mode: str, video_export: dict) -> dict:
             "required": mode == "backend-only",
             "methods": ["bearer"] if mode == "backend-only" else [],
             "per_client_pairing": False,
+            "per_client_credentials": True,
+            "provisioning": "local-host-admin-only",
         },
         "features": {
             "model_discovery": True,

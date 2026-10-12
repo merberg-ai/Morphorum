@@ -207,7 +207,13 @@ def _token(args: argparse.Namespace) -> str:
             return Path(args.token_file).expanduser().read_text(encoding="ascii").strip()
         except OSError as exc:
             raise ClientError(f"Could not read token file: {exc.strerror}") from exc
-    return os.getenv("MORPHORUM_BACKEND_TOKEN", "").strip()
+    supplied = os.getenv("MORPHORUM_BACKEND_TOKEN", "").strip()
+    if supplied:
+        return supplied
+    if getattr(args, "profile", None):
+        from morphorum_connections import keyring_get
+        return keyring_get(args.profile) or ""
+    return ""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -215,7 +221,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--url", default="http://127.0.0.1:7866")
     parser.add_argument("--token-file", help="Trusted token-file path; no token in shell arguments")
     parser.add_argument("--timeout", type=float, default=20)
+    parser.add_argument("--profile", help="Select a stored connection profile.")
     commands = parser.add_subparsers(dest="command", required=True)
+    profiles = commands.add_parser("profile", help="Manage named, non-secret connections.")
+    profile_cmd = profiles.add_subparsers(dest="profile_action", required=True)
+    add = profile_cmd.add_parser("add")
+    add.add_argument("name")
+    add.add_argument("origin")
+    add.add_argument("--label", default="")
+    profile_cmd.add_parser("list")
+    remove = profile_cmd.add_parser("remove")
+    remove.add_argument("name")
+    secret = profile_cmd.add_parser("set-secret", help="Prompt for token; store in OS keyring.")
+    secret.add_argument("name")
+    drop_secret = profile_cmd.add_parser("forget-secret")
+    drop_secret.add_argument("name")
+    connect = commands.add_parser("connect", help="Probe a named backend with identity pinning.")
+    connect.add_argument("name")
+    connect.add_argument("--attempts", type=int, default=3)
+    connect.add_argument("--trust-first", action="store_true",
+                         help="Pin the first backend identity after out-of-band verification.")
+    connect.add_argument("--replace-instance", action="store_true",
+                         help="Explicitly accept a different backend identity (verify host first).")
     commands.add_parser("doctor")
     models = commands.add_parser("models")
     models.add_argument("--family", default="sdxl")
@@ -237,7 +264,49 @@ def main(argv: list[str] | None = None) -> int:
     preview.add_argument("--output", default="morphorum-preview.gif")
     args = parser.parse_args(argv)
     try:
-        client = MorphorumClient(args.url, _token(args), timeout=args.timeout)
+        if args.command in ("profile", "connect") or args.profile:
+            from morphorum_connections import (
+                ProfileStore, ConnectionManager, keyring_set, keyring_delete,
+            )
+            store = ProfileStore()
+        if args.command == "profile":
+            if args.profile_action == "add":
+                store.add(args.name, args.origin, args.label)
+                print("[PASS] Profile saved (no token stored):", args.name)
+            elif args.profile_action == "list":
+                for name, item in store.load()["profiles"].items():
+                    print(name, item["url"], "pinned" if item["instance_id"] else "unverified")
+            elif args.profile_action == "remove":
+                store.remove(args.name)
+                print("[PASS] Profile removed (OS secret, if present, remains until forgotten):", args.name)
+            elif args.profile_action == "set-secret":
+                import getpass
+                store.get(args.name)
+                token = getpass.getpass("Backend token (not echoed): ")
+                keyring_set(args.name, token)
+                print("[PASS] Credential saved in OS keyring:", args.name)
+            elif args.profile_action == "forget-secret":
+                keyring_delete(args.name)
+                print("[PASS] OS credential deleted:", args.name)
+            return 0
+        if args.command == "connect":
+            args.profile = args.name
+            result = ConnectionManager(
+                store, lambda url, token: MorphorumClient(url, token, timeout=args.timeout)
+            ).connect(
+                args.name, _token(args), attempts=args.attempts,
+                trust_first=args.trust_first,
+                replace_identity=args.replace_instance,
+            )
+            print("[PASS] Authenticated and API compatible")
+            print("[PASS] Backend identity:", result["boot"])
+            print("[PASS] Connection:", result["url"], "mode=" + str(result["backend_mode"]))
+            if result["insecure_lan_http"]:
+                print("[WARN] Plain HTTP LAN: use only trusted LAN or encrypted VPN/tunnel.")
+            print("RESULT: PASS; backend process ownership: attached, not controlled.")
+            return 0
+        url = store.get(args.profile)["url"] if args.profile else args.url
+        client = MorphorumClient(url, _token(args), timeout=args.timeout)
         if args.command == "doctor":
             data = client.handshake()
             print(json.dumps({
@@ -282,8 +351,8 @@ def main(argv: list[str] | None = None) -> int:
             path = f"/api/animation/renders/{project}/{render_id}/preview"
             print("Saved:", client.download(path, Path(args.output), file_type="gif"))
         return 0
-    except ClientError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+    except (ClientError, RuntimeError) as exc:
+        print(f"[FAIL] {exc}", file=sys.stderr)
         return 2
 
 
