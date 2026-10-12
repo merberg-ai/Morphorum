@@ -105,7 +105,8 @@ class MorphorumClient:
             if part.stat().st_size == 0:
                 raise ClientError("Downloaded file was empty.")
             if file_type:
-                magic = part.open("rb").read(12)
+                with part.open("rb") as sample:
+                    magic = sample.read(12)
                 if file_type == "png" and not magic.startswith(b"\x89PNG\r\n\x1a\n"):
                     raise ClientError("Image download is not a PNG.")
                 if file_type == "gif" and magic[:6] not in (b"GIF87a", b"GIF89a"):
