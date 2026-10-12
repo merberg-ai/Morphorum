@@ -174,3 +174,13 @@ The client refuses external redirects, accepts only same-backend `/api/` downloa
 5. Stop for user confirmation before DB2.2. Do not merge `dev-backend` or `main` automatically.
 
 **Explicitly not built in DB2.1:** per-client pairing/revocation, new general media transfer API, soundtrack binary download, idempotent job submission, persistent job event SSE, concurrency/ETag, Qt connection panel.
+
+## DB2.1 acceptance recorded (2026-10-12)
+
+**Automated:** GitHub Actions at code commit `8fe589fb52232339107cd3d5a3a18e172ff3274b` passed **506 tests, 1 skipped, 0 failed**, including Morphorum self-test; syntax/browser JavaScript checks and installer checks also passed.
+
+**Physical remote client:** The user switched the Windows Omen backend-only service to `feature/db2-client-contract` and ran the Ubuntu Mini reference client checks for `doctor`, `models`, `projects`, and authenticated download/validation of a prior successful animation GIF. **User reports all physical commands completed successfully.** The user was on a phone with ConnectBot and could not conveniently copy the complete console output; therefore the detailed JSON/diagnostic transcript was not independently reviewed in this record. Do not reinterpret that limitation as a failed test.
+
+**Acceptance:** DB2.1 Ubuntu remote-client acceptance **passed by user report**, pending separate normal browser-mode GPU regression from the DB1 backlog. DB2.2 may be planned next. Draft PR #27 remains open and **unmerged**; `dev-backend` and `main` have not been advanced.
+
+**Mobile-friendly test output convention going forward:** Make acceptance scripts print brief, individually labeled PASS/FAIL lines and a final summary, with full logs retained as files on the test machine. Never print bearer tokens. Do not require users to paste long terminal output merely to confirm success.
