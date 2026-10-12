@@ -5,7 +5,9 @@ completed render has a frozen project/seed manifest and a sequential PNG set.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -124,7 +126,7 @@ def _validate_options(
 
 
 def _render_audio_source(project_id: str, manifest: dict[str, Any]) -> Path | None:
-    """Select project-owned WAV pinned by the completed render's frozen layers."""
+    """Select Motion Lab WAV pinned by the completed render's frozen layers."""
     layers = ((manifest.get("project") or {}).get("motion_lab") or {}).get("layers") or []
     hashes = {str(layer.get("sha256") or "") for layer in layers
               if isinstance(layer, dict) and layer.get("type") == "audio"
@@ -141,6 +143,74 @@ def _render_audio_source(project_id: str, manifest: dict[str, Any]) -> Path | No
     if not source.is_file():
         raise VideoExportError("Analyzed WAV for this render is missing. Restore the project WAV.")
     return source
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise VideoExportError(f"Could not read frozen soundtrack: {exc}") from exc
+    return digest.hexdigest()
+
+
+def _imported_render_audio_source(
+    project_id: str,
+    render_id: str,
+    manifest: dict[str, Any],
+) -> tuple[Path, float] | None:
+    snapshot = (manifest.get("project") or {}).get("_imported_soundtrack_snapshot")
+    if snapshot is None:
+        return None
+    if not isinstance(snapshot, dict):
+        raise VideoExportError("Imported soundtrack snapshot is invalid.")
+    fmt = str(snapshot.get("format") or "")
+    if fmt not in {"wav", "mp3", "ogg", "flac"}:
+        raise VideoExportError("Imported soundtrack format is invalid.")
+    digest = str(snapshot.get("sha256") or "")
+    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise VideoExportError("Imported soundtrack checksum is invalid.")
+    render_filename = str(snapshot.get("render_filename") or "")
+    expected_filename = "imported-soundtrack." + fmt
+    if render_filename != expected_filename:
+        raise VideoExportError("Imported soundtrack render filename is invalid.")
+    try:
+        offset = float(snapshot.get("offset_seconds", 0.0))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise VideoExportError("Imported soundtrack offset is invalid.") from exc
+    if not math.isfinite(offset) or abs(offset) > 30:
+        raise VideoExportError("Imported soundtrack offset must be within -30 and +30 seconds.")
+    source = _render_dir(project_id, render_id) / render_filename
+    if not source.is_file():
+        raise VideoExportError(
+            "Frozen imported soundtrack is missing from this render. Re-render after reattaching audio."
+        )
+    if _sha256_file(source) != digest:
+        raise VideoExportError(
+            "Frozen imported soundtrack checksum does not match the render manifest."
+        )
+    return source, offset
+
+
+def _render_audio_plan(
+    project_id: str,
+    render_id: str,
+    manifest: dict[str, Any],
+) -> tuple[Path | None, float, str | None]:
+    motion_lab = _render_audio_source(project_id, manifest)
+    imported = _imported_render_audio_source(project_id, render_id, manifest)
+    if motion_lab is not None and imported is not None:
+        raise VideoExportError(
+            "This render contains both Motion Lab audio and an imported soundtrack. "
+            "Remove one audio source and render again before exporting video."
+        )
+    if imported is not None:
+        return imported[0], imported[1], "imported_soundtrack"
+    if motion_lab is not None:
+        return motion_lab, 0.0, "motion_lab"
+    return None, 0.0, None
 
 
 def _export_path(project_id: str, render_id: str, format: str, quality: str, fps: int) -> Path:
@@ -162,6 +232,7 @@ def _command(
     quality: str,
     fps: int,
     audio_path: Path | None = None,
+    audio_offset_seconds: float = 0.0,
 ) -> list[str]:
     # x264 and VP9 yuv420p need even dimensions. The adjustment is applied
     # in FFmpeg, leaving original PNGs untouched.
@@ -179,7 +250,19 @@ def _command(
         "-pix_fmt", "yuv420p",
     ]
     if audio_path is not None:
-        command += ["-map", "1:a:0", "-af", "apad",
+        try:
+            offset = float(audio_offset_seconds)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise VideoExportError("Audio offset must be a finite number.") from exc
+        if not math.isfinite(offset) or abs(offset) > 30:
+            raise VideoExportError("Audio offset must be within -30 and +30 seconds.")
+        if offset > 1e-9:
+            audio_filter = f"atrim=start={offset:.6f},asetpts=PTS-STARTPTS,apad"
+        elif offset < -1e-9:
+            audio_filter = f"adelay={int(round(-offset * 1000))}:all=1,apad"
+        else:
+            audio_filter = "apad"
+        command += ["-map", "1:a:0", "-af", audio_filter,
                     "-t", f"{frame_count / fps:.6f}"]
     else:
         command += ["-an"]
@@ -215,6 +298,8 @@ class VideoExportJob:
     fps: int
     total_frames: int
     audio_included: bool = False
+    audio_source: str | None = None
+    audio_offset_seconds: float = 0.0
     created_at: str = field(default_factory=_timestamp)
     status: str = "queued"
     progress: float = 0.0
@@ -256,7 +341,9 @@ class VideoExportManager:
         ffmpeg = ffmpeg_executable()
         if ffmpeg is None:
             raise VideoExportError(export_availability()["message"])
-        soundtrack = _render_audio_source(project_id, manifest)
+        soundtrack, audio_offset, audio_source = _render_audio_plan(
+            project_id, render_id, manifest
+        )
         if soundtrack is not None:
             original_fps = float((manifest.get("project") or {}).get("animation", {}).get("fps") or 0)
             if abs(fps - original_fps) > 1e-6:
@@ -269,6 +356,8 @@ class VideoExportManager:
             project_id=project_id, render_id=render_id,
             format=fmt, quality=quality, fps=fps, total_frames=count,
             audio_included=soundtrack is not None,
+            audio_source=audio_source,
+            audio_offset_seconds=audio_offset,
         )
         with self._lock:
             if output in self._active_outputs:
@@ -276,7 +365,7 @@ class VideoExportManager:
             self._active_outputs.add(output)
             self._jobs[job.id] = job
         thread = threading.Thread(
-            target=self._run, args=(job, ffmpeg, output, soundtrack),
+            target=self._run, args=(job, ffmpeg, output, soundtrack, audio_offset),
             daemon=True, name=f"morphorum-{job.id}",
         )
         thread.start()
@@ -354,7 +443,14 @@ class VideoExportManager:
             raise VideoExportError("Video export is not complete.")
         return output
 
-    def _run(self, job: VideoExportJob, ffmpeg: str, output: Path, soundtrack: Path | None = None) -> None:
+    def _run(
+        self,
+        job: VideoExportJob,
+        ffmpeg: str,
+        output: Path,
+        soundtrack: Path | None = None,
+        audio_offset_seconds: float = 0.0,
+    ) -> None:
         temp = output.with_name(output.name + ".part")
         log_path = output.with_name(output.name + ".ffmpeg.log")
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -368,6 +464,7 @@ class VideoExportManager:
                 ffmpeg, input_pattern=output.parent.parent / "frames" / "frame_%06d.png",
                 destination=temp, frame_count=job.total_frames, format=job.format,
                 quality=job.quality, fps=job.fps, audio_path=soundtrack,
+                audio_offset_seconds=audio_offset_seconds,
             )
             # Only use argv, never a shell command. FFmpeg stderr is written
             # to a file, preventing the classic full-pipe deadlock.
