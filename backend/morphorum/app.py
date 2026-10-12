@@ -298,7 +298,7 @@ def api_prepare_project_motion_import(project_id: str, payload: dict[str, Any]) 
         current = load_animation_project(project_id)
         candidate, report = prepare_motion_import(
             payload.get("content"), filename=str(payload.get("filename") or ""),
-            project=current,
+            project=current, options=payload.get("conversion"),
         )
         digest = hashlib.sha256(json.dumps(
             current, sort_keys=True, separators=(",", ":")
@@ -306,6 +306,9 @@ def api_prepare_project_motion_import(project_id: str, payload: dict[str, Any]) 
         return {
             "can_apply": True, "project_sha256": digest,
             "source_sha256": report["source_sha256"],
+            "conversion_sha256": report["conversion_sha256"],
+            "conversion": report["conversion"],
+            "converted_schedules": report["converted_schedules"],
             "changed_axes": report["changed_axes"],
             "warnings": report["warnings"], "read_only": True,
         }
@@ -322,6 +325,8 @@ def api_apply_project_motion_import(project_id: str, payload: dict[str, Any]) ->
             filename=str(payload.get("filename") or ""),
             expected_source_sha256=str(payload.get("source_sha256") or ""),
             expected_project_sha256=str(payload.get("project_sha256") or ""),
+            options=payload.get("conversion"),
+            expected_conversion_sha256=str(payload.get("conversion_sha256") or ""),
         )
         return {"status": "applied", "project": saved,
                 "path": animation_project_path(project_id),

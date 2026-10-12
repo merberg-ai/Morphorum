@@ -95,7 +95,7 @@ def test_prepare_import_only_changes_six_camera_axes():
         "cadence":{"diffusion":"0:(3)"},
     },project_id="deforum-motion-import-test")
     imported, report=prepare_motion_import(source(),filename="motion.txt",project=p)
-    assert imported["tracks"]["camera_3d"]["translation_z"]["schedule"]=="0:(0),24:(1),119:(1)"
+    assert imported["tracks"]["camera_3d"]["translation_z"]["schedule"]=="0:(0),24:(-0.005),119:(-0.005)"
     assert imported["animation"]==p["animation"]
     assert imported["cadence"]==p["cadence"]
     assert imported["prompts"]==p["prompts"]
@@ -117,3 +117,36 @@ def test_prepare_rejects_incompatible_and_existing_motion_layers():
     p["motion_lab"]["layers"]=[{"id":"existing"}]
     with pytest.raises(DeforumImportError,match="Motion Lab"):
         prepare_motion_import(source(),filename="motion.txt",project=p)
+
+
+def test_compatibility_translation_and_strength():
+    from morphorum.animation_projects import normalize_animation_project
+    from morphorum.deforum_motion_import import prepare_motion_import
+    p=normalize_animation_project({
+        "name":"Conversion target","animation":{"mode":"3d","fps":24,"max_frames":120},
+        "cadence":{"diffusion":"0:(3)"}
+    },project_id="dmi-convert")
+    changed,report=prepare_motion_import(source(
+        translation_x="0:(200)",translation_y="0:(200)",translation_z="0:(200)",
+        rotation_3d_y="0:(5)"
+    ),filename="motion.txt",project=p)
+    tracks=changed["tracks"]["camera_3d"]
+    assert tracks["translation_x"]["schedule"]=="0:(-1)"
+    assert tracks["translation_y"]["schedule"]=="0:(1)"
+    assert tracks["translation_z"]["schedule"]=="0:(-1)"
+    assert tracks["rotation_y"]["schedule"]=="0:(5)"
+    raw,_=prepare_motion_import(source(),filename="motion.txt",project=p,
+        options={"mode":"raw","translation_strength":0.5,"rotation_strength":0.5})
+    assert raw["tracks"]["camera_3d"]["translation_z"]["schedule"]=="0:(0),24:(0.5),119:(0.5)"
+    assert raw["tracks"]["camera_3d"]["rotation_z"]["schedule"]=="0:(0),48:(-0.25),119:(0)"
+
+
+@pytest.mark.parametrize("options",[
+    {"mode":"invalid"},{"translation_strength":float("nan")},
+    {"rotation_strength":-1},{"translation_strength":3},{"translation_strength":True},
+    {"other":"unsafe"},
+])
+def test_unsafe_conversion_options_rejected(options):
+    from morphorum.deforum_motion_import import conversion_options
+    with pytest.raises(DeforumImportError):
+        conversion_options(options)

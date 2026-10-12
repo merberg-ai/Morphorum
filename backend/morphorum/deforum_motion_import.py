@@ -24,6 +24,49 @@ SOURCE_AXIS = {
 _KEYFRAME = re.compile(r"\s*(\d+)\s*:\s*\(\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*\)\s*")
 _MAX_SOURCE_FRAMES = 30000
 
+# Deforum anim_frame_warp_3d translates by 1/200 with X/Z inversions.
+# Morphorum uses different depth scene units, so this is an initial mapping.
+DEFORUM_TRANSLATION = {"translation_x": -0.005, "translation_y": 0.005, "translation_z": -0.005}
+
+
+def conversion_options(raw: Any = None) -> dict[str, Any]:
+    raw = {} if raw is None else raw
+    if not isinstance(raw, dict) or set(raw) - {"mode", "translation_strength", "rotation_strength"}:
+        raise DeforumImportError("Invalid motion conversion options.")
+    mode = raw.get("mode", "deforum")
+    if mode not in {"deforum", "raw"}:
+        raise DeforumImportError("Conversion mode must be deforum or raw.")
+    result = {"mode": mode}
+    for key in ("translation_strength", "rotation_strength"):
+        value = raw.get(key, 1.0)
+        if isinstance(value, bool):
+            raise DeforumImportError(f"{key} must be between 0 and 2.")
+        try:
+            value = float(value)
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise DeforumImportError(f"{key} must be between 0 and 2.") from exc
+        if not math.isfinite(value) or not 0 <= value <= 2:
+            raise DeforumImportError(f"{key} must be between 0 and 2.")
+        result[key] = value
+    return result
+
+
+def converted_schedule(raw: str, axis: str, options: dict[str, Any], frames: int) -> str:
+    multiplier = DEFORUM_TRANSLATION.get(axis, 1.0) if options["mode"] == "deforum" else 1.0
+    multiplier *= options["translation_strength"] if axis.startswith("translation") else options["rotation_strength"]
+    return ",".join(
+        f"{frame}:({format(value * multiplier, '.12g')})"
+        for frame, value in _parse_schedule(raw, axis, frames)
+    )
+
+
+def conversion_digest(options: dict[str, Any]) -> str:
+    import json
+    return hashlib.sha256(
+        json.dumps(options, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 
 def _positive_number(raw: Any, name: str, maximum: float) -> float:
     try:
@@ -176,6 +219,7 @@ def _source_digest(content: str) -> str:
 
 def prepare_motion_import(
     content: Any, *, filename: str, project: dict[str, Any],
+    options: Any = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Preview a copy of the changed project, rejecting unsafe timing conflicts.
 
@@ -197,9 +241,10 @@ def prepare_motion_import(
             "Import into a fresh 3D project to avoid overriding those layers."
         )
     source = parse_deforum_source(content, filename=filename)
+    settings = conversion_options(options)
     changed = deepcopy(project)
     for source_axis, target_axis in SOURCE_AXIS.items():
-        schedule = source[source_axis]
+        schedule = converted_schedule(source[source_axis], target_axis, settings, report["source"]["max_frames"])
         changed["tracks"]["camera_3d"][target_axis]["schedule"] = schedule
         changed["tracks"]["camera_3d"][target_axis]["interpolation"] = "linear"
         changed["camera_3d"][target_axis] = schedule
@@ -209,6 +254,12 @@ def prepare_motion_import(
             "Imported camera schedules failed Morphorum validation; no changes applied."
         )
     report["source_sha256"] = _source_digest(content)
+    report["conversion"] = settings
+    report["conversion_sha256"] = conversion_digest(settings)
+    report["converted_schedules"] = {
+        axis: changed["tracks"]["camera_3d"][axis]["schedule"]
+        for axis in SOURCE_AXIS.values()
+    }
     report["changed_axes"] = list(AXES)
     report["import_mode"] = "replace_camera_only"
     return changed, report
@@ -217,6 +268,7 @@ def prepare_motion_import(
 def apply_motion_import(
     project_id: str, content: Any, *, filename: str,
     expected_source_sha256: str, expected_project_sha256: str,
+    options: Any = None, expected_conversion_sha256: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Explicitly guarded save, requiring matching source and current project."""
     import json
@@ -228,6 +280,9 @@ def apply_motion_import(
     ).hexdigest()
     if current_digest != expected_project_sha256 or _source_digest(content) != expected_source_sha256:
         raise DeforumImportError("Project or import source changed since preview. Preview again.")
-    candidate, report = prepare_motion_import(content, filename=filename, project=current)
+    selected = conversion_options(options)
+    if conversion_digest(selected) != expected_conversion_sha256:
+        raise DeforumImportError("Motion conversion changed since review; review again.")
+    candidate, report = prepare_motion_import(content, filename=filename, project=current, options=selected)
     saved = save_animation_project(project_id, candidate, prefer_tracks=True)
     return saved, report
