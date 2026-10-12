@@ -70,6 +70,10 @@ from .animation_video import (
     video_export_manager,
 )
 from .schedules import ScheduleError
+from .client_protocol import capabilities as client_capabilities, error_response
+from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from .console import (
     clear_console,
     emit_console,
@@ -145,17 +149,37 @@ if not BACKEND_ONLY and ASSET_DIR.exists():
     app.mount("/assets", StaticFiles(directory=ASSET_DIR), name="assets")
 
 
+@app.exception_handler(StarletteHTTPException)
+async def client_http_exception(request: Request, exc: StarletteHTTPException):
+    return error_response(
+        request, status_code=exc.status_code, detail=jsonable_encoder(exc.detail),
+        headers=dict(exc.headers or {}),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def client_validation_exception(request: Request, exc: RequestValidationError):
+    return error_response(
+        request, status_code=422, detail=jsonable_encoder(exc.errors()),
+        message="Request payload validation failed.",
+    )
+
+
 @app.middleware("http")
 async def api_console_middleware(request: Request, call_next):
     # API-only mode has no browser shell; every API endpoint (including SSE,
     # preview files, settings and status) requires the shared bearer token.
     if BACKEND_ONLY and request.url.path.startswith("/api/"):
         if request.headers.get("origin") is not None:
-            return JSONResponse({"detail": "Browser-origin API requests are disabled."}, status_code=403)
+            return error_response(
+                request, status_code=403,
+                code="BROWSER_ORIGIN_FORBIDDEN",
+                detail="Browser-origin API requests are disabled.",
+            )
         if not authorized_backend_request(request.headers.get("authorization")):
-            return JSONResponse(
-                {"detail": "Backend API authentication required."},
-                status_code=401,
+            return error_response(
+                request, status_code=401,
+                detail="Backend API authentication required.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
     started = time.perf_counter()
@@ -217,6 +241,15 @@ def health() -> dict:
         "api_contract_version": 1,
         "root": str(ROOT),
     }
+
+
+@app.get("/api/client/capabilities")
+def api_client_capabilities() -> dict[str, Any]:
+    """DB2.1 additive feature/identity handshake for native clients."""
+    return client_capabilities(
+        mode="backend-only" if BACKEND_ONLY else "standard",
+        video_export=video_export_manager.available(),
+    )
 
 
 @app.get("/api/system")
