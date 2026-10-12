@@ -12,10 +12,10 @@ const css = fs.readFileSync(path.join(dist, 'assets', 'animation.css'), 'utf8');
 const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
 
 test('Motion Lab includes Project Manager, New Project Wizard and eleven shared-state tool panels', () => {
-  const names = ['motion','wizard','projects','editor','composer','recording','curves','preview','audio','monitor','outputs'];
-  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'\]/);
+  const names = ['motion','wizard','projects','editor','composer','recording','curves','preview','motion-import','monitor','outputs'];
+  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs'\]/);
   assert.match(js, /const names = \{/);
-  for (const name of names) assert.match(js, new RegExp(name + ":", 'm'));
+  for (const name of names) assert.match(js, new RegExp((name === 'motion-import' ? "'motion-import'" : name) + ":", 'm'));
   assert.match(js, /panels\.motion\.appendChild\(motionIntro\)/);
   assert.match(js, /panels\[name\]\.appendChild\(card\)/);
   assert.match(js, /panels\.outputs\.appendChild\(wrapper\)/);
@@ -30,7 +30,7 @@ test('Tool switching highlights the desktop sidebar, preserves selections, and s
   const start = js.indexOf('  const ANIMATION_TAB_KEY = ');
   const end = js.indexOf('  function setupAnimationWorkspaceTabs() {', start);
   assert.ok(start >= 0 && end > start);
-  const keys = ['motion','wizard','projects','editor','composer','recording','curves','preview','audio','monitor','outputs'];
+  const keys = ['motion','wizard','projects','editor','composer','recording','curves','preview','motion-import','monitor','outputs'];
   const item = key => ({ dataset: { animationTab:key, animationPanel:key, motionNav:key },
     tabIndex:-1, hidden:false, attrs:{},
     classList: { active:false, toggle(_,v) {this.active=v;} },
