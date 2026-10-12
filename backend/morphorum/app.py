@@ -82,6 +82,7 @@ from .animation_video import (
 )
 from .schedules import ScheduleError
 from .client_protocol import capabilities as client_capabilities, error_response
+from .client_submissions import SubmissionConflict, submit_once
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -1190,7 +1191,7 @@ def api_motion_preview_frame(job_id: str, index: int):
 
 
 @app.post("/api/animation/renders", status_code=202)
-def api_start_animation_render(payload: dict[str, Any]) -> dict[str, Any]:
+def api_start_animation_render(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     project_payload = payload.get("project")
     if not isinstance(project_payload, dict):
         raise HTTPException(status_code=400, detail="Animation project payload is required.")
@@ -1205,10 +1206,15 @@ def api_start_animation_render(payload: dict[str, Any]) -> dict[str, Any]:
             project_id=project_id,
         )
         source_path = animation_project_directory(project_id) / "assets" / "source.png"
-        return animation_render_manager.submit(
-            project=normalized,
-            source_path=source_path,
+        return submit_once(
+            request, operation="animation-render", payload=payload,
+            submit=lambda: animation_render_manager.submit(
+                project=normalized, source_path=source_path,
+            ),
+            lookup=animation_render_manager.get,
         )
+    except SubmissionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (AnimationProjectError, AnimationRenderError, ScheduleError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1297,16 +1303,23 @@ def api_animation_video_availability() -> dict[str, Any]:
     status_code=202,
 )
 def api_start_animation_video_export(
-    project_id: str, render_id: str, payload: dict[str, Any],
+    project_id: str, render_id: str, payload: dict[str, Any], request: Request,
 ) -> dict[str, Any]:
     try:
-        return video_export_manager.start(
-            project_id, render_id,
-            format=str(payload.get("format") or "mp4"),
-            quality=str(payload.get("quality") or "balanced"),
-            fps=payload.get("fps"),
+        return submit_once(
+            request, operation=f"video-export:{project_id}:{render_id}",
+            payload=payload,
+            submit=lambda: video_export_manager.start(
+                project_id, render_id,
+                format=str(payload.get("format") or "mp4"),
+                quality=str(payload.get("quality") or "balanced"),
+                fps=payload.get("fps"),
+            ),
+            lookup=video_export_manager.get,
         )
-    except VideoExportError as exc:
+    except SubmissionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (VideoExportError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -1685,10 +1698,16 @@ def generation_jobs(limit: int = 50) -> dict[str, Any]:
 
 
 @app.post("/api/generation/jobs", status_code=202)
-def create_generation_job(payload: dict[str, Any]) -> dict[str, Any]:
+def create_generation_job(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
-        return generation_manager.submit(payload)
-    except GenerationError as exc:
+        return submit_once(
+            request, operation="generation-image", payload=payload,
+            submit=lambda: generation_manager.submit(payload),
+            lookup=generation_manager.get,
+        )
+    except SubmissionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (GenerationError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
