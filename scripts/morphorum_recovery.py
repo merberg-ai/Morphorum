@@ -183,5 +183,28 @@ def watch_session(client: MorphorumClient, session_file: SessionFile,
                 print("[PASS] Retrieved completed GIF:", target, flush=True)
             return job
         time.sleep(interval)
-        job = client.request("GET", f"/api/animation/renders/{quote(session['render_id'], safe='')}")
+        try:
+            job = client.request(
+                "GET", f"/api/animation/renders/{quote(session['render_id'], safe='')}"
+            )
+        except ClientError:
+            # The backend keeps rendering. Reconnect the same session by GET,
+            # never inventing a new request key or cancelling GPU work.
+            print("[WARN] Connection interrupted; reconnecting to existing render.", flush=True)
+            recovered = False
+            for attempt in range(5):
+                time.sleep(min(8.0, 0.5 * 2 ** attempt))
+                try:
+                    session, job, boot_changed = attach(client, session_file)
+                    if boot_changed:
+                        print("[INFO] Backend process changed; refetched job state.", flush=True)
+                    print("[PASS] Connection restored; same render ID.", flush=True)
+                    recovered = True
+                    break
+                except ClientError:
+                    continue
+            if not recovered:
+                raise RecoveryError(
+                    "Network remains offline; saved session is safe. Run attach later."
+                )
     raise RecoveryError("Watch timed out; job may still be running. Run attach again.")
