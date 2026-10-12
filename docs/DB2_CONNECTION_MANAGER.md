@@ -86,6 +86,22 @@ After provisioning an actual client token on Ubuntu, repeat using `--token-file 
 - **Local concurrency:** admin commands should be serialized. Atomic file replacement protects active request readers but there is not yet a cross-process transaction lock for simultaneous separate issuer processes.
 - **Identity and recovery:** `instance_id` is stable per installation; `boot_id` changes on restart; client avoids automatic host repin and cannot safely assume jobs survive a server restart.
 
+## Physical acceptance progress (2026-10-12)
+
+**User-confirmed Ubuntu Mini stage 1: PASS, 6/6.** The `db2_connection_smoke.py` script executed against `http://192.168.1.24:7866` with the existing backend installation token and reported:
+
+```text
+[PASS] Authenticated API handshake
+[PASS] Server identity & boot IDs
+[PASS] Correct capability flags
+[PASS] Profile pin and reconnect
+[PASS] Identity mismatch protection
+[PASS] Invalid credential rejected
+RESULT: 6/6 PASSED
+```
+
+The detailed log remains on Ubuntu Mini at `~/tmp/db2-connection-test.log`. The subsequent operator attempted Windows PowerShell `clients issue/list` commands inside an Ubuntu Mini Bash session and received command-not-found errors. These do **not** indicate a credential-system failure: provisioning commands must run locally on the Windows Omen in a separate PowerShell terminal while the backend continues running. Follow-up per-client issue, authenticated use, revocation, and post-revocation HTTP 401 are **not yet tested**. No DB2.2 acceptance checkpoint or merge should be made until those tests pass.
+
 ## CI and physical acceptance gates
 
 1. Automated: new `tests/test_db2_connection_manager.py`, `test_db2_client_contract.py`, existing backend-only/full CI, installer and browser syntax regressions.
