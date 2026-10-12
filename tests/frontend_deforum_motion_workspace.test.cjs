@@ -28,7 +28,7 @@ test('DMI2 WAV locally previews offset without invoking project mutation',()=>{
   assert.match(js,/data-dmi-offset/);
   assert.match(js,/data-dmi-seek/);
   assert.match(js,/URL\.createObjectURL/);
-  assert.match(js,/DMI2 is preview-only/);
+  assert.match(js,/Review is required before Apply/);
   assert.match(css,/\.dmi-align/);
 });
 
