@@ -1,6 +1,6 @@
 # Morphorum backend-only mode / Morphorum Studio contract
 
-**Status:** architecture approved 2026-10-11; implementation **not started**.
+**Status:** DB1 API-only startup implementation committed on `dev-backend`; automated and physical acceptance still required. DB2–DB4 and the Studio desktop client have **not** started.
 **Branch:** `dev-backend`, created from verified `main` commit `5a14fb52141000ce0316aa7372ffa3e1610a86b1` after Deforum Motion Settings Import integration.
 **Rule:** Keep normal Morphorum startup, its browser UI, Linux compatibility, project schemas, and existing generation behavior unchanged. No merge to `main` before physical Windows acceptance.
 
@@ -49,22 +49,22 @@ Existing frontend polls render/generation job state and telemetry and consumes c
 
 ## Gates
 
-### DB1: Server split and CLI
+### DB1: Server split and CLI (implemented; Windows physical acceptance pending)
 - `--backend-only` works through Python CLI and Windows entry scripts. Starts on loopback by default, and supports explicit `--lan` / `--host 0.0.0.0` with mandatory minimal API authentication. Standard browser and existing standard LAN modes still behave exactly as before.
 - Backend-only serves all `/api/*` functional routes and does **not** serve `/` HTML or `/assets/*`.
 - No new default downloads, model path changes, or duplicated model installations.
 - FastAPI/TestClient route parity tests, CLI/startup/security baseline tests (including authenticated vs unauthorized LAN API access and actual bind address); regular frontend smoke tests must still pass.
 - Stop for review and acceptance before advancing.
 
-### DB2: Client contract and safety
+### DB2: Client contract and safety (planned)
 - Version/capabilities discovery; strengthen DB1 token management, per-install pairing/credentials, local-origin boundary, network diagnostics, firewall guidance and process lifetime semantics; stable errors/status schemas; separate compatibility tests for standard/loopback/LAN backend-only modes.
 - Verify authenticated SSE console delivery, REST job updates and remote file/image uploads/downloads, with client reconnection and no leaked secrets; plan efficient event stream if warranted.
 
-### DB3: Studio workflow completeness
+### DB3: Studio workflow completeness (planned)
 - Verify desktop client can load model, manage projects and timelines, start still/animation render, follow model load progress/frame/step/ETA, view live completed frames, cancel and resume where supported, fetch output files, view GPU telemetry and console, without any web UI.
 - Decide whether any missing pause semantics or job-event streaming need new endpoints, avoiding artificial parity claims.
 
-### DB4: Physical Windows acceptance
+### DB4: Physical Windows acceptance (planned)
 - Test SDXL on real Windows/CUDA hardware in backend-only loopback **and remote LAN** modes; validate authenticated remote frame-level preview, source/audio upload, project operation, model-load/overall progress bars, accurate ETA, prompt/frame state, live console/SSE, CPU/GPU/RAM/VRAM gauges, cancellation, recovery and remote MP4/WebM download/export with frozen soundtrack sync.
 - Run all relevant tests and existing browser-mode regression tests; preserve baseline screenshots where useful.
 - Create verified checkpoint only after user confirms physical acceptance. Merge to `main` only on explicit approval.
@@ -89,6 +89,8 @@ Morphorum Studio should remain a **separate repository** (proposed `merberg-ai/M
 - Native Qt/PySide6 application, with configurable pane layout, shortcuts, detachable graph/preview and a clear connection panel for Local or Remote backend with connected/authenticated/job-active states.
 - UI remains usable while a long GPU job runs: move network calls, file transfers, playback and waveform/audio analysis off the UI thread. Timeline follows project-frame time and offers audio-sync scrubbing independent of render FPS. Qt styling must not require the browser assets.
 - Design choices remain conceptual until Studio implementation; this doc locks API and startup compatibility, not a full finalized mockup.
+
+**DB1 test procedure:** See [`BACKEND_ONLY.md`](BACKEND_ONLY.md) for authentication and loopback/LAN startup steps, API checks, and the Windows physical acceptance checklist. See [`STUDIO_AUDIO_DIRECTOR_PLAN.md`](STUDIO_AUDIO_DIRECTOR_PLAN.md) for the soundtrack-first motion/prompt/seed roadmap.
 
 ## Documentation/acceptance principle
 
