@@ -60,6 +60,21 @@ For remote clients: acquire the token through a trusted out-of-band mechanism; u
 
 **Still open:** a real authenticated **SDXL animation** render from the remote API client; tracking live animation frames, prompt/frame state, diffusion steps, overall progress and ETA from another machine; animation/video export and standard browser-mode GPU regression if not yet physically checked. The **still-image generation/download** path is now verified, but animation-specific rendering parity is not yet established. DB1's transport/startup/authentication and remote still-image gates are complete; full DB1 animation acceptance is pending. No merge to main.
 
+## Remote SDXL animation failure diagnosed (2026-10-12)
+
+**User-reported remote test:** Ubuntu Mini successfully retrieved and submitted the saved `api-test-short` project (`api-test-short-9f178d9f`) using `POST /api/animation/renders` with the full `{"project": ...}` payload. The previous helper script incorrectly submitted only `{"project_id": ...}` and received HTTP 400; this was **test-client misuse, not an API bug**.
+
+The accepted render `anim-20261012-060549-b24a36` generated **84 frame records** but ended `status=failed`, without final GIF. The job reported:
+
+```
+3D depth/camera warp failed at frame 84:
+3D camera projection produced no visible pixels.
+```
+
+Code location: `animation_render.py` wraps `Camera3DError` from `animation_3d.render_depth_warp`. The camera module raises this exception when projected source pixels are absent/behind the camera/outside the image bounds. This may be caused by an extreme resolved 3D translation/rotation/FOV or a projection edge case; root cause is **not yet confirmed**. A normal completed animation runs `_build_render_preview` in `_complete`; failed jobs retain frame PNGs and **do not** build `preview.gif`, so the missing GIF is expected for this failure.
+
+**Next controlled gate:** Inspect saved/normalized camera values around frames 80–84 using `POST /api/animation/resolve-frame` (note that the saved project may differ from the frozen render manifest if edited). Then render a **24-frame, neutral 3D-camera in-memory variant** of the project, with all camera-3D axes zero and a 40-degree FOV, avoiding edits to the saved project and retaining the prior 84 rendered PNGs. If that completes, retrieve the API's `preview_url` or direct authenticated `/preview` GIF. Separately test a motion-enabled configuration at bounded amplitudes. DB1 full animation-render parity remains **unverified**, and neither this issue nor the earlier model-ID/script-field mismatch implicates the LAN transport layer.
+
 ## Physical DB1 acceptance checklist
 
 1. Switch the Morphorum installation to `dev-backend`. Start normal `run.bat`; verify browser loads and animation/model functionality remains available at its configured port.
