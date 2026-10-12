@@ -1,6 +1,6 @@
 # Morphorum backend-only mode / Morphorum Studio contract
 
-**Status:** DB1 API-only startup implementation committed on `dev-backend`; automated and physical acceptance still required. DB2–DB4 and the Studio desktop client have **not** started.
+**Status:** DB1 implementation committed; automated checks and user-reported Windows localhost + Ubuntu Mini remote LAN API transport/authentication tests **passed 2026-10-12**. Real SDXL API render/preview and standard browser-mode GPU regression remain pending before full DB1 acceptance. DB2–DB4 and Studio desktop client have **not** started.
 **Branch:** `dev-backend`, created from verified `main` commit `5a14fb52141000ce0316aa7372ffa3e1610a86b1` after Deforum Motion Settings Import integration.
 **Rule:** Keep normal Morphorum startup, its browser UI, Linux compatibility, project schemas, and existing generation behavior unchanged. No merge to `main` before physical Windows acceptance.
 
