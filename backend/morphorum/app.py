@@ -234,6 +234,107 @@ def api_animation_projects() -> dict[str, Any]:
     return {"projects": list_animation_projects()}
 
 
+@app.post("/api/animation/projects/{project_id}/motion-import/preview")
+def api_preview_project_motion_import(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Read-only Deforum motion inspection; never changes project or loads WAV paths."""
+    from .deforum_motion_import import preview_motion_settings
+    try:
+        project = load_animation_project(project_id)
+        return preview_motion_settings(
+            payload.get("content"), filename=str(payload.get("filename") or ""),
+            project=project,
+        )
+    except (AnimationProjectError, DeforumImportError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/motion-import/soundtrack")
+def api_get_imported_soundtrack(project_id: str) -> dict[str, Any]:
+    from .imported_soundtrack import read_soundtrack, ImportedSoundtrackError
+    try:
+        load_animation_project(project_id)
+        return {"soundtrack": read_soundtrack(project_id)}
+    except (AnimationProjectError, ImportedSoundtrackError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-import/soundtrack")
+async def api_attach_imported_soundtrack(project_id: str, request: Request) -> dict[str, Any]:
+    from .imported_soundtrack import (
+        store_soundtrack, ImportedSoundtrackError, MAX_IMPORT_AUDIO_BYTES,
+    )
+    try:
+        load_animation_project(project_id)
+        from urllib.parse import unquote
+        filename = unquote(request.headers.get("x-audio-filename", ""))
+        offset = request.headers.get("x-audio-offset-seconds", "0")
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > MAX_IMPORT_AUDIO_BYTES:
+                raise ImportedSoundtrackError("Audio exceeds the 40 MiB attachment limit.")
+        record = store_soundtrack(project_id, bytes(data), filename=filename,
+                                 offset_seconds=offset)
+        return {"status": "attached", "soundtrack": record}
+    except (AnimationProjectError, ImportedSoundtrackError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}/motion-import/soundtrack-offset")
+def api_update_imported_soundtrack_offset(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .imported_soundtrack import update_offset, ImportedSoundtrackError
+    try:
+        load_animation_project(project_id)
+        return {"soundtrack": update_offset(project_id, payload.get("offset_seconds"))}
+    except (AnimationProjectError, ImportedSoundtrackError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-import/prepare")
+def api_prepare_project_motion_import(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    import json
+    from .deforum_motion_import import prepare_motion_import
+    try:
+        current = load_animation_project(project_id)
+        candidate, report = prepare_motion_import(
+            payload.get("content"), filename=str(payload.get("filename") or ""),
+            project=current, options=payload.get("conversion"),
+        )
+        digest = hashlib.sha256(json.dumps(
+            current, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        return {
+            "can_apply": True, "project_sha256": digest,
+            "source_sha256": report["source_sha256"],
+            "conversion_sha256": report["conversion_sha256"],
+            "conversion": report["conversion"],
+            "converted_schedules": report["converted_schedules"],
+            "changed_axes": report["changed_axes"],
+            "warnings": report["warnings"], "read_only": True,
+        }
+    except (AnimationProjectError, DeforumImportError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-import/apply")
+def api_apply_project_motion_import(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .deforum_motion_import import apply_motion_import
+    try:
+        saved, report = apply_motion_import(
+            project_id, payload.get("content"),
+            filename=str(payload.get("filename") or ""),
+            expected_source_sha256=str(payload.get("source_sha256") or ""),
+            expected_project_sha256=str(payload.get("project_sha256") or ""),
+            options=payload.get("conversion"),
+            expected_conversion_sha256=str(payload.get("conversion_sha256") or ""),
+        )
+        return {"status": "applied", "project": saved,
+                "path": animation_project_path(project_id),
+                "changed_axes": report["changed_axes"]}
+    except (AnimationProjectError, DeforumImportError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/import/deforum/preview")
 def api_preview_deforum_import(payload: dict[str, Any]) -> dict[str, Any]:
     try:

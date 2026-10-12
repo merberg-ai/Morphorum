@@ -74,7 +74,7 @@ The wizard has seven guided pages, with explanations and **?** hints beside indi
 4. **Prompts & Keyframes:** write an opening prompt and, optionally, a second scene starting at a later frame.
 5. **Camera Motion:** start with Still, Pan, Zoom, Orbit, or Spiral. Orbit/Spiral select 3D.
 6. **Generation Settings:** review sampler, steps, guidance, img2img denoising strength, cadence, and seeds.
-7. **Review & Save:** examine your choices, learn about the optional Audio Motion workspace, then select **Save Project & Open Editor**.
+7. **Review & Save:** examine your choices, see guidance about optional advanced import workflows, then select **Save Project & Open Editor**.
 
 Use **Back** and **Next** freely; the wizard preserves your choices and can restore a modified draft after a browser refresh in the same session. **Nothing is created until the final Save**. The server validates the schedules first and prevents replacing unsaved Editor edits without confirmation.
 
@@ -107,7 +107,7 @@ Motion Lab divides the animation workflow into separate pages so the editing too
 | **Live Recording** | Record camera motion with keyboard/touch or a compatible gamepad. |
 | **Motion Curves & Path** | Inspect or edit animation curves and the camera trajectory. |
 | **Camera Preview** | Preview camera movement before spending time on AI rendering. |
-| **Audio Motion** | Load audio, inspect frequency/rhythm responses, and map them to motion. |
+| **Import Motion Settings** | Inspect Deforum Motion Studio camera schedules, safely apply compatible six-axis curves, and optionally attach soundtrack audio. |
 | **Render Monitor** | Follow the render and inspect progress. |
 | **Outputs** | Review completed animations and available exports. |
 
@@ -128,7 +128,7 @@ The floating Motion Lab toolbar offers shortcuts to **Record**, **Stop**, **Curv
 
 **FFmpeg is required** for video encoding. If video export is unavailable, run `ffmpeg -version` in a terminal and see [Troubleshooting](TROUBLESHOOTING.md#video-export-fails-or-ffmpeg-is-missing).
 
-Audio Motion can incorporate a soundtrack with supported exports. Confirm the audio source and resulting export settings before assuming every output has sound.
+For **Deforum Motion Settings Import**, explicitly attach the selected soundtrack before starting a new render to include it in MP4/WebM exports at the original render FPS. Source paths from exported settings are only references; see the [complete import guide](DEFORUM_MOTION_SETTINGS_IMPORT.md).
 
 ## 7. Personalize and maintain Morphorum
 

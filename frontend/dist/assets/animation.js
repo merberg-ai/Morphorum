@@ -5852,11 +5852,12 @@
   // Audio Motion is a dedicated Motion Lab workspace using the same draft
   // camera layers, project, and render controls.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs'];
+  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs'];
   const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
   let animationTab = 'motion';
   let projectWizard = null;
   function showAnimationTab(name, { persist = true } = {}) {
+    if (name === 'audio') name = 'motion-import';
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'motion';
     if (name !== 'curves') motionLabVisual?.pause();
     if (name !== 'preview') motionFramePlayer?.pause();
@@ -5889,6 +5890,408 @@
     if (dock) dock.hidden = !MOTION_LAB_TOOL_TABS.has(name);
     if (persist) try { localStorage.setItem(ANIMATION_TAB_KEY, name); } catch (_) {}
   }
+
+  // Deforum settings inspection, guarded camera import and soundtrack attachment.
+  function setupDeforumMotionImport(panel) {
+    if (!panel) return;
+    panel.classList.add('animation-deforum-motion-import');
+    panel.innerHTML = `
+      <div class="card glass dmi-workspace">
+        <div class="dmi-heading"><div><h2>Import Deforum Motion Settings</h2>
+        <p class="muted">Inspect camera motion exported from <a href="https://github.com/chicodog530/Deforum-Motion-Studio" target="_blank" rel="noopener noreferrer">Deforum Motion Studio</a> or Deforum. Nothing is applied during this preview.</p></div></div>
+        <div class="dmi-source">
+          <label>Deforum settings (.txt / .json) <input type="file" accept=".txt,.json,application/json,text/plain" data-dmi-file></label>
+          <span class="muted" data-dmi-status>Select an existing project, then choose exported settings.</span>
+        </div>
+        <div data-dmi-results hidden>
+          <div data-dmi-summary class="dmi-summary"></div>
+          <div data-dmi-warnings class="dmi-warnings"></div>
+          <div class="dmi-chart-head"><strong>Camera motion curves</strong><label>Axis <select data-dmi-axis><option value="translation_z">Depth Z</option>
+            <option value="rotation_z">Roll Z</option><option value="translation_x">Translation X</option>
+            <option value="translation_y">Translation Y</option><option value="rotation_x">Pitch X</option>
+            <option value="rotation_y">Yaw Y</option></select></label></div>
+          <svg data-dmi-chart viewBox="0 0 800 210" role="img" aria-label="Selected imported camera motion curve"></svg>
+          <div class="dmi-audio"><strong>Optional soundtrack synchronization</strong>
+            <div class="dmi-soundtrack-ref">
+              <label>Referenced soundtrack path <input data-dmi-source-path type="text" readonly placeholder="No soundtrack path in settings"></label>
+              <button type="button" data-dmi-copy-path class="secondary-button compact" disabled>Copy path</button>
+              <button type="button" data-dmi-copy-folder class="secondary-button compact" disabled>Copy folder</button>
+            </div>
+            <p class="muted" data-dmi-path-note>Browsers cannot open a local file picker at an arbitrary path from imported settings. Copy the folder path to navigate there in your system's file picker.</p>
+            <label>Choose local audio (WAV / MP3 / OGG / FLAC where supported) <input type="file" accept=".wav,.mp3,.ogg,.flac,audio/*" data-dmi-wav></label>
+            <audio data-dmi-player controls preload="metadata"></audio>
+            <div class="dmi-align"><label>Audio offset (seconds) <input type="number" data-dmi-offset step=".01" min="-30" max="30" value="0"></label>
+              <label>Motion playhead (seconds) <input type="range" data-dmi-seek min="0" max="1" value="0" step=".01"></label>
+              <output data-dmi-sync>0.00s</output></div>
+            <canvas data-dmi-waveform width="900" height="120" aria-label="Local WAV amplitude overview"></canvas>
+            <p data-dmi-length class="muted">The soundtrack path from the imported settings is informational only.</p>
+            <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-attach>Attach selected audio to project</button>
+              <button type="button" class="secondary-button compact" data-dmi-save-offset>Save audio offset</button></div>
+            <p data-dmi-attachment class="muted">Audio preview stays local until you explicitly attach it. Attached audio is frozen into new animation renders and muxed during MP4/WebM export; existing renders keep their original soundtrack snapshot.</p>
+          </div>
+          <div class="dmi-apply-review"><strong>Import camera motion into this project</strong>
+            <div class="dmi-align">
+              <label>Camera compatibility <select data-dmi-conversion>
+                <option value="deforum">Deforum compatible (scaled translation)</option>
+                <option value="raw">Raw source values (legacy)</option>
+              </select></label>
+              <div class="dmi-strength-control"><label>Translation strength <input type="number" data-dmi-translation-strength min="0" max="400" step="5" value="100" style="width:5.5rem">%</label>
+                <input type="range" data-dmi-translation-slider min="0" max="400" step="5" value="100" aria-label="Translation strength percent" style="width:100%">
+                <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-translation-reset>Reset 100%</button><button type="button" class="secondary-button compact" data-dmi-translation-tested>Tested 200%</button></div></div>
+              <div class="dmi-strength-control"><label>Rotation strength <input type="number" data-dmi-rotation-strength min="0" max="400" step="5" value="100" style="width:5.5rem">%</label>
+                <input type="range" data-dmi-rotation-slider min="0" max="400" step="5" value="100" aria-label="Rotation strength percent" style="width:100%">
+                <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-rotation-reset>Reset 100%</button><button type="button" class="secondary-button compact" data-dmi-rotation-tested>Tested 200%</button></div></div>
+            </div>
+            <p class="muted">Deforum translation uses a 1/200 scale and X/Z sign inversion. This is an initial camera compatibility mapping, not exact renderer parity. 100% is the Deforum conversion baseline; 200% matches the previously successful test. Up to 400% is experimental.</p>
+            <details><summary>Review original vs converted schedules</summary><pre data-dmi-converted style="white-space:pre-wrap;overflow-wrap:anywhere">Review safe import to show converted schedules.</pre></details>
+            <p class="muted">This replaces six camera schedules only. It does not change FPS, cadence, frames, model, prompts or audio. Projects with existing Motion Lab layers require a clean project instead.</p>
+            <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-prepare>Review safe import</button>
+              <button type="button" class="primary-button compact" data-dmi-apply disabled>Apply camera motion</button></div>
+            <p data-dmi-review class="muted">Review is required before Apply. Your project remains unchanged until confirmation.</p>
+          </div>
+        </div>
+      </div>`;
+    const file=panel.querySelector('[data-dmi-file]');
+    const status=panel.querySelector('[data-dmi-status]');
+    const results=panel.querySelector('[data-dmi-results]');
+    const axis=panel.querySelector('[data-dmi-axis]');
+    const graph=panel.querySelector('[data-dmi-chart]');
+    const player=panel.querySelector('[data-dmi-player]');
+    const wav=panel.querySelector('[data-dmi-wav]');
+    const sourcePath=panel.querySelector('[data-dmi-source-path]');
+    const copyPath=panel.querySelector('[data-dmi-copy-path]');
+    const copyFolder=panel.querySelector('[data-dmi-copy-folder]');
+    const pathNote=panel.querySelector('[data-dmi-path-note]');
+    const directoryOf=path=>String(path||'').replace(/[\\/][^\\/]*$/, '');
+    const copyText=async text=>{
+      if (!text) return;
+      try {
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+        else {
+          const temporary=document.createElement('textarea');
+          temporary.value=text;temporary.readOnly=true;
+          temporary.style.position='fixed';temporary.style.left='-9999px';
+          document.body.appendChild(temporary);temporary.select();
+          if (!document.execCommand('copy')) throw new Error('Clipboard unavailable');
+          temporary.remove();
+        }
+        pathNote.textContent='Copied. Paste the path into your file picker’s address bar to find the soundtrack.';
+      } catch(error) {
+        sourcePath.focus();sourcePath.select();
+        pathNote.textContent='Clipboard permission unavailable. The path is selected for manual copying.';
+      }
+    };
+    copyPath.addEventListener('click',()=>copyText(sourcePath.value));
+    copyFolder.addEventListener('click',()=>copyText(directoryOf(sourcePath.value)));
+    const lengthText=panel.querySelector('[data-dmi-length]');
+    const offset=panel.querySelector('[data-dmi-offset]');
+    const seek=panel.querySelector('[data-dmi-seek]');
+    const sync=panel.querySelector('[data-dmi-sync]');
+    let report=null, objectUrl=null, wavDuration=0, sourceContent=null, sourceFilename='', prepared=null;
+    const prepareButton=panel.querySelector('[data-dmi-prepare]');
+    const applyButton=panel.querySelector('[data-dmi-apply]');
+    const attachButton=panel.querySelector('[data-dmi-attach]');
+    const offsetButton=panel.querySelector('[data-dmi-save-offset]');
+    const attachmentText=panel.querySelector('[data-dmi-attachment]');
+    attachButton.disabled=true;
+    offsetButton.disabled=true;
+    const attachmentProject=()=>state.project?.id;
+    attachButton.addEventListener('click',async()=>{
+      const chosen=wav.files?.[0],projectId=attachmentProject();
+      if(!chosen || !projectId)return;
+      if(chosen.size>40*1024*1024){
+        progress('Soundtrack too large','Attachments must be 40 MiB or smaller.','error');return;
+      }
+      attachButton.disabled=true;
+      progress('Attaching soundtrack',chosen.name+' · saving a project-owned copy.');
+      try {
+        const response=await fetch('/api/animation/projects/'+encodeURIComponent(projectId)+'/motion-import/soundtrack',{
+          method:'POST',
+          headers:{'Content-Type':'application/octet-stream',
+            'X-Audio-Filename':encodeURIComponent(chosen.name),
+            'X-Audio-Offset-Seconds':String(Number(offset.value)||0)},
+          body:chosen,
+        });
+        const result=await response.json();
+        if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:'Upload failed ('+response.status+').');
+        if(attachmentProject()!==projectId)return;
+        attachmentText.textContent='Attached: '+result.soundtrack.filename+
+          ' · offset '+result.soundtrack.offset_seconds.toFixed(2)+'s.';
+        offsetButton.disabled=false;
+        progress('Soundtrack attached',result.soundtrack.filename+' saved. New renders will freeze it for video export.','success');
+      }catch(error){
+        attachmentText.textContent='Attachment failed: '+error.message;
+        progress('Soundtrack attachment failed',error.message,'error');
+      }finally{attachButton.disabled=false;}
+    });
+    offsetButton.addEventListener('click',async()=>{
+      const projectId=attachmentProject();
+      if(!projectId)return;
+      offsetButton.disabled=true;
+      progress('Saving audio offset','Updating soundtrack synchronization metadata.');
+      try{
+        const result=await api('/api/animation/projects/'+encodeURIComponent(projectId)+'/motion-import/soundtrack-offset',{
+          method:'PUT',body:JSON.stringify({offset_seconds:Number(offset.value)}),
+        });
+        if(attachmentProject()!==projectId)return;
+        attachmentText.textContent='Attached: '+result.soundtrack.filename+
+          ' · offset '+result.soundtrack.offset_seconds.toFixed(2)+'s.';
+        progress('Audio offset saved',result.soundtrack.offset_seconds.toFixed(2)+' seconds.','success');
+      }catch(error){progress('Audio offset save failed',error.message,'error');}
+      finally{offsetButton.disabled=false;}
+    });
+    const review=panel.querySelector('[data-dmi-review]');
+    const conversion=panel.querySelector('[data-dmi-conversion]');
+    const translationStrength=panel.querySelector('[data-dmi-translation-strength]');
+    const rotationStrength=panel.querySelector('[data-dmi-rotation-strength]');
+    const convertedText=panel.querySelector('[data-dmi-converted]');
+    const translationSlider=panel.querySelector('[data-dmi-translation-slider]');
+    const rotationSlider=panel.querySelector('[data-dmi-rotation-slider]');
+    const conversionSettings=()=>({
+      mode:conversion.value,
+      translation_strength:Number(translationStrength.value)/100,
+      rotation_strength:Number(rotationStrength.value)/100,
+    });
+    const progress=(heading,message,kind='info')=>toast(heading,message,kind);
+    const invalidatePrepared=()=>{
+      prepared=null;applyButton.disabled=true;
+      convertedText.textContent='Review safe import to show converted schedules.';
+      review.textContent='Review is required before Apply. No project changes have been made.';
+    };
+    const syncStrength=(field,slider,value)=>{
+      const clamped=Math.max(0,Math.min(400,Math.round(value)));
+      field.value=String(clamped);
+      slider.value=String(clamped);
+      invalidatePrepared();
+    };
+    for(const [field,slider,key] of [
+      [translationStrength,translationSlider,'translation'],
+      [rotationStrength,rotationSlider,'rotation'],
+    ]){
+      slider.addEventListener('input',()=>syncStrength(field,slider,Number(slider.value)));
+      field.addEventListener('input',()=>{
+        invalidatePrepared();
+        if(field.value!=='' && Number.isFinite(Number(field.value))){
+          slider.value=String(Math.max(0,Math.min(400,Number(field.value))));
+        }
+      });
+      field.addEventListener('change',()=>syncStrength(field,slider,Number(field.value)));
+      panel.querySelector('[data-dmi-'+key+'-reset]').addEventListener('click',()=>syncStrength(field,slider,100));
+      panel.querySelector('[data-dmi-'+key+'-tested]').addEventListener('click',()=>syncStrength(field,slider,200));
+    }
+    conversion.addEventListener('change',invalidatePrepared);
+    prepareButton.addEventListener('click',async()=>{
+      invalidatePrepared();
+      if(![translationStrength,rotationStrength].every(input=>
+        input.value!=='' && Number.isFinite(Number(input.value)) &&
+        Number(input.value)>=0 && Number(input.value)<=400
+      )){
+        review.textContent='Strength must be from 0% to 400% for both camera controls.';
+        progress('Invalid camera strength',review.textContent,'warning');
+        return;
+      }
+      if (!state.project?.id || !sourceContent) return;
+      if (state.dirty) {
+        review.textContent='Save or discard unsaved Project Editor changes before preparing the import.';
+        progress('Import review blocked',review.textContent,'warning');
+        return;
+      }
+      const projectId=state.project.id;
+      prepareButton.disabled=true;
+      review.textContent='Checking import compatibility…';
+      progress('Reviewing motion import','Validating schedules, project timing and existing layers.');
+      try {
+        const result=await api('/api/animation/projects/'+encodeURIComponent(projectId)+'/motion-import/prepare',{
+          method:'POST',body:JSON.stringify({
+            content:sourceContent,filename:sourceFilename,conversion:conversionSettings(),
+          }),
+        });
+        if(state.project?.id!==projectId) return;
+        convertedText.textContent=Object.entries(result.converted_schedules||{}).map(([axis,schedule])=>{
+          const sourceAxis=axis.startsWith('rotation_')?'rotation_3d_'+axis.split('_')[1]:axis;
+          let original='Unavailable';
+          try {original=String(JSON.parse(sourceContent)?.[sourceAxis]??'Unavailable');}
+          catch (_) {original='Unavailable';}
+          return axis+'\n  Deforum: '+original+'\n  Morphorum: '+schedule;
+        }).join('\n\n');
+        prepared={...result,projectId};
+        applyButton.disabled=false;
+        review.textContent='Safe import prepared: '+result.changed_axes.join(', ')+
+          '. Existing timing and all non-camera project settings remain unchanged.';
+        progress('Motion import ready', 'Six camera axes validated; review the changes before applying.','success');
+      }catch(error){
+        review.textContent='Import blocked: '+error.message;
+        progress('Motion import blocked',error.message,'error');
+      }finally{prepareButton.disabled=false;}
+    });
+    applyButton.addEventListener('click',async()=>{
+      const ready=prepared;
+      if(!ready || state.dirty || ready.projectId!==state.project?.id) {
+        invalidatePrepared();return;
+      }
+      const approved=await window.MorphorumDialog.confirm({
+        title:'Replace six camera schedules?',
+        message:'This will replace all six native 3D camera motion schedules using the reviewed '+ready.conversion.mode+' conversion. Existing FPS, frame count, cadence, prompts, model and soundtrack stay unchanged. This cannot be undone from this dialog.',
+        confirmText:'Apply Imported Motion',cancelText:'Cancel',variant:'default',
+      });
+      if (!approved) return;
+      applyButton.disabled=true;
+      review.textContent='Applying imported camera schedules…';
+      progress('Applying motion','Saving six validated camera schedules to the project.');
+      try{
+        const result=await api('/api/animation/projects/'+encodeURIComponent(ready.projectId)+'/motion-import/apply',{
+          method:'POST',body:JSON.stringify({
+            content:sourceContent,filename:sourceFilename,
+            source_sha256:ready.source_sha256,project_sha256:ready.project_sha256,
+            conversion:ready.conversion,conversion_sha256:ready.conversion_sha256,
+          }),
+        });
+        if(state.project?.id!==ready.projectId)return;
+        state.project=result.project;
+        state.dirty=false;
+        fillForm();
+        await loadTimeline();
+        review.textContent='Imported six camera schedules. Project saved.';
+        toast('Motion imported','Six native camera schedules updated.','success');
+      }catch(error){
+        review.textContent='Apply failed: '+error.message;
+        progress('Motion apply failed',error.message,'error');
+      }finally{invalidatePrepared();}
+    });
+    const draw=()=>{
+      if (!report) return;
+      const values=report.samples.map(s=>Number(s[axis.value])||0);
+      const low=Math.min(...values),high=Math.max(...values);
+      const range=Math.max(1e-6,high-low);
+      const d=values.map((v,i)=>(i?'L':'M')+(i*790/Math.max(1,values.length-1)+5).toFixed(2)+' '+
+        (190-(v-low)/range*170).toFixed(2)).join(' ');
+      graph.replaceChildren();
+      const ns='http://www.w3.org/2000/svg';
+      const path=document.createElementNS(ns,'path');
+      path.setAttribute('d',d);path.setAttribute('fill','none');
+      path.setAttribute('stroke','#79c8ed');path.setAttribute('stroke-width','2.4');
+      graph.appendChild(path);
+      const ruler=document.createElementNS(ns,'text');
+      ruler.setAttribute('x','9');ruler.setAttribute('y','14');
+      ruler.setAttribute('font-size','12');ruler.setAttribute('fill','currentColor');
+      ruler.textContent=axis.value.replaceAll('_',' ')+' · '+low.toFixed(4)+' to '+high.toFixed(4);
+      graph.appendChild(ruler);
+    };
+    const updateSync=()=>{
+      if (!report) return;
+      const motionTime=Number(seek.value)||0;
+      const delay=Number(offset.value)||0;
+      if (player.src && Number.isFinite(player.duration)) {
+        player.currentTime=Math.max(0,Math.min(player.duration,motionTime+delay));
+      }
+      sync.textContent='Motion '+motionTime.toFixed(2)+'s · audio '+Math.max(0,motionTime+delay).toFixed(2)+'s';
+    };
+    file.addEventListener('change',async()=>{
+      const selected=file.files?.[0];
+      if (!selected) return;
+      if (!state.project?.id) {status.textContent='Open a project before inspecting settings.';progress('Choose a project',status.textContent,'warning');return;}
+      if(selected.size>1024*1024){status.textContent='Settings exceed 1 MiB.';progress('Settings too large',status.textContent,'error');return;}
+      invalidatePrepared();sourceContent=null;sourceFilename='';
+      status.textContent='Inspecting Deforum motion…';results.hidden=true;
+      progress('Loading Deforum settings',selected.name+' · reading and validating motion tracks.');
+      try{
+        const response=await api('/api/animation/projects/'+encodeURIComponent(state.project.id)+'/motion-import/preview',{
+          method:'POST',body:JSON.stringify({content:await selected.text(),filename:selected.name}),
+        });
+        sourceContent=await selected.text();sourceFilename=selected.name;
+        report=response;results.hidden=false;
+        // Attachment metadata belongs to this project, not the exported path.
+        try {
+          const stored=await api('/api/animation/projects/'+encodeURIComponent(state.project.id)+
+            '/motion-import/soundtrack');
+          if (stored?.soundtrack) {
+            const attachment=stored.soundtrack;
+            offset.value=String(attachment.offset_seconds);
+            attachmentText.textContent='Attached: '+attachment.filename+
+              ' · saved offset '+Number(attachment.offset_seconds).toFixed(2)+'s.';
+            offsetButton.disabled=false;
+          } else {
+            attachmentText.textContent='No project soundtrack attached. Choose audio and attach explicitly.';
+            offsetButton.disabled=true;offset.value='0';
+          }
+        } catch(error) {
+          attachmentText.textContent='Could not load saved soundtrack status: '+error.message;
+          offsetButton.disabled=true;
+        }
+        const source=response.source,compare=response.project_comparison;
+        const embeddedPath=String(source.soundtrack_path||'');
+        sourcePath.value=embeddedPath;
+        copyPath.disabled=!embeddedPath;
+        copyFolder.disabled=!directoryOf(embeddedPath);
+        pathNote.textContent=embeddedPath
+          ? 'Referenced by the export only. The browser cannot set this folder as the default browse location; use Copy folder and paste it into your file picker’s address bar.'
+          : 'No soundtrack path in these settings. Choose a local audio file to inspect synchronization.';
+        wav.title=source.soundtrack_filename
+          ? 'Look for '+source.soundtrack_filename+' when browsing for soundtrack audio'
+          : 'Choose an audio file';
+        const summary=panel.querySelector('[data-dmi-summary]');
+        summary.replaceChildren();
+        for(const [label,value] of [['Source FPS',source.fps],['Source frames',source.max_frames],
+          ['Source cadence',source.cadence??'Scheduled'],['Duration',source.duration_seconds.toFixed(2)+'s'],
+          ['Project FPS',compare.fps],['Project frames',compare.max_frames]]){
+          const item=document.createElement('div');item.className='dmi-stat';
+          const strong=document.createElement('strong');strong.textContent=String(value);
+          const small=document.createElement('span');small.textContent=label;
+          item.append(small,strong);summary.appendChild(item);
+        }
+        const warnings=panel.querySelector('[data-dmi-warnings]');
+        warnings.replaceChildren();
+        for(const message of response.warnings){
+          const p=document.createElement('p');p.textContent=message;warnings.appendChild(p);
+        }
+        status.textContent=selected.name+' · '+(response.can_apply_unchanged?'Timing matches project':'Timing requires review');
+        progress('Settings loaded',status.textContent,'success');
+        seek.max=String(source.duration_seconds);seek.value='0';draw();updateSync();
+        lengthText.textContent='Settings soundtrack: '+(source.soundtrack_filename||'none')+
+          '. Choose the local audio file manually to inspect alignment. Embedded paths are never accessed automatically.';
+      }catch(error){status.textContent='Preview failed: '+error.message;report=null;results.hidden=true;
+        progress('Settings preview failed',error.message,'error');}
+    });
+    axis.addEventListener('change',draw);
+    const syncChange=()=>updateSync();
+    seek.addEventListener('input',syncChange);offset.addEventListener('input',syncChange);
+    wav.addEventListener('change',async()=>{
+      const selected=wav.files?.[0];if(!selected)return;
+      if(objectUrl) URL.revokeObjectURL(objectUrl);
+      attachButton.disabled=false;
+      objectUrl=URL.createObjectURL(selected);player.src=objectUrl;
+      progress('Loading soundtrack',selected.name+' · preparing waveform and playback.');
+      player.onloadedmetadata=()=>{
+        wavDuration=player.duration;
+        lengthText.textContent='Audio '+wavDuration.toFixed(2)+'s · motion '+
+          Number(report?.source?.duration_seconds||0).toFixed(2)+'s. Adjust audio offset for synchronization.';
+        updateSync();
+        progress('Soundtrack ready',selected.name+' · '+wavDuration.toFixed(2)+' seconds.','success');
+      };
+      // Local amplitude overview, no upload or server-side filesystem mutation.
+      try {
+        if(selected.size>40*1024*1024)throw new Error('Audio exceeds 40 MiB waveform preview limit.');
+        const ctx=new (window.AudioContext||window.webkitAudioContext)();
+        try {
+          const buffer=await ctx.decodeAudioData(await selected.arrayBuffer());
+          const channel=buffer.getChannelData(0);
+          const canvas=panel.querySelector('[data-dmi-waveform]');
+          const c=canvas.getContext('2d');c.clearRect(0,0,canvas.width,canvas.height);
+          c.strokeStyle='#79c8ed';c.beginPath();
+          for(let x=0;x<canvas.width;x++){
+            const start=Math.floor(x*channel.length/canvas.width);
+            const end=Math.min(channel.length,Math.floor((x+1)*channel.length/canvas.width));
+            let peak=0;
+            for(let i=start;i<end;i++) peak=Math.max(peak,Math.abs(channel[i]));
+            c.moveTo(x,60-peak*57);c.lineTo(x,60+peak*57);
+          }
+          c.stroke();
+        } finally {await ctx.close();}
+      }catch(error){lengthText.textContent='Audio waveform preview unavailable: '+error.message;
+        progress('Waveform unavailable',error.message,'warning');}
+    });
+  }
+
   function setupAnimationWorkspaceTabs() {
     const layout = qs('#view-animation .animation-layout');
     const root = qs('#view-animation');
@@ -5904,9 +6307,10 @@
       motion: 'Overview', wizard: 'New Project Wizard', projects: 'Project Manager', editor: 'Project Editor',
       composer: 'Camera Composer', recording: 'Live Recording',
       curves: 'Motion Curves', preview: 'Camera Preview',
-      audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
+      'motion-import': 'Import Motion Settings', audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
     };
     for (const [name, label] of Object.entries(names)) {
+      if (name === 'audio') continue;
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.animationTab = name;
@@ -5938,7 +6342,7 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'audio', 'monitor', 'outputs']) {
+    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -5966,6 +6370,13 @@
     }
     const motionIntro = qs('#animation-motion-lab-intro');
     if (motionIntro) panels.motion.appendChild(motionIntro);
+    // Preserve legacy Audio Motion DOM and controls without exposing its tab.
+    const hiddenAudioPanel = document.createElement('section');
+    hiddenAudioPanel.hidden = true;
+    hiddenAudioPanel.id = 'animation-panel-audio';
+    hiddenAudioPanel.dataset.animationPanel = 'audio';
+    panels['motion-import'].after(hiddenAudioPanel);
+    panels.audio = hiddenAudioPanel;
     const cards = [
       ['composer', '#animation-motion-lab-composer'],
       ['recording', '#animation-motion-lab-recording'],
@@ -5988,7 +6399,7 @@
       ['recording', 'Live Motion Recording', 'Perform and edit a six-axis camera take.'],
       ['curves', 'Motion Curves & Camera Path', 'Edit frame-aligned keyframes using the full-width plots.'],
       ['preview', 'Camera Motion Preview', 'Inspect 2D or 3D camera motion before rendering.'],
-      ['audio', 'Audio-Reactive Motion', 'Turn WAV beats and frequency bands into camera movement.'],
+      ['motion-import', 'Import Motion Settings', 'Preview Deforum Motion Studio schedules and align soundtrack audio.'],
       ['monitor', 'Render Monitor', 'Watch progress, frame previews, and job diagnostics.'],
       ['projects', 'Project Manager', 'Search, review, rename, and safely archive your animation projects.'],
       ['editor', 'Project Editor', 'Configure projects, prompts, resolution, and timelines.'],
@@ -6110,6 +6521,7 @@
       if (apply && !apply.disabled) apply.click();
     });
 
+    setupDeforumMotionImport(panels['motion-import']);
     motionLabSetupQuickActions(panels.motion);
     motionLabSyncQuickActions();
     const history = qs('.animation-render-history-row');

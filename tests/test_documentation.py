@@ -80,7 +80,7 @@ def test_first_project_wizard_user_docs_track_actual_flow() -> None:
     ):
         assert step in guide
         assert step in wizard
-    for feature in ("Audio Motion", "Back", "Next", "Start Over", "Save Project & Open Editor"):
+    for feature in ("Import Motion Settings", "Back", "Next", "Start Over", "Save Project & Open Editor"):
         assert feature in guide
     assert "New Project Wizard" in readme
     assert "NEW_PROJECT_WIZARD.md" in readme

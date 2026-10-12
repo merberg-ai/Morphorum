@@ -36,6 +36,7 @@ from .animation_performance import (
     AnimationPerformance, append_performance_record, load_performance_records,
     performance_record, summarize_records,
 )
+from .imported_soundtrack import ImportedSoundtrackError, freeze_soundtrack
 from .console import emit_console
 from .generation import GenerationError, GenerationRequest, generation_manager
 from .loras import lora_catalog
@@ -861,6 +862,17 @@ class AnimationRenderJob:
             if isinstance(snapshot, dict) and snapshot.get("enabled")
             else {"enabled": False}
         )
+        soundtrack = self.project.get("_imported_soundtrack_snapshot")
+        payload["imported_soundtrack"] = (
+            {
+                "enabled": True,
+                "filename": str(soundtrack.get("filename") or ""),
+                "offset_seconds": float(soundtrack.get("offset_seconds") or 0.0),
+                "sha256": str(soundtrack.get("sha256") or ""),
+            }
+            if isinstance(soundtrack, dict)
+            else {"enabled": False}
+        )
         return payload
 
     def manifest(self) -> dict[str, Any]:
@@ -985,7 +997,8 @@ class AnimationRenderManager:
         try:
             seed_plan = self._resolve_seed_plan(project)
             snapshot = freeze_hybrid_source(project, output_dir)
-        except (HybridRenderError, OSError, ValueError):
+            soundtrack_snapshot = freeze_soundtrack(project_id, output_dir)
+        except (HybridRenderError, ImportedSoundtrackError, OSError, ValueError):
             # Submission must not leave incomplete snapshots/output folders.
             shutil.rmtree(output_dir, ignore_errors=True)
             raise
@@ -1002,6 +1015,14 @@ class AnimationRenderManager:
             emit_console("info", "animation",
                 f"{render_id}: frozen {snapshot['source_frames']} extracted frame references "
                 f"({snapshot['source_fps']:g} FPS) for hybrid anchor input.")
+        job.project.pop("_imported_soundtrack_snapshot", None)
+        if soundtrack_snapshot is not None:
+            job.project["_imported_soundtrack_snapshot"] = soundtrack_snapshot
+            emit_console(
+                "info", "animation",
+                f"{render_id}: frozen imported soundtrack {soundtrack_snapshot['filename']} "
+                f"with {soundtrack_snapshot['offset_seconds']:+.3f}s offset.",
+            )
         with self._lock:
             self._jobs[render_id] = job
         self._write_manifest(job)
