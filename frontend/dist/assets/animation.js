@@ -6740,6 +6740,16 @@
             <p data-dmi-attachment class="muted">Audio preview stays local until you explicitly attach it. Attached audio is frozen into new animation renders and muxed during MP4/WebM export; existing renders keep their original soundtrack snapshot.</p>
           </div>
           <div class="dmi-apply-review"><strong>Import camera motion into this project</strong>
+            <div class="dmi-align">
+              <label>Camera compatibility <select data-dmi-conversion>
+                <option value="deforum">Deforum compatible (scaled translation)</option>
+                <option value="raw">Raw source values (legacy)</option>
+              </select></label>
+              <label>Translation strength <input type="number" data-dmi-translation-strength min="0" max="2" step=".05" value="1"></label>
+              <label>Rotation strength <input type="number" data-dmi-rotation-strength min="0" max="2" step=".05" value="1"></label>
+            </div>
+            <p class="muted">Deforum translation uses a 1/200 scale and X/Z sign inversion. This is an initial camera compatibility mapping, not exact renderer parity. Strength 1 means 100%.</p>
+            <details><summary>Review original vs converted schedules</summary><pre data-dmi-converted style="white-space:pre-wrap;overflow-wrap:anywhere">Review safe import to show converted schedules.</pre></details>
             <p class="muted">This replaces six camera schedules only. It does not change FPS, cadence, frames, model, prompts or audio. Projects with existing Motion Lab layers require a clean project instead.</p>
             <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-prepare>Review safe import</button>
               <button type="button" class="primary-button compact" data-dmi-apply disabled>Apply camera motion</button></div>
@@ -6837,11 +6847,25 @@
       finally{offsetButton.disabled=false;}
     });
     const review=panel.querySelector('[data-dmi-review]');
+    const conversion=panel.querySelector('[data-dmi-conversion]');
+    const translationStrength=panel.querySelector('[data-dmi-translation-strength]');
+    const rotationStrength=panel.querySelector('[data-dmi-rotation-strength]');
+    const convertedText=panel.querySelector('[data-dmi-converted]');
+    const conversionSettings=()=>({
+      mode:conversion.value,
+      translation_strength:Number(translationStrength.value),
+      rotation_strength:Number(rotationStrength.value),
+    });
     const progress=(heading,message,kind='info')=>toast(heading,message,kind);
     const invalidatePrepared=()=>{
       prepared=null;applyButton.disabled=true;
+      convertedText.textContent='Review safe import to show converted schedules.';
       review.textContent='Review is required before Apply. No project changes have been made.';
     };
+    for(const control of [conversion,translationStrength,rotationStrength]){
+      control.addEventListener('change',invalidatePrepared);
+      control.addEventListener('input',invalidatePrepared);
+    }
     prepareButton.addEventListener('click',async()=>{
       invalidatePrepared();
       if (!state.project?.id || !sourceContent) return;
@@ -6856,9 +6880,16 @@
       progress('Reviewing motion import','Validating schedules, project timing and existing layers.');
       try {
         const result=await api('/api/animation/projects/'+encodeURIComponent(projectId)+'/motion-import/prepare',{
-          method:'POST',body:JSON.stringify({content:sourceContent,filename:sourceFilename}),
+          method:'POST',body:JSON.stringify({
+            content:sourceContent,filename:sourceFilename,conversion:conversionSettings(),
+          }),
         });
         if(state.project?.id!==projectId) return;
+        convertedText.textContent=Object.entries(result.converted_schedules||{}).map(([axis,schedule])=>{
+          const sourceAxis=axis.startsWith('rotation_')?'rotation_3d_'+axis.split('_')[1]:axis;
+          return axis+'\n  Deforum: '+(report?.axes?.[axis]?.source_key||sourceAxis)+
+            '\n  Morphorum: '+schedule;
+        }).join('\n\n');
         prepared={...result,projectId};
         applyButton.disabled=false;
         review.textContent='Safe import prepared: '+result.changed_axes.join(', ')+
@@ -6876,7 +6907,7 @@
       }
       const approved=await window.MorphorumDialog.confirm({
         title:'Replace six camera schedules?',
-        message:'This will replace all six native 3D camera motion schedules in the current project. Existing FPS, frame count, cadence, prompts, model and soundtrack stay unchanged. This cannot be undone from this dialog.',
+        message:'This will replace all six native 3D camera motion schedules using the reviewed '+ready.conversion.mode+' conversion. Existing FPS, frame count, cadence, prompts, model and soundtrack stay unchanged. This cannot be undone from this dialog.',
         confirmText:'Apply Imported Motion',cancelText:'Cancel',variant:'default',
       });
       if (!approved) return;
@@ -6888,6 +6919,7 @@
           method:'POST',body:JSON.stringify({
             content:sourceContent,filename:sourceFilename,
             source_sha256:ready.source_sha256,project_sha256:ready.project_sha256,
+            conversion:ready.conversion,conversion_sha256:ready.conversion_sha256,
           }),
         });
         if(state.project?.id!==ready.projectId)return;

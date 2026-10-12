@@ -70,3 +70,13 @@ test('DMI3 soundtrack attachment is explicit and separate from camera import',()
   assert.match(js,/X-Audio-Offset-Seconds/);
   assert.match(js,/Attached audio is frozen into new animation renders and muxed during MP4\/WebM export/);
 });
+
+
+test('DMI3 Deforum camera conversion controls are reviewed and hashed',()=>{
+  assert.match(js,/data-dmi-conversion/);
+  assert.match(js,/data-dmi-translation-strength/);
+  assert.match(js,/data-dmi-rotation-strength/);
+  assert.match(js,/conversion_sha256/);
+  assert.match(js,/converted_schedules/);
+  assert.match(js,/change',invalidatePrepared/);
+});

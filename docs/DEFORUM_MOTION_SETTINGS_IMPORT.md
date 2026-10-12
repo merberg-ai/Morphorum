@@ -95,3 +95,15 @@ The Windows attachment/theme/toast persistence gate above passed on 2026-10-11 a
 - Regression coverage extends `tests/test_imported_soundtrack.py`, `tests/test_animation_render.py`, `tests/test_animation_video.py` and the importer frontend contract for immutable render snapshots, checksum protection, offset filters and dual-audio conflict refusal.
 
 **Windows physical gate:** attach the imported soundtrack and a clearly nonzero offset, start a fresh animation render, then export both MP4 and WebM at original FPS. Confirm audio is present and offset direction matches the browser preview. Change/re-attach the project soundtrack after the render completes and confirm re-exporting that old render still uses its frozen original track. Also verify a render with Motion Lab audio plus an imported soundtrack is blocked at video export rather than choosing one. Stop before cross-FPS retiming, automatic duration fitting, recovery/undo expansion or DMI4 final polish.
+
+
+## DMI3 camera unit compatibility (Windows preview gate pending)
+
+Deforum's `anim_frame_warp_3d` applies a 1/200 translation scale and X/Z sign inversion. The earlier importer copied raw Deforum numbers directly into Morphorum's native 3D camera schedules, producing exaggerated camera motion. This increment adds a bounded, explicit conversion at **import preparation**, not inside the native renderer.
+
+- Default `deforum` mode converts X=-X/200, Y=Y/200, Z=-Z/200. Rotation schedules remain in degrees without a unit conversion. This is a source-compatible starting point, not a promise of identical visual output because depth/projection differ.
+- `raw` restores original legacy behavior for visual comparison. Separate translation and rotation strength controls accept 0..2 (100% is 1).
+- Preparation displays converted schedules and gives the conversion options their own SHA-256 fingerprint. Apply checks that fingerprint, as well as existing source and project fingerprints; changing options requires another review. No non-camera project values are modified.
+- Imported JSON is not rewritten. Re-select the same source file to experiment with different settings.
+- **Physical gate:** use a disposable matching 3D project, compare a short camera preview with `deforum` 100%, `deforum` 50% translation, and legacy `raw` values. Verify translation direction, depth travel, and pitch/yaw/roll. Re-review after changing any strength. Do not assume perfect Deforum visual parity. Stop for acceptance before adjusting 3D projection geometry or merging.
+
