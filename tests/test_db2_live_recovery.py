@@ -70,6 +70,25 @@ def test_idempotent_journal_replays_exact_job_and_fails_safe(journal):
     assert len(calls) == 2
 
 
+def test_idempotent_job_replay_after_unknown_process_state(journal):
+    payload = {"prompt": "example", "model_id": "fake"}
+    record = client_submissions.submit_once(
+        _request(key="image-stale-retry-2"),
+        operation="generation-image", payload=payload,
+        submit=lambda: {"id": "img-previous", "status": "queued"},
+    )
+    assert record["status"] == "queued"
+    replay = client_submissions.submit_once(
+        _request(key="image-stale-retry-2"),
+        operation="generation-image", payload=payload,
+        submit=lambda: (_ for _ in ()).throw(AssertionError("must not resubmit")),
+        lookup=lambda ident: None,
+    )
+    assert replay["id"] == "img-previous"
+    assert replay["status"] == "unknown"
+    assert replay["result_may_be_stale"] is True
+
+
 def test_pending_reservation_is_never_reexecuted(journal):
     calls = []
     def uncertain():
@@ -244,3 +263,26 @@ def test_native_session_refuses_changed_backend(tmp_path, recovery_modules):
     client.identity = "c" * 32
     with pytest.raises(RecoveryError, match="instance changed"):
         attach(client, sess)
+
+def test_backend_only_job_event_stream_is_authenticated():
+    code = """
+from fastapi.testclient import TestClient
+from morphorum.app import app
+with TestClient(app) as client:
+    path = "/api/client/jobs/animation/nonexistent/events"
+    without = client.get(path)
+    assert without.status_code == 401
+    assert without.json()["error"]["code"] == "AUTH_REQUIRED"
+    auth = {"Authorization": "Bearer " + "a" * 48}
+    allowed = client.get(path, headers=auth)
+    assert allowed.status_code == 404
+    assert client.get("/api/console/stream", headers={"Origin": "https://evil.test"}).status_code == 403
+"""
+    env = os.environ.copy()
+    env["MORPHORUM_BACKEND_ONLY"] = "1"
+    env["MORPHORUM_BACKEND_TOKEN"] = "a" * 48
+    run = subprocess.run(
+        [sys.executable, "-c", code], env=env,
+        capture_output=True, text=True, timeout=90, check=False,
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
