@@ -49,8 +49,9 @@ class MorphorumClient:
         self.timeout = timeout
         self._opener = build_opener(_NoRedirect)
 
-    def request(self, method: str, path: str, *, payload: dict | None = None) -> dict:
-        data, _ = self._http(method, path, payload=payload)
+    def request(self, method: str, path: str, *, payload: dict | None = None,
+                headers: dict[str, str] | None = None) -> dict:
+        data, _ = self._http(method, path, payload=payload, extra_headers=headers)
         try:
             return json.loads(data)
         except (UnicodeDecodeError, ValueError) as exc:
@@ -256,22 +257,27 @@ class MorphorumClient:
     def projects(self) -> list[dict]:
         return self.request("GET", "/api/animation/projects").get("projects", [])
 
-    def render(self, project_id: str) -> dict:
+    def render(self, project_id: str, *, idempotency_key: str | None = None) -> dict:
         project_id = quote(project_id, safe="")
         project = self.request("GET", f"/api/animation/projects/{project_id}")["project"]
-        # Exact current contract: the render accepts the full saved project,
-        # never just a project ID. No implicit save or mutation.
-        return self.request("POST", "/api/animation/renders", payload={"project": project})
+        # Exact current contract: render accepts the full project, never just ID.
+        headers = {"Idempotency-Key": idempotency_key} if idempotency_key else None
+        return self.request("POST", "/api/animation/renders", payload={"project": project},
+                            headers=headers)
 
     def generate(self, model_id: str, prompt: str, *, width: int = 512,
-                 height: int = 512, steps: int = 20, seed: int = 12345) -> dict:
+                 height: int = 512, steps: int = 20, seed: int = 12345,
+                 idempotency_key: str | None = None) -> dict:
         payload = {
             "model_id": model_id, "prompt": prompt, "negative_prompt": "",
             "width": width, "height": height, "steps": steps,
             "guidance_scale": 6.5, "sampler": "dpmpp_2m_sde",
             "seed": seed, "seed_mode": "fixed", "images": 1,
         }
-        return self.request("POST", "/api/generation/jobs", payload=payload)
+        return self.request(
+            "POST", "/api/generation/jobs", payload=payload,
+            headers={"Idempotency-Key": idempotency_key} if idempotency_key else None,
+        )
 
     def watch(self, job_id: str, *, kind: str, interval: float = 2.0,
               max_seconds: float = 3600, frames_dir: Path | None = None) -> dict:
