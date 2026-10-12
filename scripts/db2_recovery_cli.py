@@ -31,7 +31,8 @@ def main() -> int:
     start.add_argument("--watch", action="store_true")
     sub.add_parser("attach", help="Reattach an existing session, without new work.")
     probe = sub.add_parser("probe", help="Read-only recovery preflight for an existing job.")
-    probe.add_argument("render_id")
+    probe.add_argument("render_id", nargs="?")
+    probe.add_argument("--project", help="Find the newest completed render for this project.")
     args = parser.parse_args()
 
     try:
@@ -60,13 +61,27 @@ def main() -> int:
             return 0 if result.get("status") == "completed" else 1
 
         info = client.handshake()
+        render_id = args.render_id
+        if not render_id and args.project:
+            options = client.request(
+                "GET", f"/api/animation/projects/{quote(args.project, safe='')}/renders"
+            ).get("renders", [])
+            matched = next(
+                (item for item in options if item.get("status") == "completed"),
+                None,
+            )
+            if matched is None:
+                raise RecoveryError("No completed render exists for this project.")
+            render_id = matched["id"]
+        if not render_id:
+            raise RecoveryError("Supply an existing render ID or --project PROJECT_ID.")
         record = client.request(
-            "GET", f"/api/animation/renders/{quote(args.render_id, safe='')}"
+            "GET", f"/api/animation/renders/{quote(render_id, safe='')}"
         )
         print("[PASS] Authenticated API handshake", flush=True)
         print("[PASS] Existing render found:", record.get("id"), flush=True)
         print("[PASS] Render status:", record.get("status"), flush=True)
-        url = f"/api/client/jobs/animation/{quote(args.render_id, safe='')}/events"
+        url = f"/api/client/jobs/animation/{quote(render_id, safe='')}/events"
         from urllib.request import Request
         request = Request(client.base_url + url, headers={
             "Authorization": "Bearer " + secret,
