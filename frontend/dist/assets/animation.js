@@ -6887,8 +6887,10 @@
         if(state.project?.id!==projectId) return;
         convertedText.textContent=Object.entries(result.converted_schedules||{}).map(([axis,schedule])=>{
           const sourceAxis=axis.startsWith('rotation_')?'rotation_3d_'+axis.split('_')[1]:axis;
-          return axis+'\n  Deforum: '+(report?.axes?.[axis]?.source_key||sourceAxis)+
-            '\n  Morphorum: '+schedule;
+          let original='Unavailable';
+          try {original=String(JSON.parse(sourceContent)?.[sourceAxis]??'Unavailable');}
+          catch (_) {original='Unavailable';}
+          return axis+'\n  Deforum: '+original+'\n  Morphorum: '+schedule;
         }).join('\n\n');
         prepared={...result,projectId};
         applyButton.disabled=false;
