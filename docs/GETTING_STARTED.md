@@ -74,7 +74,7 @@ The wizard has seven guided pages, with explanations and **?** hints beside indi
 4. **Prompts & Keyframes:** write an opening prompt and, optionally, a second scene starting at a later frame.
 5. **Camera Motion:** start with Still, Pan, Zoom, Orbit, or Spiral. Orbit/Spiral select 3D.
 6. **Generation Settings:** review sampler, steps, guidance, img2img denoising strength, cadence, and seeds.
-7. **Review & Save:** examine your choices, learn about the optional Audio Motion workspace, then select **Save Project & Open Editor**.
+7. **Review & Save:** examine your choices, see guidance about optional advanced import workflows, then select **Save Project & Open Editor**.
 
 Use **Back** and **Next** freely; the wizard preserves your choices and can restore a modified draft after a browser refresh in the same session. **Nothing is created until the final Save**. The server validates the schedules first and prevents replacing unsaved Editor edits without confirmation.
 

@@ -390,7 +390,7 @@
             summary.appendChild(fact);
           }
           container.append(summary);
-          this.info(container, 'Optional advanced feature: Audio Motion can analyze a WAV soundtrack, synchronize frequency bands with camera movement, and include audio in supported video exports. You can explore it after saving; it is not required to create a project.');
+          this.info(container, 'Optional after saving: Import Motion Settings can load Deforum Motion Studio camera schedules into a matching 3D project and attach a soundtrack for new renders. This is separate from the New Project Wizard.');
           break;
         }
       }

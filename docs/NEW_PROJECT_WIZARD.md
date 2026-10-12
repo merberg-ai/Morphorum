@@ -122,7 +122,7 @@ On Save, Morphorum:
 4. **Creates the new project only after validation succeeds**, using the normal animation-project API and synchronized native timeline tracks.
 5. Loads the created project in **Project Editor**, where you can refine it, preview motion, or start rendering.
 
-The final page introduces **Audio Motion**, an optional advanced workspace for turning WAV analysis and frequency information into camera movement. It is deliberately **not** part of this beginner wizard. You can explore it after saving.
+The final page introduces optional advanced work after the beginner wizard. **Motion Lab → Import Motion Settings** can load Deforum Motion Studio camera schedules into a matching saved 3D project and optionally attach an audio track; it is not part of the wizard. See [Import Deforum Motion Settings](DEFORUM_MOTION_SETTINGS_IMPORT.md).
 
 ## Navigation, draft recovery, and safety
 
@@ -146,7 +146,7 @@ Try this short route through Motion Lab:
 3. **Camera Preview:** check the motion before an expensive render.
 4. **Render Monitor:** start and follow a short render.
 5. **Outputs:** inspect finished frames and video exports.
-6. **Audio Motion (optional):** explore soundtrack-reactive camera motion after the basic animation is working.
+6. **Import Motion Settings (optional):** after saving, import compatible Deforum camera motion and synchronize an attached soundtrack in a separate workspace.
 
 ## Need help?
 
