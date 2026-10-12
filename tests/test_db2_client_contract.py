@@ -46,6 +46,7 @@ def test_persisted_instance_and_process_boot_id(monkeypatch, tmp_path):
 def test_instance_bad_contents_rejected(monkeypatch, tmp_path):
     identifier = tmp_path / "backend-instance-id"
     identifier.write_text("bad\n")
+    identifier.chmod(0o600)
     monkeypatch.setattr(client_protocol, "BACKEND_INSTANCE_PATH", identifier)
     client_protocol.backend_instance_id.cache_clear()
     try:
@@ -198,6 +199,7 @@ def test_reference_client_model_and_render_payload(reference_client_module):
 def test_reference_client_rejects_incompatible_contract(reference_client_module):
     mod = reference_client_module
     class FakeResponse:
+        headers = {}
         def __enter__(self):
             return self
         def __exit__(self, *unused):
