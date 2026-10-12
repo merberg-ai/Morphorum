@@ -1,5 +1,7 @@
 param(
     [switch]$Lan,
+    [Alias("backend-only")]
+    [switch]$BackendOnly,
     [ValidateRange(1, 65535)]
     [int]$Port = 7865
 )
@@ -11,8 +13,9 @@ Set-Location $Root
 $Python = Join-Path $Root '.venv\Scripts\python.exe'
 # A command-line -Port applies to this launch only. Otherwise use the
 # installer's saved preference, falling back to Morphorum's default.
-$PortSource = if ($PSBoundParameters.ContainsKey('Port')) { 'command line' } else { 'default' }
-if (-not $PSBoundParameters.ContainsKey('Port')) {
+$PortSource = if ($PSBoundParameters.ContainsKey('Port')) { 'command line' } elseif ($BackendOnly) { 'backend default' } else { 'default' }
+if ($BackendOnly -and -not $PSBoundParameters.ContainsKey('Port')) { $Port = 7866 }
+if (-not $BackendOnly -and -not $PSBoundParameters.ContainsKey('Port')) {
     $portFile = Join-Path $Root 'data\server-port.txt'
     if (Test-Path $portFile) {
         $rawPort = (Get-Content -LiteralPath $portFile -Raw).Trim()
@@ -30,10 +33,11 @@ if (-not $PSBoundParameters.ContainsKey('Port')) {
 $env:HF_HUB_DISABLE_PROGRESS_BARS = '1'
 $env:HF_HUB_DISABLE_TELEMETRY = '1'
 
-Show-MorphorumBanner -Mode $(if ($Lan) { 'RUN / LAN' } else { 'RUN / LOCAL' })
+Show-MorphorumBanner -Mode $(if ($BackendOnly) { if ($Lan) { 'API ONLY / LAN' } else { 'API ONLY / LOCAL' } } elseif ($Lan) { 'RUN / LAN' } else { 'RUN / LOCAL' })
 Write-MorphorumSection 'STARTUP CHECKS'
 Write-MorphorumDetail 'Location' $Root
 Write-MorphorumDetail 'Server port' "$Port ($PortSource)"
+if ($BackendOnly) { Write-MorphorumDetail 'Server mode' 'Backend API only (token protected)' }
 
 if (-not (Test-Path $Python)) {
     Fail 'Morphorum runtime is not installed. Run install.bat first.'
@@ -62,7 +66,11 @@ Write-MorphorumSection 'ACCESS'
 Write-MorphorumNext 'This computer' "http://127.0.0.1:$Port"
 if ($Lan) {
     Warn 'LAN access enabled: Morphorum listens on all network interfaces.'
-    Warn 'Only run on a trusted private network. This service is not password-protected.'
+    if ($BackendOnly) {
+        Warn 'Backend API requires a bearer token. Use trusted private networks or VPN; do not expose to the internet.'
+    } else {
+        Warn 'Only run on a trusted private network. This service is not password-protected.'
+    }
     try {
         $addresses = @(
             Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
@@ -83,10 +91,17 @@ if ($Lan) {
 }
 
 Write-MorphorumSection 'SERVER'
-Step 'Starting Morphorum. Leave this window open while using the app.'
+if ($BackendOnly) {
+    Write-MorphorumDetail 'API token file' (Join-Path $Root 'data\backend-access-token')
+    Step 'Starting Morphorum API-only mode. Use a native client with a bearer token.'
+} else {
+    Step 'Starting Morphorum. Leave this window open while using the app.'
+}
 Write-Host '  Press Ctrl+C to stop the server.' -ForegroundColor DarkGray
 Write-Host ''
-& $Python -m morphorum serve --host $hostAddress --port $Port
+$serveArgs = @('-m', 'morphorum', 'serve', '--host', $hostAddress, '--port', [string]$Port)
+if ($BackendOnly) { $serveArgs += '--backend-only' }
+& $Python @serveArgs
 $code = $LASTEXITCODE
 if ($code -ne 0) { Fail "Server stopped with exit code $code." }
 else { Okay 'Morphorum server stopped.' }
