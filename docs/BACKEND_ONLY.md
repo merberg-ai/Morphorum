@@ -58,7 +58,7 @@ For remote clients: acquire the token through a trusted out-of-band mechanism; u
 - GitHub Actions at tested commit: **499 tests passed, 1 skipped** in backend workflow, plus successful syntax and installer workflow runs.
 - **Remote SDXL still-image generation accepted by user:** Ubuntu Mini submitted an authenticated `POST /api/generation/jobs` using the installed `artUniverse_sdxlV60_874843` SDXL checkpoint (looked up by its real model-index ID), polled the job to completion, and downloaded a valid completed PNG from `GET /api/generation/jobs/{job_id}/images/{filename}`. The generated haunted-computer/skull image was shared and visually confirmed. This validates the **end-to-end still-image remote GPU workflow** including job submission, job polling and file retrieval, but does not establish animation-specific frame-preview parity. The first attempt returned HTTP 400 due to an incorrect request schema / name-vs-ID confusion in the *test script*, not a confirmed backend defect.
 
-**Still open:** a real authenticated **SDXL animation** render from the remote API client; tracking live animation frames, prompt/frame state, diffusion steps, overall progress and ETA from another machine; animation/video export and standard browser-mode GPU regression if not yet physically checked. The **still-image generation/download** path is now verified, but animation-specific rendering parity is not yet established. DB1's transport/startup/authentication and remote still-image gates are complete; full DB1 animation acceptance is pending. No merge to main.
+**DB1 remote end-to-end status:** remote SDXL still-image generation/download **passed**; remote SDXL animation generation **completed after correcting camera configuration**; authenticated GIF retrieval/playback **passed**. Initial live polling and frame retrieval were exercised by the Ubuntu test client, although detailed prompt/frame-state, ETA accuracy, and MP4/WebM export are not independently asserted here. **Still open:** standard browser-mode regression on Windows after this branch's changes and optional video export parity. No merge to `main` until the outstanding gate is accepted.
 
 ## Remote SDXL animation failure diagnosed (2026-10-12)
 
@@ -73,7 +73,7 @@ The accepted render `anim-20261012-060549-b24a36` generated **84 frame records**
 
 Code location: `animation_render.py` wraps `Camera3DError` from `animation_3d.render_depth_warp`. The camera module raises this exception when projected source pixels are absent/behind the camera/outside the image bounds. This may be caused by an extreme resolved 3D translation/rotation/FOV or a projection edge case; root cause is **not yet confirmed**. A normal completed animation runs `_build_render_preview` in `_complete`; failed jobs retain frame PNGs and **do not** build `preview.gif`, so the missing GIF is expected for this failure.
 
-**Next controlled gate:** Inspect saved/normalized camera values around frames 80–84 using `POST /api/animation/resolve-frame` (note that the saved project may differ from the frozen render manifest if edited). Then render a **24-frame, neutral 3D-camera in-memory variant** of the project, with all camera-3D axes zero and a 40-degree FOV, avoiding edits to the saved project and retaining the prior 84 rendered PNGs. If that completes, retrieve the API's `preview_url` or direct authenticated `/preview` GIF. Separately test a motion-enabled configuration at bounded amplitudes. DB1 full animation-render parity remains **unverified**, and neither this issue nor the earlier model-ID/script-field mismatch implicates the LAN transport layer.
+**Resolution:** The user identified incorrect camera settings in the new project's configuration, corrected them, and subsequently completed a remote animation render. Preserve the failed run for regression diagnostics; investigate the New Project Wizard camera defaults/validation separately. This historical failure is **not** an ongoing DB1 remote-render blocker.
 
 ## Follow-up: successful corrected remote animation (2026-10-12)
 
@@ -81,7 +81,20 @@ Code location: `animation_render.py` wraps `Camera3DError` from `animation_3d.re
 
 **Deferred UI issue:** Investigate the Morphorum browser **New Project Wizard**. The user reports a camera-setting setup issue that led to the invalid 3D configuration. Reproduce and validate wizard defaults, applied 3D motion schedules and saved project camera values. Fix in the web UI workstream later, not as part of DB1 backend startup.
 
-**Not yet separately confirmed:** Successful authenticated download/playback of this completed run's `preview.gif` from Ubuntu Mini, MP4/WebM export and the usual browser-mode regression. The older script's `preview_url` download logic may need separate verification. Retain the original failed render and its 84 completed frames for diagnostics. Keep `dev-backend` isolated from `main` pending any outstanding acceptance gates.
+**Follow-up verified:** Ubuntu Mini downloaded the finished animation's `preview.gif` with an authenticated call to `/api/animation/renders/{project_id}/{render_id}/preview`. The user confirmed the GIF is valid and the test **passed**. This verifies that the remote completed animation can be retrieved and viewed without the browser UI. **Pending:** MP4/WebM export and normal-browser-mode regression (if not already physically checked). Retain original failed render frames for diagnostics; keep `dev-backend` separate from `main` until approved.
+
+## DB1 remote-verification checkpoint summary (2026-10-12)
+
+**User-reported status: PASS** for API-only mode on Windows and remote Ubuntu Mini LAN access, authenticated SDXL still-image generation/download, corrected SDXL animation completion, and authenticated final animation GIF download/validation.
+
+- Rendering PC: Windows Omen at `D:\\Morphorum-test`, server `192.168.1.24:7866`, token-protected `dev-backend`.
+- Client: Ubuntu Mini with only a bearer token and HTTP calls; no shared model files or browser UI required.
+- Workflows: health, unauthorized HTTP 401, absent browser root HTTP 404, telemetry, project retrieval, generation/render jobs, console SSE, image PNG and animation GIF remote retrieval.
+- Earlier camera projection failure at frame 84 attributed by user to wrong camera settings, corrected before successful animation; New Project Wizard camera initialization/validation requires a separate follow-up.
+- GitHub CI: 499 passed, 1 skipped backend tests on implementation commit `04100f7525b81c926299e9226c3a1da40b28ad3e`; syntax and installer checks passed.
+- **Out of scope for claiming full release acceptance:** ordinary web UI regression on this branch, MP4/WebM video export, audio-mux parity and richer event stream/client integration.
+
+This record is a checkpoint of the **verified API-only remote workflow**, not proof that every regular/UI/export path has been physically exercised.
 
 ## Physical DB1 acceptance checklist
 
