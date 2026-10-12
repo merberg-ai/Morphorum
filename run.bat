@@ -1,14 +1,16 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-rem Translate GNU-style launch options to Windows PowerShell script switches.
-set "MORPH_ARGS="
+rem Preserve legacy command-line forwarding for normal Morphorum runs.
+if /I "%~1"=="--backend-only" goto backend_only
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\run_windows.ps1" %*
+exit /b %ERRORLEVEL%
+
+:backend_only
+rem Translate explicit GNU-style backend-only launch options into PowerShell.
+set "MORPH_ARGS=-BackendOnly"
+shift
 :parse
 if "%~1"=="" goto launch
-if /I "%~1"=="--backend-only" (
-    set "MORPH_ARGS=!MORPH_ARGS! -BackendOnly"
-    shift
-    goto parse
-)
 if /I "%~1"=="--lan" (
     set "MORPH_ARGS=!MORPH_ARGS! -Lan"
     shift
