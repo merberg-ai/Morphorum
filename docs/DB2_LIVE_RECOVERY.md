@@ -134,3 +134,19 @@ Full CI includes the existing DB1–DB2.3 contract/animation tests and new `test
 3. User reports one active render connection interruption followed by same-render reattachment and final GIF recovery (physical GPU acceptance).
 4. Verify a completed render remains discoverable after a backend restart. Check independent revoked-client 401 still works if useful.
 5. Write verified checkpoint from this branch only after acceptance; no merge to ancestor branches or `main` without explicit permission.
+
+## DB2.4 physical acceptance recorded (2026-10-12)
+
+**User-confirmed Ubuntu Mini / Windows Omen acceptance: PASSED.** This run used the authenticated backend-only LAN endpoint at `http://192.168.1.24:7866` on branch `feature/db2-live-recovery`.
+
+**Read-only event probe:** `db2_recovery_cli.py ... probe --project api-test-short-9f178d9f` returned **`RESULT: 5/5 PASSED`**: authenticated handshake; completed render `anim-20261012-062016-d23669` found; status `completed`; typed job SSE produced a valid event; boot-ID metadata received (prefix `b898e0fed86b`). This did not submit a render.
+
+**Live disconnect and recovery:** Started a new 120-frame animation with persistent session at `~/tmp/db2-render-session.json`; accepted render ID **`anim-20261012-110819-b29995`**. Client observed `loading_model`, then `rendering`, retrieved completed PNGs, and the user deliberately pressed **Ctrl+C** at approximately **10.1%** progress (frame 12). The reference client printed `Client monitoring stopped. GPU job was NOT cancelled.` The user reconnected via a new `attach` invocation; the **same render ID** was returned, the backend had continued to **24.2%** (frame 28), and the client downloaded additional completed frames over the remaining rendering progress. Render reached `finalizing` at 100%, then `completed` at frame 119; the final GIF was downloaded successfully as `/home/jim/tmp/db2-render-session.gif`.
+
+**Supported acceptance conclusions:** Live terminal/client interruption did not cancel the remote animation; persistent-session reattachment recovered the same job ID; progress polling and completed-frame retrieval continued across interruption; final GIF could be fetched. No duplicate submission was observed in this session. The typed SSE read-only probe passed separately. User supplied explicit terminal output for both tests.
+
+**Automated checks:** Source implementation commit `4542378b16a7e5b99757d7fbf9a6ba7fa99c1e15` passed GitHub Actions backend tests (**529 passed, 1 skipped, 0 failed**), self-test, syntax/browser JS checks and installer checks.
+
+**Still outstanding and not claimed physically tested:** an actual backend **process restart** and reattachment to previously completed/interrupted work; a forced dropped-HTTP-response idempotency replay; native client live SSE reconnection through packet loss (the physical live render used authoritative REST polling); normal browser-mode GPU regression; and MP4/video audio-mux export acceptance. Retain these as targeted DB2.5 integration gates rather than marking them passed. No merge to DB2.3 or `dev-backend`/`main` is authorized.
+
+**Checkpoint disposition:** DB2.4 client-disconnect acceptance passed and is suitable for a verified checkpoint, explicitly scoped to the proven behavior above. The following DB2.5 milestone should prioritize pending process restart, error injection, video export and standard browser regressions.
