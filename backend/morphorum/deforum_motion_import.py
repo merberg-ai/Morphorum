@@ -55,7 +55,7 @@ def converted_schedule(raw: str, axis: str, options: dict[str, Any], frames: int
     multiplier = DEFORUM_TRANSLATION.get(axis, 1.0) if options["mode"] == "deforum" else 1.0
     multiplier *= options["translation_strength"] if axis.startswith("translation") else options["rotation_strength"]
     return ",".join(
-        f"{frame}:({format(value * multiplier, '.12g')})"
+        f"{frame}:({'0' if value * multiplier == 0 else format(value * multiplier, '.12g')})"
         for frame, value in _parse_schedule(raw, axis, frames)
     )
 
