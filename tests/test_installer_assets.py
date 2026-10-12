@@ -81,3 +81,17 @@ def test_windows_port_preference_is_saved_and_runners_accept_overrides() -> None
     for bat in ("install.bat", "run.bat", "run-lan.bat"):
         assert "%*" in (ROOT / bat).read_text(encoding="utf-8"), bat
     assert "-Lan %*" in (ROOT / "run-lan.bat").read_text(encoding="utf-8")
+
+
+def test_windows_backend_only_wrapper_preserves_normal_launch() -> None:
+    wrapper = (ROOT / "run.bat").read_text(encoding="utf-8")
+    runner = (ROOT / "scripts" / "run_windows.ps1").read_text(encoding="utf-8")
+    # The original %* call is used for all normal launches.
+    assert 'if /I "%~1"=="--backend-only" goto backend_only' in wrapper
+    assert '-File "%~dp0scripts\\run_windows.ps1" %*' in wrapper
+    assert 'set "MORPH_ARGS=-BackendOnly"' in wrapper
+    assert '"--lan"' in wrapper
+    assert '"--port"' in wrapper
+    assert '[switch]$BackendOnly' in runner
+    assert "if ($BackendOnly) { $Port = 7866 }" in runner
+    assert "'--backend-only'" in runner
