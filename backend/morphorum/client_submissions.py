@@ -136,8 +136,14 @@ def submit_once(
                         return {**refreshed, "idempotency_replayed": True}
                 except Exception:
                     pass
-            return {**initial, "idempotency_replayed": True,
-                    "result_may_be_stale": True}
+            # A completed journal entry is proof that a job was submitted,
+            # NOT proof that its worker survived a server restart. Never
+            # report an old "queued" or "generating" state as live.
+            return {
+                **initial, "status": "unknown", "idempotency_replayed": True,
+                "result_may_be_stale": True,
+                "message": "Submission was accepted previously but current job state is unavailable.",
+            }
 
         entry = {
             "schema_version": 1,
