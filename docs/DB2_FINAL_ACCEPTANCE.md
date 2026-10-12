@@ -164,3 +164,11 @@ Please report **PASS/FAIL** for standard browser mode separately. The New Projec
 **DB2.5 physical acceptance so far: 41/41 checks passed** (preflight 6/6, lost-response replay 4/4, restart 2/2 + 5/5, fixture creation 2/2, MP4 10/10, WebM 10/10, safe fixture cleanup 2/2). **Still awaiting only Gate F:** normal Windows browser-mode project/editor/telemetry functionality and a physical SDXL GPU generation smoke check. Neither browser behavior nor GPU inference in standard launcher mode is established by the backend-only checks.
 
 No full DB2.5 checkpoint or merge is authorized by these partial results. Keep PR #31 draft, `dev-backend` and `main` unchanged.
+
+## Final DB2.5 acceptance (2026-10-12)
+
+**Gate F: PASS (user-confirmed).** The user verified that the normal Windows Web UI functions as expected, including image/video generation, telemetry, and other application functionality.
+
+**DB2.5 acceptance: PASS.** Gate B–E scripted physical tests returned 41/41 passing checks, and the remaining Gate F browser/GPU regression was accepted. Prior DB2.1–DB2.4 checkpoint acceptance remains valid. Limits on interrupted backend processes, live SSE history and crash-uncertain submissions remain as documented.
+
+The next step is a verified DB2.5 checkpoint followed by review of the stacked draft PRs #27–#31. The work is still isolated from `dev-backend` and `main`; integration awaits separate approval. Morphorum Studio's native desktop UI will live in a user-created repository.
