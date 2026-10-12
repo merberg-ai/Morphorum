@@ -107,3 +107,7 @@ Deforum's `anim_frame_warp_3d` applies a 1/200 translation scale and X/Z sign in
 - Imported JSON is not rewritten. Re-select the same source file to experiment with different settings.
 - **Physical gate:** use a disposable matching 3D project, compare a short camera preview with `deforum` 100%, `deforum` 50% translation, and legacy `raw` values. Verify translation direction, depth travel, and pitch/yaw/roll. Re-review after changing any strength. Do not assume perfect Deforum visual parity. Stop for acceptance before adjusting 3D projection geometry or merging.
 
+
+### Camera strength controls (next physical gate)
+
+Both camera strengths now use 0–400% sliders and number-entry fields with reset 100% and tested 200% shortcuts. 100% maps to internal multiplier 1.0, 200% to 2.0 and 400% to 4.0. Deforum conversion remains the default, and settings still fingerprint the reviewed import. UI clamps edited percentages to 0..400 on change; preparation rejects invalid or out-of-range percentages. Controls use existing Morphorum button/theme classes and invalidate prior reviews whenever changed. Windows physical gate: verify slider/field synchronization, reset and tested shortcuts, theme appearance, 250–400% application, and re-review requirement after edits. The 200% shortcuts reflect user calibration, not a universal default.

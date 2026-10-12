@@ -80,3 +80,12 @@ test('DMI3 Deforum camera conversion controls are reviewed and hashed',()=>{
   assert.match(js,/converted_schedules/);
   assert.match(js,/change',invalidatePrepared/);
 });
+
+test('DMI strength controls use percent with 400% ceiling and reviewed multipliers',()=>{
+  assert.match(js,/data-dmi-translation-slider/);
+  assert.match(js,/data-dmi-rotation-slider/);
+  assert.match(js,/data-dmi-translation-tested/);
+  assert.match(js,/data-dmi-rotation-tested/);
+  assert.match(js,/translation_strength:Number\(translationStrength.value\)\/100/);
+  assert.match(js,/rotation_strength:Number\(rotationStrength.value\)\/100/);
+});

@@ -143,10 +143,17 @@ def test_compatibility_translation_and_strength():
 
 @pytest.mark.parametrize("options",[
     {"mode":"invalid"},{"translation_strength":float("nan")},
-    {"rotation_strength":-1},{"translation_strength":3},{"translation_strength":True},
+    {"rotation_strength":-1},{"translation_strength":5},{"translation_strength":True},
     {"other":"unsafe"},
 ])
 def test_unsafe_conversion_options_rejected(options):
     from morphorum.deforum_motion_import import conversion_options
     with pytest.raises(DeforumImportError):
         conversion_options(options)
+
+
+def test_four_hundred_percent_strength_is_valid():
+    from morphorum.deforum_motion_import import conversion_options, converted_schedule
+    options=conversion_options({"translation_strength":4, "rotation_strength":4})
+    assert converted_schedule("0:(100)", "translation_z", options, 120)=="0:(-2)"
+    assert converted_schedule("0:(12.5)", "rotation_y", options, 120)=="0:(50)"

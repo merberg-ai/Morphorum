@@ -40,13 +40,13 @@ def conversion_options(raw: Any = None) -> dict[str, Any]:
     for key in ("translation_strength", "rotation_strength"):
         value = raw.get(key, 1.0)
         if isinstance(value, bool):
-            raise DeforumImportError(f"{key} must be between 0 and 2.")
+            raise DeforumImportError(f"{key} must be between 0 and 4.")
         try:
             value = float(value)
         except (ValueError, TypeError, OverflowError) as exc:
-            raise DeforumImportError(f"{key} must be between 0 and 2.") from exc
-        if not math.isfinite(value) or not 0 <= value <= 2:
-            raise DeforumImportError(f"{key} must be between 0 and 2.")
+            raise DeforumImportError(f"{key} must be between 0 and 4.") from exc
+        if not math.isfinite(value) or not 0 <= value <= 4:
+            raise DeforumImportError(f"{key} must be between 0 and 4.")
         result[key] = value
     return result
 

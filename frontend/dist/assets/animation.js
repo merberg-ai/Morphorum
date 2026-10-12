@@ -6745,10 +6745,14 @@
                 <option value="deforum">Deforum compatible (scaled translation)</option>
                 <option value="raw">Raw source values (legacy)</option>
               </select></label>
-              <label>Translation strength <input type="number" data-dmi-translation-strength min="0" max="2" step=".05" value="1"></label>
-              <label>Rotation strength <input type="number" data-dmi-rotation-strength min="0" max="2" step=".05" value="1"></label>
+              <div class="dmi-strength-control"><label>Translation strength <input type="number" data-dmi-translation-strength min="0" max="400" step="5" value="100" style="width:5.5rem">%</label>
+                <input type="range" data-dmi-translation-slider min="0" max="400" step="5" value="100" aria-label="Translation strength percent" style="width:100%">
+                <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-translation-reset>Reset 100%</button><button type="button" class="secondary-button compact" data-dmi-translation-tested>Tested 200%</button></div></div>
+              <div class="dmi-strength-control"><label>Rotation strength <input type="number" data-dmi-rotation-strength min="0" max="400" step="5" value="100" style="width:5.5rem">%</label>
+                <input type="range" data-dmi-rotation-slider min="0" max="400" step="5" value="100" aria-label="Rotation strength percent" style="width:100%">
+                <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-rotation-reset>Reset 100%</button><button type="button" class="secondary-button compact" data-dmi-rotation-tested>Tested 200%</button></div></div>
             </div>
-            <p class="muted">Deforum translation uses a 1/200 scale and X/Z sign inversion. This is an initial camera compatibility mapping, not exact renderer parity. Strength 1 means 100%.</p>
+            <p class="muted">Deforum translation uses a 1/200 scale and X/Z sign inversion. This is an initial camera compatibility mapping, not exact renderer parity. 100% is the Deforum conversion baseline; 200% matches the previously successful test. Up to 400% is experimental.</p>
             <details><summary>Review original vs converted schedules</summary><pre data-dmi-converted style="white-space:pre-wrap;overflow-wrap:anywhere">Review safe import to show converted schedules.</pre></details>
             <p class="muted">This replaces six camera schedules only. It does not change FPS, cadence, frames, model, prompts or audio. Projects with existing Motion Lab layers require a clean project instead.</p>
             <div class="dmi-apply-actions"><button type="button" class="secondary-button compact" data-dmi-prepare>Review safe import</button>
@@ -6851,10 +6855,12 @@
     const translationStrength=panel.querySelector('[data-dmi-translation-strength]');
     const rotationStrength=panel.querySelector('[data-dmi-rotation-strength]');
     const convertedText=panel.querySelector('[data-dmi-converted]');
+    const translationSlider=panel.querySelector('[data-dmi-translation-slider]');
+    const rotationSlider=panel.querySelector('[data-dmi-rotation-slider]');
     const conversionSettings=()=>({
       mode:conversion.value,
-      translation_strength:Number(translationStrength.value),
-      rotation_strength:Number(rotationStrength.value),
+      translation_strength:Number(translationStrength.value)/100,
+      rotation_strength:Number(rotationStrength.value)/100,
     });
     const progress=(heading,message,kind='info')=>toast(heading,message,kind);
     const invalidatePrepared=()=>{
@@ -6862,12 +6868,38 @@
       convertedText.textContent='Review safe import to show converted schedules.';
       review.textContent='Review is required before Apply. No project changes have been made.';
     };
-    for(const control of [conversion,translationStrength,rotationStrength]){
-      control.addEventListener('change',invalidatePrepared);
-      control.addEventListener('input',invalidatePrepared);
+    const syncStrength=(field,slider,value)=>{
+      const clamped=Math.max(0,Math.min(400,Math.round(value)));
+      field.value=String(clamped);
+      slider.value=String(clamped);
+      invalidatePrepared();
+    };
+    for(const [field,slider,key] of [
+      [translationStrength,translationSlider,'translation'],
+      [rotationStrength,rotationSlider,'rotation'],
+    ]){
+      slider.addEventListener('input',()=>syncStrength(field,slider,Number(slider.value)));
+      field.addEventListener('input',()=>{
+        invalidatePrepared();
+        if(field.value!=='' && Number.isFinite(Number(field.value))){
+          slider.value=String(Math.max(0,Math.min(400,Number(field.value))));
+        }
+      });
+      field.addEventListener('change',()=>syncStrength(field,slider,Number(field.value)));
+      panel.querySelector('[data-dmi-'+key+'-reset]').addEventListener('click',()=>syncStrength(field,slider,100));
+      panel.querySelector('[data-dmi-'+key+'-tested]').addEventListener('click',()=>syncStrength(field,slider,200));
     }
+    conversion.addEventListener('change',invalidatePrepared);
     prepareButton.addEventListener('click',async()=>{
       invalidatePrepared();
+      if(![translationStrength,rotationStrength].every(input=>
+        input.value!=='' && Number.isFinite(Number(input.value)) &&
+        Number(input.value)>=0 && Number(input.value)<=400
+      )){
+        review.textContent='Strength must be from 0% to 400% for both camera controls.';
+        progress('Invalid camera strength',review.textContent,'warning');
+        return;
+      }
       if (!state.project?.id || !sourceContent) return;
       if (state.dirty) {
         review.textContent='Save or discard unsaved Project Editor changes before preparing the import.';
