@@ -1,6 +1,6 @@
 # Morphorum backend-only mode / Morphorum Studio contract
 
-**Status:** DB1 implementation committed; automated checks and user-reported Windows localhost + Ubuntu Mini LAN transport/authentication tests **passed 2026-10-12**, followed by a successful remote **SDXL still-image render and PNG download**. After correcting the saved project's 3D camera settings, a remote **SDXL animation render also completed successfully**. Authenticated animation GIF download/playback **also passed**. DB1 remote API workflow is verified; ordinary browser-mode GPU regression and MP4/WebM export remain untested physically before full integration acceptance. DB2–DB4 and Studio desktop client have **not** started.
+**Status (2026-10-12):** DB1 remote Windows Omen/Ubuntu Mini transport, still-image GPU output and remote animation/GIF acceptance passed. DB2.1 (client contract), DB2.2 (profiles/revocable client auth), DB2.3 (project-owned asset transfers), and DB2.4 (live render disconnect/recovery) all have verified acceptance checkpoints. DB2.4 user test completed a 120-frame animation across a client disconnect. DB2.5 final backend integration is implemented on `feature/db2-final-integration` and is **pending actual Windows/Ubuntu physical testing** for backend restart, forced lost-response replay, FFmpeg MP4/WebM with audio and normal browser-mode GPU regression. The native Studio UI has **not started** and will live in a new repository created by the user. DB2 PRs are stacked and unmerged; `dev-backend`/`main` untouched.
 **Branch:** `dev-backend`, created from verified `main` commit `5a14fb52141000ce0316aa7372ffa3e1610a86b1` after Deforum Motion Settings Import integration.
 **Rule:** Keep normal Morphorum startup, its browser UI, Linux compatibility, project schemas, and existing generation behavior unchanged. No merge to `main` before physical Windows acceptance.
 
@@ -56,9 +56,13 @@ Existing frontend polls render/generation job state and telemetry and consumes c
 - FastAPI/TestClient route parity tests, CLI/startup/security baseline tests (including authenticated vs unauthorized LAN API access and actual bind address); regular frontend smoke tests must still pass.
 - Stop for review and acceptance before advancing.
 
-### DB2: Client contract and safety (planned)
-- Version/capabilities discovery; strengthen DB1 token management, per-install pairing/credentials, local-origin boundary, network diagnostics, firewall guidance and process lifetime semantics; stable errors/status schemas; separate compatibility tests for standard/loopback/LAN backend-only modes.
-- Verify authenticated SSE console delivery, REST job updates and remote file/image uploads/downloads, with client reconnection and no leaked secrets; plan efficient event stream if warranted.
+### DB2: Client contract and safety (DB2.1–DB2.4 physically verified; DB2.5 acceptance pending)
+- DB2.1: additive versioned capabilities, stable backend installation/boot IDs, structured compatible errors, Python reference client. Verified checkpoint: `checkpoint/db2-1-client-contract-verified-20261012`.
+- DB2.2: local-only per-client revocable credentials, named connection profiles, safe token storage boundaries and identity-aware reconnection. Verified checkpoint: `checkpoint/db2-2-connection-security-verified-20261012`.
+- DB2.3: project asset descriptors, soundtrack/Motion Lab WAV retrieval, SHA-256 transfers, conditional If-Match saves. Verified checkpoint: `checkpoint/db2-3-project-assets-verified-20261012`.
+- DB2.4: idempotent GPU submissions, typed SSE with restart/gap detection, persistent remote render sessions; physical 120-frame render survived client Ctrl+C/reconnect and downloaded final GIF. Verified checkpoint: `checkpoint/db2-4-live-render-recovery-verified-20261012`.
+- DB2.5: final video checksum integrity, synthetic audio/FFmpeg acceptance fixture, restart/lost-response smoke tests, normal browser regression and new-repo Studio handoff. **Do not claim physical acceptance before the user tests it.**
+- See `DB2_FINAL_ACCEPTANCE.md` and `STUDIO_CLIENT_HANDOFF.md`; no insecure LAN pairing ceremony or durable SSE replay is claimed.
 
 ### DB3: Studio workflow completeness (planned)
 - Verify desktop client can load model, manage projects and timelines, start still/animation render, follow model load progress/frame/step/ETA, view live completed frames, cancel and resume where supported, fetch output files, view GPU telemetry and console, without any web UI.

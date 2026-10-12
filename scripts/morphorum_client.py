@@ -122,6 +122,10 @@ class MorphorumClient:
                     raise ClientError("Image download is not a PNG.")
                 if file_type == "gif" and magic[:6] not in (b"GIF87a", b"GIF89a"):
                     raise ClientError("Animation preview is not a GIF.")
+                if file_type == "mp4" and magic[4:8] != b"ftyp":
+                    raise ClientError("Downloaded video is not an MP4 container.")
+                if file_type == "webm" and magic[:4] != bytes((0x1a, 0x45, 0xdf, 0xa3)):
+                    raise ClientError("Downloaded video is not a WebM/Matroska container.")
             part.replace(destination)
             return destination
         except HTTPError as exc:

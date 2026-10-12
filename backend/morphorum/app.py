@@ -1348,11 +1348,17 @@ def api_download_animation_video(
 ):
     try:
         path = video_export_manager.file(project_id, render_id, format, quality, fps)
+        digest = video_export_manager.checksum(path)
         return FileResponse(
             path,
             media_type="video/mp4" if format == "mp4" else "video/webm",
             filename=path.name,
             content_disposition_type="inline" if inline else "attachment",
+            headers={
+                "X-Content-SHA256": digest,
+                "ETag": '"' + digest + '"',
+                "Cache-Control": "private, no-store",
+            },
         )
     except VideoExportError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
