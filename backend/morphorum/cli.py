@@ -12,6 +12,10 @@ from PIL import Image
 from . import __version__
 from .animation_motion import _frame_transform_matrix, render_affine
 from .backend_access import backend_token_file, resolve_backend_token
+from .client_credentials import (
+    ClientCredentialError, issue_client_token, list_clients,
+    revoke_client, write_issued_token,
+)
 from .paths import ensure_runtime_dirs
 from .animation_projects import seed_example_animation_project
 from .system_info import doctor_report, write_install_manifest
@@ -252,6 +256,40 @@ def command_seed_example(_: argparse.Namespace) -> int:
     return 0
 
 
+
+def command_clients(args: argparse.Namespace) -> int:
+    """Local-host administrator action; never exposed as an API endpoint."""
+    try:
+        if args.clients_action == "issue":
+            from pathlib import Path
+            output = Path(args.out).expanduser()
+            if output.exists():
+                raise ClientCredentialError("Output token file already exists; choose a fresh filename.")
+            token, record = issue_client_token(args.name, lifetime_days=args.days)
+            try:
+                write_issued_token(output, token)
+            except OSError as exc:
+                revoke_client(record["id"])
+                raise ClientCredentialError(f"Token output could not be saved: {exc}") from exc
+            print(f"Client issued: {record['name']} ({record['id']})")
+            print(f"Secret written to: {output}")
+            print("Transfer the token only through a trusted secure channel; delete the issued file afterward.")
+            return 0
+        if args.clients_action == "list":
+            for entry in list_clients():
+                status = "REVOKED" if entry["revoked"] else "ACTIVE"
+                print(f"{entry['id']}  {status:7s}  {entry['name']}  expires={entry['expires_at']}")
+            return 0
+        if args.clients_action == "revoke":
+            record = revoke_client(args.id)
+            print(f"Revoked: {record['id']} ({record['name']}); effective immediately.")
+            return 0
+    except (ClientCredentialError, OSError, ValueError) as exc:
+        print(f"Client credential action failed: {exc}", file=sys.stderr)
+        return 2
+    return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="morphorum")
     parser.add_argument("--version", action="version", version=f"Morphorum {__version__}")
@@ -277,6 +315,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     self_test = sub.add_parser("self-test", help="Exercise the local API without opening a port.")
     self_test.set_defaults(func=command_self_test)
+
+    clients = sub.add_parser(
+        "clients", help="Administer per-client backend tokens locally (not over HTTP)."
+    )
+    client_actions = clients.add_subparsers(dest="clients_action", required=True)
+    issue = client_actions.add_parser("issue", help="Issue a new revocable client token.")
+    issue.add_argument("name", help="Friendly client name.")
+    issue.add_argument("--days", type=int, default=90, help="Token expiry, 1-365 days.")
+    issue.add_argument("--out", required=True, help="New file for the one-time secret. Never overwritten.")
+    issue.set_defaults(func=command_clients)
+    listed = client_actions.add_parser("list", help="List client IDs/status, never secrets.")
+    listed.set_defaults(func=command_clients)
+    revoke = client_actions.add_parser("revoke", help="Revoke a client token immediately.")
+    revoke.add_argument("id")
+    revoke.set_defaults(func=command_clients)
 
     sample = sub.add_parser("seed-example", help="Install the bundled example if there are no projects.")
     sample.set_defaults(func=command_seed_example)
