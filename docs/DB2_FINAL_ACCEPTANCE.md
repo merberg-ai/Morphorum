@@ -150,3 +150,13 @@ Please report **PASS/FAIL** for standard browser mode separately. The New Projec
 - After backend acceptance, the user will create a **new, separate Morphorum Studio repository**. The implementation handoff is `docs/STUDIO_CLIENT_HANDOFF.md`. No Studio UI source code is created by DB2.5.
 
 **Known caveats:** no public-WAN transport, no secret safe pairing over bare LAN HTTP, no distributed multi-server exactly-once job commit guarantee, no durable historical SSE replay, and no Windows native Qt Studio UI yet.
+
+## DB2.5 physical acceptance progress (2026-10-12)
+
+**Gate B (preflight): PASS by direct Ubuntu Mini terminal output, 6/6.** The authenticated backend at `http://192.168.1.24:7866` on Windows Omen reported versioned DB2 capabilities, preserved installation identity, a completed previously accepted DB2.4 render and available saved frames. The video-export API was reachable and **host FFmpeg was reported available**. Observed `boot_id` prefix: `676e9b269c2f`. User's local log: `/home/jim/tmp/db25-preflight.log`.
+
+**Gate C (simulated response loss): PASS by direct Ubuntu Mini terminal output, 4/4.** The completed render remained available; the test deliberately discarded a response to a **replay of its existing idempotency key/request**, retried the exact request and received the original render ID; the project render list was unchanged, with no duplicate GPU job created. User's local log: `/home/jim/tmp/db25-lost-response.log`. This confirms keyed replay under the tested scenario, **not** an actual server crash between enqueue and journal commit.
+
+**Still awaiting physical acceptance:** Gate D (real backend process restart preserving installation ID, changing boot ID and downloading old GIF), Gate E (FFmpeg MP4 and WebM exports each containing genuine audio streams with SHA-256-verified downloads and guarded fixture cleanup), Gate F (normal Windows browser-mode/GPU regression). These are **not** covered by the user's initial “all tests passed” response, which included the 6/6 and 4/4 outputs only.
+
+No full DB2.5 checkpoint or merge is authorized by these partial results. Keep PR #31 draft, `dev-backend` and `main` unchanged.
