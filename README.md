@@ -1,186 +1,108 @@
 # Morphorum
 
-**Local AI image generation and Deforum-style animation, from one browser-based studio.**
+**Create AI images, build camera-driven animations, and export videos on your own computer.**
 
-Morphorum is a self-hosted image and motion-graphics application for **Windows and Linux**. Generate still images, build keyframed 2D/3D animations, experiment with audio-reactive camera motion, and export videos without relying on a hosted generation service.
+Morphorum is an open-source, self-hosted image and animation studio with a browser interface. It supports **SDXL, FLUX, and Z-Image** models, a guided animation wizard, 2D/3D Motion Lab, and optional remote control through an authenticated backend API.
 
-**Release:** `0.1.0a1` (early alpha) · **License:** [The Unlicense](LICENSE) · **Source:** [GitHub](https://github.com/merberg-ai/Morphorum)
+**Version:** 0.1.0a1 (early alpha) · **License:** [The Unlicense](LICENSE) · **Platforms:** Windows 10/11 and 64-bit Linux
 
 > [!IMPORTANT]
-> Morphorum is **alpha software**. It has working local generation and animation workflows, but expect large downloads, hardware-dependent performance, and occasional rough edges. Back up important projects before updating. AI checkpoints are **not bundled** with the application.
+> Morphorum is early alpha software. It does not include AI model weights. A compatible NVIDIA GPU is strongly recommended, and you should keep backups of your projects and outputs.
 
-## Get started in three steps
+## Quick start
 
-### 1. Install Morphorum
+### 1. Install
 
-**Windows 10/11**
+**Windows (recommended):**
 
-1. Download **[bootstrap.bat](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat)**.
-2. Open your Downloads folder and run `bootstrap.bat`.
-3. When prompted, press **Enter** to install to `C:\Morphorum`, or enter another folder such as `D:\Morphorum`.
-4. Press **Enter** to use the default server port (**7865**), or choose another number.
-5. Let the installer finish. It downloads the required Python runtime and dependencies automatically.
+1. Download **[bootstrap.bat](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat)** from this repository.
+2. Run the downloaded file and follow the prompts. Choose the default **`C:\Morphorum`** folder and **7865** port, or enter your own.
+3. The installer downloads Morphorum and sets up its own Python environment. It may offer to install Git or FFmpeg through Windows Package Manager.
 
-Or use PowerShell to download and launch it:
+Prefer PowerShell? Download and run the same installer:
 
-```powershell
+~~~powershell
 curl.exe -fL -o bootstrap.bat https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat
 .\bootstrap.bat
-```
+~~~
 
-> [!TIP]
-> Prefer a different folder and port without being prompted? Run `.\bootstrap.bat -InstallDir "D:\Morphorum" -Port 8080`. The installer can also install Git and FFmpeg through Windows Package Manager when available.
+**Linux (64-bit):**
 
-**Linux**
-
-Paste this into a terminal:
-
-```bash
+~~~bash
 curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash
-```
+~~~
 
-The default location is `~/Morphorum`. To choose a different location:
+The default Linux installation is `~/Morphorum`. The bootstrap may request `sudo` to install Git if it is missing. See [installation options](docs/INSTALLATION.md) for custom directories, supported platforms, and troubleshooting.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash -s -- "$HOME/Apps/Morphorum"
-```
+> **Space and hardware:** The base installer checks for at least **8 GiB free**, but AI models and generated video need much more. The optional Z-Image-Turbo package is approximately **33 GB** by itself. CUDA-capable NVIDIA hardware is recommended; CPU generation may be extremely slow.
 
-Some Linux systems may need FFmpeg installed separately. See the [full installation guide](docs/INSTALLATION.md#linux).
+### 2. Start Morphorum
 
-### 2. Start the application
+From your installation folder:
 
-**Windows** (PowerShell, after installing to the default location):
-
-```powershell
-cd C:\Morphorum
-.\run.bat
-```
-
-**Linux:**
-
-```bash
-cd ~/Morphorum
-./run.sh
-```
-
-Keep the terminal window open while using Morphorum. In your browser, go to:
-
-**[http://127.0.0.1:7865](http://127.0.0.1:7865)**
-
-If you chose a different server port during installation, replace `7865` with that port. Press **Ctrl+C** in the terminal to stop the server.
-
-### 3. Get a model and generate something
-
-1. In Morphorum, open **Models**.
-2. Find the managed **Z-Image-Turbo** option, choose **Download**, and wait for it to finish. This is a large download (approximately **33 GB**) and requires additional disk space for the runtime and generated files.
-3. Select **Use Model** when it becomes available.
-4. Open **Image Generation**, type a prompt, choose a resolution, and generate your first image.
-
-You can also index supported **SDXL** and **FLUX** checkpoints from directories you already have. Z-Image-Turbo uses **one model package** for text-to-image and image-to-image; you do not need two downloads.
-
-See [First steps](docs/GETTING_STARTED.md) for a guided walkthrough of still images, the included animation project, and exporting a video.
-
-## What you can do
-
-| Workspace | Highlights |
+| Windows PowerShell | Linux terminal |
 | --- | --- |
-| **Image Generation** | SDXL, FLUX, and Z-Image generation; model-aware presets, prompts, seeds, batches, progress, and results. |
-| **Motion Lab** | Keyframed 2D/3D camera animation, six-axis motion, depth-aware previews, layered presets, and curve/path editing. |
-| **New Project Wizard** | Guided seven-step project creation with contextual help, model-specific defaults, prompts/keyframes, motion presets, and a final review and save. |
-| **Project Manager** | Search, inspect, create, open, rename, and move animation projects to Trash. |
-| **Live Recording** | Record camera movement with keyboard/touch controls and supported browser gamepads. |
-| **Import Motion Settings** | Inspect Deforum Motion Studio `.txt`/`.json` camera schedules, apply compatible six-axis motion to a matching 3D project, and optionally synchronize exported audio. |
-| **Render Monitor / Outputs** | Monitor long renders; preview frames, pause/resume/cancel supported jobs, and export MP4/WebM. |
-| **Models / LoRAs** | Scan external model and LoRA folders, inspect metadata, and insert compatible LoRA tags into prompts. A no-model warning provides setup instructions when no checkpoint is available. |
-| **Settings / Console** | Choose four dark themes, select UI/monospace fonts, manage model paths, and view diagnostic logs. |
+| `cd C:\Morphorum` then `.\run.bat` | `cd ~/Morphorum` then `./run.sh` |
 
-The **version badge** in the top-right corner also links directly to this repository, the checked-out Git branch, and the exact Git commit, making it easier to find the code running on your machine.
+Open **http://127.0.0.1:7865** in your browser. If you selected a different Windows installation port, use that instead. Keep the terminal open while using Morphorum; press **Ctrl+C** to stop its server.
 
-**Appearance themes:** **Midnight Glass** (near-black), **Deep Ocean** (dark blue), **Amethyst Night** (dark purple), and **Slate Graphite** (grey). Interface and technical/console fonts can be selected independently in Settings.
+### 3. Add a model and make an image
 
-Additional functionality includes Deforum-style timeline/schedule controls, selected legacy Deforum settings import, video-source inspection/extraction and hybrid-frame workflows. **Legacy imports are not guaranteed to reproduce every Deforum extension or unsupported setting.**
+1. Open **Models** in Morphorum.
+2. Download the managed **Z-Image-Turbo** model, or go to **Settings** to index your existing SDXL/FLUX model directories.
+3. Choose **Use Model** when a model is ready.
+4. Open **Image Generation**, enter a prompt, and generate a single test image using a recommended resolution.
 
-For an existing 3D project, use **Motion Lab → Import Motion Settings** to import camera curves from a Deforum Motion Studio export. The importer provides preview, camera compatibility conversion, 0–400% translation/rotation controls, guarded Apply, and optional soundtrack attachment for new renders. See the [Deforum Motion Settings Import guide](docs/DEFORUM_MOTION_SETTINGS_IMPORT.md).
+The translucent **No generation models available** notice provides setup help if Morphorum cannot find a base checkpoint. LoRAs cannot be used as a replacement for a base model.
 
-> [!NOTE]
-> **Model availability matters.** Morphorum does not ship SDXL, FLUX, or Z-Image checkpoints. Some advanced workflows need substantial NVIDIA GPU VRAM, disk space, or FFmpeg. A model must be downloaded or indexed before you can render an image or animation.
+For step-by-step screenshots-free guidance, see [Your first image and animation](docs/GETTING_STARTED.md).
 
-## First animation: use the New Project Wizard
+## What can Morphorum do?
 
-For a new project, open **Motion Lab → New Project Wizard**. It guides you through **Name → Model → Animation Setup → Prompts & Keyframes → Camera Motion → Generation Settings → Review & Save**, with help hints and Back/Next controls. The wizard uses the same default-project schema as Project Editor, validates schedules, and **does not create a project until you select Save Project & Open Editor**. The final screen notes optional advanced audio workflows, which are separate from the beginner wizard. See the [complete wizard walkthrough](docs/NEW_PROJECT_WIZARD.md).
+| Feature | What it provides |
+| --- | --- |
+| Image Generation | Text-to-image and supported image-to-image generation, model-aware presets, seeds, batches and progress |
+| Models & LoRAs | Managed Z-Image-Turbo installation, external SDXL/FLUX folders, model-aware LoRA discovery |
+| New Project Wizard | Seven guided pages from naming and model selection to motion, prompts and saving |
+| Motion Lab | Keyframes, 2D/3D camera movement, six-axis camera composer, live motion recording, curves and previews |
+| Animation & Outputs | Frame rendering, progress monitoring, completed-frame previews, MP4/WebM export with FFmpeg |
+| Import Motion Settings | Compatible Deforum Motion Studio camera schedules, optional soundtrack attachment |
+| Interface | Responsive browser layout, built-in console and telemetry, themes: **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite** |
 
-If no checkpoints are available, a translucent **No generation models available** banner links to setup instructions for Z-Image-Turbo downloads and SDXL/FLUX/LoRA directories. Your selected model is required to complete the wizard.
+A new installation may include a **Default** example project (120 frames at 24 FPS), created only when the project library is empty. For a first render, reduce the frame count and choose an appropriate model and image size.
 
-### Or explore the included Default project
+[See features and limitations](docs/CURRENT_STATUS.md) · [New Project Wizard](docs/NEW_PROJECT_WIZARD.md) · [Deforum motion import](docs/DEFORUM_MOTION_SETTINGS_IMPORT.md)
 
-New installations with an empty project library include a **Default** example animation (3D, **120 frames at 24 FPS**, 1024 × 1024, with two keyframed cat prompts).
+## Everyday commands
 
-1. Open **Motion Lab → Project Manager** and select **Default**.
-2. Choose **Open in Editor**, select a compatible model, and review the project settings.
-3. Open **Camera Composer** or **Motion Curves & Path** to experiment with movement. Use **Camera Preview** for a quick look.
-4. Apply your changes and select **Render Animation**. The **Render Monitor** displays progress.
-5. Review your completed work in **Outputs** and export a video.
+Run these **from your installed Morphorum directory**, after stopping an active server before updates:
 
-For the safest first test, use a **short project and a model-supported resolution** rather than immediately rendering all 120 frames at 1024 × 1024.
-
-The starter project is installed **only when no projects exist**. An update or repair will not replace an edited project.
-
-## Optional backend-only mode and Morphorum Studio
-
-The browser UI and the generation backend remain together in the standard launcher (`run.bat` or `run.sh`). Morphorum also supports an **API-only** process for native clients, including the separately developed [Morphorum-Studio](https://github.com/merberg-ai/Morphorum-Studio):
-
-- On Windows, `run.bat --backend-only` serves the authenticated API on loopback port **7866**, without browser routes.
-- For a **trusted local network** only, `run.bat --backend-only --lan` opts in to LAN binding. Client authentication with bearer credentials is required.
-- Linux uses `./run.sh --backend-only` or `./run.sh --backend-only --lan`.
-- **Security:** plaintext LAN HTTP does not encrypt bearer tokens. Use a secure VPN/tunnel or TLS for any untrusted network, and do not port-forward this server. Standard browser LAN mode remains a different, unauthenticated mode.
-
-See [Backend-only mode](docs/BACKEND_ONLY.md), [Studio API handoff](docs/STUDIO_CLIENT_HANDOFF.md), and the [2026-10-14 backend promotion record](docs/BACKEND_PROMOTION_20261014.md).
-
-## Running, updating, and repairing
-
-Run these from your **Morphorum installation directory**:
-
-| Task | Windows | Linux |
+| Action | Windows | Linux |
 | --- | --- | --- |
-| Start locally | `.\run.bat` | `./run.sh` |
-| Allow access from other devices on your LAN | `.\run-lan.bat` | `./run-lan.sh` |
-| Update the current branch | `.\update.bat` | `./update.sh` |
-| Update to the main branch | `.\update.bat main` | `./update.sh main` |
-| Repair / run diagnostics | `.\repair.bat` | `./repair.sh` |
+| Local browser app | `.\run.bat` | `./run.sh` |
+| Browser app on trusted LAN | `.\run-lan.bat` | `./run-lan.sh` |
+| Backend API only, local | `.\run.bat --backend-only` | `./run.sh --backend-only` |
+| Backend API only, trusted LAN | `.\run.bat --backend-only --lan` | `./run.sh --backend-only --lan` |
+| Update current branch | `.\update.bat` | `./update.sh` |
+| Switch/update to public main | `.\update.bat main` | `./update.sh main` |
+| Repair environment | `.\repair.bat` | `./repair.sh` |
 
-On Windows, the installer remembers your selected port. You can override it for one run with `.\run.bat -Port 8080` or `.\run-lan.bat -Port 8080`, without changing the saved setting.
+### Browser mode vs. backend-only mode
 
-> [!WARNING]
-> **LAN mode is not an internet-facing service.** It binds the application to network interfaces so trusted devices on your local network can connect. Morphorum does **not** currently provide built-in authentication for that server. **Do not** forward its port on your router or expose it directly to the internet.
+The usual launcher provides both a **web interface and generation API**, typically on port **7865**. Backend-only mode provides **just the API**, typically on port **7866**, for clients such as the separate [Morphorum Studio desktop app](https://github.com/merberg-ai/Morphorum-Studio). Backend-only requests require an authorization token; its root browser page is intentionally absent.
 
-Updates protect Git-tracked changes and preserve project and configuration directories. For important work, keep a separate backup of your `projects/` and `outputs/` directories.
-
-## Requirements at a glance
-
-- **Windows:** Windows 10/11, a supported 64-bit system, enough disk space, and network access during setup. The installer can provision its own Python 3.12 environment.
-- **Linux:** 64-bit Linux, common shell utilities, Git, and internet access for setup. Git can be installed automatically on several supported distributions.
-- **AI generation:** A supported **NVIDIA GPU with CUDA** is strongly recommended for practical local generation. CPU fallback, where available, can be extremely slow.
-- **Disk space:** The installer checks for at least **8 GiB free** for the base runtime, **not** for checkpoints. Plan **tens of gigabytes more** per model; managed Z-Image-Turbo advertises approximately **33 GB**.
-- **Video:** FFmpeg is required for video encoding/export and certain source-video workflows.
-
-For detailed system preparation, troubleshooting, and an explanation of what the installer changes, see [Installation & maintenance](docs/INSTALLATION.md).
+**Security matters:** `run-lan` exposes the ordinary, **unauthenticated** browser app to your private network. Backend-only LAN mode requires bearer credentials, **but plain HTTP does not encrypt them**. Neither mode should be directly exposed to the public internet or forwarded through your router. Use secure networking and read [Backend-only setup and client authentication](docs/BACKEND_ONLY.md) before connecting remotely.
 
 ## Documentation
 
-| Guide | Start here for |
-| --- | --- |
-| **[Getting started](docs/GETTING_STARTED.md)** | Your first image, animation, model, and export |
-| **[New Project Wizard](docs/NEW_PROJECT_WIZARD.md)** | Step-by-step project setup, motion presets, hints, validation, and saving |
-| **[Deforum Motion Settings Import](docs/DEFORUM_MOTION_SETTINGS_IMPORT.md)** | Import six-axis camera curves from Deforum Motion Studio, calibrate strengths, attach audio, and export |
-| **[Installation & maintenance](docs/INSTALLATION.md)** | Windows/Linux install, ports, update, repair, paths, logs |
-| **[Troubleshooting](docs/TROUBLESHOOTING.md)** | Common download, GPU, startup, port, and render problems |
-| **[Features & current status](docs/CURRENT_STATUS.md)** | What is implemented, limitations, and development branches |
-| **[Developer docs index](docs/README.md)** | Architecture, project formats, schedule/render internals, roadmap |
+- **[Install & maintain](docs/INSTALLATION.md)**: Windows/Linux setup, custom locations, updates, repairs, data backups
+- **[Getting started](docs/GETTING_STARTED.md)**: first image, animation and video
+- **[Backend-only mode](docs/BACKEND_ONLY.md)**: LAN setup, per-client credentials, connection checks, security
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)**: installer, model, CUDA, networking and export problems
+- **[Documentation index](docs/README.md)**: all maintained user and contributor guides
 
-## Development and contributions
+## Project information
 
-Morphorum is an independent, clean-room implementation inspired by Deforum workflows. Supported file formats and observable behavior can be studied and reimplemented, but **GPL/AGPL-covered source code must not be copied** into the Unlicensed core.
+Morphorum is independent software inspired by Deforum-style creative workflows; it is **not** a copy of Deforum or a guarantee of output compatibility. Some features are experimental, and large renders depend on GPU and model capabilities. Visit [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues) to report bugs or request improvements.
 
-Development normally proceeds on **feature branches → `dev-ui` → `main`** after review and tests. Earlier milestone notes are historical and may not reflect the current build.
-
-See [Contributing](CONTRIBUTING.md), [the license](LICENSE), [third-party notices](THIRD_PARTY.md), and [additional notices](NOTICE.md).
+Contributions are welcome: [Contributing](CONTRIBUTING.md) · [License](LICENSE) · [Third-party acknowledgments](THIRD_PARTY.md) · [Notices](NOTICE.md).

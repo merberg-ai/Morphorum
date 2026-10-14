@@ -1,6 +1,6 @@
 # Getting started with Morphorum
 
-This guide starts **after you have installed Morphorum**. For the installer itself, go to the [README](../README.md#get-started-in-three-steps). You don't need prior experience with Python, command lines, or AI animation to follow this walkthrough.
+This guide starts **after you have installed Morphorum**. For the installer itself, go to the [README](../README.md#quick-start). You do not need to install Python manually or know AI animation beforehand. Morphorum runs locally on your computer.
 
 > [!TIP]
 > Try one small image before a long animation. A single test image is the fastest way to confirm your model and GPU are working.
@@ -142,6 +142,10 @@ To update the installed source:
 - Linux: run `./update.sh` in the installation directory.
 
 **Keep your files safe:** the `projects/`, `outputs/`, and `data/` directories contain work and settings. Normal updates preserve them, but you should periodically copy the important ones to another drive. **Move to Trash** in Project Manager relocates project data into the application's project Trash area; it is not an automatic cloud backup or a permanent undo system.
+
+## Want to use a separate desktop client?
+
+The optional [backend-only mode](BACKEND_ONLY.md) lets a compatible native client connect to the same generation engine without the browser UI. This is an advanced workflow; it requires authentication and secure network configuration. The default browser mode is simpler for a first run.
 
 ## Need help?
 

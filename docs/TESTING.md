@@ -1,90 +1,55 @@
-# Testing Morphorum before release
+# Testing and validation
 
-This checklist is for maintainers and testers. **New users do not need to run the automated tests**; follow [Getting started](GETTING_STARTED.md) instead.
+This page is for contributors and maintainers. **You do not need to run automated tests to install or use Morphorum.** For that, follow [Getting started](GETTING_STARTED.md).
 
-> [!NOTE]
-> A successful CI run checks syntax, APIs, and scripted behavior. A real NVIDIA GPU and browser test is still important for validating large model downloads, performance, camera previews, and video export.
+## GitHub Actions
 
-## Automated checks
+The repository runs three complementary checks:
 
-The repository runs three GitHub Actions workflow suites on pull requests and selected branch pushes:
-
-| Workflow | Checks |
+| Workflow | Purpose |
 | --- | --- |
-| **Syntax checks** | Python compilation, browser JavaScript syntax, frontend behavior/regression suites |
-| **Backend tests** | Python/pytest model, project, rendering, settings and API tests |
-| **Installer checks** | Windows PowerShell parser, Linux shell syntax, actual Windows standalone `bootstrap.bat -Help` download/launch smoke test |
+| Backend tests | Python `pytest` API, models, projects and render-related behavior, plus an internal self-test |
+| Syntax checks | Python compilation, browser JavaScript syntax and frontend regression tests |
+| Installer checks | PowerShell and Bash syntax and a standalone Windows bootstrap smoke check |
 
-Review them at [GitHub Actions](https://github.com/merberg-ai/Morphorum/actions). Green runs on `dev-ui` are required before proposing promotion to `main`, and the `main` merge should be checked again afterward.
+See the current results under [Actions](https://github.com/merberg-ai/Morphorum/actions). Passing CI does not replace physical GPU, browser, and remote-network testing for affected features.
 
-Developers who already have a virtual environment with **pytest** installed can run:
+## Run tests locally
 
-```bash
-python -m pytest tests
-```
+A normal installed Morphorum has its own Python virtual environment. Install `pytest` in that environment if it is not already available.
 
-The frontend behavior suites run with Node.js **22**, which is used for development/CI only (not for normal user installation).
+**Windows PowerShell (from installation folder):**
 
-## Windows clean-install acceptance
+~~~powershell
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m morphorum self-test
+~~~
 
-On a Windows 10/11 system with sufficient disk space and ideally an NVIDIA CUDA GPU:
+**Linux:**
 
-1. Use a **new, disposable directory** such as `D:\Morphorum-test`, not the primary installation.
-2. Download a fresh `bootstrap.bat` from the [published main branch](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat).
-3. Open PowerShell and run the bootstrap with that disposable directory:
+~~~bash
+./.venv/bin/python -m pytest
+./.venv/bin/python -m morphorum self-test
+~~~
 
-   ```powershell
-   .\bootstrap.bat -InstallDir "D:\Morphorum-test" -Port 7865
-   ```
+The frontend tests run under **Node.js 22** for development/CI, not normal app installation. Follow the scripts referenced by `.github/workflows/syntax.yml` for the current suite.
 
-4. Confirm installer prerequisite checks, managed Python 3.12 and PyTorch, optional Git/FFmpeg setup, and self-test.
-5. Confirm these exist after installation: `.venv`, `.runtime`, `data\config.yaml`, `data\server-port.txt`, `logs\install.log`, `projects`.
-6. Run `.\run.bat` from the installed folder and open **http://127.0.0.1:7865**.
-7. Confirm `http://127.0.0.1:7865/api/health` returns a healthy response.
-8. In **Motion Lab → Project Manager**, verify the **Default** starter project appears if the project library was previously empty.
-9. Run `.\run.bat -Port 8080` and confirm the URL changes for that session without modifying the port saved by the installer.
-10. Run `.\repair.bat` and verify the starter project and any edits remain intact.
-11. Run `.\update.bat` and verify the updater protects data and reports a successful self-test.
+## Manual release checks
 
-**Safety:** Do not test deletion/Trash with valuable user projects. Use disposable projects.
+Before promoting an installation, use a disposable directory and test at least the relevant workflows:
 
-## Windows generation and Motion Lab acceptance
+1. Install from a fresh checkout and run the standard browser launcher.
+2. Confirm a model can be discovered and a small image generated.
+3. Open the New Project Wizard, save a small project, preview its camera motion and run a short animation.
+4. Confirm results, telemetry, and FFmpeg video export where available.
+5. For backend changes, confirm both normal and backend-only launches, authenticated LAN access and client connectivity.
+6. Confirm update/repair commands preserve user projects and settings.
+7. Recheck the new GitHub CI results after the merge.
 
-1. Open **Models** and check an already installed Z-Image-Turbo package, or download it if storage allows (approximately **33 GB**).
-2. Render **one text-to-image** sample and **one image-to-image** frame. Both should reuse the same Z-Image model folder.
-3. Open the starter project, choose the model, and confirm prompts, resolution, frame count, and mode.
-   Also test **Motion Lab → New Project Wizard** end-to-end using a disposable project. Verify all seven steps and help hints, that the chosen model updates sampler/steps/guidance, that two keyframed prompts and 2D/3D camera preset schedules survive Save and reopen, and that missing-model or invalid-schedule errors prevent creation. Test Back/Next, refreshing to recover a session draft, Start Over, and the warning for unsaved Editor changes. See [New Project Wizard](NEW_PROJECT_WIZARD.md).
-   With an empty disposable model index, verify the transparent **No generation models available** banner and its Models/Settings links; confirm LoRA-only lists still warn and a scanned checkpoint hides it. Test top-right Version Info's repository, branch and full-commit links.
-4. Use Camera Composer, editable Motion Curves, Camera Preview, and the floating quick-action toolbar.
-5. Test Live Recording/Stop; verify conflicting controls correctly disable during active operations.
-6. Test Audio Motion and soundtrack export with a disposable project/audio source.
-7. Render a short animation and confirm progress, preview/monitor, output files, and FFmpeg export.
-8. Test each theme and the interface/console font selectors. Save preferences, refresh, and verify persistence.
-9. Verify desktop and mobile browser layouts separately.
+Do not use someone else's valuable model, project or output folder for destructive testing. Record the exact commit, environment, and whether checks were automated or physically tested.
 
-GPU performance and VRAM usage should be **measured rather than assumed**. Include model name, batch, resolution, steps, driver, and GPU in performance reports.
+## Reporting failures
 
-## Linux acceptance
+Use [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues) for reproducible bugs. Include OS, GPU, checkpoint family, version, relevant commands and the first error. Never publish tokens, credential files or private data.
 
-1. Install to a **new directory** using `scripts/bootstrap.sh`.
-2. Verify Git prerequisites, managed Python environment, and `./run.sh`.
-3. Confirm the default local URL and a one-run `MORPHORUM_PORT_OVERRIDE=8080 ./run.sh` override.
-4. Run `./repair.sh` and `./update.sh`.
-5. Check model indexing, one small render, and FFmpeg export with hardware actually available on that system.
-6. Check `./run-lan.sh` **only on a trusted private LAN**.
-
-## Release integration checklist
-
-Before promoting `dev-ui` to `main`:
-
-- [ ] Source branch and target are up to date; changes are reviewable and conflict-free.
-- [ ] Recovery checkpoint recorded for existing `main`.
-- [ ] README, installation, getting-started, troubleshooting, and current-status documentation match the actual scripts/code.
-- [ ] All required CI checks pass.
-- [ ] Physical Windows/GPU and user-interface acceptance has been recorded for the promoted feature set.
-- [ ] PR targets `main` with its expected commit SHA.
-- [ ] Post-merge `main` CI is checked.
-- [ ] `main` installation URLs and beginner commands work after promotion.
-- [ ] Important `checkpoint/*` branches are preserved.
-
-For a bug report, copy the **first relevant error** rather than dumping an entire multi-megabyte log. Include version/branch, GPU, OS, exact reproduction steps, and whether the same problem occurs on `dev-ui` and `main`.
+[Return to documentation index](README.md).

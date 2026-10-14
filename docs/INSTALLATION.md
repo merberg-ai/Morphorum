@@ -1,203 +1,151 @@
-# Installing and maintaining Morphorum
+# Installation and maintenance
 
-**New user?** Start with the [README quick start](../README.md#get-started-in-three-steps). This guide explains the installer in more detail, including custom installation folders, server ports, models, updates, and how to recover from problems.
+This guide covers the supported Windows and Linux installers, first launch, network access, updates and backups. For the shortest path, follow the [README quick start](../README.md#quick-start).
 
 > [!IMPORTANT]
-> Morphorum is **early alpha software**. The installer can configure the application and its Python environment, but it **does not download AI models automatically**. Back up important projects before updating or changing Git branches.
+> Morphorum is early alpha. Models are **not included** and can require substantial downloads. The installer configures a **private Python 3.12 environment** for Morphorum; you do not need to install Python or Node.js manually.
 
-## Before installing
+## Requirements
 
-| Item | What to know |
+| Requirement | Details |
 | --- | --- |
-| **Operating system** | Windows 10/11 or 64-bit Linux. Scripts are provided for both. |
-| **GPU** | An NVIDIA GPU with CUDA is recommended for practical local image/video generation. Availability and speed depend on the model and hardware. |
-| **Free space** | The installer checks for **8 GiB** to bootstrap the runtime. Models need substantially more: managed **Z-Image-Turbo is about 33 GB** by itself. Plan additional space for caches and outputs. |
-| **Internet** | Required to fetch source, Python packages, and any models you choose to download. |
-| **Git and Python** | Install scripts arrange Git where supported, a managed Python **3.12** runtime, and Morphorum's private environment. You do not need to create a Python virtual environment manually. |
-| **FFmpeg** | Required for video encoding/export and some video-source operations. Windows may install it with `winget`; Linux users may need a distribution package. |
+| Operating system | Windows 10/11 or a compatible 64-bit Linux distribution |
+| GPU | NVIDIA CUDA GPU strongly recommended; CPU-only generation may be extremely slow |
+| Disk space | At least **8 GiB free** for initial runtime checks, plus model weights, caches and outputs; Z-Image-Turbo is approximately **33 GB** |
+| Internet | Needed for source, managed runtime/dependencies, and any models you download |
+| Git | Installed automatically on supported setups, or install it yourself |
+| FFmpeg | Needed for video export and some source video functions; Windows installer may use `winget`, Linux can use distribution packages |
 
-The frontend is included in the repository. **Node.js is not required** just to use the app.
+Use the default installation directory if you are not sure. Avoid installing inside a source-controlled project or an existing folder containing unrelated files.
 
 ## Windows installation
 
-### Option A: Download and run the installer
+1. Download [bootstrap.bat](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat).
+2. Run it from Downloads (or launch from PowerShell). Windows may ask you to confirm running a downloaded script; only run files you trust.
+3. Select an installation folder. Press Enter to use **`C:\Morphorum`**; other locations such as `D:\Morphorum` work too.
+4. Choose a server port. Press Enter for **7865**.
+5. Let setup finish. The installer sets up Git when needed, downloads a managed Python runtime, installs compatible dependencies, checks CUDA when NVIDIA hardware is present, and runs its self-test.
 
-1. Download **[bootstrap.bat](https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat)**.
-2. Double-click `bootstrap.bat` or run it in a Command Prompt/PowerShell terminal.
-3. When asked for the **installation directory**, press Enter for `C:\Morphorum`, or type another location such as `D:\Morphorum`.
-4. When asked for the **server port**, press Enter for `7865`, or enter a free port from 1 through 65535.
-5. Let the colored setup window finish downloading dependencies, checking CUDA where relevant, and running its self-test.
-6. When complete, the installer displays the location of `run.bat`.
+PowerShell alternative:
 
-> [!TIP]
-> The first installation may take a while. Morphorum downloads the Python runtime and GPU-aware PyTorch dependencies. The **33 GB Z-Image model is an optional separate download** from the Models page after startup.
-
-### Option B: PowerShell installation
-
-Open PowerShell where you want to keep the downloaded installer and run:
-
-```powershell
+~~~powershell
 curl.exe -fL -o bootstrap.bat https://raw.githubusercontent.com/merberg-ai/Morphorum/main/bootstrap.bat
 .\bootstrap.bat
-```
+~~~
 
-To choose a folder and port without answering the prompts:
+Noninteractive folder and port selection:
 
-```powershell
+~~~powershell
 .\bootstrap.bat -InstallDir "D:\Morphorum" -Port 8080
-```
+~~~
 
-The bootstrap also accepts `-Branch dev-ui` for development installations. For the published main build, **omit `-Branch`**. Installing into an existing managed checkout invokes the guarded updater rather than discarding your files.
+The published installer uses the `main` branch by default. `-Branch` is available for advanced testing, but is not needed for a normal installation.
 
-### Launch on Windows
+### Windows: start the app
 
-Open PowerShell, change to the installation folder, and run:
+Open **PowerShell**:
 
-```powershell
+~~~powershell
 cd C:\Morphorum
 .\run.bat
-```
+~~~
 
-Open **http://127.0.0.1:7865** in a browser, or replace `7865` with the port you selected. Keep the PowerShell window open. Press **Ctrl+C** to stop the server.
+Go to **http://127.0.0.1:7865** in your browser. If you chose another port, use that port. Leave the PowerShell window open; **Ctrl+C** stops the server.
 
-To run on a different port for a single session:
+Change the listening port for one launch without overwriting the saved selection:
 
-```powershell
+~~~powershell
 .\run.bat -Port 8080
-```
-
-This override **does not alter** the default port you chose during setup. Windows stores that preference at `data\server-port.txt`.
+~~~
 
 ## Linux installation
 
-The installer supports common 64-bit Linux distributions. It attempts to provision Git on several common package-manager families; system packages may require `sudo`.
+From a terminal on 64-bit Linux:
 
-Default location, `~/Morphorum`:
-
-```bash
+~~~bash
 curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash
-```
+~~~
 
-Custom install location:
+This installs into **`~/Morphorum`**. The bootstrap may ask for `sudo` to install Git using a supported package manager. If preferred, inspect/download the bootstrap script before executing it.
 
-```bash
+For a custom folder:
+
+~~~bash
 curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash -s -- "$HOME/Apps/Morphorum"
-```
+~~~
 
-Alternatively, set `MORPHORUM_HOME` in the environment. The precedence is **explicit path → environment variable → default location**.
+An explicit install path takes priority over the optional `MORPHORUM_HOME` variable. Some Linux systems require FFmpeg to be installed separately. GPU drivers and CUDA support depend on your distribution.
 
-The installer provisions the local Python runtime and dependencies. If FFmpeg is missing, install it through your Linux distribution's package manager.
+### Linux: start the app
 
-### Launch on Linux
-
-```bash
+~~~bash
 cd ~/Morphorum
 ./run.sh
-```
+~~~
 
-Open **http://127.0.0.1:7865** in your browser. Linux uses `7865` by default and supports a launch-time environment override:
+Visit **http://127.0.0.1:7865**. An optional per-launch port override is supported:
 
-```bash
+~~~bash
 MORPHORUM_PORT_OVERRIDE=8080 ./run.sh
-```
+~~~
 
-Linux does **not** currently use the Windows port-prompt/file mechanism. Its run script uses `MORPHORUM_PORT_OVERRIDE` when supplied.
+The Linux launcher does not use the Windows saved-port file.
 
-## Local access versus LAN access
+## After installation: choose a model
 
-**Local mode** (default) binds the server to `127.0.0.1` so only the host computer can open it:
+1. Open **Models**.
+2. Download managed **Z-Image-Turbo** (approximately 33 GB), then choose **Use Model**, **or** specify your existing SDXL/FLUX folders in **Settings**, scan and select an available checkpoint.
+3. Use **Image Generation** to make one modest-resolution test image.
+4. For animation, choose **Motion Lab → New Project Wizard**.
 
-| Platform | Command |
-| --- | --- |
-| Windows | `.\run.bat` |
-| Linux | `./run.sh` |
+A new installation with no saved projects may include the **Default** example animation: 120 frames at 24 FPS. It does not automatically have a model assigned, and a full 1024 × 1024 animation is not the best first GPU test.
 
-**LAN mode** lets other devices on your private network connect:
+Continue with [Getting started](GETTING_STARTED.md) for the full walkthrough.
 
-| Platform | Command |
-| --- | --- |
-| Windows | `.\run-lan.bat` |
-| Linux | `./run-lan.sh` |
+## Network access: three choices
 
-Windows also supports `.\run-lan.bat -Port 8080`. The Windows launcher lists detected local IPv4 URLs. On Linux, read the host computer's LAN IPv4 address and use `http://HOST_IP:7865` or your configured override.
+| Mode | Windows | Linux | Default port | Access |
+| --- | --- | --- | --- | --- |
+| Local browser + API | `.\run.bat` | `./run.sh` | 7865 | This computer only |
+| Browser + API on trusted LAN | `.\run-lan.bat` | `./run-lan.sh` | 7865 | Other local devices; **no login** |
+| Authenticated backend-only API | `.\run.bat --backend-only` | `./run.sh --backend-only` | 7866 | This computer only |
+
+To make backend-only accessible on a trusted LAN, use `.\run.bat --backend-only --lan` on Windows or `./run.sh --backend-only --lan` on Linux. See the dedicated [Backend-only guide](BACKEND_ONLY.md) for authentication and secure client configuration.
 
 > [!WARNING]
-> **Do not expose Morphorum directly to the internet.** The LAN server is **not password-protected**. Restrict it to a network you trust, and do not forward its listening port through your router. If a device cannot connect, check the operating system's firewall and that both devices are on the same local network.
+> **Neither LAN mode is safe to expose directly to the internet.** Ordinary browser LAN mode is unauthenticated; backend-only bearer authentication does **not encrypt** credentials on plain HTTP. Do not use router port forwarding. Prefer a secure VPN or TLS tunnel for untrusted networks.
 
-## First-run example project and AI models
+The machine running Morphorum is the server. Connecting devices use its **actual private IP address**, for example `http://192.168.1.50:7865`, not `0.0.0.0`. A local firewall may need a narrowly scoped rule for your private network.
 
-A clean installation with an empty project library gets a **Default** animation project containing 3D settings, 120 frames at 24 FPS, 1024 × 1024 resolution, and two prompt keyframes. Its source is `config/example-project.json`.
+## Updates and repairs
 
-The installer **does not replace existing projects** during repair or update. Open **Motion Lab → Project Manager → Default**, choose **Open in Editor**, and select a model before rendering.
+**Stop the server before updating.** Back up projects and outputs if they matter to you.
 
-**Starting your own animation:** open **Motion Lab → New Project Wizard**. It walks through naming the project, selecting an available model, animation dimensions and timing, prompts, camera movement, and generation settings before the final Review & Save. It starts from Morphorum's canonical default-project schema and creates nothing until you save. The bundled Default example and new wizard projects are separate. See [New Project Wizard](NEW_PROJECT_WIZARD.md).
-
-On a new installation with **no usable generation checkpoint**, a translucent warning banner at the top of the interface provides a **Configure Models / Help** dialog. This explains checkpoint directory settings, optional LoRA paths, downloading managed Z-Image-Turbo, and scanning. The banner appears only after the model index successfully loads, and disappears when a usable checkpoint is indexed.
-
-For a first model, open **Models** and use the managed **Z-Image-Turbo** download. It is an approximately **33 GB** model package and supports both txt2img and img2img. Existing compatible SDXL and FLUX checkpoints can be indexed from folders selected under **Settings**. See [Getting started](GETTING_STARTED.md#2-download-or-locate-an-image-model).
-
-## Updating Morphorum
-
-Before any update, stop the running server and save your work.
-
-From the installation folder:
-
-| Goal | Windows | Linux |
+| Task | Windows (from install folder) | Linux (from install folder) |
 | --- | --- | --- |
-| Update the current Git branch | `.\update.bat` | `./update.sh` |
-| Switch to the published main branch | `.\update.bat main` | `./update.sh main` |
-| Switch to development (advanced) | `.\update.bat dev-ui` | `./update.sh dev-ui` |
+| Update current branch | `.\update.bat` | `./update.sh` |
+| Switch/update to published main | `.\update.bat main` | `./update.sh main` |
+| Repair and run diagnostics | `.\repair.bat` | `./repair.sh` |
 
-The updater checks for **uncommitted modifications to Git-tracked files**, backs up configuration and top-level database files, uses **fast-forward-only Git pulls**, refreshes dependencies, and runs verification. It can attempt to roll back its source/runtime changes if the update fails.
+Updates use guarded Git operations and normally preserve the data directories. They may refuse to continue if you have uncommitted changes in Git-tracked files. **Do not run `git reset --hard` just to silence a warning.**
 
-> [!NOTE]
-> An update is **not** a substitute for a full backup. Back up your `projects/`, `outputs/`, and `data/` folders separately if the work matters to you. The updater's backup focuses on configuration and selected database files; it does not duplicate every model or rendered video.
+For Windows, the initial port preference lives at `data\server-port.txt` and is used by subsequent normal launches. Linux uses the launcher defaults or environment overrides.
 
-### Updating an older installation without branch-aware scripts
+## What to back up
 
-Very early installations may not accept a branch name on the command line. In that case, stop Morphorum, open a terminal in the installation directory, and use Git to switch to an existing main tracking branch, then update:
+The most important folders inside the installation directory are:
 
-```powershell
-git fetch origin
-git switch main
-.\update.bat
-```
+| Folder | Contents |
+| --- | --- |
+| `projects/` | Animation projects and their managed media |
+| `outputs/` | Generated images, frames, videos and exports |
+| `data/` | Application settings and state (including sensitive backend credentials) |
+| `logs/` | Installer and diagnostic logs |
+| `cache/` | Download caches |
+| `backups/` | Selected updater backup and rollback information |
 
-If `main` does not exist locally, use `git switch --track origin/main`. **Do not use `git reset --hard` to fix errors:** it can discard local tracked modifications. See [Troubleshooting](TROUBLESHOOTING.md#updater-refuses-to-run-because-of-local-changes).
+**Protect `data/`** because it can contain authentication material. Do not post the entire folder or its contents in bug reports. The updater's own backups are **not** full backups of all projects, renders or checkpoints. Copy important user data somewhere separate before substantial changes.
 
-## Repair, diagnostics, and logs
+## Need help?
 
-Run these from the installed Morphorum folder:
-
-| Task | Windows | Linux |
-| --- | --- | --- |
-| Repair runtime/dependencies and diagnose | `.\repair.bat` | `./repair.sh` |
-| Start and inspect console messages | `.\run.bat` | `./run.sh` |
-
-Repair refreshes the managed environment and invokes Morphorum's **doctor** checks (Python, Git, FFmpeg, runtime directories, available disk space, GPU/CUDA where present, and related dependencies).
-
-Useful locations:
-
-| Path (inside the installation folder) | What it contains | What updates do |
-| --- | --- | --- |
-| `data/` | User settings (`config.yaml`), selected port on Windows (`server-port.txt`), and runtime state | Preserve |
-| `projects/` | Animation projects and project-managed source files | Preserve |
-| `outputs/` | Generated images, frames, and video output | Preserve |
-| `cache/` | Download/cache data | Preserve (unless manually cleaned) |
-| `logs/` | Installer, repair, update, and runtime logs | Preserve |
-| `backups/` | Update backup and rollback metadata | Preserve |
-| `.runtime/` | Installer-owned `uv`, Python, and package cache | May repair/update |
-| `.venv/` | Installer-owned Python environment | May repair/update |
-| `config/example-project.json` | Bundled example template in source | Updated with source; not your saved project |
-
-The installer writes logs under `logs/`, including `install.log`, `update.log`, and `repair.log`. You can also run `.\run.bat` or `./run.sh` from a terminal and read the errors there.
-
-### Dependency versions and advanced development
-
-Morphorum uses `pyproject.toml` to define Python requirements, including **Python 3.12**, and `uv` for installation. The installer manages a local PyTorch build appropriate to available hardware. There is **no separate Node frontend build step for users**.
-
-For developer-oriented details see [Architecture](ARCHITECTURE.md), [Testing](TESTING.md), and [Contributing](../CONTRIBUTING.md).
-
-## Troubleshooting
-
-Problems starting the app, downloading a model, accessing from a phone, using CUDA, or exporting video? Start with the [troubleshooting guide](TROUBLESHOOTING.md). If that doesn't resolve it, include the exact error, your OS, GPU, command, and relevant log lines in a [GitHub issue](https://github.com/merberg-ai/Morphorum/issues).
+Read [Troubleshooting](TROUBLESHOOTING.md) for installer failures, GPU/CUDA problems, model scans, ports, missing FFmpeg and update errors. [Open an issue](https://github.com/merberg-ai/Morphorum/issues) with your OS, GPU, version and first relevant error. Redact tokens and private paths.
