@@ -1,19 +1,12 @@
 # Morphorum Studio: Native UI repository handoff
 
-**Purpose:** Give the future separate Morphorum Studio repository an explicit, tested backend contract. This file is authored in the Morphorum backend repository; **no Studio UI repository has been created**. The user will create that repository when ready.
+**Purpose:** Describe the accepted backend API contract for the separate native [Morphorum-Studio](https://github.com/merberg-ai/Morphorum-Studio) repository. The Studio repository is established and developing independently from Morphorum's browser UI.
 
-**Recommended new repo name:** `merberg-ai/Morphorum-Studio` (proposal, not yet created).
-**Candidate technology:** Python 3.12+, PySide6/Qt 6 for native Windows first, Linux as follow-up; package into a desktop installer later. An eventual Android/mobile app can use the same versioned API contract independently.
+**Technology:** Windows-first Python 3.12+, PySide6/Qt 6 native client, with Linux support as a later option.
 
-**Backend integration baseline:** DB2.1–DB2.5 work currently sits in the *stacked* feature PRs, not `main`:
-- #27 `feature/db2-client-contract` targets `dev-backend`
-- #28 `feature/db2-connection-manager` targets #27's branch
-- #29 `feature/db2-project-assets` targets #28's branch
-- #30 `feature/db2-live-recovery` targets #29's branch
-- #31 `feature/db2-final-integration` targets #30's branch
+**Accepted backend baseline:** DB1–DB2.5, integrated into `main` through [PR #32](https://github.com/merberg-ai/Morphorum/pull/32) on 2026-10-14 (source tree merge commit `0cb5d489e27b5193fac8dd075d418b8e324beddd`). All five DB2 milestone PRs (#27–#31) were integrated into `dev-backend` first, then promoted through `dev-ui`. On 2026-10-14 the user confirmed Studio connection testing and both normal and backend-only launch modes passed on the integrated `dev-ui` checkout.
 
-Every milestone has a verified checkpoint through DB2.4, and DB2.5 remains subject to physical acceptance. Do not base a newly created Studio repository on `main` until backend PR integration is deliberately completed and verified. For early Studio prototyping, explicitly point at the accepted DB2 feature branch and document the pinned contract version.
-
+**Versioning advice:** Studio should detect `api_contract_version=1` and required advertised capabilities at connection time rather than depend on branch names. Studio feature readiness and its own milestones are maintained in the separate repository. Details of the backend promotion are in [BACKEND_PROMOTION_20261014.md](BACKEND_PROMOTION_20261014.md).
 ## Separation of responsibilities
 
 ```text
@@ -138,4 +131,4 @@ Keep the existing browser UI functional throughout. UI appearance can reuse Morp
 
 The backend currently lacks historical durable job SSE replay and a cryptographically secure host-pairing ceremony over ordinary LAN HTTP; a single server owns its idempotency journal. Diffusion does not resume its GPU kernels across a host restart. The New Project Wizard camera-default issue belongs to the Web UI workstream. Large multi-minute Audio Director soundtrack support needs separate upload/transfer design. Any still-open physical checks are recorded in `docs/DB2_FINAL_ACCEPTANCE.md` and **must not be silently marked passed**.
 
-**Handoff readiness rule:** Finish DB2.5 physical tests, record a verified checkpoint and obtain explicit approval for backend branch integration; then the user creates the separate Studio repository and we start S0/S1 from the accepted backend contract.
+**Handoff readiness (2026-10-14):** Backend DB1–DB2.5 and the integrated Studio connection smoke test are accepted. `main` contains the promoted API contract. Continue Studio development and validation independently in `merberg-ai/Morphorum-Studio`; do not infer that every native Studio feature has completed physical acceptance.

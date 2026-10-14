@@ -125,6 +125,17 @@ For the safest first test, use a **short project and a model-supported resolutio
 
 The starter project is installed **only when no projects exist**. An update or repair will not replace an edited project.
 
+## Optional backend-only mode and Morphorum Studio
+
+The browser UI and the generation backend remain together in the standard launcher (`run.bat` or `run.sh`). Morphorum also supports an **API-only** process for native clients, including the separately developed [Morphorum-Studio](https://github.com/merberg-ai/Morphorum-Studio):
+
+- On Windows, `run.bat --backend-only` serves the authenticated API on loopback port **7866**, without browser routes.
+- For a **trusted local network** only, `run.bat --backend-only --lan` opts in to LAN binding. Client authentication with bearer credentials is required.
+- Linux uses `./run.sh --backend-only` or `./run.sh --backend-only --lan`.
+- **Security:** plaintext LAN HTTP does not encrypt bearer tokens. Use a secure VPN/tunnel or TLS for any untrusted network, and do not port-forward this server. Standard browser LAN mode remains a different, unauthenticated mode.
+
+See [Backend-only mode](docs/BACKEND_ONLY.md), [Studio API handoff](docs/STUDIO_CLIENT_HANDOFF.md), and the [2026-10-14 backend promotion record](docs/BACKEND_PROMOTION_20261014.md).
+
 ## Running, updating, and repairing
 
 Run these from your **Morphorum installation directory**:
