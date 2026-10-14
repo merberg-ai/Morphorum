@@ -1,6 +1,6 @@
-# Morphorum API-only mode (DB1 test candidate)
+# Morphorum API-only mode (DB1–DB2.5 integrated)
 
-**Workstream:** `dev-backend` — keep isolated from `main` until full Windows SDXL render/preview acceptance. This mode removes **browser UI serving only**; generation, animation, GPU telemetry, live completed-frame previews, console SSE, project/audio services and exports remain on the API.
+**Current status (2026-10-14):** Integrated into `main` in [PR #32](https://github.com/merberg-ai/Morphorum/pull/32) after DB1–DB2.5 physical acceptance. Morphorum Studio connection and the normal/browser + backend-only launch smoke tests also passed against promoted `dev-ui`. This mode removes **browser UI serving only**; generation, animation, GPU telemetry, live completed-frame previews, console SSE, project/audio services and exports remain on the API. The dated DB1-only test notes below are retained as historical records; their old pending language was superseded by the [DB2.5 final acceptance](DB2_FINAL_ACCEPTANCE.md) and [promotion record](BACKEND_PROMOTION_20261014.md).
 
 ## Start
 
@@ -108,8 +108,8 @@ This record is a checkpoint of the **verified API-only remote workflow**, not pr
 
 ## Known constraints and next steps
 
-- Studio isn't built yet. Backend-only has API endpoints and live *completed*-frame previews, **not** every intermediate diffusion step.
-- Existing REST polling and console SSE stay available. Dedicated job-progress SSE/push events, native Studio client and secure LAN pairing UX are DB2/Studio work.
+- Native Studio lives in the separate [Morphorum-Studio](https://github.com/merberg-ai/Morphorum-Studio) repository. Backend-only has API endpoints and live *completed*-frame previews, **not** every intermediate diffusion step.
+- Existing REST polling, console SSE and the DB2 typed client events/recovery contract are available. Durable historical SSE replay and a cryptographically secure pairing ceremony remain unsupported.
 - Existing cancel/resume support stays available; a dedicated pause feature must be audited separately before claiming parity.
 - Server/client file paths differ across LAN machines; Studio must upload soundtrack/asset bytes or use explicit managed shares, not send a Windows client path as if it were a backend file.
 - Keep access to trusted private networks only. Do not enable public bind without credentials and transport protection.

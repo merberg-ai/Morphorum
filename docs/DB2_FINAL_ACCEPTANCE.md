@@ -1,6 +1,6 @@
 # DB2.5 backend integration and physical acceptance
 
-**State:** isolated feature candidate `feature/db2-final-integration` from DB2.4 verified checkpoint `a449c51fb0fb7415899fffbe75d8e682ccb4d66a`. Draft PR #31 targets `feature/db2-live-recovery`. **Do not merge to `dev-backend` or `main` until explicit user approval.** The native Studio desktop application will live in a user-created **separate repository**, not this branch.
+**Current disposition (2026-10-14): ACCEPTED AND INTEGRATED.** This page preserves the original 2026-10-12 DB2.5 acceptance script and incremental test record, including dated instructions for an isolated feature branch. Those instructions are historical, not the current branch/release status. DB2.5 was accepted on Windows Omen/Ubuntu Mini, integrated into `dev-backend`, promoted through `dev-ui` and then into `main` by [PR #32](https://github.com/merberg-ai/Morphorum/pull/32). The final `main` backend merge commit is `0cb5d489e27b5193fac8dd075d418b8e324beddd`. [Morphorum-Studio](https://github.com/merberg-ai/Morphorum-Studio) is the separate native client repository.
 
 DB2.5 does not redesign GPU inference, alter camera motion, replace the current Web UI or create a Studio application. Its purpose is to close the remaining backend/client acceptance gaps and prepare an API contract ready for a new native desktop client.
 
@@ -171,4 +171,4 @@ At the time of the first four gates, DB2.5 was not yet accepted. The final physi
 
 **DB2.5 acceptance: PASS.** Gate B–E scripted physical tests returned 41/41 passing checks, and the remaining Gate F browser/GPU regression was accepted. Prior DB2.1–DB2.4 checkpoint acceptance remains valid. Limits on interrupted backend processes, live SSE history and crash-uncertain submissions remain as documented.
 
-The next step is a verified DB2.5 checkpoint followed by review of the stacked draft PRs #27–#31. The work is still isolated from `dev-backend` and `main`; integration awaits separate approval. Morphorum Studio's native desktop UI will live in a user-created repository.
+**Post-acceptance update (2026-10-14):** DB2 PRs #27–#31 were integrated in order; the combined backend was verified and promoted through `dev-ui` (PR #33) to `main` (PR #32). The user confirmed the integrated checkout passes native Studio connection testing and both browser/normal and backend-only launch modes. This supersedes the dated pending-integration notes above. See [promotion record](BACKEND_PROMOTION_20261014.md).

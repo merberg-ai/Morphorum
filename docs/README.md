@@ -19,6 +19,7 @@ Welcome to the Morphorum documentation. Pick the guide that matches what you wan
 | Area | Documents |
 | --- | --- |
 | Architecture | [Architecture](ARCHITECTURE.md), [Contributing](../CONTRIBUTING.md), [Testing](TESTING.md) |
+| Backend-only and native Studio integration | [Backend-only launch and security](BACKEND_ONLY.md), [Studio contract](STUDIO_CLIENT_HANDOFF.md), [Backend promotion record](BACKEND_PROMOTION_20261014.md), [DB2.5 physical acceptance](DB2_FINAL_ACCEPTANCE.md) |
 | Models and LoRAs | [LoRA behavior](LORAS.md), [Performance and cadence](PERFORMANCE_CADENCE.md), [SDXL memory investigation](SDXL_ANIMATION_MEMORY_INVESTIGATION.md), [SDXL LoRA text encoder investigation](SDXL_LORA_TEXT_ENCODER_INVESTIGATION.md) |
 | Animation projects and engine | [Project format](ANIMATION_PROJECTS.md), [Schedule engine](SCHEDULES.md), [Timeline schema](TIMELINE_SCHEMA.md), [Timeline API](TIMELINE_API.md), [Timeline UI](TIMELINE_UI.md) |
 | Renders and preview | [Render pipeline](ANIMATION_RENDERING.md), [Camera preview](MOTION_PREVIEW.md), [2D hardening](2D_HARDENING.md), [3D camera MVP](3D_CAMERA_MVP.md) |

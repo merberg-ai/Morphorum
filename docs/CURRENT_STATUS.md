@@ -1,8 +1,8 @@
 # Morphorum: current features and development status
 
 **Build version:** `0.1.0a1` (early alpha)  
-**Build lineage:** Desktop/Motion Lab PR [#20](https://github.com/merberg-ai/Morphorum/pull/20), first-run onboarding PR [#22](https://github.com/merberg-ai/Morphorum/pull/22) (integrated into `dev-ui` at `661d029a267bc8c9b6fb01995f46a7ab4b323711`).  
-**Status reviewed:** 2026-10-11
+**Build lineage:** Desktop/Motion Lab PR [#20](https://github.com/merberg-ai/Morphorum/pull/20), first-run onboarding PR [#22](https://github.com/merberg-ai/Morphorum/pull/22), and the DB1–DB2.5 backend integration PR [#32](https://github.com/merberg-ai/Morphorum/pull/32) (merged into `main` on 2026-10-14).  
+**Status reviewed:** 2026-10-14
 
 > [!NOTE]
 > This page summarizes the current implementation and physical-test history. Some documents under `docs/` contain **historical plans, research, and acceptance notes**; headings such as "not yet implemented" in an old roadmap should not be treated as a current feature list. For setup, use the [README](../README.md) and [Getting started](GETTING_STARTED.md).
@@ -24,6 +24,18 @@
 | **Deforum and video input** | Selected legacy Deforum JSON/TXT settings-to-new-project import remains available alongside the new existing-project motion-only importer; upload/inspect/extract video-source frames for supported hybrid experiments. |
 | **Appearance** | Four dark themes (Midnight Glass, Deep Ocean, Amethyst Night, Slate Graphite), interface/console font choices, responsive layouts, and version popover links to repository/current Git branch/exact commit. |
 | **Diagnostics** | On-screen console, hardware/VRAM reporting when available, job progress, installer self-test and doctor commands. |
+
+## Backend-only and native Studio compatibility (2026-10-14)
+
+- **Production backend integrated:** `dev-backend` DB1–DB2.5 was promoted through `dev-ui` into `main` in PR [#32](https://github.com/merberg-ai/Morphorum/pull/32). The source-code integration merge commit is `0cb5d489e27b5193fac8dd075d418b8e324beddd`. PR [#33](https://github.com/merberg-ai/Morphorum/pull/33) staged the integration into `dev-ui` first.
+- **Standard launch remains supported:** `run.bat` / `run.sh` run the browser UI and GPU API normally. The optional `--backend-only` mode runs the API without static browser routes; `--backend-only --lan` explicitly binds the authenticated API to LAN interfaces (default port 7866).
+- **Remote-client contract:** versioned capabilities, per-client revocable credentials, project/asset integrity transfers, conditional saves, keyed submissions, typed event streams, reconnect/recovery, and MP4/WebM checksum-backed exports with soundtrack are implemented. For practical client details see [Studio client handoff](STUDIO_CLIENT_HANDOFF.md) and [Backend-only start/security](BACKEND_ONLY.md).
+- **Physical acceptance:** prior DB1–DB2.5 Windows GPU/Ubuntu LAN tests passed, including FFmpeg audio exports; on 2026-10-14 the user also confirmed the integrated `dev-ui` checkout runs in both browser and backend-only modes and passes the Morphorum Studio connection test. CI passed on the integration candidate and post-promotion `dev-ui`.
+- **Separate native app:** [Morphorum-Studio](https://github.com/merberg-ai/Morphorum-Studio) is a distinct repository with its own roadmap and native UI; the successful connection smoke test is not a claim that every Studio editing or rendering feature is production-complete.
+- **Security boundary:** backend-only mode requires bearer auth, but plain HTTP on untrusted LAN is not encrypted. The ordinary Web UI LAN service remains a separate, unauthenticated mode. Neither should be internet-exposed without appropriate controls.
+- **Known protocol boundaries:** idempotency is scoped to one host, an actual server restart interrupts active GPU processing, and event history is not a durable SSE replay archive.
+
+See [Backend promotion record](BACKEND_PROMOTION_20261014.md) for commit IDs, verification and rollback refs.
 
 ## Verified testing and current caveats
 

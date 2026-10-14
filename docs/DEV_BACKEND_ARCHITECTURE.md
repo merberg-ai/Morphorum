@@ -1,8 +1,8 @@
 # Morphorum backend-only mode / Morphorum Studio contract
 
-**Status (2026-10-12):** DB1 remote Windows Omen/Ubuntu Mini transport, still-image GPU output and remote animation/GIF acceptance passed. DB2.1 (client contract), DB2.2 (profiles/revocable client auth), DB2.3 (project-owned asset transfers), and DB2.4 (live render disconnect/recovery) all have verified acceptance checkpoints. DB2.4 user test completed a 120-frame animation across a client disconnect. DB2.5 final backend integration is implemented on `feature/db2-final-integration` and is **pending actual Windows/Ubuntu physical testing** for backend restart, forced lost-response replay, FFmpeg MP4/WebM with audio and normal browser-mode GPU regression. The native Studio UI has **not started** and will live in a new repository created by the user. DB2 PRs are stacked and unmerged; `dev-backend`/`main` untouched.
-**Branch:** `dev-backend`, created from verified `main` commit `5a14fb52141000ce0316aa7372ffa3e1610a86b1` after Deforum Motion Settings Import integration.
-**Rule:** Keep normal Morphorum startup, its browser UI, Linux compatibility, project schemas, and existing generation behavior unchanged. No merge to `main` before physical Windows acceptance.
+**Current status (2026-10-14):** DB1 through DB2.5 were physically accepted on Windows Omen/Ubuntu Mini and integrated into `main` via PR #32, merge commit `0cb5d489e27b5193fac8dd075d418b8e324beddd`. The integrated `dev-ui` branch also passed user testing of normal/browser and backend-only modes and the Morphorum Studio connection test on 2026-10-14. The separate [Morphorum-Studio](https://github.com/merberg-ai/Morphorum-Studio) repository now exists and is under active development.
+**Original workstream:** `dev-backend` branched from `main` at `5a14fb52141000ce0316aa7372ffa3e1610a86b1`. Its milestones and original acceptance gates are retained below for historical traceability.
+**Compatibility rule:** Keep normal browser launch, Linux compatibility, project schemas and existing generation behavior intact. Backend-only must remove only browser hosting; client API capability data must survive. See [promotion record](BACKEND_PROMOTION_20261014.md).
 
 ## Goal
 
@@ -49,19 +49,19 @@ Existing frontend polls render/generation job state and telemetry and consumes c
 
 ## Gates
 
-### DB1: Server split and CLI (implemented; Windows physical acceptance pending)
+### DB1: Server split and CLI (implemented and physically accepted)
 - `--backend-only` works through Python CLI and Windows entry scripts. Starts on loopback by default, and supports explicit `--lan` / `--host 0.0.0.0` with mandatory minimal API authentication. Standard browser and existing standard LAN modes still behave exactly as before.
 - Backend-only serves all `/api/*` functional routes and does **not** serve `/` HTML or `/assets/*`.
 - No new default downloads, model path changes, or duplicated model installations.
 - FastAPI/TestClient route parity tests, CLI/startup/security baseline tests (including authenticated vs unauthorized LAN API access and actual bind address); regular frontend smoke tests must still pass.
 - Stop for review and acceptance before advancing.
 
-### DB2: Client contract and safety (DB2.1–DB2.4 physically verified; DB2.5 acceptance pending)
+### DB2: Client contract and safety (DB2.1–DB2.5 implemented and physically accepted)
 - DB2.1: additive versioned capabilities, stable backend installation/boot IDs, structured compatible errors, Python reference client. Verified checkpoint: `checkpoint/db2-1-client-contract-verified-20261012`.
 - DB2.2: local-only per-client revocable credentials, named connection profiles, safe token storage boundaries and identity-aware reconnection. Verified checkpoint: `checkpoint/db2-2-connection-security-verified-20261012`.
 - DB2.3: project asset descriptors, soundtrack/Motion Lab WAV retrieval, SHA-256 transfers, conditional If-Match saves. Verified checkpoint: `checkpoint/db2-3-project-assets-verified-20261012`.
 - DB2.4: idempotent GPU submissions, typed SSE with restart/gap detection, persistent remote render sessions; physical 120-frame render survived client Ctrl+C/reconnect and downloaded final GIF. Verified checkpoint: `checkpoint/db2-4-live-render-recovery-verified-20261012`.
-- DB2.5: final video checksum integrity, synthetic audio/FFmpeg acceptance fixture, restart/lost-response smoke tests, normal browser regression and new-repo Studio handoff. **Do not claim physical acceptance before the user tests it.**
+- DB2.5: final video checksum integrity, synthetic audio/FFmpeg acceptance fixture, restart/lost-response smoke tests, normal browser regression and new-repo Studio handoff. **Physically accepted on 2026-10-12** with separate integrated-mode confirmation on 2026-10-14; detailed test provenance remains in `DB2_FINAL_ACCEPTANCE.md`.
 - See `DB2_FINAL_ACCEPTANCE.md` and `STUDIO_CLIENT_HANDOFF.md`; no insecure LAN pairing ceremony or durable SSE replay is claimed.
 
 ### DB3: Studio workflow completeness (planned)
