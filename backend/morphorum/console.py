@@ -47,11 +47,18 @@ def emit_console(level: str, category: str, message: str) -> ConsoleEvent:
     return event
 
 
-def snapshot(after_id: int = 0, limit: int = 500) -> list[dict]:
+def snapshot(after_id: int = 0, limit: int = 500, *, from_start: bool = False) -> list[dict]:
     limit = max(1, min(int(limit), _MAX_EVENTS))
     with _lock:
         selected = [event for event in _events if event.id > after_id]
-    return [event.to_dict() for event in selected[-limit:]]
+    return [event.to_dict() for event in (selected[:limit] if from_start else selected[-limit:])]
+
+
+def console_bounds() -> tuple[int, int]:
+    with _lock:
+        if not _events:
+            return 0, 0
+        return _events[0].id, _events[-1].id
 
 
 def clear_console() -> None:
@@ -103,11 +110,31 @@ def install_logging_handler() -> None:
     emit_console("info", "runtime", "Morphorum console event stream initialized.")
 
 
-async def sse_events(after_id: int = 0) -> Iterator[str]:
+async def sse_events(after_id: int = 0, *, previous_boot_id: str | None = None) -> Iterator[str]:
+    from .client_protocol import BOOT_ID
+
     cursor = max(0, int(after_id))
     last_heartbeat = time.monotonic()
+    first, newest = console_bounds()
+    if (previous_boot_id and previous_boot_id != BOOT_ID) or cursor > newest:
+        yield ("event: console_reset\n"
+               "data: " + json.dumps({"boot_id": BOOT_ID, "reason": "backend_restarted",
+                                        "action": "reload_console_cursor"}) + "\n\n")
+        cursor = 0
+    elif cursor and first and cursor < first - 1:
+        yield ("event: console_gap\n"
+               "data: " + json.dumps({"boot_id": BOOT_ID, "first_available": first,
+                                        "after_id": cursor}) + "\n\n")
+        cursor = first - 1
+
     while True:
-        batch = snapshot(cursor, limit=250)
+        first, _ = console_bounds()
+        if cursor and first and cursor < first - 1:
+            yield ("event: console_gap\n"
+                   "data: " + json.dumps({"boot_id": BOOT_ID, "first_available": first,
+                                            "after_id": cursor}) + "\n\n")
+            cursor = first - 1
+        batch = snapshot(cursor, limit=250, from_start=True)
         if batch:
             for event in batch:
                 cursor = max(cursor, int(event["id"]))

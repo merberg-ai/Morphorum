@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from .backend_access import authorized_backend_request
 from .animation_projects import (
+    AnimationProjectConflict,
     AnimationProjectError,
+    project_etag,
     animation_project_directory,
     animation_project_path,
     create_animation_project,
@@ -23,6 +28,14 @@ from .animation_projects import (
     save_animation_project,
     trash_animation_project,
 )
+from .project_assets import (
+    ProjectAssetError, ProjectAssetTooLarge, catalog as project_asset_catalog,
+    read_bounded, source_descriptor, soundtrack_descriptor, soundtrack_path,
+    motion_wav_descriptor, motion_wav_path,
+)
+from .animation_motion import SOURCE_MAX_BYTES
+from .imported_soundtrack import MAX_IMPORT_AUDIO_BYTES
+
 from .animation_resolution import (
     project_schedule_series,
     resolve_project_frame,
@@ -68,6 +81,13 @@ from .animation_video import (
     video_export_manager,
 )
 from .schedules import ScheduleError
+from .client_protocol import capabilities as client_capabilities, error_response
+from .client_submissions import SubmissionConflict, submit_once
+from .client_events import job_event_stream
+from .client_protocol import BOOT_ID
+from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from .console import (
     clear_console,
     emit_console,
@@ -98,6 +118,8 @@ from .system_info import (
     windows_gpu_process_memory,
 )
 
+BACKEND_ONLY = os.getenv("MORPHORUM_BACKEND_ONLY", "") == "1"
+
 FRONTEND_DIR = ROOT / "frontend" / "dist"
 FRONTEND_INDEX = FRONTEND_DIR / "index.html"
 ASSET_DIR = FRONTEND_DIR / "assets"
@@ -115,7 +137,7 @@ def _frontend_asset_version() -> str:
     return digest.hexdigest()[:12]
 
 
-FRONTEND_ASSET_VERSION = _frontend_asset_version()
+FRONTEND_ASSET_VERSION = None if BACKEND_ONLY else _frontend_asset_version()
 
 
 @asynccontextmanager
@@ -132,14 +154,48 @@ app = FastAPI(
     version=__version__,
     description="Morphorum local AI image and animation studio.",
     lifespan=lifespan,
+    docs_url=None if BACKEND_ONLY else "/docs",
+    redoc_url=None if BACKEND_ONLY else "/redoc",
+    openapi_url=None if BACKEND_ONLY else "/openapi.json",
 )
 
-if ASSET_DIR.exists():
+if not BACKEND_ONLY and ASSET_DIR.exists():
     app.mount("/assets", StaticFiles(directory=ASSET_DIR), name="assets")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def client_http_exception(request: Request, exc: StarletteHTTPException):
+    return error_response(
+        request, status_code=exc.status_code, detail=jsonable_encoder(exc.detail),
+        headers=dict(exc.headers or {}),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def client_validation_exception(request: Request, exc: RequestValidationError):
+    return error_response(
+        request, status_code=422, detail=jsonable_encoder(exc.errors()),
+        message="Request payload validation failed.",
+    )
 
 
 @app.middleware("http")
 async def api_console_middleware(request: Request, call_next):
+    # API-only mode has no browser shell; every API endpoint (including SSE,
+    # preview files, settings and status) requires the shared bearer token.
+    if BACKEND_ONLY and request.url.path.startswith("/api/"):
+        if request.headers.get("origin") is not None:
+            return error_response(
+                request, status_code=403,
+                code="BROWSER_ORIGIN_FORBIDDEN",
+                detail="Browser-origin API requests are disabled.",
+            )
+        if not authorized_backend_request(request.headers.get("authorization")):
+            return error_response(
+                request, status_code=401,
+                detail="Backend API authentication required.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     started = time.perf_counter()
     try:
         response = await call_next(request)
@@ -170,7 +226,6 @@ async def api_console_middleware(request: Request, call_next):
     return response
 
 
-@app.get("/", include_in_schema=False)
 def root():
     if FRONTEND_INDEX.exists():
         html = FRONTEND_INDEX.read_text(encoding="utf-8")
@@ -180,6 +235,10 @@ def root():
         "<h1>Morphorum</h1><p>Frontend assets are missing. Run the Morphorum repair command.</p>",
         status_code=503,
     )
+
+
+if not BACKEND_ONLY:
+    app.add_api_route("/", root, methods=["GET"], include_in_schema=False)
 
 
 @app.get("/api/health")
@@ -192,8 +251,19 @@ def health() -> dict:
         "git_commit": git_commit(),
         "git_commit_full": git_commit_full(),
         "frontend_asset_version": FRONTEND_ASSET_VERSION,
+        "mode": "backend-only" if BACKEND_ONLY else "standard",
+        "api_contract_version": 1,
         "root": str(ROOT),
     }
+
+
+@app.get("/api/client/capabilities")
+def api_client_capabilities() -> dict[str, Any]:
+    """DB2.1 additive feature/identity handshake for native clients."""
+    return client_capabilities(
+        mode="backend-only" if BACKEND_ONLY else "standard",
+        video_export=video_export_manager.available(),
+    )
 
 
 @app.get("/api/system")
@@ -268,15 +338,19 @@ async def api_attach_imported_soundtrack(project_id: str, request: Request) -> d
         from urllib.parse import unquote
         filename = unquote(request.headers.get("x-audio-filename", ""))
         offset = request.headers.get("x-audio-offset-seconds", "0")
-        data = bytearray()
-        async for chunk in request.stream():
-            data.extend(chunk)
-            if len(data) > MAX_IMPORT_AUDIO_BYTES:
-                raise ImportedSoundtrackError("Audio exceeds the 40 MiB attachment limit.")
-        record = store_soundtrack(project_id, bytes(data), filename=filename,
+        data = await read_bounded(
+            request.stream(), limit=MAX_IMPORT_AUDIO_BYTES,
+            expected_digest=request.headers.get("x-content-sha256"),
+        )
+        record = store_soundtrack(project_id, data, filename=filename,
                                  offset_seconds=offset)
-        return {"status": "attached", "soundtrack": record}
-    except (AnimationProjectError, ImportedSoundtrackError) as exc:
+        return {
+            "status": "attached", "soundtrack": record,
+            "asset": soundtrack_descriptor(project_id),
+        }
+    except ProjectAssetTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except (AnimationProjectError, ImportedSoundtrackError, ProjectAssetError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -394,9 +468,10 @@ def api_create_animation_project(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.get("/api/animation/projects/{project_id}")
-def api_animation_project(project_id: str) -> dict[str, Any]:
+def api_animation_project(project_id: str, response: Response) -> dict[str, Any]:
     try:
         project = load_animation_project(project_id)
+        response.headers["ETag"] = project_etag(project_id)
         return {
             "project": project,
             "path": animation_project_path(project_id),
@@ -406,14 +481,22 @@ def api_animation_project(project_id: str) -> dict[str, Any]:
 
 
 @app.put("/api/animation/projects/{project_id}")
-def api_save_animation_project(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def api_save_animation_project(
+    project_id: str, payload: dict[str, Any], request: Request, response: Response,
+) -> dict[str, Any]:
+    match = request.headers.get("if-match")
+    if match is not None and not re.fullmatch(r'"[0-9a-f]{64}"', match):
+        raise HTTPException(status_code=400, detail="If-Match must be one quoted project ETag.")
     try:
-        project = save_animation_project(project_id, payload)
+        project = save_animation_project(project_id, payload, expected_etag=match)
+        response.headers["ETag"] = project_etag(project_id)
         return {
             "status": "saved",
             "project": project,
             "path": animation_project_path(project_id),
         }
+    except AnimationProjectConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
@@ -807,11 +890,68 @@ def api_hybrid_frame_file(project_id: str, frame_number: int):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/projects/{project_id}/assets")
+def api_project_assets(project_id: str) -> dict[str, Any]:
+    """DB2.3 read-only project-owned media catalog. No server file paths."""
+    try:
+        load_animation_project(project_id)
+        return {"schema_version": 1, "assets": project_asset_catalog(project_id)}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/motion-import/soundtrack/file")
+def api_download_attached_soundtrack(project_id: str):
+    try:
+        load_animation_project(project_id)
+        asset = soundtrack_descriptor(project_id)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="No project soundtrack attached.")
+        path, record = soundtrack_path(project_id)
+        return FileResponse(
+            path, media_type=asset["media_type"], filename=record["filename"],
+            headers={
+                "Cache-Control": "private, no-store",
+                "ETag": '"' + asset["sha256"] + '"',
+                "X-Content-SHA256": asset["sha256"],
+            },
+        )
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio/{sha256}")
+def api_download_motion_lab_wav(project_id: str, sha256: str):
+    try:
+        load_animation_project(project_id)
+        asset = motion_wav_descriptor(project_id, sha256)
+        path = motion_wav_path(project_id, sha256)
+        return FileResponse(
+            path, media_type="audio/wav", filename=asset["filename"],
+            headers={
+                "Cache-Control": "private, no-store",
+                "ETag": '"' + asset["sha256"] + '"',
+                "X-Content-SHA256": asset["sha256"],
+            },
+        )
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/projects/{project_id}/source-image", status_code=201)
 async def api_upload_animation_source_image(project_id: str, request: Request) -> dict[str, Any]:
     try:
         project = load_animation_project(project_id)
-        data = await request.body()
+        data = await read_bounded(
+            request.stream(), limit=SOURCE_MAX_BYTES,
+            expected_digest=request.headers.get("x-content-sha256"),
+        )
         destination = animation_project_directory(project_id) / "assets" / "source.png"
         info = save_source_image(data, destination)
         filename = str(request.headers.get("x-filename") or "source-image").strip()[:255]
@@ -835,7 +975,12 @@ async def api_upload_animation_source_image(project_id: str, request: Request) -
                 "bytes": info["bytes"],
             },
             "project": saved,
+            "asset": source_descriptor(project_id),
         }
+    except ProjectAssetTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except MotionPreviewError as exc:
@@ -1048,7 +1193,7 @@ def api_motion_preview_frame(job_id: str, index: int):
 
 
 @app.post("/api/animation/renders", status_code=202)
-def api_start_animation_render(payload: dict[str, Any]) -> dict[str, Any]:
+def api_start_animation_render(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     project_payload = payload.get("project")
     if not isinstance(project_payload, dict):
         raise HTTPException(status_code=400, detail="Animation project payload is required.")
@@ -1063,10 +1208,15 @@ def api_start_animation_render(payload: dict[str, Any]) -> dict[str, Any]:
             project_id=project_id,
         )
         source_path = animation_project_directory(project_id) / "assets" / "source.png"
-        return animation_render_manager.submit(
-            project=normalized,
-            source_path=source_path,
+        return submit_once(
+            request, operation="animation-render", payload=payload,
+            submit=lambda: animation_render_manager.submit(
+                project=normalized, source_path=source_path,
+            ),
+            lookup=animation_render_manager.get,
         )
+    except SubmissionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (AnimationProjectError, AnimationRenderError, ScheduleError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1155,16 +1305,23 @@ def api_animation_video_availability() -> dict[str, Any]:
     status_code=202,
 )
 def api_start_animation_video_export(
-    project_id: str, render_id: str, payload: dict[str, Any],
+    project_id: str, render_id: str, payload: dict[str, Any], request: Request,
 ) -> dict[str, Any]:
     try:
-        return video_export_manager.start(
-            project_id, render_id,
-            format=str(payload.get("format") or "mp4"),
-            quality=str(payload.get("quality") or "balanced"),
-            fps=payload.get("fps"),
+        return submit_once(
+            request, operation=f"video-export:{project_id}:{render_id}",
+            payload=payload,
+            submit=lambda: video_export_manager.start(
+                project_id, render_id,
+                format=str(payload.get("format") or "mp4"),
+                quality=str(payload.get("quality") or "balanced"),
+                fps=payload.get("fps"),
+            ),
+            lookup=video_export_manager.get,
         )
-    except VideoExportError as exc:
+    except SubmissionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (VideoExportError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -1191,11 +1348,17 @@ def api_download_animation_video(
 ):
     try:
         path = video_export_manager.file(project_id, render_id, format, quality, fps)
+        digest = video_export_manager.checksum(path)
         return FileResponse(
             path,
             media_type="video/mp4" if format == "mp4" else "video/webm",
             filename=path.name,
             content_disposition_type="inline" if inline else "attachment",
+            headers={
+                "X-Content-SHA256": digest,
+                "ETag": '"' + digest + '"',
+                "Cache-Control": "private, no-store",
+            },
         )
     except VideoExportError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1543,10 +1706,16 @@ def generation_jobs(limit: int = 50) -> dict[str, Any]:
 
 
 @app.post("/api/generation/jobs", status_code=202)
-def create_generation_job(payload: dict[str, Any]) -> dict[str, Any]:
+def create_generation_job(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
-        return generation_manager.submit(payload)
-    except GenerationError as exc:
+        return submit_once(
+            request, operation="generation-image", payload=payload,
+            submit=lambda: generation_manager.submit(payload),
+            lookup=generation_manager.get,
+        )
+    except SubmissionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (GenerationError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -1578,18 +1747,54 @@ def generation_image(job_id: str, filename: str):
 
 @app.get("/api/console")
 def get_console(after_id: int = 0, limit: int = 500) -> dict[str, Any]:
-    return {"events": snapshot(after_id=after_id, limit=limit)}
+    return {"events": snapshot(after_id=after_id, limit=limit), "boot_id": BOOT_ID}
 
 
 @app.get("/api/console/stream")
-def stream_console(after_id: int = 0):
+def stream_console(after_id: int = 0, boot_id: str | None = None):
     return StreamingResponse(
-        sse_events(after_id),
+        sse_events(after_id, previous_boot_id=boot_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "X-Backend-Boot-ID": BOOT_ID,
+        },
+    )
+
+
+@app.get("/api/client/jobs/{kind}/{job_id}/events")
+def api_client_job_events(kind: str, job_id: str, boot_id: str | None = None):
+    if kind == "animation":
+        def get_job():
+            try:
+                return animation_render_manager.get(job_id)
+            except AnimationRenderError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+    elif kind == "image":
+        def get_job():
+            job = generation_manager.get(job_id)
+            if job is None:
+                raise HTTPException(status_code=404, detail="Generation job not found")
+            return job
+    elif kind == "video":
+        def get_job():
+            try:
+                return video_export_manager.get(job_id)
+            except VideoExportError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported job kind.")
+    get_job()  # Return 404 before streaming rather than after response starts.
+    return StreamingResponse(
+        job_event_stream(kind, get_job, previous_boot_id=boot_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "X-Backend-Boot-ID": BOOT_ID,
         },
     )
 

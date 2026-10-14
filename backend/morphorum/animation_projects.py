@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import threading
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -45,6 +47,23 @@ _KNOWN_TOP_LEVEL = {
 
 class AnimationProjectError(RuntimeError):
     pass
+
+
+class AnimationProjectConflict(AnimationProjectError):
+    """Conditional project update refers to a stale revision."""
+
+
+_PROJECT_SAVE_LOCK = threading.RLock()
+
+
+def project_etag(project_id: str) -> str:
+    """Strong ETag of saved project bytes, independent of timestamp precision."""
+    path = _project_file(project_id)
+    try:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    except FileNotFoundError as exc:
+        raise AnimationProjectError("Animation project not found.") from exc
+    return f'"{digest}"'
 
 
 def _utc_now() -> str:
@@ -615,22 +634,30 @@ def save_animation_project(
     payload: dict[str, Any],
     *,
     prefer_tracks: bool | None = None,
+    expected_etag: str | None = None,
 ) -> dict[str, Any]:
-    path = _project_file(project_id)
-    if not path.is_file():
-        raise AnimationProjectError("Animation project not found.")
-    existing = load_animation_project(project_id)
-    project = normalize_animation_project(
-        payload,
-        existing=existing,
-        project_id=project_id,
-        prefer_tracks=prefer_tracks,
-    )
-    project["created_at"] = existing["created_at"]
-    project["updated_at"] = _utc_now()
-    _write_atomic(path, project)
-    emit_console("info", "animation", f"Saved animation project {project_id}: {project['name']}.")
-    return project
+    # All saves share this lock; a conditional check and write are one unit.
+    # Older browser callers omit expected_etag and preserve prior semantics.
+    with _PROJECT_SAVE_LOCK:
+        path = _project_file(project_id)
+        if not path.is_file():
+            raise AnimationProjectError("Animation project not found.")
+        existing = load_animation_project(project_id)
+        if expected_etag is not None and project_etag(project_id) != expected_etag:
+            raise AnimationProjectConflict(
+                "Project changed since it was loaded. Reload before saving."
+            )
+        project = normalize_animation_project(
+            payload,
+            existing=existing,
+            project_id=project_id,
+            prefer_tracks=prefer_tracks,
+        )
+        project["created_at"] = existing["created_at"]
+        project["updated_at"] = _utc_now()
+        _write_atomic(path, project)
+        emit_console("info", "animation", f"Saved animation project {project_id}: {project['name']}.")
+        return project
 
 
 def list_animation_projects() -> list[dict[str, Any]]:

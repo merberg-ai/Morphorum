@@ -11,7 +11,11 @@ from PIL import Image
 
 from . import __version__
 from .animation_motion import _frame_transform_matrix, render_affine
-from .app import app
+from .backend_access import backend_token_file, resolve_backend_token
+from .client_credentials import (
+    ClientCredentialError, issue_client_token, list_clients,
+    revoke_client, write_issued_token,
+)
 from .paths import ensure_runtime_dirs
 from .animation_projects import seed_example_animation_project
 from .system_info import doctor_report, write_install_manifest
@@ -19,8 +23,36 @@ from .system_info import doctor_report, write_install_manifest
 
 def command_serve(args: argparse.Namespace) -> int:
     ensure_runtime_dirs()
-    host = args.host or os.getenv("MORPHORUM_HOST_OVERRIDE", "127.0.0.1")
-    port = args.port or int(os.getenv("MORPHORUM_PORT_OVERRIDE", "7865"))
+    backend_only = bool(getattr(args, "backend_only", False))
+    lan = bool(getattr(args, "lan", False))
+    requested_host = getattr(args, "host", None)
+    if lan and requested_host and requested_host != "0.0.0.0":
+        print("--lan conflicts with --host (expected 0.0.0.0).", file=sys.stderr)
+        return 2
+
+    if backend_only:
+        # Do not inherit the standard browser server port or LAN defaults.
+        host = requested_host or ("0.0.0.0" if lan else
+                                  os.getenv("MORPHORUM_BACKEND_HOST_OVERRIDE", "127.0.0.1"))
+        port = args.port or int(os.getenv("MORPHORUM_BACKEND_PORT_OVERRIDE", "7866"))
+        try:
+            resolve_backend_token()
+        except (RuntimeError, OSError, ValueError) as exc:
+            print(f"Backend authentication initialization failed: {exc}", file=sys.stderr)
+            return 2
+        os.environ["MORPHORUM_BACKEND_ONLY"] = "1"
+        print(f"Morphorum backend-only API: {host}:{port} (authentication required)")
+        if os.getenv("MORPHORUM_BACKEND_TOKEN", "").strip():
+            print("Authentication: MORPHORUM_BACKEND_TOKEN environment variable.")
+        else:
+            print(f"Authentication token file: {backend_token_file()}")
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            print("LAN/API exposure enabled. Use only trusted networks or a VPN; never expose publicly.")
+    else:
+        host = requested_host or ("0.0.0.0" if lan else os.getenv("MORPHORUM_HOST_OVERRIDE", "127.0.0.1"))
+        port = args.port or int(os.getenv("MORPHORUM_PORT_OVERRIDE", "7865"))
+        os.environ.pop("MORPHORUM_BACKEND_ONLY", None)
+
     env_access_log = str(os.getenv("MORPHORUM_ACCESS_LOG", "")).strip().lower()
     access_log = bool(args.access_log) or env_access_log in {"1", "true", "yes", "on"}
     uvicorn.run(
@@ -50,6 +82,8 @@ def command_doctor(args: argparse.Namespace) -> int:
 
 
 def command_self_test(_: argparse.Namespace) -> int:
+    from .app import app
+
     ensure_runtime_dirs()
     try:
         try:
@@ -222,6 +256,40 @@ def command_seed_example(_: argparse.Namespace) -> int:
     return 0
 
 
+
+def command_clients(args: argparse.Namespace) -> int:
+    """Local-host administrator action; never exposed as an API endpoint."""
+    try:
+        if args.clients_action == "issue":
+            from pathlib import Path
+            output = Path(args.out).expanduser()
+            if output.exists():
+                raise ClientCredentialError("Output token file already exists; choose a fresh filename.")
+            token, record = issue_client_token(args.name, lifetime_days=args.days)
+            try:
+                write_issued_token(output, token)
+            except OSError as exc:
+                revoke_client(record["id"])
+                raise ClientCredentialError(f"Token output could not be saved: {exc}") from exc
+            print(f"Client issued: {record['name']} ({record['id']})")
+            print(f"Secret written to: {output}")
+            print("Transfer the token only through a trusted secure channel; delete the issued file afterward.")
+            return 0
+        if args.clients_action == "list":
+            for entry in list_clients():
+                status = "REVOKED" if entry["revoked"] else "ACTIVE"
+                print(f"{entry['id']}  {status:7s}  {entry['name']}  expires={entry['expires_at']}")
+            return 0
+        if args.clients_action == "revoke":
+            record = revoke_client(args.id)
+            print(f"Revoked: {record['id']} ({record['name']}); effective immediately.")
+            return 0
+    except (ClientCredentialError, OSError, ValueError) as exc:
+        print(f"Client credential action failed: {exc}", file=sys.stderr)
+        return 2
+    return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="morphorum")
     parser.add_argument("--version", action="version", version=f"Morphorum {__version__}")
@@ -230,6 +298,10 @@ def build_parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="Start the Morphorum API server.")
     serve.add_argument("--host")
     serve.add_argument("--port", type=int)
+    serve.add_argument("--backend-only", action="store_true",
+                       help="Serve API endpoints only; bearer token required.")
+    serve.add_argument("--lan", action="store_true",
+                       help="Explicitly bind to 0.0.0.0 (LAN; authenticate clients).")
     serve.add_argument(
         "--access-log",
         action="store_true",
@@ -243,6 +315,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     self_test = sub.add_parser("self-test", help="Exercise the local API without opening a port.")
     self_test.set_defaults(func=command_self_test)
+
+    clients = sub.add_parser(
+        "clients", help="Administer per-client backend tokens locally (not over HTTP)."
+    )
+    client_actions = clients.add_subparsers(dest="clients_action", required=True)
+    issue = client_actions.add_parser("issue", help="Issue a new revocable client token.")
+    issue.add_argument("name", help="Friendly client name.")
+    issue.add_argument("--days", type=int, default=90, help="Token expiry, 1-365 days.")
+    issue.add_argument("--out", required=True, help="New file for the one-time secret. Never overwritten.")
+    issue.set_defaults(func=command_clients)
+    listed = client_actions.add_parser("list", help="List client IDs/status, never secrets.")
+    listed.set_defaults(func=command_clients)
+    revoke = client_actions.add_parser("revoke", help="Revoke a client token immediately.")
+    revoke.add_argument("id")
+    revoke.set_defaults(func=command_clients)
 
     sample = sub.add_parser("seed-example", help="Install the bundled example if there are no projects.")
     sample.set_defaults(func=command_seed_example)

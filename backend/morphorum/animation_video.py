@@ -306,6 +306,7 @@ class VideoExportJob:
     message: str = "Queued video export"
     error: str | None = None
     bytes: int | None = None
+    sha256: str | None = None
     completed_at: str | None = None
 
     def public(self) -> dict[str, Any]:
@@ -443,6 +444,21 @@ class VideoExportManager:
             raise VideoExportError("Video export is not complete.")
         return output
 
+    @staticmethod
+    def checksum(path: Path) -> str:
+        """Digest for authenticated download; support older exports without metadata."""
+        record = _export_record_path(path)
+        try:
+            payload = json.loads(record.read_text(encoding="utf-8"))
+            value = payload.get("sha256")
+            if (isinstance(value, str)
+                    and re.fullmatch(r"[0-9a-f]{64}", value)
+                    and payload.get("bytes") == path.stat().st_size):
+                return value
+        except (OSError, ValueError, TypeError):
+            pass
+        return _sha256_file(path)
+
     def _run(
         self,
         job: VideoExportJob,
@@ -496,6 +512,7 @@ class VideoExportManager:
                 job.status = "completed"
                 job.progress = 1.0
                 job.bytes = output.stat().st_size
+                job.sha256 = _sha256_file(output)
                 job.message = f"{job.format.upper()} export ready ({job.bytes} bytes)"
                 job.completed_at = _timestamp()
                 _atomic_json(record_path, job.public())

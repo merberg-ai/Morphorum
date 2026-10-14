@@ -2,7 +2,7 @@ name: Syntax checks
 
 on:
   push:
-    branches: [main, dev-ui]
+    branches: [main, dev-ui, dev-backend]
   pull_request:
 
 jobs:
