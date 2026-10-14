@@ -2,18 +2,14 @@ name: Installer checks
 
 on:
   push:
-    branches: [main, dev-ui, dev-backend]
+    branches: [main, dev-ui]
     paths:
       - 'scripts/**'
       - '*.sh'
       - '*.bat'
       - '.github/workflows/installer-checks.yml'
+  # Every PR must report this check before branch protection can require it.
   pull_request:
-    paths:
-      - 'scripts/**'
-      - '*.sh'
-      - '*.bat'
-      - '.github/workflows/installer-checks.yml'
 
 jobs:
   powershell-syntax:
