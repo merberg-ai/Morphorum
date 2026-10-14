@@ -2,17 +2,14 @@ name: Backend tests
 
 on:
   push:
-    branches: [main, dev-ui, dev-backend]
+    branches: [main, dev-ui]
     paths:
       - 'backend/**'
       - 'tests/**'
       - 'pyproject.toml'
       - '.github/workflows/backend-tests.yml'
+  # Every PR must report this check before branch protection can require it.
   pull_request:
-    paths:
-      - 'backend/**'
-      - 'tests/**'
-      - 'pyproject.toml'
 
 jobs:
   test:
