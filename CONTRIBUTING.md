@@ -1,26 +1,36 @@
 # Contributing to Morphorum
 
-Morphorum is intended to be community-built, approachable, and technically serious.
+Thanks for helping improve Morphorum. Contributions that make installation, image generation, animation and documentation more reliable are welcome.
 
-## Before contributing
+## Before opening a pull request
 
-1. Keep the core standalone and browser-based.
-2. Preserve classic Deforum project/prompt compatibility where practical.
-3. Do not hard-code assumptions that all model families share SD-style CFG, samplers, schedulers, or text encoders.
-4. Mobile-browser usability is a requirement, not an optional responsive pass at the end.
-5. Long-running work must expose meaningful state/progress to the render job system.
-6. New model support belongs behind the model-adapter/capability interfaces.
+1. Search [existing issues](https://github.com/merberg-ai/Morphorum/issues) for similar work. For larger changes, open an issue describing the problem and proposed approach first.
+2. Work from an up-to-date feature branch; do not force-push or rewrite the public `main` history.
+3. Keep changes focused and explain which user workflow they affect.
+4. Add or update tests and documentation when user-facing behavior changes.
+5. Open a pull request against the active development/integration branch (normally `dev-ui`), rather than changing `main` directly.
 
-## Licensing / clean-room rule
+## Local setup for contributors
 
-Original Morphorum code is Unlicensed. Do not copy, paste, mechanically translate, or lightly rewrite GPL/AGPL-covered source into Morphorum's core. Implement compatible behavior independently from public documentation, permitted test data, file formats, and observable behavior.
+Use the normal [installation instructions](docs/INSTALLATION.md) to prepare a working environment. A separate test installation is recommended if you also have valuable saved projects.
 
-If a contribution needs third-party source or vendoring, document it in `THIRD_PARTY.md` and verify compatibility before submitting it.
+Tests and GitHub Actions are explained in [Testing](docs/TESTING.md). The repository includes Python backend tests, Node-based browser logic tests, shell/PowerShell checks and installer smoke checks. Node.js is a **development requirement only**, not a normal end-user installation requirement.
 
-## Development style
+## Design principles
 
-- Prefer small, testable modules over UI-coupled inference code.
-- Treat project schemas and capability manifests as versioned APIs.
-- Add tests for legacy settings/schedule compatibility.
-- Error messages shown to users should explain the recovery action; technical tracebacks belong behind an expandable detail view/log.
-- Do not silently reinterpret model-specific parameters when switching architectures.
+- Preserve the existing browser workflow and compatibility with saved projects.
+- Keep backend-only client APIs versioned and avoid unsafe assumptions about network trust or local filesystem paths.
+- Use model-specific capabilities: SDXL, FLUX and Z-Image do not share every sampler, guidance value or text-encoder behavior.
+- Keep desktop and mobile-browser layouts usable and long-running operations observable.
+- Prefer clear error messages with recovery steps. Never include tokens, personal paths or authentication files in reports.
+- Add regression coverage for changes to model handling, rendering, project files, launchers or installation.
+
+## Licensing and third-party code
+
+Morphorum is distributed under [The Unlicense](LICENSE). Do not copy, mechanically translate or lightly rewrite GPL/AGPL-covered Deforum or other incompatible code into the Morphorum core. Independent implementations based on publicly documented behavior and permitted file formats are welcome.
+
+Document new third-party requirements in [THIRD_PARTY.md](THIRD_PARTY.md), and confirm their licenses before opening a PR.
+
+## Reporting an issue
+
+At [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues), describe expected vs. observed behavior, reproduction steps, Morphorum version/branch, OS, GPU/model where relevant, and the **first meaningful error** from the app or terminal. Redact secrets before attaching any log or screenshot.

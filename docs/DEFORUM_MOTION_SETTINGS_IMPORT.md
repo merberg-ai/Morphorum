@@ -40,10 +40,8 @@ Animation frame previews and GIF-like previews may be silent. Check the **export
 - **200% / 200%** translation and rotation strengths were tested successfully on Windows during development, but different projects may require other values. The sliders allow safe experimentation through 400%.
 - The existing, separate legacy Deforum **create new project** import is not this workflow.
 
-## Technical endpoints and verification
+## More help
 
-Existing-project endpoints: `POST /api/animation/projects/{project_id}/motion-import/preview`, `/prepare`, `/apply`; `GET`/`POST /api/animation/projects/{project_id}/motion-import/soundtrack` and `PUT /api/animation/projects/{project_id}/motion-import/soundtrack-offset`. Prepare/apply use source, project and conversion fingerprints to prevent stale changes.
+For a first animation, follow [Getting started](GETTING_STARTED.md) or the [New Project Wizard](NEW_PROJECT_WIZARD.md). If the import fails, verify the project uses the same FPS, frame count and cadence as the source file. Test a short camera preview before rendering a full animation.
 
-Regression tests: `tests/test_deforum_motion_import.py`, `tests/test_imported_soundtrack.py`, `tests/test_animation_render.py`, `tests/test_animation_video.py` and `tests/frontend_deforum_motion_workspace.test.cjs`. Run the full repository test suite for a release. Windows browser and GPU validation of the import settings and soundtrack workflow was reported during feature development; that does not establish universal Deforum output parity.
-
-Morphorum uses Deforum-compatible **export settings**, not copied implementation source. Thanks to [Deforum Motion Studio](https://github.com/chicodog530/Deforum-Motion-Studio) for the useful workflow and export format.
+Morphorum uses compatible export settings, not copied implementation source. Credit to [Deforum Motion Studio](https://github.com/chicodog530/Deforum-Motion-Studio) for the useful workflow and export format.

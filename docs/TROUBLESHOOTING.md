@@ -173,6 +173,18 @@ The guarded updater stops if Git-tracked application files have uncommitted chan
 
 Windows updates: `.\update.bat` or `.\update.bat main`. Linux: `./update.sh` or `./update.sh main`.
 
+## Backend-only mode returns 401, 404 or cannot connect
+
+Backend-only mode is a **token-protected API**, not the browser interface. Opening its root URL returns **404** by design. An API request with no or invalid bearer token returns **401**.
+
+- Start it using `.\run.bat --backend-only` (Windows) or `./run.sh --backend-only` (Linux), normally on port **7866**.
+- Add `--lan` if another computer on your trusted private network needs to connect, and enter the host's actual LAN IP, not `0.0.0.0`.
+- Use an issued per-client token, not a password. Reissue or revoke credentials locally on the backend computer if needed.
+- Check your firewall and verify the backend server remains running.
+- Never post `data/backend-access-token`, exported client tokens, or raw Authorization headers in a bug report.
+
+See [Backend-only setup and security](BACKEND_ONLY.md) for correct commands, an authenticated health check and supported remote client behavior.
+
 ## Where to find logs
 
 Inside your installation folder, check:
