@@ -20,6 +20,8 @@ function createPlayer() {
   });
   const root=controls(), image=controls(), play=controls(), reset=controls();
   const loop=controls(), scrub=controls(), time=controls();
+  const rangeEnabled=controls(),rangeStart=controls(),rangeEnd=controls();
+  const frameEvents=[],loadEvents=[];
   let tick=null, current=0;
   const ctx={window:{},performance:{now:()=>current},
     requestAnimationFrame(fn){tick=fn;return 1;},
@@ -27,9 +29,12 @@ function createPlayer() {
   vm.runInNewContext(src,ctx);
   const player=new ctx.window.MorphorumMotionFramePlayer({
     root,image,play,reset,loop,scrub,time,getAudio:()=>null,
-    shouldSync:()=>false,status:()=>{},
+    shouldSync:()=>false,status:()=>{},rangeEnabled,rangeStart,rangeEnd,
+    onFrame:event=>frameEvents.push({...event}),
+    onLoad:event=>loadEvents.push({...event}),
   });
-  return {player,root,image,play,reset,loop,scrub,time,
+  return {player,root,image,play,reset,loop,scrub,time,rangeEnabled,rangeStart,
+    rangeEnd,frameEvents,loadEvents,
     clock(value){current=value; if(tick)tick(value);}};
 }
 
@@ -64,4 +69,71 @@ test('ML3.4 has distinct preview quality options and default balanced mode',()=>
   assert.match(html,/<option value="fast">/);
   assert.match(html,/<option value="balanced" selected>/);
   assert.match(html,/<option value="detailed">/);
+});
+
+test('MS5.1 A/B review plays exact bounded project frames and loops at B',()=>{
+  const h=createPlayer();
+  h.player.load({id:'ab',result:{fps:10,source_frames:100,
+    captured_frame_numbers:[0,20,40,60,80,99]}});
+  assert.equal(h.rangeEnd.value,'99');
+  assert.equal(h.rangeEnabled.checked,false);
+  assert.ok(h.player.setReviewRange(22,35,true));
+  assert.equal(h.rangeStart.value,'22');
+  assert.equal(h.rangeEnd.value,'35');
+  assert.equal(h.player.frame,22);
+  h.player.play();
+  h.clock(500); // project frame 27
+  assert.equal(h.player.frame,27);
+  h.clock(1500); // relative 15 frames, wrap inside 14-frame window
+  assert.equal(h.player.frame,23);
+  assert.match(h.image.src,/\/frames\/1$/);
+  assert.equal(h.frameEvents.at(-1).previewSampleFrame,20);
+  h.player.pause();
+  assert.ok(h.loadEvents.length===1);
+  assert.deepEqual(h.loadEvents[0],{fps:10,frames:100,samples:6});
+});
+
+test('MS5.1 non-loop playback stops precisely at selected B',()=>{
+  const h=createPlayer();
+  h.player.load({id:'stop',result:{fps:24,source_frames:48,
+    captured_frame_numbers:[0,10,20,30,47]}});
+  assert.ok(h.player.setReviewRange(12,18,true));
+  h.loop.checked=false;
+  h.player.play();
+  h.clock(2000);
+  assert.equal(h.player.frame,18);
+  assert.equal(h.player.active,false);
+  assert.equal(h.play.textContent,'▶ Play');
+  assert.equal(h.scrub.value,'18');
+  assert.equal(h.player.reviewRange().limited,true);
+  assert.equal(h.player.setReviewRange(-1,3),false);
+  assert.equal(h.player.setReviewRange(3,48),false);
+  assert.equal(h.player.setReviewRange(15,12),false);
+});
+
+test('MS5.1 rejects corrupt preview timing and sample map before playback',()=>{
+  const h=createPlayer();
+  const make=result=>()=>h.player.load({id:'bad',result});
+  assert.throws(make({fps:0,source_frames:24}),/FPS/);
+  assert.throws(make({fps:24,source_frames:0}),/FPS/);
+  assert.throws(make({fps:24,source_frames:24,
+    captured_frame_numbers:[0,12,12,23]}),/sample frame map/);
+  assert.throws(make({fps:24,source_frames:24,
+    captured_frame_numbers:[0,24]}),/sample frame map/);
+  assert.equal(h.root.hidden,true);
+  assert.equal(h.player.jobId,null);
+  h.player.load({id:'good',result:{fps:12,source_frames:3,
+    captured_frame_numbers:[0,2]}});
+  assert.equal(h.root.hidden,false);
+  assert.equal(h.player.jobId,'good');
+});
+
+test('MS5.1 exposes accessible A/B review and take selection on preview panel',()=>{
+  for(const id of ['animation-motion-review-enabled','animation-motion-review-a',
+    'animation-motion-review-b','animation-motion-review-mark-a',
+    'animation-motion-review-mark-b','animation-motion-review-take',
+    'animation-motion-review-use-take','animation-motion-review-curves',
+    'animation-motion-review-status','animation-motion-review-values']) {
+    assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
+  }
 });
