@@ -258,15 +258,15 @@ try {
         Okay 'Morphorum self-test passed.'
     }
 
-    if (-not $Repair -and -not $Update) {
-        # Only a successfully provisioned fresh install becomes eligible.
-        & $VenvPython -m morphorum setup-state ready
-        if ($LASTEXITCODE -ne 0) { throw 'Could not finalize first-run setup state.' }
-    }
-
     if ($SavePort) {
         Set-Content -LiteralPath $PortFile -Value ([string]$ServerPort) -Encoding ASCII
         Okay 'Server port preference saved for future launches.'
+    }
+
+    if (-not $Repair -and -not $Update) {
+        # Mark ready after checks AND saved port successfully completed.
+        & $VenvPython -m morphorum setup-state ready
+        if ($LASTEXITCODE -ne 0) { throw 'Could not finalize first-run setup state.' }
     }
 
     Write-MorphorumSection 'MORPHORUM IS READY'
