@@ -270,14 +270,18 @@ automatic launch currently exists.
   setup due solely to empty model lists. Owner acceptance of the MS5.4
   physical test remains the gate to feature-bearing MS6.1. Preserve `main`,
   draft PR #39, saved projects and model weights.
-- **MS6.1 — Automatic fresh-install detection and CLI override.** Add
-  persistent server-owned wizard state, resumability, and one-launch
-  `--setup-wizard` override (plus Windows PowerShell `-SetupWizard`).
-  Open wizard automatically on the first WebUI visit of a genuinely fresh
-  installation; never force it merely because no models are indexed.
-  Explain that **WebUI is default** on port 7865, while backend-only is a
-  separate authenticated API mode normally on port 7866. Mode changes
-  require a restart. Backend-only mode itself has no browser wizard.
+- **MS6.1 — Automatic fresh-install detection and CLI override (implemented;
+  physical verification pending).** Installer-owned atomic provenance and
+  resumable setup-state file under `data/`; `GET /api/setup/status` and guarded
+  revision-checked `POST /api/setup/progress`. A genuine fresh install opens
+  the Welcome page automatically. The separate first-run frontend implements
+  Welcome, WebUI versus backend-only explanation, persistent Skip/Resume and
+  manual Settings reopen. `--setup-wizard` / PowerShell `-SetupWizard`
+  overrides only the current WebUI server launch; API-only mode rejects it.
+  The models/LoRA/download/sample pages remain intentionally unimplemented.
+  Neither settings, project data nor model files are changed automatically.
+  Test legacy/upgrade safety, fresh Windows/Linux provenance and backend-only
+  non-exposure before accepting this milestone.
 - **MS6.2 — Guided model and LoRA paths.** Welcome/diagnostics; typed
   server-host directory paths; server-side existence/readability checks;
   family-specific model and LoRA identification; explicit save/rescan and
@@ -916,3 +920,28 @@ flags, pages, model verification and new example templates belong to MS6.1–6.4
 **Next gate:** finish CI and confirm the MS5.4 Windows physical acceptance
 before beginning MS6.1. A go-ahead for MS6.0 planning alone is not proof
 that the last physical regression has been completed. Do not merge PR #39.
+
+## MS6.1 implementation checkpoint (2026-10-15)
+
+**Delivered on `dev-webui`:** `backend/morphorum/setup_state.py` atomic
+installer provenance lifecycle; CLI commands `setup-state prepare/ready` and
+`serve --setup-wizard`; Windows/Linux installer handshake; Windows PowerShell
+`-SetupWizard` and CMD `run.bat --setup-wizard`; setup status/progress HTTP
+endpoints; independent responsive/accessible Welcome and Modes entry overlay;
+Settings reopen and server-side Skip/Resume. Explicitly reject the override
+in backend-only mode, preserving bearer-token protected API behavior.
+
+The shipped WebUI says clearly that MS6.2 model/LoRA pages, MS6.3 optional
+Z-Image managed download and MS6.4 two 512px examples are **not operational
+until their subsequent milestones**. Opening the entry cannot download a
+model, start GPU work, create animation projects or change a user's models.
+
+**Safety/testing:** `tests/test_ms61_setup_state.py` covers fresh vs. legacy,
+corrupted state, optimistic revision races, explicit skip and manual opt-in,
+backend-only launch conflicts, and same-origin setup HTTP protections.
+`tests/frontend_first_run_setup.test.cjs` covers automatic browser entry,
+manual reopen, Skip persistence and step progression. Include both in CI.
+
+**Next gate:** CI on the final MS6.1 head, then physical tests on the Windows
+host and a fresh-install Linux test environment before MS6.2. Still no merge
+into `main` until separately approved by the owner.
