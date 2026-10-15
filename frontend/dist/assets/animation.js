@@ -4881,6 +4881,165 @@
   let motionLabAudioProjectId = null;
   let motionLabAudioElement = null;
   let motionLabAudioUrl = null;
+  let motionLabEditedEvents = null;
+  let motionLabSelectedEvent = null;
+  let motionLabMarkersDirty = false;
+  let motionLabMarkerUndo = [];
+  let motionLabMarkerRedo = [];
+  function motionLabMarkerSnapshot() {
+    if (!motionLabEditedEvents) return;
+    motionLabMarkerUndo.push(motionLabEditedEvents.map(e=>({...e})));
+    if (motionLabMarkerUndo.length > 60) motionLabMarkerUndo.shift();
+    motionLabMarkerRedo = [];
+  }
+  function motionLabMarkerHistory(redo) {
+    const source = redo ? motionLabMarkerRedo : motionLabMarkerUndo;
+    if (!source.length || !motionLabEditedEvents) return;
+    const destination = redo ? motionLabMarkerUndo : motionLabMarkerRedo;
+    destination.push(motionLabEditedEvents.map(e=>({...e})));
+    motionLabEditedEvents = source.pop();
+    motionLabMarkersDirty = true;
+    motionLabStereoWaveform();
+  }
+
+  async function motionLabSaveMarkers() {
+    if (!motionLabAudioAnalysis || !motionLabEditedEvents || !state.project ||
+        motionLabAudioProjectId !== state.project.id) return;
+    const button = qs('[data-event-persist]');
+    if (button) button.disabled = true;
+    try {
+      const saved = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/motion-lab/audio-markers', {method:'PUT',body:JSON.stringify({
+          source_sha256:motionLabAudioAnalysis.source_sha256,
+          duration_seconds:motionLabAudioAnalysis.duration_seconds,
+          events:motionLabEditedEvents,
+        })});
+      if (!saved?.markers) throw new Error('Marker save was not confirmed.');
+      motionLabMarkersDirty = false;
+      motionLabEventEditor();
+      motionLabNotify('Drum marker edits saved for this WAV.');
+    } catch(error) {
+      motionLabNotify('Could not save markers: ' + (error?.message || error));
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function motionLabEventEditor() {
+    const panel = qs('#animation-audio-event-editor');
+    if (!panel || !motionLabAudioAnalysis) return;
+    const events = motionLabEditedEvents || [];
+    const selected = events.find(e => e.id === motionLabSelectedEvent);
+    const output = panel.querySelector('[data-event-count]');
+    if (output) output.textContent = events.filter(e => e.enabled).length +
+      ' active / ' + events.length + ' markers · ' +
+      (motionLabMarkersDirty ? 'Unsaved edits' : 'Saved or unmodified');
+    const time = panel.querySelector('[data-event-time]');
+    const kind = panel.querySelector('[data-event-kind]');
+    const enabled = panel.querySelector('[data-event-enabled]');
+    if (time) { time.disabled = !selected; time.value = selected ? String(selected.time_seconds) : ''; }
+    if (kind) { kind.disabled = !selected; kind.value = selected?.kind || 'kick'; }
+    if (enabled) { enabled.disabled = !selected; enabled.checked = selected?.enabled !== false; }
+    const undo = panel.querySelector('[data-event-undo]');
+    const redo = panel.querySelector('[data-event-redo]');
+    if (undo) undo.disabled = !motionLabMarkerUndo.length;
+    if (redo) redo.disabled = !motionLabMarkerRedo.length;
+    const remove = panel.querySelector('[data-event-remove]');
+    if (remove) remove.disabled = !selected;
+    const summary = panel.querySelector('[data-event-selected]');
+    if (summary) summary.textContent = selected ?
+      'Selected ' + selected.kind + ' at ' + selected.time_seconds.toFixed(3) + ' s' :
+      'Select a marker on the waveform to edit it';
+  }
+  function motionLabEventChange(action) {
+    if (!motionLabAudioAnalysis || !motionLabEditedEvents) return;
+    const panel = qs('#animation-audio-event-editor');
+    const selected = motionLabEditedEvents.find(e => e.id === motionLabSelectedEvent);
+    if (action === 'add' || action === 'remove' || action === 'reset' || action === 'clear-detected' ||
+        (action === 'update' && selected)) motionLabMarkerSnapshot();
+    if (action === 'add') {
+      const duration = motionLabAudioAnalysis.duration_seconds;
+      const time = Math.max(0, Math.min(duration - .000001,
+        Number(motionLabAudioElement?.currentTime) || 0));
+      const id = 'manual-' + String(Date.now()) + '-' + motionLabEditedEvents.length;
+      motionLabEditedEvents.push({id, kind:'kick', time_seconds:time,
+        strength:1, source:'manual',enabled:true});
+      motionLabSelectedEvent = id;
+    } else if (action === 'clear-detected') {
+      // Preserve user-created manual markers and all camera motion cues.
+      motionLabEditedEvents = motionLabEditedEvents.filter(e => e.source === 'manual' ||
+        String(e.id).startsWith('manual-'));
+      motionLabSelectedEvent = null;
+    } else if (action === 'reset') {
+      motionLabEditedEvents = (motionLabAudioAnalysis.events?.events || []).map(
+        e => ({...e, enabled:true}));
+      motionLabSelectedEvent = null;
+    } else if (selected && action === 'remove') {
+      motionLabEditedEvents = motionLabEditedEvents.filter(e => e.id !== selected.id);
+      motionLabSelectedEvent = null;
+    } else if (selected && action === 'update') {
+      const time = Number(panel?.querySelector('[data-event-time]')?.value);
+      if (!Number.isFinite(time) || time < 0 || time >= motionLabAudioAnalysis.duration_seconds) {
+        motionLabNotify('Marker time must be within the audio duration.');
+        return;
+      }
+      selected.time_seconds = Math.round(time * 1000000) / 1000000;
+      selected.kind = panel.querySelector('[data-event-kind]').value;
+      selected.enabled = Boolean(panel.querySelector('[data-event-enabled]').checked);
+    }
+    motionLabEditedEvents.sort((a,b)=>a.time_seconds-b.time_seconds);
+    motionLabMarkersDirty = true;
+    motionLabStereoWaveform();
+  }
+  function motionLabWavePlayhead() {
+    const section = qs('#animation-audio-stereo-timeline');
+    const line = section?.querySelector('[data-wave-playhead]');
+    const readout = section?.querySelector('[data-wave-time]');
+    const button = section?.querySelector('[data-wave-play]');
+    const audio = motionLabAudioElement;
+    const duration = Number(motionLabAudioAnalysis?.duration_seconds) || 0;
+    const current = Math.max(0, Math.min(duration, Number(audio?.currentTime) || 0));
+    if (readout) readout.textContent = current.toFixed(2) + ' / ' + duration.toFixed(2) + ' s';
+    if (button) button.textContent = audio && !audio.paused ? 'Pause audio' : 'Play audio';
+    if (!line || !duration) return;
+    const begin = Number(section.dataset.waveStart || 0);
+    const end = Number(section.dataset.waveEnd || duration);
+    const follow = section.querySelector('[data-wave-follow]')?.checked;
+    const span = end - begin;
+    // Page forward before the playhead reaches the right edge. Updating the
+    // Start slider redraws the waveform, then this function uses new bounds.
+    if (follow && audio && !audio.paused && span > 0 && span < duration &&
+        (current > begin + span * .75 || current < begin)) {
+      const desired = Math.max(0, Math.min(duration - span, current - span * .25));
+      const startSlider = section.querySelector('[data-wave-start]');
+      const zoom = Number(section.querySelector('[data-wave-zoom]')?.value || 1);
+      const available = Math.max(0, 1 - 1 / zoom);
+      if (startSlider && available > 0) {
+        startSlider.value = String(Math.round(desired / duration / available * 1000));
+        motionLabStereoWaveform();
+        return;
+      }
+    }
+    const shown = current >= begin && current <= end;
+    line.setAttribute('visibility', shown ? 'visible' : 'hidden');
+    if (shown) {
+      const x = (current - begin) / Math.max(1e-9, end - begin) * 800;
+      line.setAttribute('x1', x.toFixed(3));
+      line.setAttribute('x2', x.toFixed(3));
+    }
+  }
+  function motionLabWaveToggle() {
+    const audio = motionLabAudioElement;
+    if (!audio) return;
+    if (!audio.paused) { audio.pause(); return; }
+    if (audio.ended || (Number.isFinite(audio.duration) && audio.currentTime >= audio.duration)) {
+      audio.currentTime = 0;
+    }
+    const started = audio.play();
+    started?.catch(error => motionLabAudioSyncStatus(
+      'Audio playback blocked: ' + (error?.message || error)));
+  }
+
   function motionLabReleaseAudio() {
     motionLabAudioElement?.pause();
     if (motionLabAudioElement) motionLabAudioElement.removeAttribute('src');
@@ -4943,6 +5102,608 @@
     const rises = values.map((v, i) => i ? Math.max(0, v - values[i - 1]) : 0);
     const peak = Math.max(0, ...rises);
     return rises.map(v => peak > 1e-12 ? Math.max(0, Math.min(1, v / peak - sensitivity * .5)) : 0);
+  }
+  // DA4.2: manual choreography is independent of beat detection.
+  let motionDirectorCues = [];
+  let motionDirectorSelected = null;
+  let motionDirectorDirty = false;
+  const MOTION_DIRECTOR_PRESETS = [
+    ['push_zoom_in','Push Zoom In'],['roll_right_left','Roll Right → Left'],
+    ['push_return','Push & Return'],['roll_left_right','Roll Left → Right'],
+    ['dolly_out','Dolly Out'],['shake','Shake'],['ripple','Ripple'],
+    ['reveal_drift','Reveal Drift'],['fly_through','Fly-through'],
+  ];
+  let motionDirectorBulkUndo = null;
+  let motionDirectorPreviewMatches = false;
+  function motionDirectorFindCandidates() {
+    const panel = qs('#animation-audio-motion-director');
+    const analysis = motionLabAudioAnalysis;
+    if (!panel || !analysis) return [];
+    const kind = panel.querySelector('[data-beat-kind]')?.value || 'kick';
+    const minStrength = Number(panel.querySelector('[data-beat-strength]')?.value ?? .35);
+    const minGap = Number(panel.querySelector('[data-beat-gap]')?.value ?? .1);
+    const start = Number(panel.querySelector('[data-beat-start]')?.value ?? 0);
+    const end = Number(panel.querySelector('[data-beat-end]')?.value ?? analysis.duration_seconds);
+    const every = Number(panel.querySelector('[data-beat-every]')?.value ?? 1);
+    if (![minStrength,minGap,start,end,every].every(Number.isFinite) ||
+        minStrength<0 || minStrength>1 || minGap<0 || minGap>2 ||
+        start<0 || end<=start || end>analysis.duration_seconds + .001 ||
+        !Number.isInteger(every) || every<1 || every>16) return [];
+    let last = -Infinity;
+    const candidates = [];
+    for (const event of motionLabEditedEvents || []) {
+      if (event.enabled === false || event.kind !== kind ||
+          Number(event.strength ?? 1)<minStrength ||
+          event.time_seconds<start || event.time_seconds>=end ||
+          event.time_seconds-last<minGap) continue;
+      last = event.time_seconds;
+      candidates.push(event);
+    }
+    return candidates.filter((_,i)=>i%every===0);
+  }
+  function motionDirectorFindStatus() {
+    const panel=qs('#animation-audio-motion-director');
+    if (!panel) return;
+    const status=panel.querySelector('[data-beat-summary]');
+    const candidates=motionDirectorFindCandidates();
+    if (status) status.textContent=candidates.length+' eligible detected or manually corrected hit(s). Review before assigning.';
+    const undo=panel.querySelector('[data-beat-undo]');
+    if (undo) undo.disabled=!motionDirectorBulkUndo;
+  }
+  function motionDirectorAssignBeats() {
+    const panel=qs('#animation-audio-motion-director');
+    if (!panel || !motionLabAudioAnalysis) return;
+    const events=motionDirectorFindCandidates();
+    if (!events.length) {motionLabNotify('No matching hits in this range.');return;}
+    const preset=panel.querySelector('[data-beat-preset]').value;
+    const alternate=panel.querySelector('[data-beat-alternate]').checked;
+    const intensity=.5, duration=.6;
+    const existing=new Set(motionDirectorCues.filter(c=>c.source_event_id)
+      .map(c=>c.source_event_id+'|'+c.preset));
+    const additions=[];
+    for (const event of events) {
+      const chosen=alternate ? (additions.length%2 ? 'roll_left_right' : 'roll_right_left') : preset;
+      if (existing.has(event.id+'|'+chosen)) continue;
+      const id='beatcue-'+Date.now().toString(36)+'-'+(motionDirectorCues.length+additions.length);
+      additions.push({id,preset:chosen,time_seconds:event.time_seconds,
+        duration_seconds:duration,intensity,easing:'ease_in_out',enabled:true,
+        source_event_id:event.id});
+      existing.add(event.id+'|'+chosen);
+    }
+    if (!additions.length) {motionLabNotify('Those hits already have matching cues.');return;}
+    if (motionDirectorCues.length+additions.length>3000) {
+      motionLabNotify('Cue limit is 3000. Narrow the beat range.');return;
+    }
+    motionDirectorBulkUndo=motionDirectorCues.map(c=>({...c}));
+    motionDirectorCues.push(...additions);
+    motionDirectorDirty=true;
+    motionDirectorPanel();motionLabStereoWaveform();
+    motionLabNotify('Added '+additions.length+' camera cues. Save cues to keep them.');
+  }
+  function motionDirectorPanel() {
+    let panel = qs('#animation-audio-motion-director');
+    const waveform = qs('#animation-audio-stereo-timeline');
+    if (!waveform || !motionLabAudioAnalysis) return;
+    if (!panel) {
+      panel = document.createElement('section');
+      panel.id = 'animation-audio-motion-director';
+      panel.className = 'animation-audio-motion-director';
+      panel.innerHTML = '<div class="animation-audio-director-head"><strong>Camera motion cues</strong>' +
+        '<span class="muted">Place a camera move at any point, even without detected beats.</span></div>' +
+        '<div class="animation-audio-director-actions"><button type="button" data-cue-add>Add cue at playhead</button>' +
+        '<button type="button" data-cue-save>Save cues</button>' +
+        '<button type="button" data-cue-preview>Preview camera cues</button>' +
+        '<button type="button" data-cue-apply>Apply camera cues</button>' +
+        '<span data-cue-status class="muted"></span></div>' +
+        '<div class="animation-audio-director-fields">' +
+        '<label>Movement<select data-cue-preset></select></label>' +
+        '<label>Start (seconds)<input data-cue-time type="number" min="0" step=".001"></label>' +
+        '<label>Duration (seconds)<input data-cue-duration type="number" min=".01" max="30" step=".05"></label>' +
+        '<label>Intensity (0–1)<input data-cue-intensity type="number" min="0" max="1" step=".05"></label>' +
+        '<label>Easing<select data-cue-easing><option value="ease_in_out">Ease in/out</option>' +
+        '<option value="linear">Linear</option><option value="smoothstep">Smoothstep</option>' +
+        '<option value="ease_in">Ease in</option><option value="ease_out">Ease out</option></select></label>' +
+        '<label class="animation-audio-director-enabled"><input data-cue-enabled type="checkbox"> Enabled</label></div>' +
+        '<div class="animation-audio-director-actions"><button type="button" data-cue-update>Update selected</button>' +
+        '<button type="button" data-cue-delete>Delete selected</button></div>' +
+        '<div data-cue-list class="animation-audio-director-list"></div>' +
+        '<details class="animation-audio-find-beats"><summary>Find Beats · Optional batch cues</summary>' +
+        '<div class="animation-audio-beat-grid">' +
+        '<label>Find<select data-beat-kind><option value="kick">Kick</option><option value="snare">Snare</option><option value="highs">Highs</option></select></label>' +
+        '<label>Minimum strength<input data-beat-strength type="number" min="0" max="1" step=".05" value=".35"></label>' +
+        '<label>Min gap (s)<input data-beat-gap type="number" min="0" max="2" step=".025" value=".1"></label>' +
+        '<label>From (s)<input data-beat-start type="number" min="0" step=".1" value="0"></label>' +
+        '<label>To (s)<input data-beat-end type="number" min="0" step=".1"></label>' +
+        '<label>Every Nth hit<input data-beat-every type="number" min="1" max="16" step="1" value="1"></label>' +
+        '<label>Motion preset<select data-beat-preset></select></label>' +
+        '<label class="animation-audio-beat-check"><input data-beat-alternate type="checkbox"> Alternate right/left rolls</label></div>' +
+        '<div class="animation-audio-director-actions"><button type="button" data-beat-preview>Preview matches</button>' +
+        '<button type="button" data-beat-assign>Assign cues to matches</button>' +
+        '<button type="button" data-beat-undo disabled>Undo batch</button></div>' +
+        '<p data-beat-summary class="muted">Review candidate hits before assigning.</p></details>' +
+        '<p class="muted">Cues save with this WAV. Save cues, then Preview camera cues or Apply camera cues. Existing Motion Lab layers remain additive.</p>';
+      waveform.after(panel);
+      const options = panel.querySelector('[data-cue-preset]');
+      for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
+        const option = document.createElement('option');
+        option.value = key; option.textContent = label; options.appendChild(option);
+      }
+      const beatOptions=panel.querySelector('[data-beat-preset]');
+      for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
+        const option=document.createElement('option');option.value=key;
+        option.textContent=label;beatOptions.appendChild(option);
+      }
+      panel.querySelector('[data-beat-preview]').addEventListener('click',()=>{
+        motionDirectorPreviewMatches=true;motionDirectorFindStatus();motionLabStereoWaveform();
+      });
+      panel.querySelector('[data-beat-assign]').addEventListener('click',motionDirectorAssignBeats);
+      panel.querySelector('[data-beat-undo]').addEventListener('click',()=>{
+        if (!motionDirectorBulkUndo) return;
+        motionDirectorCues=motionDirectorBulkUndo;motionDirectorBulkUndo=null;
+        motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
+      });
+      panel.querySelector('[data-cue-add]').addEventListener('click', () => {
+        const time = Math.max(0,Math.min(motionLabAudioAnalysis.duration_seconds-.000001,
+          Number(motionLabAudioElement?.currentTime)||0));
+        const id = 'cue-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,9);
+        const cue = {id,preset:'push_zoom_in',time_seconds:time,duration_seconds:.6,
+          intensity:.5,easing:'ease_in_out',enabled:true,source_event_id:null};
+        motionDirectorCues.push(cue);motionDirectorSelected=id;motionDirectorDirty=true;
+        motionDirectorPanel();motionLabStereoWaveform();
+      });
+      panel.querySelector('[data-cue-update]').addEventListener('click', () => {
+        const cue = motionDirectorCues.find(c => c.id === motionDirectorSelected);
+        if (!cue) return;
+        const time = Number(panel.querySelector('[data-cue-time]').value);
+        const duration = Number(panel.querySelector('[data-cue-duration]').value);
+        const intensity = Number(panel.querySelector('[data-cue-intensity]').value);
+        if (![time,duration,intensity].every(Number.isFinite) || time<0 ||
+            time>=motionLabAudioAnalysis.duration_seconds || duration<.01 ||
+            duration>30 || intensity<0 || intensity>1) {
+          motionLabNotify('Cue timing or intensity is outside allowed limits.');return;
+        }
+        Object.assign(cue,{preset:panel.querySelector('[data-cue-preset]').value,
+          time_seconds:time,duration_seconds:duration,intensity,
+          easing:panel.querySelector('[data-cue-easing]').value,
+          enabled:panel.querySelector('[data-cue-enabled]').checked});
+        motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
+      });
+      panel.querySelector('[data-cue-delete]').addEventListener('click', () => {
+        motionDirectorCues=motionDirectorCues.filter(c=>c.id!==motionDirectorSelected);
+        motionDirectorSelected=null;motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
+      });
+      const stageCues = (apply) => {
+        const project=state.project;
+        if (!project || motionLabAudioProjectId !== project.id || motionLabBusy) {
+          motionLabNotify('Open and analyze the project WAV first.');return;
+        }
+        if (motionDirectorDirty) {
+          motionLabNotify('Save camera cues first, then preview or apply them.');return;
+        }
+        if (!motionDirectorCues.some(c=>c.enabled && c.intensity>0)) {
+          motionLabNotify('Add an enabled camera cue first.');return;
+        }
+        const frames=Number(project.animation?.max_frames);
+        if (!Number.isInteger(frames) || frames<1 || frames>3000) return;
+        const cueDocument={
+          source_sha256:motionLabAudioAnalysis.source_sha256,
+          duration_seconds:motionLabAudioAnalysis.duration_seconds,
+          cues:motionDirectorCues.map(c=>({...c})),
+        };
+        const id='director-'+cueDocument.source_sha256.slice(0,24);
+        const replacement={
+          id,type:'audio_cues',enabled:true,blend:'add',
+          start_frame:0,end_frame:frames,sha256:cueDocument.source_sha256,
+          name:'Audio Motion Director',cue_document:cueDocument,
+        };
+        const existing=motionLabDraftLayers.findIndex(l=>l.id===id);
+        if (existing<0 && motionLabDraftLayers.length>=24) {
+          motionLabNotify('Motion Lab supports a maximum of 24 layers.');return;
+        }
+        if (existing>=0) motionLabDraftLayers[existing]=replacement;
+        else motionLabDraftLayers.push(replacement);
+        commitMotionLabDraft();
+        void motionLabPreviewOrApply(apply,{curvesOnly:false});
+      };
+      panel.querySelector('[data-cue-preview]').addEventListener('click',()=>stageCues(false));
+      panel.querySelector('[data-cue-apply]').addEventListener('click',async()=>{
+        const approved=await window.MorphorumDialog.confirm({
+          title:'Apply Audio Motion Director cues?',
+          message:'Replace this source\'s existing Director layer with the saved cues and apply native six-axis camera schedules to this project? Other Motion Lab layers remain in the draft.',
+          confirmText:'Apply Camera Cues',cancelText:'Cancel',variant:'default',
+        });
+        if (approved) stageCues(true);
+      });
+      panel.querySelector('[data-cue-save]').addEventListener('click', async () => {
+        const projectId=state.project?.id;
+        if (!projectId || motionLabAudioProjectId!==projectId) return;
+        const save=panel.querySelector('[data-cue-save]');save.disabled=true;
+        try {
+          const response=await api('/api/animation/projects/'+encodeURIComponent(projectId)+
+            '/motion-lab/audio-cues',{method:'PUT',body:JSON.stringify({
+              source_sha256:motionLabAudioAnalysis.source_sha256,
+              duration_seconds:motionLabAudioAnalysis.duration_seconds,cues:motionDirectorCues,
+            })});
+          if (!response?.cues) throw new Error('Cue save not confirmed.');
+          motionDirectorCues=response.cues.cues;motionDirectorDirty=false;
+          motionLabNotify('Camera cues saved with this WAV.');
+        } catch(error) {motionLabNotify('Cue save failed: '+(error?.message||error));}
+        finally {save.disabled=false;motionDirectorPanel();}
+      });
+      panel.querySelector('[data-cue-list]').addEventListener('click', event => {
+        const button=event.target.closest('[data-cue-id]');
+        if (!button) return;
+        motionDirectorSelected=button.dataset.cueId;
+        const cue=motionDirectorCues.find(c=>c.id===motionDirectorSelected);
+        if (cue && motionLabAudioElement) motionLabAudioElement.currentTime=cue.time_seconds;
+        motionDirectorPanel();
+      });
+    }
+    const beatEnd=panel.querySelector('[data-beat-end]');
+    if (beatEnd && !beatEnd.value) beatEnd.value=motionLabAudioAnalysis.duration_seconds.toFixed(3);
+    motionDirectorFindStatus();
+    const selected=motionDirectorCues.find(c=>c.id===motionDirectorSelected);
+    for (const [attr,key] of [['data-cue-preset','preset'],['data-cue-time','time_seconds'],
+        ['data-cue-duration','duration_seconds'],['data-cue-intensity','intensity'],
+        ['data-cue-easing','easing']]) {
+      const input=panel.querySelector('['+attr+']');
+      input.disabled=!selected;
+      input.value=selected?String(selected[key]):'';
+    }
+    const enabled=panel.querySelector('[data-cue-enabled]');
+    enabled.disabled=!selected;enabled.checked=Boolean(selected?.enabled);
+    for (const attr of ['data-cue-update','data-cue-delete'])
+      panel.querySelector('['+attr+']').disabled=!selected;
+    const status=panel.querySelector('[data-cue-status]');
+    status.textContent=motionDirectorCues.length+' cues'+(motionDirectorDirty?' · Unsaved':' · Saved');
+    for (const kind of ['data-cue-preview','data-cue-apply'])
+      panel.querySelector('['+kind+']').disabled=motionDirectorDirty || !motionDirectorCues.length || motionLabBusy;
+    const list=panel.querySelector('[data-cue-list]');list.replaceChildren();
+    for (const cue of [...motionDirectorCues].sort((a,b)=>a.time_seconds-b.time_seconds)) {
+      const button=document.createElement('button');button.type='button';
+      button.className='animation-audio-cue-item'+(cue.id===motionDirectorSelected?' active':'');
+      button.dataset.cueId=cue.id;
+      button.textContent=cue.time_seconds.toFixed(3)+'s · '+
+        (MOTION_DIRECTOR_PRESETS.find(p=>p[0]===cue.preset)?.[1]||cue.preset)+
+        (cue.enabled?'':' (disabled)');
+      list.appendChild(button);
+    }
+  }
+  function motionLabStereoWaveform() {
+    const preview = qs('#animation-motion-lab-audio-preview');
+    const analysis = motionLabAudioAnalysis;
+    if (!preview) return;
+    let section = qs('#animation-audio-stereo-timeline');
+    if (!analysis?.waveform?.channels?.length) {
+      if (section) section.hidden = true;
+      return;
+    }
+    if (!section) {
+      section = document.createElement('section');
+      section.id = 'animation-audio-stereo-timeline';
+      section.className = 'animation-audio-stereo-timeline';
+      section.innerHTML = '<div class="animation-audio-wave-controls"><strong>Audio reference · Events</strong>' +
+        '<label class="animation-audio-wave-mode">Display <select data-wave-mode>' +
+        '<option value="envelope">Envelope + markers</option>' +
+        '<option value="stereo">Stereo waveform</option>' +
+        '<option value="both">Envelope + stereo</option></select></label>' +
+        '<label>Zoom <input type="range" min="1" max="12" value="1" step="1" data-wave-zoom></label>' +
+        '<label>Pan <input type="range" min="0" max="1000" value="0" step="1" data-wave-start></label>' +
+        '<label class="animation-audio-wave-follow"><input type="checkbox" data-wave-follow checked> Follow playhead</label></div>' +
+        '<div class="animation-audio-wave-transport"><button type="button" data-wave-play>Play audio</button>' +
+        '<output data-wave-time>0.00 / 0.00 s</output><span>Click or tap the waveform to seek</span></div>' +
+        '<svg data-wave-svg viewBox="0 0 800 180" role="img" tabindex="0" aria-label="Audio waveform with editable kick and snare events"></svg>' +
+        '<div class="animation-audio-ruler"><span data-wave-left-time>0.00s</span><span data-wave-right-time>0.00s</span></div>' +
+        '<p class="muted" data-wave-description></p>';
+      const workspace = qs('#animation-audio-analysis-workspace');
+      const diagnostics = workspace?.querySelector('.animation-audio-legacy-envelope');
+      if (workspace && diagnostics) diagnostics.before(section);
+      else preview.before(section);
+      const editor = document.createElement('div');
+      editor.id = 'animation-audio-event-editor';
+      editor.className = 'animation-audio-event-editor';
+      editor.innerHTML = '<div class="animation-audio-event-heading"><strong>Event detection & marker editing</strong>' +
+        '<span class="muted">Drag a marker to move · double-click empty waveform to add · Shift-click marker to remove</span></div>' +
+        '<p data-event-selected>Select a marker on the waveform to edit it</p>' +
+        '<div class="animation-audio-event-fields">' +
+        '<label>Time (seconds)<input type="number" min="0" step="0.001" data-event-time disabled></label>' +
+        '<label>Type<select data-event-kind disabled><option value="kick">Kick</option>' +
+        '<option value="snare">Snare</option><option value="highs">Highs</option></select></label>' +
+        '<label class="animation-audio-event-checkbox"><input type="checkbox" data-event-enabled disabled> Enabled</label></div>' +
+        '<div class="animation-audio-event-actions"><button type="button" data-event-save>Update marker</button>' +
+        '<button type="button" data-event-add>Add at playhead</button>' +
+        '<button type="button" data-event-remove disabled>Remove marker</button>' +
+        '<button type="button" data-event-undo disabled>Undo</button>' +
+        '<button type="button" data-event-redo disabled>Redo</button>' +
+        '<button type="button" data-event-reset>Reset detections</button>' +
+        '<button type="button" data-event-clear-detected>Clear all detected markers</button>' +
+        '<button type="button" data-event-persist>Save marker edits</button></div>' +
+        '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera motion until a later phase.</p>';
+      section.after(editor);
+      editor.querySelector('[data-event-persist]')?.addEventListener('click', () => void motionLabSaveMarkers());
+      editor.querySelector('[data-event-undo]')?.addEventListener('click', () => motionLabMarkerHistory(false));
+      editor.querySelector('[data-event-redo]')?.addEventListener('click', () => motionLabMarkerHistory(true));
+      for (const [attr, action] of [['data-event-save','update'],['data-event-add','add'],
+        ['data-event-remove','remove'],['data-event-reset','reset'],
+        ['data-event-clear-detected','clear-detected']]) {
+        editor.querySelector('['+attr+']')?.addEventListener('click', () => motionLabEventChange(action));
+      }
+      const displayMode = section.querySelector('[data-wave-mode]');
+      if (displayMode) displayMode.value = 'stereo';
+      section.querySelector('[data-wave-mode]')?.addEventListener('change', motionLabStereoWaveform);
+      section.querySelector('[data-wave-zoom]')?.addEventListener('input', motionLabStereoWaveform);
+      section.querySelector('[data-wave-start]')?.addEventListener('input', () => {
+        const follow = section.querySelector('[data-wave-follow]');
+        if (follow) follow.checked = false; // manual navigation takes priority
+        motionLabStereoWaveform();
+      });
+      section.querySelector('[data-wave-follow]')?.addEventListener('change', () => {
+        motionLabStereoWaveform();
+      });
+      section.querySelector('[data-wave-play]')?.addEventListener('click', motionLabWaveToggle);
+      const seekTo = ratio => {
+        const audio = motionLabAudioElement;
+        if (!audio || !motionLabAudioAnalysis) return;
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        audio.currentTime = Math.max(0, Math.min(
+          Number.isFinite(audio.duration) ? audio.duration : end,
+          begin + Math.max(0, Math.min(1, ratio)) * (end - begin)));
+        motionLabWavePlayhead();
+      };
+      let dragMarker = null;
+      const waveform = section.querySelector('[data-wave-svg]');
+      waveform?.addEventListener('dblclick', event => {
+        const time = positionToTime(event);
+        if (time === null || !motionLabEditedEvents) return;
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        const rect = waveform.getBoundingClientRect();
+        const closest = motionLabEditedEvents.some(e =>
+          Math.abs(e.time_seconds-time) < (end-begin)*10/Math.max(1,rect.width));
+        if (closest) return;
+        motionLabMarkerSnapshot();
+        const id = 'manual-' + String(Date.now()) + '-' + motionLabEditedEvents.length;
+        motionLabEditedEvents.push({id,kind:'kick',time_seconds:Math.max(0,Math.min(
+          motionLabAudioAnalysis.duration_seconds-.000001,Math.round(time*1000)/1000)),
+          enabled:true,strength:1,source:'manual'});
+        motionLabSelectedEvent = id;
+        motionLabMarkersDirty = true;
+        motionLabStereoWaveform();
+      });
+      const positionToTime = event => {
+        const rect = waveform.getBoundingClientRect();
+        if (!rect.width) return null;
+        const ratio = Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        return begin + ratio * (end - begin);
+      };
+      waveform?.addEventListener('pointerdown', event => {
+        const cueHit=event.target.closest?.('[data-timeline-cue]');
+        if (cueHit) {
+          motionDirectorSelected=cueHit.getAttribute('data-timeline-cue');
+          motionDirectorPanel();
+          return;
+        }
+        if (event.button !== 0 || !motionLabEditedEvents?.length) return;
+        const target = positionToTime(event);
+        if (target === null) return;
+        const rect = waveform.getBoundingClientRect();
+        const tolerance = (Number(section.dataset.waveEnd)-Number(section.dataset.waveStart))
+          * 12 / rect.width;
+        const candidates = motionLabEditedEvents.filter(e => Math.abs(e.time_seconds-target) <= tolerance);
+        candidates.sort((a,b)=>Math.abs(a.time_seconds-target)-Math.abs(b.time_seconds-target));
+        if (!candidates.length) return;
+        const selected = candidates[0];
+        motionLabSelectedEvent = selected.id;
+        dragMarker = {id:selected.id,startX:event.clientX,moved:false};
+        waveform.setPointerCapture?.(event.pointerId);
+        motionLabEventEditor();
+      });
+      waveform?.addEventListener('pointermove', event => {
+        if (!dragMarker || !motionLabEditedEvents) return;
+        if (Math.abs(event.clientX-dragMarker.startX) <= 4 && !dragMarker.moved) return;
+        if (!dragMarker.moved) { motionLabMarkerSnapshot(); dragMarker.moved = true; }
+        const target = positionToTime(event);
+        const selected = motionLabEditedEvents.find(e=>e.id===dragMarker.id);
+        if (target !== null && selected) {
+          selected.time_seconds = Math.max(0,Math.min(
+            motionLabAudioAnalysis.duration_seconds-.000001,Math.round(target*1000)/1000));
+          motionLabMarkersDirty = true;
+          // Redraw after pointer release to retain capture during drag.
+          const x = (selected.time_seconds-Number(section.dataset.waveStart)) /
+            Math.max(1e-9,Number(section.dataset.waveEnd)-Number(section.dataset.waveStart))*800;
+          const marker = waveform.querySelector('[data-drag-preview]');
+          if (marker) {marker.setAttribute('x1',x);marker.setAttribute('x2',x);}
+          motionLabEventEditor();
+        }
+      });
+      const finishDrag = event => {
+        if (!dragMarker) return;
+        const moved = dragMarker.moved;
+        dragMarker = null;
+        if (waveform.hasPointerCapture?.(event.pointerId)) waveform.releasePointerCapture(event.pointerId);
+        if (moved) {section.dataset.waveSuppressClick='1'; motionLabStereoWaveform();}
+      };
+      waveform?.addEventListener('pointerup',finishDrag);
+      waveform?.addEventListener('pointercancel',finishDrag);
+      section.querySelector('[data-wave-svg]')?.addEventListener('click', event => {
+        const cueHit=event.target.closest?.('[data-timeline-cue]');
+        if (cueHit) {
+          motionDirectorSelected=cueHit.getAttribute('data-timeline-cue');
+          motionDirectorPanel(); return;
+        }
+        if (section.dataset.waveSuppressClick === '1') {
+          delete section.dataset.waveSuppressClick;
+          return;
+        }
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (bounds.width <= 0) return;
+        const ratio = Math.max(0, Math.min(1,(event.clientX - bounds.left) / bounds.width));
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        const target = begin + ratio * (end - begin);
+        const tolerance = (end - begin) * 12 / bounds.width;
+        let closest = null;
+        for (const candidate of motionLabEditedEvents || []) {
+          const distance = Math.abs(candidate.time_seconds - target);
+          if (distance <= tolerance && (!closest || distance < closest.distance)) {
+            closest = {id:candidate.id,distance};
+          }
+        }
+        if (closest) {
+          motionLabSelectedEvent = closest.id;
+          if (event.shiftKey) { motionLabEventChange('remove'); return; }
+          motionLabStereoWaveform();
+        } else {
+          motionLabSelectedEvent = null;
+          motionLabEventEditor();
+          seekTo(ratio);
+        }
+      });
+      section.querySelector('[data-wave-svg]')?.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase()==='z' ||
+            event.key.toLowerCase()==='y')) {
+          event.preventDefault();
+          motionLabMarkerHistory(event.key.toLowerCase()==='y' || event.shiftKey);
+          return;
+        }
+        const selected = motionLabEditedEvents?.find(e=>e.id===motionLabSelectedEvent);
+        if (selected && (event.key==='Delete' || event.key==='Backspace')) {
+          event.preventDefault(); motionLabEventChange('remove'); return;
+        }
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        if (selected) {
+          motionLabMarkerSnapshot();
+          const step = event.shiftKey ? 1/Math.max(1,Number(motionLabAudioAnalysis?.fps)||12) : .01;
+          selected.time_seconds = Math.max(0,Math.min(
+            motionLabAudioAnalysis.duration_seconds-.000001,
+            Math.round((selected.time_seconds+(event.key==='ArrowRight'?step:-step))*1000000)/1000000));
+          motionLabMarkersDirty = true;
+          motionLabStereoWaveform();
+          return;
+        }
+        const current = Number(motionLabAudioElement?.currentTime) || 0;
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        seekTo((current - begin + (event.key === 'ArrowRight' ? .1 : -.1)) /
+          Math.max(1e-9, end - begin));
+      });
+    }
+    section.hidden = false;
+    const channels = analysis.waveform.channels;
+    const total = analysis.waveform.bins;
+    const zoom = Number(section.querySelector('[data-wave-zoom]')?.value || 1);
+    const startControl = section.querySelector('[data-wave-start]');
+    const maxStart = Math.max(0, 1 - 1 / zoom);
+    const from = Math.round(Number(startControl?.value || 0) / 1000 * maxStart * total);
+    const to = Math.min(total, from + Math.max(1, Math.ceil(total / zoom)));
+    const svg = section.querySelector('[data-wave-svg]');
+    const ns = 'http://www.w3.org/2000/svg';
+    svg.replaceChildren();
+    const make = (tag, attributes) => {
+      const el = document.createElementNS(ns, tag);
+      for (const [k, v] of Object.entries(attributes)) el.setAttribute(k, String(v));
+      svg.appendChild(el);
+      return el;
+    };
+    const count = channels.length;
+    const mode = section.querySelector('[data-wave-mode]')?.value || 'envelope';
+    const height = count === 2 ? 64 : 120;
+    if (mode !== 'envelope') channels.forEach((channel, index) => {
+      const center = count === 2 ? 45 + index * 81 : 88;
+      make('line', {x1:0,y1:center,x2:800,y2:center,stroke:'currentColor','stroke-opacity':'.16'});
+      const d = [];
+      for (let i = from; i < to; i++) {
+        const x = (i - from) * 800 / Math.max(1,to-from);
+        const pair = channel[i] || [0,0];
+        d.push('M' + x.toFixed(2) + ' ' + (center - pair[1] * height/2).toFixed(2) +
+          ' V' + (center - pair[0] * height/2).toFixed(2));
+      }
+      make('path', {d:d.join(' '),fill:'none',stroke:index?'#b49df3':'#73d5ed',
+        'stroke-width':Math.max(.8,Math.min(2,800/(to-from))),'vector-effect':'non-scaling-stroke'});
+      make('text', {x:5,y:center-25,fill:'currentColor','font-size':11}).textContent =
+        count === 2 ? (index ? 'R' : 'L') : 'Mono';
+    });
+    if (mode !== 'stereo') {
+      const values = motionLabAudioSignal();
+      const fps = Number(analysis.fps) || 12;
+      const startTime = from / total * analysis.duration_seconds;
+      const endTime = to / total * analysis.duration_seconds;
+      const peak = Math.max(.05,...values);
+      const points = [];
+      for (let i = 0; i < values.length; i++) {
+        const time = (i + .5) / fps;
+        if (time < startTime || time > endTime) continue;
+        const x = (time - startTime) * 800 / Math.max(1e-9,endTime-startTime);
+        const y = 164 - Math.max(0,values[i]) / peak * 140;
+        points.push((points.length?'L':'M') + x.toFixed(2) + ' ' + y.toFixed(2));
+      }
+      if (points.length) make('path', {d:points.join(' '),fill:'none',
+        stroke:'#73d5ed','stroke-width':2.4,'vector-effect':'non-scaling-stroke'});
+      const gate = Math.max(0,Math.min(1,Number(qs('#animation-motion-lab-audio-threshold')?.value)||0));
+      const y = 164 - gate / peak * 140;
+      make('line',{x1:0,x2:800,y1:y,y2:y,stroke:'#ff857c',
+        'stroke-width':1.5,'stroke-dasharray':'7 5'});
+    }
+    const tStart = from / total * analysis.duration_seconds;
+    const tEnd = to / total * analysis.duration_seconds;
+    section.dataset.waveStart = String(tStart);
+    section.dataset.waveEnd = String(tEnd);
+    const left = section.querySelector('[data-wave-left-time]');
+    const right = section.querySelector('[data-wave-right-time]');
+    if (left) left.textContent = tStart.toFixed(2) + 's · frame ' + Math.round(tStart*analysis.fps);
+    if (right) right.textContent = tEnd.toFixed(2) + 's · frame ' + Math.round(tEnd*analysis.fps);
+    const events = motionLabEditedEvents || analysis.events?.events || [];
+    const candidateIds = motionDirectorPreviewMatches ?
+      new Set(motionDirectorFindCandidates().map(e=>e.id)) : new Set();
+    let visible = 0;
+    for (const event of events) {
+      if (event.time_seconds < tStart || event.time_seconds > tEnd) continue;
+      const x = (event.time_seconds - tStart) * 800 / Math.max(1e-9,tEnd-tStart);
+      make('line', {x1:x,y1:4,x2:x,y2:176,stroke:event.kind === 'kick'?'#ffba66':
+        event.kind === 'snare'?'#f28fba':'#a0a0a0',
+        'stroke-width':event.id===motionLabSelectedEvent?3:1.5,
+        'stroke-opacity':event.enabled===false?'.2':'.85'});
+      if (candidateIds.has(event.id)) {
+        make('circle',{cx:x,cy:8,r:4,fill:'#6bebaf','pointer-events':'none'});
+      }
+      visible++;
+    }
+    // Explicit cue lane is separate from detected transient markers.
+    const cueColors = {push_zoom_in:'#75d9b5',roll_right_left:'#c99cf2',
+      roll_left_right:'#c99cf2',push_return:'#73d5ed',dolly_out:'#73d5ed',
+      shake:'#ffb76b',ripple:'#ff96bd',reveal_drift:'#a8d4f5',
+      fly_through:'#75d9b5'};
+    for (const cue of motionDirectorCues) {
+      if (cue.time_seconds < tStart || cue.time_seconds > tEnd) continue;
+      const x=(cue.time_seconds-tStart)*800/Math.max(1e-9,tEnd-tStart);
+      const band=make('rect',{x:Math.max(0,x-5),y:153,width:11,height:22,rx:2,
+        fill:cueColors[cue.preset]||'#fff','fill-opacity':cue.enabled?'.96':'.35',
+        'data-timeline-cue':cue.id,role:'button',
+        'aria-label':'Motion cue '+cue.preset+' at '+cue.time_seconds.toFixed(3)+' seconds',
+        stroke:cue.id===motionDirectorSelected?'#fff':'none','stroke-width':2});
+      const tip=document.createElementNS(ns,'title');
+      tip.textContent=cue.preset.replaceAll('_',' ')+' · '+cue.time_seconds.toFixed(3)+'s';
+      band.appendChild(tip);
+    }
+    make('line', {x1:0,x2:0,y1:0,y2:180,stroke:'#ffed81','stroke-width':3,
+      'vector-effect':'non-scaling-stroke','pointer-events':'none',
+      visibility:'hidden','data-drag-preview':''});
+    make('line', {x1:0,x2:0,y1:0,y2:180,stroke:'#fff','stroke-width':2,
+      'vector-effect':'non-scaling-stroke','pointer-events':'none',
+      visibility:'hidden','data-wave-playhead':''});
+    motionLabWavePlayhead();
+    motionLabEventEditor();
+    const desc = section.querySelector('[data-wave-description]');
+    if (desc) desc.textContent = (mode === 'envelope'?'Frame-aligned energy envelope':
+      mode === 'both'?'Envelope over separate L/R channels':
+      count === 2?'Separate L/R channels':'Mono channel') +
+      ' · ' + tStart.toFixed(2) + '–' + tEnd.toFixed(2) + ' s · ' + visible +
+      ' attack candidates in view (orange kick, pink snare, gray highs). ' +
+      'Markers represent spectral candidates, not isolated instruments.';
   }
   function motionLabAudioPreview() {
     const preview = qs('#animation-motion-lab-audio-preview');
