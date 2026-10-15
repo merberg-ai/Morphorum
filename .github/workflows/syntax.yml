@@ -34,6 +34,7 @@ jobs:
         run: |
           node --check frontend/dist/assets/ui-services.js
           node --check frontend/dist/assets/app.js
+          node --check frontend/dist/assets/first-run-setup.js
           node --check frontend/dist/assets/models.js
           node --check frontend/dist/assets/image.js
           node --check frontend/dist/assets/loras.js
