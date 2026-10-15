@@ -23,8 +23,15 @@ function harness() {
   ].map(([k,value])=>[k,{value}]));
   const selectedAxes = [{value:'translation_x'},{value:'translation_y'}];
   inputs.axes = {querySelectorAll:()=>selectedAxes};
+  inputs.name = {value:'Cinematic Orbit'};
+  inputs.library = {
+    value:'',children:[],
+    replaceChildren(){this.children=[];},
+    appendChild(child){this.children.push(child);},
+  };
+  inputs.status = {textContent:''};
   const panel={querySelector:selector=>{
-    const key=selector.match(/^\[data-ms4-(\w+)\]$/)?.[1];
+    const key=selector.match(/^\[data-ms(?:4|43)-(\w+)\]$/)?.[1];
     return inputs[key] || null;
   }};
   const state={project:{id:'project-a',animation:{mode:'3d',fps:24,max_frames:120}}};
@@ -37,11 +44,21 @@ function harness() {
     animationMode:()=> '3d',
     commitMotionLabDraft(){commits++;},
     async motionLabPreviewOrApply(apply,opts){actions.push(apply?'apply':opts?.curvesOnly?'curves':'preview');},
-    document:{activeElement:null},
+    document:{activeElement:null,createElement(){return {value:'',textContent:''};}},
+    window:{MorphorumDialog:{confirm:async()=>true}},
+    async api(){throw Error('Mock API not configured');},
   };
   vm.runInNewContext(js.slice(start,end)+`
     motionStudioArrangementSyncRange = () => {};
     motionStudioArrangementResetFields = () => {};
+    motionStudioRenderArrangement = () => {};
+    motionStudioArrangementRebuildAxes = axes => {
+      selectedAxes.splice(0, selectedAxes.length, ...axes.map(value=>({value})));
+    };
+    this.savePreset = ms43Save;
+    this.loadPreset = ms43Load;
+    this.deletePreset = ms43Delete;
+    this.setPresets = value => {ms43Presets=value;};
     this.stage = motionStudioArrange;
     this.remove = motionStudioArrangementRemove;
     this.choose = motionStudioArrangementSelect;
@@ -68,6 +85,11 @@ test('arrangement mounts in existing Motion Studio, not a second camera composit
   assert.match(css,/\.motion-studio-arrangement-actions/);
   assert.match(js,/motionStudioArrangementRemove\(id\)/);
   assert.match(css,/\.motion-studio-arrangement-remove/);
+  assert.match(js,/data-ms43-library/);
+  assert.match(js,/data-ms43-save/);
+  assert.match(js,/data-ms43-update/);
+  assert.match(js,/data-ms43-delete/);
+  assert.match(css,/\.motion-studio-custom-presets/);
   assert.doesNotMatch(js,/addLane\('Unstaged selection'/);
 });
 
@@ -132,6 +154,62 @@ test('removing another staged movement keeps the selected layer editable',async(
   ctx.remove(secondId);
   assert.equal(layers.length,1);
   assert.equal(commitCount(),3);
+});
+
+test('MS4.3 presets save current editor parameters without staging or changing the project',async()=>{
+  const {ctx,layers,inputs,selectedAxes,actions,commitCount}=harness();
+  const endpoint='/api/animation/motion-studio/custom-presets';
+  const stored=[];
+  ctx.api=async (url, options={})=>{
+    assert.ok(url.startsWith(endpoint));
+    if (!options.method) return {presets:stored.map(item=>({...item}))};
+    if (options.method==='POST') {
+      const body=JSON.parse(options.body);
+      const item={...body,id:'saved-1'};
+      stored.push(item);
+      return {preset:item};
+    }
+    throw Error('Unexpected request');
+  };
+  await ctx.savePreset(false);
+  assert.equal(stored.length,1);
+  assert.equal(stored[0].name,'Cinematic Orbit');
+  assert.equal(stored[0].preset,'wave');
+  assert.deepEqual(Array.from(stored[0].axes),['translation_x','translation_y']);
+  assert.equal(stored[0].start_ratio,.1);
+  assert.equal(stored[0].end_ratio,.3);
+  assert.equal(layers.length,0);
+  assert.equal(commitCount(),0);
+  assert.equal(inputs.library.value,'saved-1');
+  assert.ok(actions.some(action=>action==='toast:Custom preset saved'));
+});
+
+test('MS4.3 loads proportional frame range as a new, unstaged movement',async()=>{
+  const {ctx,layers,inputs,selectedAxes,commitCount}=harness();
+  await ctx.stage('stage');
+  const existing=layers[0];
+  assert.equal(commitCount(),1);
+  inputs.library.value='saved-abc';
+  ctx.setPresets([{
+    id:'saved-abc',name:'Spiral Sweep',preset:'spiral',blend:'replace',
+    axes:['translation_z','rotation_z'],strength:.35,cycle_seconds:5,
+    fade_seconds:.4,start_ratio:.25,end_ratio:.75,
+  }]);
+  ctx.loadPreset();
+  assert.equal(ctx.selection(),'');
+  assert.equal(inputs.preset.value,'spiral');
+  assert.equal(inputs.blend.value,'replace');
+  assert.equal(inputs.start.value,'30');
+  assert.equal(inputs.end.value,'90');
+  assert.deepEqual(selectedAxes.map(x=>x.value),['translation_z','rotation_z']);
+  assert.equal(layers.length,1,'Loading must not stage a project movement');
+  assert.equal(layers[0],existing,'Loading must not edit existing layer');
+  await ctx.stage('stage');
+  assert.equal(layers.length,2);
+  assert.equal(layers[1].start_frame,30);
+  assert.equal(layers[1].end_frame,90);
+  assert.equal(layers[1].blend,'replace');
+  assert.equal(commitCount(),2);
 });
 
 test('preview stages native preset then invokes existing curve diagnostics',async()=>{
