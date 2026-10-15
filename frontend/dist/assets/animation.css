@@ -3365,10 +3365,9 @@ dialog#animation-deforum-dialog {
 
 /* MS5.2: non-destructive side-by-side review of saved render PNGs. */
 .motion-review-split {
-  display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));
   gap:12px;align-items:start;min-width:0;
 }
-.motion-review-split:has(> .motion-review-split-image[hidden]) {grid-template-columns:minmax(0,1fr);}
 .motion-review-split-image {
   min-width:0;display:grid;gap:6px;overflow:hidden;
 }
