@@ -91,3 +91,17 @@ Physical Windows + Android/browser acceptance remains pending.
 
 The W2 checkpoint commit is the rollback point for this batch. Do not
 promote this implementation to `main` until it has been physically accepted.
+
+## W2 final source checkpoint (post-compatibility review)
+
+The original `GET /api/animation/projects/<id>/assets` contract is retained
+for existing API/Studio consumers. The browser instead uses the separate
+`/media-inventory` route to show valid files together with recovery warnings.
+The test suite was aligned to the split API. Soundtrack duration updates on
+browser `loadedmetadata` and playback errors are displayed non-destructively.
+
+Final remote source validation: **15/15** targeted frontend tests passed in a
+JavaScript source-test harness, with **6/6** additional contract assertions.
+Relevant JavaScript parsed successfully. This is not a full GitHub Actions,
+Python backend, Windows or Android acceptance run. Those remain for physical
+verification before promoting `dev-webui` to `main`.
