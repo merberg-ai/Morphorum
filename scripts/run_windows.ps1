@@ -2,11 +2,17 @@ param(
     [switch]$Lan,
     [Alias("backend-only")]
     [switch]$BackendOnly,
+    [Alias('setup-wizard')]
+    [switch]$SetupWizard,
     [ValidateRange(1, 65535)]
     [int]$Port = 7865
 )
 
 $ErrorActionPreference = 'Stop'
+if ($BackendOnly -and $SetupWizard) {
+    Write-Error 'Setup wizard requires WebUI mode. Remove -BackendOnly.'
+    exit 2
+}
 $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'ui_windows.ps1')
 Set-Location $Root
@@ -101,6 +107,7 @@ Write-Host '  Press Ctrl+C to stop the server.' -ForegroundColor DarkGray
 Write-Host ''
 $serveArgs = @('-m', 'morphorum', 'serve', '--host', $hostAddress, '--port', [string]$Port)
 if ($BackendOnly) { $serveArgs += '--backend-only' }
+if ($SetupWizard) { $serveArgs += '--setup-wizard' }
 & $Python @serveArgs
 $code = $LASTEXITCODE
 if ($code -ne 0) { Fail "Server stopped with exit code $code." }
