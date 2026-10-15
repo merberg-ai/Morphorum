@@ -117,7 +117,7 @@ test('a previous project response never overwrites a newly opened project', asyn
 test('bad reanalysis produces a visible warning instead of losing project state', async () => {
   const selected = project();
   const { ctx, nodes } = makeContext(selected, async url => {
-    if (url.endsWith('/assets')) return { assets: [wav], warnings: [] };
+    if (url.endsWith('/media-inventory')) return { assets: [wav], warnings: [] };
     throw Error('Stored WAV checksum mismatch');
   });
   await ctx.restoreProjectMedia({ resetAudio: true });
