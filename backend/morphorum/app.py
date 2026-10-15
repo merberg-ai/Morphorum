@@ -1446,6 +1446,19 @@ def api_resume_animation_render(project_id: str, render_id: str) -> dict[str, An
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/renders/{project_id}/{render_id}/review-metadata")
+def api_animation_render_review_metadata(
+    project_id: str, render_id: str,
+) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return animation_render_manager.review_metadata(project_id, render_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AnimationRenderError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.get("/api/animation/renders/{project_id}/{render_id}/frames/{frame}")
 def api_animation_render_frame(project_id: str, render_id: str, frame: int):
     try:
