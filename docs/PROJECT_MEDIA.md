@@ -73,3 +73,21 @@ several WAVs, and missing/corrupt assets. Verify that switching projects
 does not show the previous project's audio or image.
 
 Work is on `dev-webui`; keep `main` unchanged pending physical acceptance.
+
+## W2 checkpoint — 2026-10-15
+
+Project media restoration is implemented on `dev-webui` as one integration
+batch. The project editor now has persistent media playback and offset controls,
+verified inventory diagnostics and restored Motion Lab WAV analysis, including
+saved audio-layer editing parameters. The server uses per-asset inventory
+recovery and a checksum-verified WAV reanalysis endpoint.
+
+Source-level validation: 5 new Node project-media tests + 10 existing
+`frontend_dev_ui` tests pass in an in-memory test harness; JavaScript syntax
+parses, and five additional integration checks pass. Four new Python tests
+were added for valid and damaged assets, but the **full Python test suite and
+GitHub Actions results have not been verified** from this remote session.
+Physical Windows + Android/browser acceptance remains pending.
+
+The W2 checkpoint commit is the rollback point for this batch. Do not
+promote this implementation to `main` until it has been physically accepted.
