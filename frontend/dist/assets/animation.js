@@ -5752,7 +5752,6 @@
     ['gentle-drift', 'Gentle Drift'], ['wave', 'Wave'],
     ['spiral', 'Spiral'], ['figure-eight', 'Figure Eight'],
     ['rocking', 'Rocking'], ['push-in', 'Push In'], ['pull-out', 'Pull Out'],
-    ['still', 'Still / Reset'],
   ];
   let motionStudioArrangementProjectId = '';
   let motionStudioArrangementSelection = '';
