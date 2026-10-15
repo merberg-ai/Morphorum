@@ -17,7 +17,7 @@ test('DA4.2 can add a manual cue without detecting a beat', () => {
 test('DA4.2 saves and loads source-bound cue documents', () => {
   assert.match(js,/\/motion-lab\/audio-cues\//);
   assert.match(js,/source_sha256:motionLabAudioAnalysis\.source_sha256/);
-  assert.match(js,/storedCues\.cues\.cues\.map/);
+  assert.match(js,/motionDirectorCues = doc\.cues\.map/);
   assert.match(js,/duration_seconds:motionLabAudioAnalysis\.duration_seconds/);
 });
 test('DA4.2 separate cue lane and inspector is responsive', () => {
