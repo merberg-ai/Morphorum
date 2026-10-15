@@ -54,6 +54,7 @@ test('import and LoRA warnings retain useful meaning without branch milestones',
 
 test('build identity shows version and branch with compact mobile disclosure', () => {
   const css = read('frontend/dist/assets/app.css');
+  const phone = read('frontend/dist/assets/mobile.css');
   assert.match(html, /id="runtime-build"/);
   assert.match(html, /id="runtime-version"/);
   assert.match(html, /id="runtime-branch"/);
@@ -61,7 +62,7 @@ test('build identity shows version and branch with compact mobile disclosure', (
   assert.match(html, /id="runtime-branch-full"/);
   assert.match(html, /id="runtime-commit"/);
   assert.match(css, /\.runtime-build-popover\s*\{/);
-  assert.match(css, /\.runtime-branch-short\s*\{display:block !important;\}/);
+  assert.match(phone, /\.runtime-branch-short\s*\{display:block !important;\}/);
   assert.match(css, /\.runtime-meta > span\s*\{/);
   assert.match(css, /text-overflow: ellipsis/);
 });

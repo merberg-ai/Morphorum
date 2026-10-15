@@ -2344,8 +2344,240 @@
     await refreshCurve(project, sequence);
   }
 
+  // The project is the source of truth, not a browser file input. Every project
+  // open starts with a verified inventory and rehydrates its media players.
+  let projectMediaGeneration = 0;
+  let projectAudioRestoreGeneration = 0;
+  let projectMedia = {
+    projectId: '', loading: false, assets: [], warnings: [],
+    soundtrack: null, selectedWav: '',
+  };
+
+  function projectMediaAssets(kind) {
+    return projectMedia.projectId === state.project?.id
+      ? projectMedia.assets.filter(asset => asset.kind === kind) : [];
+  }
+
+  function projectMediaWarning(message) {
+    if (projectMedia.projectId !== state.project?.id) return;
+    if (!projectMedia.warnings.includes(message)) projectMedia.warnings.push(message);
+  }
+
+  function renderProjectMedia() {
+    const project = state.project;
+    const status = qs('#animation-media-status');
+    const warningNode = qs('#animation-media-warnings');
+    const soundtrackRow = qs('#animation-media-soundtrack');
+    const soundtrackPlayer = qs('#animation-media-soundtrack-player');
+    const soundtrackName = qs('#animation-media-soundtrack-name');
+    const offset = qs('#animation-media-offset');
+    const offsetSave = qs('#animation-media-offset-save');
+    const wavRow = qs('#animation-media-motion-audio');
+    const wavSelect = qs('#animation-media-wav-select');
+    const wavPlayer = qs('#animation-media-wav-player');
+    const wavNote = qs('#animation-media-wav-note');
+    const current = Boolean(project && projectMedia.projectId === project.id);
+    const loading = current && projectMedia.loading;
+    const image = projectMediaAssets('source_image')[0];
+    const soundtrack = projectMediaAssets('soundtrack')[0];
+    const wavs = projectMediaAssets('motion_lab_wav');
+    const warnings = current ? projectMedia.warnings : [];
+
+    if (status) status.textContent = !project ? 'Open a project to inspect saved media.' :
+      !current || loading ? 'Checking saved project media…' :
+      (image ? 'Start image verified · ' : '') +
+      (soundtrack ? 'Soundtrack attached · ' : '') +
+      wavs.length + ' saved Motion Lab WAV' + (wavs.length === 1 ? '' : 's') +
+      (warnings.length ? ' · Some assets need attention.' : '.');
+    if (warningNode) {
+      warningNode.hidden = !warnings.length;
+      warningNode.textContent = warnings.join('\n');
+    }
+    if (soundtrackRow) soundtrackRow.hidden = !soundtrack;
+    if (soundtrackPlayer) {
+      const url = soundtrack?.url || '';
+      if (soundtrackPlayer.getAttribute('src') !== url) {
+        if (url) soundtrackPlayer.src = url;
+        else soundtrackPlayer.removeAttribute('src');
+      }
+    }
+    if (soundtrackName) soundtrackName.textContent = soundtrack
+      ? (projectMedia.soundtrack?.filename || soundtrack.filename) +
+        (Number.isFinite(soundtrackPlayer?.duration) ?
+          ' · ' + soundtrackPlayer.duration.toFixed(2) + 's' : '') +
+        ' · offset ' + Number(projectMedia.soundtrack?.offset_seconds || 0).toFixed(2) + 's'
+      : '';
+    if (offset) {
+      offset.disabled = !soundtrack;
+      if (current && projectMedia.soundtrack && document.activeElement !== offset) {
+        offset.value = String(projectMedia.soundtrack.offset_seconds || 0);
+      }
+    }
+    if (offsetSave) offsetSave.disabled = !soundtrack || !projectMedia.soundtrack;
+
+    if (wavRow) wavRow.hidden = wavs.length === 0;
+    if (wavSelect) {
+      const previouslySelected = wavSelect.value;
+      wavSelect.replaceChildren();
+      for (const wav of wavs) {
+        const option = document.createElement('option');
+        option.value = wav.sha256;
+        option.textContent = wav.filename.slice(0, 12) + '… · ' +
+          (wav.bytes / (1024 * 1024)).toFixed(1) + ' MiB';
+        wavSelect.appendChild(option);
+      }
+      const selected = wavs.some(w => w.sha256 === projectMedia.selectedWav)
+        ? projectMedia.selectedWav
+        : (wavs.some(w => w.sha256 === previouslySelected) ? previouslySelected : '');
+      if (selected) wavSelect.value = selected;
+      wavSelect.disabled = loading;
+    }
+    const selectedWav = wavs.find(w => w.sha256 === projectMedia.selectedWav);
+    if (wavPlayer) {
+      const url = selectedWav?.url || '';
+      if (wavPlayer.getAttribute('src') !== url) {
+        if (url) wavPlayer.src = url;
+        else wavPlayer.removeAttribute('src');
+      }
+    }
+    if (wavNote) wavNote.textContent = !selectedWav
+      ? 'No WAV selected.'
+      : motionLabAudioProjectId === project?.id &&
+        motionLabAudioAnalysis?.source_sha256 === selectedWav.sha256
+        ? 'Saved WAV restored for synchronized Motion Curves playback and analysis.'
+        : warnings.some(message => message.startsWith('Could not restore saved Motion Lab WAV'))
+          ? 'Saved WAV could not be analyzed. See the media warning above.'
+          : 'Restoring saved WAV analysis for this project…';
+    renderSourceState();
+  }
+
+  async function restoreSavedMotionWav(sha256) {
+    const id = state.project?.id;
+    const asset = projectMediaAssets('motion_lab_wav').find(item => item.sha256 === sha256);
+    const token = ++projectAudioRestoreGeneration;
+    motionLabReleaseAudio();
+    motionLabAudioAnalysis = null;
+    motionLabAudioProjectId = null;
+    motionLabAudioPreview();
+    motionLabAudioUi();
+    if (!id || !asset) return;
+    const info = qs('#animation-motion-lab-audio-info');
+    if (info) info.textContent = 'Restoring saved WAV analysis…';
+    try {
+      const response = await api(asset.url + '/analysis');
+      if (token !== projectAudioRestoreGeneration || state.project?.id !== id ||
+          projectMedia.selectedWav !== sha256) return;
+      const analysis = response.analysis;
+      if (!Array.isArray(analysis?.values) ||
+          analysis.values.length !== Number(state.project.animation.max_frames) ||
+          Number(analysis.fps) !== Number(state.project.animation.fps)) {
+        throw new Error('Saved WAV analysis does not match the current project frames/FPS.');
+      }
+      motionLabAudioAnalysis = analysis;
+      motionLabAudioProjectId = id;
+      motionLabAudioUrl = asset.url;
+      motionLabAudioElement = new Audio(asset.url);
+      motionLabAudioElement.preload = 'auto';
+      motionLabAudioElement.load();
+      // Reload the most recently saved layer's editing choices alongside its
+      // analysis. Keep the currently saved camera tracks untouched.
+      const savedLayer = (state.project.motion_lab?.layers || []).slice().reverse()
+        .find(layer => layer.type === 'audio' && layer.sha256 === sha256);
+      if (savedLayer) {
+        for (const [name, value] of Object.entries({
+          band: savedLayer.band, detection: savedLayer.detection,
+          sensitivity: savedLayer.sensitivity, axis: savedLayer.axis,
+          threshold: savedLayer.threshold, distance: savedLayer.distance,
+          attack: savedLayer.attack_frames, release: savedLayer.release_frames,
+        })) {
+          const control = qs('#animation-motion-lab-audio-' + name);
+          if (control && value != null) control.value = String(value);
+        }
+      }
+      motionLabAudioSyncStatus('Saved WAV ready for synchronized playback.');
+      if (info) info.textContent = 'Restored saved WAV (' + analysis.values.length +
+        ' frames, ' + Number(analysis.duration_seconds).toFixed(2) + ' seconds).';
+      const badge = qs('#animation-motion-lab-audio-status');
+      if (badge) badge.textContent = 'Saved WAV ready';
+      motionLabAudioPreview();
+      motionLabAudioUi();
+    } catch (error) {
+      if (token !== projectAudioRestoreGeneration || state.project?.id !== id) return;
+      projectMediaWarning('Could not restore saved Motion Lab WAV: ' + error.message);
+      if (info) info.textContent = 'Saved WAV could not be restored: ' + error.message;
+      renderProjectMedia();
+      motionLabAudioUi();
+    }
+    if (token === projectAudioRestoreGeneration) renderProjectMedia();
+  }
+
+  async function restoreProjectMedia({ resetAudio = false } = {}) {
+    const id = state.project?.id;
+    const token = ++projectMediaGeneration;
+    if (resetAudio) {
+      ++projectAudioRestoreGeneration;
+      motionLabReleaseAudio();
+      motionLabAudioAnalysis = null;
+      motionLabAudioProjectId = null;
+      motionLabAudioPreview();
+      motionLabAudioUi();
+    }
+    if (!id) {
+      projectMedia = { projectId: '', loading: false, assets: [], warnings: [],
+        soundtrack: null, selectedWav: '' };
+      renderProjectMedia();
+      return;
+    }
+    const previous = projectMedia.projectId === id ? projectMedia.selectedWav : '';
+    projectMedia = { projectId: id, loading: true, assets: [], warnings: [],
+      soundtrack: null, selectedWav: previous };
+    renderProjectMedia();
+    try {
+      const inventory = await api('/api/animation/projects/' + encodeURIComponent(id) + '/media-inventory');
+      if (token !== projectMediaGeneration || state.project?.id !== id) return;
+      const assets = Array.isArray(inventory.assets) ? inventory.assets : [];
+      const warnings = Array.isArray(inventory.warnings) ? inventory.warnings.slice() : [];
+      const soundtrackAsset = assets.find(asset => asset.kind === 'soundtrack');
+      let soundtrack = null;
+      if (soundtrackAsset) {
+        try {
+          const response = await api('/api/animation/projects/' + encodeURIComponent(id) +
+            '/motion-import/soundtrack');
+          soundtrack = response.soundtrack;
+          if (!soundtrack) warnings.push('Soundtrack is stored but its metadata is unavailable.');
+        } catch (error) {
+          warnings.push('Could not read attached soundtrack settings: ' + error.message);
+        }
+      }
+      if (token !== projectMediaGeneration || state.project?.id !== id) return;
+      const wavs = assets.filter(asset => asset.kind === 'motion_lab_wav');
+      const layers = Array.isArray(state.project.motion_lab?.layers)
+        ? state.project.motion_lab.layers : [];
+      const lastAudioLayer = layers.slice().reverse().find(layer =>
+        layer.type === 'audio' && wavs.some(wav => wav.sha256 === layer.sha256));
+      const currentAnalysisSha = motionLabAudioProjectId === id
+        ? motionLabAudioAnalysis?.source_sha256 : '';
+      const chosen = [currentAnalysisSha, previous, lastAudioLayer?.sha256, wavs[0]?.sha256]
+        .find(sha => sha && wavs.some(wav => wav.sha256 === sha)) || '';
+      projectMedia = { projectId: id, loading: false, assets, warnings,
+        soundtrack, selectedWav: chosen };
+      renderProjectMedia();
+      if (chosen && (resetAudio || motionLabAudioProjectId !== id ||
+          motionLabAudioAnalysis?.source_sha256 !== chosen)) {
+        await restoreSavedMotionWav(chosen);
+      }
+    } catch (error) {
+      if (token !== projectMediaGeneration || state.project?.id !== id) return;
+      projectMedia.loading = false;
+      projectMediaWarning('Could not check saved project assets: ' + error.message);
+      renderProjectMedia();
+    }
+  }
+
   function sourceImageUrl() {
     if (!state.project?.id || !state.project?.animation?.source_image) return '';
+    if (projectMedia.projectId === state.project.id && !projectMedia.loading &&
+        !projectMediaAssets('source_image').length) return '';
     const version = encodeURIComponent(state.project.updated_at || 'source');
     return '/api/animation/projects/' + encodeURIComponent(state.project.id) + '/source-image?v=' + version;
   }
@@ -2357,7 +2589,9 @@
     const clear = qs('#animation-clear-source');
     const preview = qs('#animation-generate-motion-preview');
     const fileInput = qs('#animation-source-file');
-    const hasSource = Boolean(state.project?.animation?.source_image);
+    const hasSource = Boolean(state.project?.animation?.source_image) &&
+      (projectMedia.projectId !== state.project?.id || projectMedia.loading ||
+       projectMediaAssets('source_image').length > 0);
     const startMode = qs('#animation-start-mode')?.value || state.project?.animation?.start_mode || 'prompt';
     const requiresSource = startMode === 'source';
     const renderActive = ['queued', 'loading_model', 'rendering', 'finalizing'].includes(
@@ -2370,7 +2604,7 @@
       note.textContent = requiresSource
         ? (hasSource
             ? 'Frame 0 will use the uploaded image exactly; diffusion feedback begins on frame 1.'
-            : 'Frame 0 requires an uploaded image in this mode. Upload one below before rendering.')
+            : 'Frame 0 requires a valid uploaded image. If its saved file is missing, upload it again.')
         : 'Frame 0 will be generated with the selected model and frame-0 prompt. An uploaded image is optional and can still be used for the camera-motion preview.';
     }
     if (image) {
@@ -2381,9 +2615,10 @@
     if (empty) empty.hidden = hasSource;
     if (meta) meta.textContent = hasSource
       ? ((requiresSource ? 'Starting frame · ' : 'Optional preview reference · ') + (state.project.animation.source_image_name || 'uploaded image'))
-      : (requiresSource ? 'No starting image uploaded.' : 'No image uploaded. Prompt mode does not require one.');
+      : (state.project?.animation?.source_image ? 'Saved start image missing or unreadable. Re-upload to repair.' :
+        requiresSource ? 'No starting image uploaded.' : 'No image uploaded. Prompt mode does not require one.');
     if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
-    if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    if (clear) clear.disabled = !state.project || !state.project?.animation?.source_image || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     // A source photo is optional: Motion Lab falls back to a calibration grid.
     if (preview) preview.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     const overlay = qs('#animation-preview-highlight-holes');
@@ -2526,6 +2761,7 @@
       clearMotionPreviewResult();
       renderSourceState();
       renderDepthState();
+      void restoreProjectMedia();
       toast('Source image uploaded', payload.source.width + ' × ' + payload.source.height + ' · ' + file.name, 'success');
     } catch (error) {
       toast('Source image upload failed', error.message, 'error', 7000);
@@ -2549,6 +2785,7 @@
       clearMotionPreviewResult();
       renderSourceState();
       renderDepthState();
+      void restoreProjectMedia();
       toast('Source image cleared', 'The project source image was removed.', 'success');
     } catch (error) {
       toast('Could not clear source image', error.message, 'error', 6500);
@@ -3742,6 +3979,7 @@
 
       await loadProjectList();
       fillForm();
+      void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
       await loadRenderHistory();
@@ -4081,6 +4319,7 @@
       state.timelineSelection = null;
       state.depthPreview = null;
       fillForm();
+      void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
       await loadRenderHistory();
@@ -4124,6 +4363,7 @@
       state.depthPreview = null;
       await loadProjectList();
       fillForm();
+      void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
       await loadRenderHistory();
@@ -4644,7 +4884,7 @@
   function motionLabReleaseAudio() {
     motionLabAudioElement?.pause();
     if (motionLabAudioElement) motionLabAudioElement.removeAttribute('src');
-    if (motionLabAudioUrl) URL.revokeObjectURL(motionLabAudioUrl);
+    if (motionLabAudioUrl?.startsWith('blob:')) URL.revokeObjectURL(motionLabAudioUrl);
     motionLabAudioElement = null;
     motionLabAudioUrl = null;
   }
@@ -4797,6 +5037,8 @@
       motionLabNotify('WAV exceeds 20 MiB.');
       return;
     }
+    // A manual selection wins over any in-flight automatic project restore.
+    ++projectAudioRestoreGeneration;
     motionLabAudioAnalysis = null;
     motionLabAudioProjectId = null;
     motionLabReleaseAudio();
@@ -4929,6 +5171,7 @@
         ' seconds · frame-aligned full-band RMS.';
       const badge = qs('#animation-motion-lab-audio-status');
       if (badge) badge.textContent = 'WAV ready';
+      void restoreProjectMedia();
     } catch (error) {
       if (status) status.textContent = 'Audio import failed: ' + (error?.message || error);
       motionLabNotify('Audio import failed: ' + (error?.message || error));
@@ -6018,6 +6261,7 @@
         attachmentText.textContent='Attached: '+result.soundtrack.filename+
           ' · offset '+result.soundtrack.offset_seconds.toFixed(2)+'s.';
         offsetButton.disabled=false;
+        void restoreProjectMedia();
         progress('Soundtrack attached',result.soundtrack.filename+' saved. New renders will freeze it for video export.','success');
       }catch(error){
         attachmentText.textContent='Attachment failed: '+error.message;
@@ -6036,6 +6280,7 @@
         if(attachmentProject()!==projectId)return;
         attachmentText.textContent='Attached: '+result.soundtrack.filename+
           ' · offset '+result.soundtrack.offset_seconds.toFixed(2)+'s.';
+        void restoreProjectMedia();
         progress('Audio offset saved',result.soundtrack.offset_seconds.toFixed(2)+' seconds.','success');
       }catch(error){progress('Audio offset save failed',error.message,'error');}
       finally{offsetButton.disabled=false;}
@@ -6602,6 +6847,61 @@
       if (file) uploadSourceImage(file);
     });
     qs('#animation-clear-source')?.addEventListener('click', clearSourceImage);
+    // Audio duration is only known after the browser loads the remote file's
+    // metadata. Refresh the visible label without mutating project state.
+    qs('#animation-media-soundtrack-player')?.addEventListener('loadedmetadata', renderProjectMedia);
+    for (const id of ['animation-media-soundtrack-player', 'animation-media-wav-player']) {
+      qs('#' + id)?.addEventListener('error', event => {
+        const projectId = state.project?.id;
+        if (!projectId || projectMedia.projectId !== projectId ||
+            !event.target.currentSrc.includes('/projects/' + encodeURIComponent(projectId) + '/')) return;
+        projectMediaWarning(id === 'animation-media-soundtrack-player'
+          ? 'Attached soundtrack cannot be played in this browser. Check the audio file or its format.'
+          : 'Saved Motion Lab WAV could not be played in this browser.');
+        renderProjectMedia();
+      });
+    }
+    qs('#animation-source-preview')?.addEventListener('error', event => {
+      const id = state.project?.id;
+      if (!id || !event.target.currentSrc.includes('/projects/' + encodeURIComponent(id) + '/')) return;
+      if (projectMedia.projectId !== id) return;
+      projectMedia.loading = false;
+      projectMedia.assets = projectMedia.assets.filter(asset => asset.kind !== 'source_image');
+      projectMediaWarning('Saved start image could not be decoded. Upload it again to repair the project.');
+      renderProjectMedia();
+    });
+    qs('#animation-media-wav-select')?.addEventListener('change', event => {
+      const checksum = event.target.value;
+      if (!projectMediaAssets('motion_lab_wav').some(wav => wav.sha256 === checksum)) return;
+      projectMedia.selectedWav = checksum;
+      renderProjectMedia();
+      void restoreSavedMotionWav(checksum);
+    });
+    qs('#animation-media-offset-save')?.addEventListener('click', async () => {
+      const id = state.project?.id;
+      const seconds = Number(qs('#animation-media-offset')?.value);
+      if (!id || !Number.isFinite(seconds) || Math.abs(seconds) > 30) {
+        toast('Invalid soundtrack offset', 'Choose an offset between -30 and 30 seconds.', 'warning');
+        return;
+      }
+      const button = qs('#animation-media-offset-save');
+      setBusy(button, true);
+      try {
+        const result = await api('/api/animation/projects/' + encodeURIComponent(id) +
+          '/motion-import/soundtrack-offset', {
+          method: 'PUT', body: JSON.stringify({ offset_seconds: seconds }),
+        });
+        if (state.project?.id !== id) return;
+        projectMedia.soundtrack = result.soundtrack;
+        renderProjectMedia();
+        toast('Soundtrack offset saved', seconds.toFixed(2) + ' seconds.', 'success');
+      } catch (error) {
+        toast('Could not save soundtrack offset', error.message, 'error');
+      } finally {
+        setBusy(button, false);
+      }
+    });
+
     qs('#animation-generate-depth')?.addEventListener('click', () => generateDepthPreview(false));
     qs('#animation-recompute-depth')?.addEventListener('click', () => generateDepthPreview(true));
     qs('#animation-clear-depth')?.addEventListener('click', clearDepthPreview);

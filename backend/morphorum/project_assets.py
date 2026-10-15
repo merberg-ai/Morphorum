@@ -141,6 +141,62 @@ def motion_wav_descriptor(project_id: str, sha256: str) -> dict:
     )
 
 
+def catalog_with_warnings(project_id: str, project: dict) -> dict:
+    """Recover valid project media independently when another asset is damaged.
+
+    Keep the original strict catalog() API for callers that need all-or-nothing
+    validation; the WebUI needs a partial inventory plus explicit diagnostics.
+    No local filesystem paths are returned.
+    """
+    items: list[dict] = []
+    warnings: list[str] = []
+    root = animation_project_directory(project_id)
+
+    try:
+        image = source_descriptor(project_id)
+        if image is not None:
+            items.append(image)
+        elif (project.get("animation") or {}).get("source_image"):
+            warnings.append("Saved start image is missing. Upload it again to repair the project.")
+    except (ProjectAssetError, OSError):
+        warnings.append("Saved start image is damaged or unreadable. Upload it again.")
+
+    try:
+        soundtrack = soundtrack_descriptor(project_id)
+        if soundtrack is not None:
+            items.append(soundtrack)
+        elif (root / "imported_soundtrack" / "attachment.json").exists():
+            warnings.append("Saved soundtrack metadata exists, but its audio file is unavailable.")
+    except (ProjectAssetError, OSError, ValueError):
+        warnings.append("Saved soundtrack is missing, damaged or unreadable.")
+
+    folder = root / "motion_lab_audio"
+    if folder.exists():
+        if folder.is_symlink() or not folder.is_dir():
+            warnings.append("Saved Motion Lab audio directory is invalid.")
+        else:
+            for path in sorted(folder.glob("*.wav"))[:100]:
+                if not _DIGEST.fullmatch(path.stem):
+                    warnings.append("A saved Motion Lab WAV has an invalid identifier.")
+                    continue
+                try:
+                    items.append(motion_wav_descriptor(project_id, path.stem))
+                except (ProjectAssetError, OSError):
+                    warnings.append("A saved Motion Lab WAV is damaged or unreadable (" +
+                                    path.stem[:12] + "…).")
+
+    available = {item["sha256"] for item in items if item["kind"] == "motion_lab_wav"}
+    for layer in (project.get("motion_lab") or {}).get("layers", []):
+        if isinstance(layer, dict) and layer.get("type") == "audio":
+            checksum = layer.get("sha256")
+            if isinstance(checksum, str) and _DIGEST.fullmatch(checksum) and checksum not in available:
+                message = "An audio-motion layer references a missing WAV (" + checksum[:12] + "…)."
+                if message not in warnings:
+                    warnings.append(message)
+
+    return {"schema_version": 1, "assets": items, "warnings": warnings}
+
+
 def catalog(project_id: str) -> list[dict]:
     items = []
     source = source_descriptor(project_id)
