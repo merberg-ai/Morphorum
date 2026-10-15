@@ -650,9 +650,25 @@
               <label><span>Deadzone</span><input id="animation-motion-lab-record-deadzone" type="number" min="0" max="0.5" step="0.01" value="0.08"></label>
               <label><span>Response / return</span><input id="animation-motion-lab-record-response" type="number" min="0.05" max="1" step="0.05" value="0.55"></label>
               <label><span>Release tail <small class="muted">frames</small></span><input id="animation-motion-lab-record-tail" type="number" min="0" max="12" step="1" value="3"></label>
+              <label><span>Punch-in edge feather <small class="muted">frames</small></span><input id="animation-motion-lab-punch-feather" type="number" min="0" max="12" step="1" value="3"></label>
+              <label><span>Gamepad layout</span><select id="animation-motion-lab-gamepad-profile"><option value="standard">Standard (left translate, right look)</option><option value="swapped">Swap sticks (left look, right translate)</option></select></label>
               <label class="animation-motion-record-gamepad"><input id="animation-motion-lab-record-gamepad" type="checkbox"> Use browser gamepad when available</label>
             </div>
 
+            <details class="animation-motion-record-limits">
+              <summary>Camera safety limits (per-axis)</summary>
+              <p class="muted">Limits cap the final composed native camera increment on each frame, including presets, audio and recorded takes. Translation is scene units/frame; rotation is degrees/frame. Limit changes are unsaved project settings until you save or Apply.</p>
+              <div class="animation-motion-axis-limit-grid">
+                <label>Move X <small>units/frame</small><input type="number" data-motion-record-limit="translation_x" min="0.00001" max="30" step="0.005" value="0.12"></label>
+                <label>Move Y <small>units/frame</small><input type="number" data-motion-record-limit="translation_y" min="0.00001" max="30" step="0.005" value="0.12"></label>
+                <label>Move Z <small>units/frame</small><input type="number" data-motion-record-limit="translation_z" min="0.00001" max="30" step="0.005" value="0.12"></label>
+                <label>Pitch <small>deg/frame</small><input type="number" data-motion-record-limit="rotation_x" min="0.00001" max="30" step="0.05" value="2"></label>
+                <label>Yaw <small>deg/frame</small><input type="number" data-motion-record-limit="rotation_y" min="0.00001" max="30" step="0.05" value="2"></label>
+                <label>Roll <small>deg/frame</small><input type="number" data-motion-record-limit="rotation_z" min="0.00001" max="30" step="0.05" value="2"></label>
+              </div>
+              <p class="muted" id="animation-motion-record-limits-status" role="status">Default limits loaded for this project.</p>
+            </details>
+            <p class="muted" id="animation-motion-record-unit-help">Sensitivity is native movement per frame, not speed per second. FPS affects the corresponding movement per second.</p>
             <fieldset class="animation-motion-axis-arms">
               <legend>Armed axes</legend>
               <label><input type="checkbox" data-motion-record-axis="translation_x" checked> Strafe X</label>
