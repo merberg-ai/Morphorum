@@ -2531,6 +2531,10 @@
       motionDirectorCues = [];
       motionDirectorSelected = null;
       motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
+      ++motionStudioSpectrumToken;
+      motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
+      motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
+      motionStudioSelectedChannel = '';
       motionStudioRenderChannels();
       motionLabStereoWaveform();
       motionLabAudioPreview();
@@ -6029,7 +6033,12 @@
     motionStudioChannelState = {
       projectId, sha, channels, dirty: false,
     };
+    if (!channels.some(channel => channel.id === motionStudioSelectedChannel)) {
+      motionStudioSelectedChannel = channels[0]?.id || '';
+    }
+    motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
     motionStudioRenderChannels();
+    void motionStudioFetchSpectrum(projectId, sha);
   }
 
   function motionStudioUpdateChannelButtons() {
@@ -6047,6 +6056,10 @@
     }
     const add = panel.querySelector('[data-ms3-add]');
     if (add) add.disabled = !ready || motionStudioChannelState.channels.length >= 8;
+    const inspect = panel.querySelector('[data-ms3-inspect]');
+    if (inspect) inspect.disabled = !ready || !motionStudioChannelState.channels.length;
+    const refresh = panel.querySelector('[data-ms3-refresh-spectrum]');
+    if (refresh) refresh.disabled = !ready || motionStudioSpectrum.loading;
     const status = panel.querySelector('[data-ms3-status]');
     if (status) status.textContent = !state.project ? 'Open a project to configure channels.' :
       !current ? 'Analyze or restore a saved WAV to enable independent channels.' :
@@ -6121,11 +6134,13 @@
           motionStudioChannelState.channels[index][name] = value;
           if (name === 'name') row.querySelector('[data-ms3-label]').textContent = value;
           motionStudioChannelState.dirty = true;
+          motionStudioDrawSpectrum();
           motionStudioUpdateChannelButtons();
         });
       }
       list.appendChild(row);
     }
+    motionStudioDrawSpectrum();
     motionStudioUpdateChannelButtons();
   }
 
@@ -6143,6 +6158,33 @@
       <p class="muted">Each response is non-drifting and frame-aligned.
       Use a saved project WAV. Settings are staged in a single editable
       Motion Lab layer and saved only on Apply.</p>
+      <section class="motion-studio-spectrum-panel">
+        <div class="motion-studio-spectrum-heading">
+          <strong>Frequency spectrum</strong>
+          <label>Channel<select data-ms3-select aria-label="Sound channel to inspect"></select></label>
+          <label>Keyboard edge<select data-ms3-edge aria-label="Frequency band edge">
+            <option value="low">Low frequency</option>
+            <option value="high">High frequency</option>
+          </select></label>
+          <button type="button" class="secondary-button compact"
+            data-ms3-refresh-spectrum>Refresh FFT</button>
+        </div>
+        <svg data-ms3-spectrum-svg viewBox="0 0 720 176" tabindex="0"
+          role="img" aria-label="Saved WAV frequency spectrum"></svg>
+        <p data-ms3-spectrum-caption class="muted" aria-live="polite">
+          Load a saved WAV to inspect its frequency profile.</p>
+      </section>
+      <section class="motion-studio-response-panel">
+        <div class="motion-studio-spectrum-heading">
+          <strong>Channel energy preview</strong>
+          <button type="button" class="secondary-button compact"
+            data-ms3-inspect>Analyze channel responses</button>
+        </div>
+        <svg data-ms3-envelope-svg viewBox="0 0 720 160" role="img"
+          aria-label="Selected channel normalized energy by project frame"></svg>
+        <p data-ms3-envelope-status class="muted">
+          Analyze the selected channel to see its response before staging motion.</p>
+      </section>
       <div data-ms3-list class="motion-studio-channel-list"></div>
       <div class="motion-studio-channel-actions">
         <button type="button" class="secondary-button compact" data-ms3-add>Add custom channel</button>
@@ -6153,6 +6195,53 @@
       <p class="muted" role="status" aria-live="polite" data-ms3-status>
         Analyze a WAV to configure audio channels.</p>`;
     panel.appendChild(card);
+    const spectrum = card.querySelector('[data-ms3-spectrum-svg]');
+    const edgePicker = card.querySelector('[data-ms3-edge]');
+    const selectedPicker = card.querySelector('[data-ms3-select]');
+    selectedPicker.addEventListener('change', event => {
+      motionStudioSelectedChannel = event.target.value;
+      motionStudioDrawSpectrum();
+    });
+    spectrum.addEventListener('pointerdown', event => {
+      const band = motionStudioSelectedBand();
+      if (!band || !motionStudioSpectrum.points.length ||
+          motionStudioSpectrum.projectId !== state.project?.id) return;
+      const upper = motionStudioSpectrum.maxHz;
+      const hz = motionStudioSpectrumFrequency(event.clientX,spectrum,upper);
+      const nearest = Math.abs(Math.log(Math.max(20,band.low_hz) / hz)) <
+        Math.abs(Math.log(Math.max(20,band.high_hz) / hz)) ? 'low' : 'high';
+      motionStudioDraggingEdge = nearest;
+      edgePicker.value = nearest;
+      if (spectrum.setPointerCapture) spectrum.setPointerCapture(event.pointerId);
+      motionStudioEditBandEdge(hz,nearest);
+      event.preventDefault();
+    });
+    spectrum.addEventListener('pointermove', event => {
+      if (!motionStudioDraggingEdge || !motionStudioSpectrum.points.length) return;
+      const hz = motionStudioSpectrumFrequency(event.clientX,spectrum,
+        motionStudioSpectrum.maxHz);
+      motionStudioEditBandEdge(hz,motionStudioDraggingEdge);
+    });
+    for (const eventName of ['pointerup','pointercancel','lostpointercapture']) {
+      spectrum.addEventListener(eventName, () => { motionStudioDraggingEdge = ''; });
+    }
+    spectrum.addEventListener('keydown', event => {
+      if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+      const band = motionStudioSelectedBand();
+      if (!band) return;
+      const edge = edgePicker.value === 'high' ? 'high' : 'low';
+      const direction = event.key === 'ArrowRight' || event.key === 'ArrowUp' ? 1 : -1;
+      const next = Number(band[edge + '_hz']) * 2 ** (direction / 12);
+      motionStudioEditBandEdge(next,edge);
+      event.preventDefault();
+    });
+    card.querySelector('[data-ms3-refresh-spectrum]').addEventListener('click', () => {
+      const projectId = state.project?.id, sha = motionLabAudioAnalysis?.source_sha256;
+      if (projectId && sha && motionLabAudioProjectId === projectId)
+        void motionStudioFetchSpectrum(projectId,sha,true);
+    });
+    card.querySelector('[data-ms3-inspect]').addEventListener('click',
+      () => void motionStudioInspectChannels());
     card.querySelector('[data-ms3-add]').addEventListener('click', () => {
       if (motionStudioChannelState.channels.length >= 8) return;
       const analysis = motionLabAudioAnalysis;
@@ -6222,6 +6311,9 @@
           channel.envelope.length !== frames)) {
         throw new Error('Frequency response length does not match project frames.');
       }
+      motionStudioBandPreview = {projectId,sha,fps,frames,
+        ranges:JSON.stringify(ranges),bands};
+      motionStudioShowBandPreview();
       const layer = {
         id: 'audio-channels-' + sha.slice(0, 16), type: 'audio_channels',
         name: 'Independent sound channels', enabled: true, blend: 'add',
@@ -6411,6 +6503,10 @@
     motionLabEditedEvents = null;
     motionDirectorCues = [];
     motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
+    ++motionStudioSpectrumToken;
+    motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
+    motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
+    motionStudioSelectedChannel = '';
     motionStudioRenderChannels();
     motionLabAudioAnalysis = null;
     motionLabAudioProjectId = null;
