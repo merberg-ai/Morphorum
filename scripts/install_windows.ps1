@@ -219,6 +219,11 @@ try {
     }
 
     Write-MorphorumSection 'USER SETTINGS + MEDIA TOOLS'
+    if (-not $Repair -and -not $Update) {
+        # Capture genuinely fresh provenance BEFORE copying config or seeding Default.
+        & $VenvPython -m morphorum setup-state prepare
+        if ($LASTEXITCODE -ne 0) { throw 'Could not prepare first-run setup state.' }
+    }
     $userConfig = Join-Path $Root 'data\config.yaml'
     if (-not (Test-Path $userConfig)) {
         Copy-Item (Join-Path $Root 'config\default.yaml') $userConfig
@@ -251,6 +256,12 @@ try {
         & $VenvPython -m morphorum self-test
         if ($LASTEXITCODE -ne 0) { throw 'Morphorum self-test failed.' }
         Okay 'Morphorum self-test passed.'
+    }
+
+    if (-not $Repair -and -not $Update) {
+        # Only a successfully provisioned fresh install becomes eligible.
+        & $VenvPython -m morphorum setup-state ready
+        if ($LASTEXITCODE -ne 0) { throw 'Could not finalize first-run setup state.' }
     }
 
     if ($SavePort) {
