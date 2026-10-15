@@ -5746,6 +5746,358 @@
       ' attack candidates in view (orange kick, pink snare, gray highs). ' +
       'Markers represent spectral candidates, not isolated instruments.';
   }
+  // MS4.1: continuous motion arrangement uses canonical native preset layers
+  // and the existing Motion Lab draft history/preview/apply infrastructure.
+  const MOTION_STUDIO_CONTINUOUS_PRESETS = [
+    ['gentle-drift', 'Gentle Drift'], ['wave', 'Wave'],
+    ['spiral', 'Spiral'], ['figure-eight', 'Figure Eight'],
+    ['rocking', 'Rocking'], ['push-in', 'Push In'], ['pull-out', 'Pull Out'],
+    ['still', 'Still / Reset'],
+  ];
+  let motionStudioArrangementProjectId = '';
+  let motionStudioArrangementSelection = '';
+  let motionStudioArrangementLoaded = '';
+  let motionStudioArrangementSerial = 0;
+
+  function motionStudioArrangementFrameCount() {
+    return Math.max(1, Number(state.project?.animation?.max_frames) || 120);
+  }
+  function motionStudioArrangementFps() {
+    return Math.max(1, Number(state.project?.animation?.fps) || 24);
+  }
+  function motionStudioArrangementActiveLayer() {
+    return motionLabDraftLayers.find(layer =>
+      layer.type !== 'audio' && layer.type !== 'audio_cues' &&
+      layer.type !== 'audio_channels' && layer.type !== 'recording' &&
+      layer.type !== 'keyframes' &&
+      layer.id === motionStudioArrangementSelection &&
+      MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === layer.preset)) || null;
+  }
+  function motionStudioArrangementFields() {
+    const panel = qs('#animation-motion-studio-arrangement');
+    return panel ? {
+      panel,
+      preset:panel.querySelector('[data-ms4-preset]'),
+      strength:panel.querySelector('[data-ms4-strength]'),
+      cycle:panel.querySelector('[data-ms4-cycle]'),
+      fade:panel.querySelector('[data-ms4-fade]'),
+      start:panel.querySelector('[data-ms4-start]'),
+      end:panel.querySelector('[data-ms4-end]'),
+      startSlide:panel.querySelector('[data-ms4-start-slide]'),
+      endSlide:panel.querySelector('[data-ms4-end-slide]'),
+    } : null;
+  }
+  function motionStudioArrangementResetFields() {
+    const fields = motionStudioArrangementFields();
+    if (!fields) return;
+    const count = motionStudioArrangementFrameCount();
+    fields.preset.value = 'wave';
+    fields.strength.value = '.65';
+    fields.cycle.value = '2';
+    fields.fade.value = '.1';
+    fields.start.value = '0';
+    fields.end.value = String(count);
+    motionStudioArrangementSyncRange('start');
+  }
+  function motionStudioArrangementSyncRange(edited = '') {
+    const fields = motionStudioArrangementFields();
+    if (!fields) return;
+    const count = motionStudioArrangementFrameCount();
+    let start = Number(fields.start.value);
+    let end = Number(fields.end.value);
+    if (!Number.isFinite(start)) start = 0;
+    if (!Number.isFinite(end)) end = count;
+    start = Math.max(0, Math.min(count - 1, Math.round(start)));
+    end = Math.max(1, Math.min(count, Math.round(end)));
+    if (start >= end) {
+      if (edited === 'start') end = Math.min(count, start + 1);
+      else start = Math.max(0, end - 1);
+    }
+    fields.start.value = String(start);
+    fields.end.value = String(end);
+    fields.startSlide.min = '0';
+    fields.startSlide.max = String(count - 1);
+    fields.endSlide.min = '1';
+    fields.endSlide.max = String(count);
+    fields.startSlide.value = String(start);
+    fields.endSlide.value = String(end);
+    const readout = fields.panel.querySelector('[data-ms4-range-label]');
+    if (readout) {
+      const fps = motionStudioArrangementFps();
+      readout.textContent = 'Frames ' + start + '–' + (end - 1) +
+        ' · ' + (start/fps).toFixed(2) + '–' + (end/fps).toFixed(2) +
+        ' seconds · ' + (end-start) + ' frames';
+    }
+    motionStudioArrangementRenderTimeline();
+  }
+  function motionStudioArrangementSelect(id) {
+    const layer = motionLabDraftLayers.find(item => item.id === id &&
+      item.type !== 'audio' && item.type !== 'recording' &&
+      MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === item.preset));
+    motionStudioArrangementSelection = layer?.id || '';
+    motionStudioArrangementLoaded = '';
+    motionStudioRenderArrangement();
+  }
+  function motionStudioArrangementSeek(frame) {
+    const audio = motionLabAudioElement;
+    if (!audio || motionLabAudioProjectId !== state.project?.id) return;
+    const seconds = Math.max(0, Math.min(
+      (motionStudioArrangementFrameCount()-1) / motionStudioArrangementFps(),
+      Number(frame) / motionStudioArrangementFps()));
+    if (Number.isFinite(seconds)) audio.currentTime = seconds;
+    motionStudioArrangementPlayhead();
+  }
+  function motionStudioArrangementPlayhead() {
+    const panel = qs('#animation-motion-studio-arrangement');
+    if (!panel) return;
+    const available = Boolean(motionLabAudioElement &&
+      motionLabAudioProjectId === state.project?.id);
+    const count = motionStudioArrangementFrameCount();
+    const position = available
+      ? Math.max(0, Math.min(count-1, Number(motionLabAudioElement.currentTime || 0) *
+        motionStudioArrangementFps())) : 0;
+    const playhead = panel.querySelector('[data-ms4-playhead]');
+    if (playhead) {
+      playhead.style.left = (100 * position/count).toFixed(3) + '%';
+      playhead.hidden = !available;
+    }
+    const seek = panel.querySelector('[data-ms4-seek]');
+    if (seek) {
+      if (document.activeElement !== seek) seek.value = String(Math.round(position));
+      seek.disabled = !available;
+    }
+    const status = panel.querySelector('[data-ms4-playback-status]');
+    if (status) status.textContent = available
+      ? (position/motionStudioArrangementFps()).toFixed(2) + 's / ' +
+        (count/motionStudioArrangementFps()).toFixed(2) + 's'
+      : 'Load a WAV or attached soundtrack for synchronized seeking.';
+  }
+  function motionStudioArrangementRenderTimeline() {
+    const panel = qs('#animation-motion-studio-arrangement');
+    const lanes = panel?.querySelector('[data-ms4-lanes]');
+    if (!lanes) return;
+    lanes.replaceChildren();
+    const count = motionStudioArrangementFrameCount();
+    const layers = motionLabDraftLayers.filter(l => l.type === 'preset' ||
+      (!l.type && MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === l.preset)));
+    const addLane = (label, start, end, selected, id, enabled) => {
+      const row = document.createElement('div');
+      row.className = 'motion-studio-arrangement-lane';
+      const title = document.createElement('span');
+      title.className = 'motion-studio-arrangement-label';
+      title.textContent = label;
+      const track = document.createElement('div');
+      track.className = 'motion-studio-arrangement-track';
+      const bar = document.createElement('button');
+      bar.type = 'button';
+      bar.className = 'motion-studio-arrangement-bar';
+      if (selected) bar.classList.add('selected');
+      if (!enabled) bar.classList.add('disabled');
+      bar.style.left = (100 * Math.max(0, Math.min(count,start)) / count).toFixed(3) + '%';
+      bar.style.width = (100 * Math.max(1, Math.min(count,end)-start) / count).toFixed(3) + '%';
+      bar.textContent = start + '–' + (end-1);
+      bar.title = label + ': frame ' + start + ' through ' + (end-1) +
+        '. Select to edit.';
+      bar.setAttribute('aria-label',bar.title);
+      bar.addEventListener('click', () => motionStudioArrangementSelect(id));
+      track.appendChild(bar);
+      row.append(title,track);
+      lanes.appendChild(row);
+    };
+    for (const layer of layers) {
+      addLane((layer.preset || 'preset').replaceAll('-',' ') +
+        (layer.enabled === false ? ' (disabled)' : ''),
+        Number(layer.start_frame),Number(layer.end_frame),
+        layer.id === motionStudioArrangementSelection,
+        layer.id,layer.enabled !== false);
+    }
+    const form = motionStudioArrangementFields();
+    if (form) {
+      const s = Math.max(0,Math.min(count-1,Number(form.start.value) || 0));
+      const e = Math.max(s+1,Math.min(count,Number(form.end.value) || count));
+      addLane('Unstaged selection',s,e,false,'',true);
+    }
+    const caption = panel.querySelector('[data-ms4-lane-status]');
+    if (caption) caption.textContent = layers.length +
+      ' continuous layer(s) in the Motion Lab draft. Other audio, cue, curve and recorded layers are preserved.';
+    motionStudioArrangementPlayhead();
+  }
+  function motionStudioRenderArrangement() {
+    const fields = motionStudioArrangementFields();
+    if (!fields) return;
+    const {panel} = fields;
+    const projectId = state.project?.id || '';
+    if (motionStudioArrangementProjectId !== projectId) {
+      motionStudioArrangementProjectId = projectId;
+      motionStudioArrangementSelection = '';
+      motionStudioArrangementLoaded = '';
+      motionStudioArrangementResetFields();
+    }
+    const active = motionStudioArrangementActiveLayer();
+    if (!active && motionStudioArrangementSelection) {
+      motionStudioArrangementSelection = '';
+      motionStudioArrangementLoaded = '';
+    }
+    if (active && active.id !== motionStudioArrangementLoaded) {
+      fields.preset.value = active.preset;
+      fields.strength.value = String(active.strength);
+      fields.cycle.value = String(active.cycle_seconds);
+      fields.fade.value = String(active.fade_seconds);
+      fields.start.value = String(active.start_frame);
+      fields.end.value = String(active.end_frame);
+      motionStudioArrangementLoaded = active.id;
+    }
+    const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
+    for (const key of ['stage','preview','apply','new']) {
+      const button = panel.querySelector('[data-ms4-'+key+']');
+      if (button) button.disabled = !ready ||
+        (key !== 'new' && !active && motionLabDraftLayers.length >= 24);
+    }
+    for (const input of panel.querySelectorAll('input,select')) {
+      if (input.hasAttribute('data-ms4-seek')) continue;
+      input.disabled = !ready;
+    }
+    const action = panel.querySelector('[data-ms4-stage]');
+    if (action) action.textContent = active ? 'Update Selected Layer' : '+ Stage Movement';
+    const badge = panel.querySelector('[data-ms4-status]');
+    if (badge) badge.textContent = !projectId ? 'Open a project' :
+      !ready ? 'Choose a 3D project to edit continuous motion' :
+      active ? 'Editing ' + active.preset.replaceAll('-',' ') +
+        ' · changes are only a draft until applied' :
+      'Compose a new continuous motion region';
+    motionStudioArrangementSyncRange();
+  }
+  async function motionStudioArrange(action = 'stage') {
+    const form = motionStudioArrangementFields();
+    if (!form || !state.project || animationMode() !== '3d' || motionLabBusy) return;
+    const count = motionStudioArrangementFrameCount();
+    motionStudioArrangementSyncRange();
+    const data = {
+      preset:form.preset.value,
+      strength:Number(form.strength.value),
+      cycle_seconds:Number(form.cycle.value),
+      fade_seconds:Number(form.fade.value),
+      start_frame:Number(form.start.value),
+      end_frame:Number(form.end.value),
+    };
+    if (!MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === data.preset) ||
+        !Number.isFinite(data.strength) || data.strength < 0 || data.strength > 1 ||
+        !Number.isFinite(data.cycle_seconds) || data.cycle_seconds < .2 ||
+        data.cycle_seconds > 600 || !Number.isFinite(data.fade_seconds) ||
+        data.fade_seconds < 0 || data.fade_seconds > 120 ||
+        !Number.isInteger(data.start_frame) || !Number.isInteger(data.end_frame) ||
+        data.start_frame < 0 || data.end_frame > count ||
+        data.end_frame <= data.start_frame) {
+      motionLabNotify('Check movement strength, cycle, fade and frame range.');
+      toast('Invalid motion region','Check values and try again.','warning');
+      return;
+    }
+    const existing = motionStudioArrangementActiveLayer();
+    if (!existing && motionLabDraftLayers.length >= 24) {
+      motionLabNotify('Motion Lab supports up to 24 layers. Remove a layer first.');
+      return;
+    }
+    const id = existing?.id || 'motion-studio-cont-' +
+      (++motionStudioArrangementSerial) + '-' + Date.now().toString(36);
+    const layer = {id,type:'preset',blend:'add',enabled:existing?.enabled !== false,...data};
+    const index = existing ? motionLabDraftLayers.findIndex(x=>x.id===existing.id) : -1;
+    if (index >= 0) motionLabDraftLayers[index] = layer;
+    else motionLabDraftLayers.push(layer);
+    motionStudioArrangementSelection = id;
+    motionStudioArrangementLoaded = id;
+    commitMotionLabDraft();
+    if (action === 'preview') await motionLabPreviewOrApply(false,{curvesOnly:true});
+    else if (action === 'apply') await motionLabPreviewOrApply(true);
+  }
+  function motionStudioCreateArrangementCard(panel) {
+    const card = document.createElement('article');
+    card.className = 'card glass motion-studio-arrangement';
+    card.id = 'animation-motion-studio-arrangement';
+    card.innerHTML = `
+      <div class="card-header"><div>
+        <h2>Continuous Camera Motion</h2>
+        <p class="muted">Choreograph sustained movement alongside the soundtrack.
+          Regions are native Motion Lab layers, not another render engine.</p>
+      </div></div>
+      <div class="motion-studio-arrangement-playback">
+        <span data-ms4-playback-status>Load a WAV for synchronized seeking.</span>
+        <label>Audio playhead / seek
+          <input type="range" data-ms4-seek min="0" max="120" step="1"
+            value="0" aria-label="Seek project audio by frame"></label>
+      </div>
+      <div class="motion-studio-arrangement-timeline">
+        <div class="motion-studio-arrangement-ruler" data-ms4-ruler></div>
+        <div class="motion-studio-arrangement-playhead" data-ms4-playhead hidden></div>
+        <div data-ms4-lanes class="motion-studio-arrangement-lanes"></div>
+        <p class="muted" data-ms4-lane-status>Project motion layers appear here.</p>
+      </div>
+      <div class="motion-studio-arrangement-fields">
+        <label>Continuous preset<select data-ms4-preset></select></label>
+        <label>Strength (0–1)<input type="number" data-ms4-strength
+          min="0" max="1" step=".05" value=".65"></label>
+        <label>Cycle (seconds)<input type="number" data-ms4-cycle
+          min=".2" max="600" step=".1" value="2"></label>
+        <label>Fade (seconds)<input type="number" data-ms4-fade
+          min="0" max="120" step=".05" value=".1"></label>
+        <label>Start frame<input type="number" data-ms4-start
+          min="0" step="1" value="0"></label>
+        <label>End frame (exclusive)<input type="number" data-ms4-end
+          min="1" step="1" value="120"></label>
+      </div>
+      <div class="motion-studio-arrangement-range">
+        <label>Start<input type="range" data-ms4-start-slide min="0"
+          max="119" step="1" value="0"></label>
+        <label>End<input type="range" data-ms4-end-slide min="1"
+          max="120" step="1" value="120"></label>
+        <span data-ms4-range-label class="muted">Frames 0–119</span>
+      </div>
+      <div class="motion-studio-arrangement-actions">
+        <button type="button" class="secondary-button compact" data-ms4-new>New Movement</button>
+        <button type="button" class="secondary-button compact" data-ms4-stage>+ Stage Movement</button>
+        <button type="button" class="secondary-button compact" data-ms4-preview>Preview Curves</button>
+        <button type="button" class="primary-button compact" data-ms4-apply>Apply to Animation</button>
+      </div>
+      <p class="muted" data-ms4-status role="status" aria-live="polite">Open a 3D project.</p>
+      <details class="motion-field-help"><summary>Timing, units and safety</summary>
+        <p>All segments are frame aligned. Start is inclusive, end is exclusive;
+        cycle and fade use seconds at the current project FPS. Movement is
+        in Morphorum's native scene units per frame (translation) and degrees
+        per frame (rotation). MS4.1 uses additive layers only, so manual cues
+        and sound channels remain untouched. Preview does not save animation
+        schedules; Apply uses existing Motion Lab safeguards.</p>
+      </details>`;
+    for (const [key,label] of MOTION_STUDIO_CONTINUOUS_PRESETS) {
+      const item=document.createElement('option');
+      item.value=key;
+      item.textContent=label;
+      card.querySelector('[data-ms4-preset]').appendChild(item);
+    }
+    panel.appendChild(card);
+    const s = key=>card.querySelector('[data-ms4-'+key+']');
+    const sync = key=>()=>{
+      motionStudioArrangementSyncRange(key);
+    };
+    s('start').addEventListener('input',sync('start'));
+    s('end').addEventListener('input',sync('end'));
+    s('start-slide').addEventListener('input',()=>{
+      s('start').value=s('start-slide').value; sync('start')();
+    });
+    s('end-slide').addEventListener('input',()=>{
+      s('end').value=s('end-slide').value; sync('end')();
+    });
+    s('seek').addEventListener('input',event=>motionStudioArrangementSeek(event.target.value));
+    s('new').addEventListener('click',()=>{
+      motionStudioArrangementSelection='';
+      motionStudioArrangementLoaded='';
+      motionStudioArrangementResetFields();
+      motionStudioRenderArrangement();
+    });
+    for (const action of ['stage','preview','apply']) {
+      s(action).addEventListener('click',()=>void motionStudioArrange(action));
+    }
+    motionStudioRenderArrangement();
+  }
+
   // MS3: Audio-frequency channels share ONE Motion Lab layer per WAV. Draft
   // settings never write project camera schedules until explicit Apply.
   const MOTION_STUDIO_AXES = [
@@ -6415,6 +6767,7 @@
     if (!motionLabAudioElement) return;
     for (const type of ['timeupdate', 'play', 'pause', 'seeked', 'ended']) {
       motionLabAudioElement.addEventListener(type, motionLabWavePlayhead);
+      motionLabAudioElement.addEventListener(type, motionStudioArrangementPlayhead);
     }
     motionLabWavePlayhead();
   }
@@ -7071,6 +7424,7 @@
     const count = Number(project?.animation?.max_frames || 120);
     motionLabRecordingUi();
     motionLabAudioUi();
+    motionStudioRenderArrangement();
     const stage = qs('#animation-motion-lab-compose-status');
     if (stage) stage.textContent = !project ? 'Select a project' :
       !is3d ? '2D project (switch to 3D here)' : motionLabDraftLayers.length +
@@ -8307,6 +8661,7 @@
       </div>
     `;
     panels.audio.prepend(audioIntro);
+    motionStudioCreateArrangementCard(panels.audio);
     motionStudioCreateChannelCard(panels.audio);
     // DA3 layout: wide analysis displays are independent of the compact
     // configuration card. Reparenting preserves existing element IDs,
