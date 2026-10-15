@@ -16,7 +16,7 @@ We are porting tested Morphorum components from `dev-audio`, not merging the
 old branch. Upstream DMS remains a behavior and workflow reference; its native
 Tkinter code and Deforum-export math are not directly copied into Morphorum.
 
-## MS1: Rebase audio foundation onto current backend (implemented, CI pending)
+## MS1: Rebase audio foundation onto current backend (implemented, CI passed)
 
 - Imported `audio_events.py` for high-resolution, FPS-independent spectral
   attack candidates in kick, snare and highs bands. Candidates are **not**
@@ -36,7 +36,7 @@ Tkinter code and Deforum-export math are not directly copied into Morphorum.
   regression cases. CI includes all backend tests.
 
 ## MS2: Visible project-connected Motion Studio (integration pass implemented;
-CI and physical acceptance pending)
+CI passed; physical acceptance pending)
 
 - Exposed **Motion Studio** in the Motion Lab workspace navigation rather than
   keeping Audio Motion in a hidden panel. Deforum **Import Motion Settings**
@@ -104,3 +104,23 @@ explicit Apply. Keep existing strict project asset API contracts for Studio.
 Upstream Deforum-Motion-Studio is publicly readable but has no declared
 LICENSE file; independent implementation is preferred until source reuse
 terms are documented, despite the project's owner's informal permission.
+
+## MS1/MS2 source-integration checkpoint (2026-10-15)
+
+The first integration pass on `dev-webui` has passed the draft PR #39 checks:
+
+- **Syntax checks:** passed, including all five newly integrated Audio Motion
+  frontend regression files and existing shared WebUI tests.
+- **Backend tests:** 613 passed, 1 skipped, including new source-bound marker,
+  cue, spectral event, short-clip and native-six-axis tests.
+- **Morphorum self-test:** passed.
+- **Installer checks:** passed on the CI Windows/Linux paths.
+
+The initial port briefly exposed a short-WAV SciPy STFT overlap issue and
+sidebar test index assumptions. Both are repaired. The accepted W1/W2 project
+media contract remains intact, and this work does not change `main`.
+
+**Next gate:** physical Windows + Android browser workflow testing of Motion
+Studio with existing project WAVs, edited markers and saved camera cues. Do
+not treat a successful CI run as proof that touch/desktop interaction or GPU
+animation previews are physically accepted. Keep draft PR #39 unmerged.
