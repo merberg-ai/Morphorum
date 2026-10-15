@@ -26,7 +26,7 @@
   function page() {
     const position = Math.max(0, STEPS.indexOf(step));
     qs('title').textContent = TITLES[position];
-    qs('progress').textContent = 'Step ' + (position + 1) + ' of 7 · MS6.1 onboarding entry';
+    qs('progress').textContent = 'Step ' + (position + 1) + ' of 7 · MS6.2 model and LoRA setup';
     const content = qs('description');
     content.replaceChildren();
     const paragraph = message => {
@@ -42,21 +42,23 @@
     if (step === 'welcome') {
       paragraph('Morphorum creates AI images and camera-driven animations on your computer. This setup will help you configure model folders, optional LoRAs, and a small starter project.');
       paragraph('Models are not included in a fresh installation. Downloads require your permission; opening this wizard will never download weights, generate frames or alter existing projects.');
-      paragraph('This milestone establishes the setup entry and resumable progress. Directory setup, model downloads and example creation will follow in MS6.2–MS6.4.');
+      paragraph('This wizard configures model folders first, then optional LoRAs. Managed Z-Image download and starter projects follow in subsequent releases.');
     } else if (step === 'modes') {
       heading('WebUI: the default');
       paragraph('Morphorum runs a local Python backend and opens a browser interface, normally at http://127.0.0.1:7865. Closing a browser tab does not automatically stop a running render.');
       heading('Backend-only: advanced integration');
       paragraph('An authenticated API for external clients such as Morphorum Studio, normally on port 7866. It does not provide this browser wizard. Changing modes requires stopping and restarting Morphorum, for example with run.bat --backend-only or ./run.sh --backend-only.');
       paragraph('Stay in the normal WebUI to finish the setup steps.');
+    } else if (step === 'models' || step === 'loras') {
+      void window.MorphorumSetupFolders?.render(content,step);
     } else {
       heading('This page is scheduled for the next MS6 implementation pass');
       paragraph('Your progress is saved on the Morphorum host, not in browser storage. Model and LoRA folder verification begins in MS6.2, followed by the optional Z-Image download and two 512 × 512 dolly examples.');
       paragraph('Close to resume here later, or Skip for now to return to the normal WebUI. Your existing settings and projects remain untouched.');
     }
     qs('back').disabled = position === 0;
-    qs('next').disabled = position >= 2;
-    qs('next').textContent = position === 1 ? 'Continue to Model Setup' : 'Next';
+    qs('next').disabled = position >= 4;
+    qs('next').textContent = position === 1 ? 'Continue to Model Setup' : position === 2 ? 'Optional LoRA Folders' : position === 3 ? 'Continue to Z-Image' : 'Next';
     showError('');
   }
   async function fetchStatus() {
@@ -91,7 +93,7 @@
       if (!qs('overlay').hidden) {
         qs('skip').disabled = false;
         qs('back').disabled = STEPS.indexOf(step) === 0;
-        qs('next').disabled = STEPS.indexOf(step) >= 2;
+        qs('next').disabled = STEPS.indexOf(step) >= 4;
       }
     }
   }
@@ -110,6 +112,7 @@
       }
       if (!reopen && !latest.show_wizard) return;
       snapshot = latest;
+      window.MorphorumSetupFolders?.reset();
       manual = reopen || latest.forced_for_launch;
       step = reopen && ['completed','skipped','legacy'].includes(latest.status)
         ? 'welcome' : STEPS.includes(latest.step) ? latest.step : 'welcome';
@@ -124,7 +127,12 @@
   function bind() {
     qs('next')?.addEventListener('click', () => {
       const i=STEPS.indexOf(step);
-      if (i < 2) void action('advance',STEPS[i+1]);
+      if (i < 4) {
+        try {
+          if (i === 2 || i === 3) window.MorphorumSetupFolders?.beforeNext(STEPS[i]);
+          void action('advance',STEPS[i+1]);
+        } catch (error) {showError(error.message);}
+      }
     });
     qs('back')?.addEventListener('click', () => {
       const i=STEPS.indexOf(step);
