@@ -124,3 +124,13 @@ media contract remains intact, and this work does not change `main`.
 Studio with existing project WAVs, edited markers and saved camera cues. Do
 not treat a successful CI run as proof that touch/desktop interaction or GPU
 animation previews are physically accepted. Keep draft PR #39 unmerged.
+
+## MS1/MS2 physical acceptance (2026-10-15)
+
+The project owner tested the Motion Studio integration on the physical
+Morphorum installation and confirmed it **works as expected**. This records
+physical acceptance of the first Motion Studio integration pass, alongside
+the previously verified automated checks (613 passed, 1 skipped).
+Proceed with MS3 on `dev-webui` without merging the draft PR or changing
+`main`. Retain `dev-audio` as a reference checkpoint only.
+
