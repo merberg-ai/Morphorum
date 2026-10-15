@@ -116,7 +116,8 @@ def setup_status(*, forced: bool = False, backend_only: bool = False) -> dict[st
         ready = bool(state and state["ready"])
         auto = bool(ready and state["provenance"] == "fresh_installer" and
                     status in {"not_started", "in_progress"})
-        force = bool(forced and not backend_only)
+        force = bool(forced and not backend_only and
+                     (state is None or ready or state["provenance"] == "manual_existing"))
         return dict(schema_version=1, eligible=auto, show_wizard=not backend_only and
                     (auto or force), forced_for_launch=force,
                     status=status, step=state["step"] if state else "welcome",
