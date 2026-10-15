@@ -6496,6 +6496,9 @@
     const analyze = qs('#animation-motion-lab-analyze-audio');
     const add = qs('#animation-motion-lab-add-audio');
     if (analyze) analyze.disabled = !ready;
+    const attached = qs('#animation-motion-lab-use-soundtrack');
+    if (attached) attached.disabled = !ready || motionLabSoundtrackBusy ||
+      !projectMediaAssets('soundtrack').length;
     if (add) add.disabled = !ready || motionLabDraftLayers.length >= 24 ||
       !motionLabAudioAnalysis || motionLabAudioProjectId !== state.project?.id ||
       Number(motionLabAudioAnalysis.fps) !== Number(state.project?.animation?.fps);
@@ -6524,6 +6527,10 @@
       // restores waveform, manual cues, markers, spectrum and sound channels.
       await restoreProjectMedia({preferredWav:sha});
       if (state.project?.id !== projectId) return;
+      if (motionLabAudioProjectId !== projectId ||
+          motionLabAudioAnalysis?.source_sha256 !== sha) {
+        throw new Error('The analyzed soundtrack could not be restored into Motion Studio.');
+      }
       const filename = response.soundtrack?.filename || soundtrack.filename;
       motionLabSoundtrackStatus = 'Loaded project soundtrack: ' + filename +
         (response.converted_to_pcm ? ' (converted to PCM WAV on host).' :
