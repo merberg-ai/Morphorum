@@ -6069,6 +6069,7 @@
         ' · changes are only a draft until applied' :
       'Compose a new continuous motion region';
     motionStudioArrangementSyncRange();
+    ms43Controls();
   }
 
   // Reusable named presets live in Morphorum's data directory, not the project.
@@ -6315,6 +6316,28 @@
           max="120" step="1" value="120"></label>
         <span data-ms4-range-label class="muted">Frames 0–119</span>
       </div>
+      <section class="motion-studio-custom-presets" aria-label="Saved custom camera motion presets">
+        <div>
+          <h3>My Motion Presets</h3>
+          <p class="muted">Saved separately from projects on this Morphorum installation.
+            Load to the editor, then Stage Movement. Frame ranges scale with project length.</p>
+        </div>
+        <div class="motion-studio-custom-fields">
+          <label>Saved preset<select data-ms43-library>
+            <option value="">Choose saved preset</option></select></label>
+          <label>Name<input type="text" data-ms43-name maxlength="64"
+            placeholder="e.g. Slow cinematic orbit"></label>
+        </div>
+        <div class="motion-studio-custom-actions">
+          <button type="button" class="secondary-button compact" data-ms43-load>Load to Editor</button>
+          <button type="button" class="secondary-button compact" data-ms43-save>Save as New</button>
+          <button type="button" class="secondary-button compact" data-ms43-update>Update Saved</button>
+          <button type="button" class="secondary-button compact" data-ms43-delete>Delete Saved</button>
+          <button type="button" class="secondary-button compact" data-ms43-refresh>Refresh Library</button>
+        </div>
+        <p class="muted" data-ms43-status role="status" aria-live="polite">
+          Loading shared preset library…</p>
+      </section>
       <div class="motion-studio-arrangement-actions">
         <button type="button" class="secondary-button compact" data-ms4-new>New Movement</button>
         <button type="button" class="secondary-button compact" data-ms4-stage>+ Stage Movement</button>
@@ -6364,7 +6387,15 @@
     for (const action of ['stage','preview','apply']) {
       s(action).addEventListener('click',()=>void motionStudioArrange(action));
     }
+    const custom = key => card.querySelector('[data-ms43-' + key + ']');
+    custom('library').addEventListener('change', ms43Select);
+    custom('load').addEventListener('click', ms43Load);
+    custom('save').addEventListener('click', () => void ms43Save(false));
+    custom('update').addEventListener('click', () => void ms43Save(true));
+    custom('delete').addEventListener('click', () => void ms43Delete());
+    custom('refresh').addEventListener('click', () => void ms43Refresh());
     motionStudioRenderArrangement();
+    void ms43Refresh();
   }
 
   // MS3: Audio-frequency channels share ONE Motion Lab layer per WAV. Draft
