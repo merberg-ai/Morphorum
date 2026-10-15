@@ -2403,6 +2403,8 @@
     }
     if (soundtrackName) soundtrackName.textContent = soundtrack
       ? (projectMedia.soundtrack?.filename || soundtrack.filename) +
+        (Number.isFinite(soundtrackPlayer?.duration) ?
+          ' · ' + soundtrackPlayer.duration.toFixed(2) + 's' : '') +
         ' · offset ' + Number(projectMedia.soundtrack?.offset_seconds || 0).toFixed(2) + 's'
       : '';
     if (offset) {
@@ -2475,6 +2477,21 @@
       motionLabAudioElement = new Audio(asset.url);
       motionLabAudioElement.preload = 'auto';
       motionLabAudioElement.load();
+      // Reload the most recently saved layer's editing choices alongside its
+      // analysis. Keep the currently saved camera tracks untouched.
+      const savedLayer = (state.project.motion_lab?.layers || []).slice().reverse()
+        .find(layer => layer.type === 'audio' && layer.sha256 === sha256);
+      if (savedLayer) {
+        for (const [name, value] of Object.entries({
+          band: savedLayer.band, detection: savedLayer.detection,
+          sensitivity: savedLayer.sensitivity, axis: savedLayer.axis,
+          threshold: savedLayer.threshold, distance: savedLayer.distance,
+          attack: savedLayer.attack_frames, release: savedLayer.release_frames,
+        })) {
+          const control = qs('#animation-motion-lab-audio-' + name);
+          if (control && value != null) control.value = String(value);
+        }
+      }
       motionLabAudioSyncStatus('Saved WAV ready for synchronized playback.');
       if (info) info.textContent = 'Restored saved WAV (' + analysis.values.length +
         ' frames, ' + Number(analysis.duration_seconds).toFixed(2) + ' seconds).';
