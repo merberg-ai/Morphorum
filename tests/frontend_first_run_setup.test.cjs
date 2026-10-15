@@ -51,6 +51,9 @@ function harness(serverStatus){
     window:{
       addEventListener:(name,cb)=>{listeners[name]=cb;},
       MorphorumToast:(...args)=>messages.push(args),
+      MorphorumSetupFolders:{render:(container,kind)=>{
+        container.appendChild({tag:'p',textContent:kind+' folder editor'});
+      },beforeNext:()=>true,reset:()=>{}},
     },
   };
   vm.runInNewContext(script,context);
@@ -80,8 +83,14 @@ test('MS6.1 fresh installation automatically shows Welcome and progresses server
   assert.equal(h.calls.at(-1).options.headers['X-Morphorum-Setup'],'1');
   await h.click('next');
   assert.equal(h.status.step,'models');
+  assert.equal(h.nodes['first-run-next'].disabled,false);
+  assert.match(h.nodes['first-run-description'].children[0].textContent,/models folder editor/);
+  await h.click('next');
+  assert.equal(h.status.step,'loras');
+  assert.match(h.nodes['first-run-description'].children[0].textContent,/loras folder editor/);
+  await h.click('next');
+  assert.equal(h.status.step,'zimage');
   assert.equal(h.nodes['first-run-next'].disabled,true);
-  assert.match(h.nodes['first-run-description'].children[0].textContent,/next MS6 implementation/);
   assert.ok(h.calls.every(call=>!call.url.includes('/download')&&!call.url.includes('/models/scan')
     &&!call.url.includes('/animation/projects')),'Opening and progressing should have no work side effects');
 });
@@ -135,5 +144,6 @@ test('MS6.1 responsive shell, Settings affordance, and no second project wizard'
   assert.match(css,/\.first-run-overlay\[hidden\]/);
   assert.match(css,/@media \(max-width:550px\)/);
   assert.match(html,/first-run-setup\.js/);
+  assert.match(html,/first-run-folders\.js/);
   assert.match(html,/project-wizard\.js/);
 });
