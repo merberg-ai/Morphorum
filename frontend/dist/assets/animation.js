@@ -5724,6 +5724,274 @@
       ' attack candidates in view (orange kick, pink snare, gray highs). ' +
       'Markers represent spectral candidates, not isolated instruments.';
   }
+  // MS3: Audio-frequency channels share ONE Motion Lab layer per WAV. Draft
+  // settings never write project camera schedules until explicit Apply.
+  const MOTION_STUDIO_AXES = [
+    ['translation_x', 'Travel X'], ['translation_y', 'Travel Y'],
+    ['translation_z', 'Travel Z'], ['rotation_x', 'Pitch'],
+    ['rotation_y', 'Yaw'], ['rotation_z', 'Roll'],
+  ];
+  let motionStudioChannelState = { projectId: '', sha: '', channels: [], dirty: false };
+  let motionStudioChannelSerial = 0;
+  const motionStudioBandCache = new Map();
+
+  function motionStudioChannelDefaults(analysis) {
+    const end = Number(analysis.values.length);
+    return [
+      { id:'bass', name:'Bass', enabled:true, low_hz:35, high_hz:150,
+        axis:'translation_z', mode:'hits', threshold:.25, sensitivity:.35,
+        strength:.4, attack_frames:2, release_frames:6, cooldown_frames:3,
+        offset_frames:0, start_frame:0, end_frame:end },
+      { id:'snare', name:'Snare', enabled:true, low_hz:180, high_hz:2400,
+        axis:'rotation_x', mode:'hits', threshold:.3, sensitivity:.35,
+        strength:.35, attack_frames:2, release_frames:5, cooldown_frames:4,
+        offset_frames:0, start_frame:0, end_frame:end },
+      { id:'crash', name:'Crash', enabled:true, low_hz:2500, high_hz:3500,
+        axis:'rotation_z', mode:'ripple', threshold:.3, sensitivity:.35,
+        strength:.25, attack_frames:2, release_frames:12, cooldown_frames:6,
+        offset_frames:0, start_frame:0, end_frame:end },
+    ];
+  }
+
+  function motionStudioRestoreChannels(projectId, analysis) {
+    const sha = analysis?.source_sha256;
+    if (!projectId || !sha || state.project?.id !== projectId) return;
+    const saved = (state.project.motion_lab?.layers || []).find(layer =>
+      layer.type === 'audio_channels' && layer.sha256 === sha);
+    const channels = saved?.channel_document?.channels?.length
+      ? saved.channel_document.channels.map(channel => {
+          const { envelope, ...settings } = channel;
+          return { ...settings };
+        }) : motionStudioChannelDefaults(analysis);
+    motionStudioChannelState = {
+      projectId, sha, channels, dirty: false,
+    };
+    motionStudioRenderChannels();
+  }
+
+  function motionStudioUpdateChannelButtons() {
+    const panel = qs('#animation-motion-studio-channels');
+    if (!panel) return;
+    const analysis = motionLabAudioAnalysis;
+    const current = Boolean(state.project?.id && analysis &&
+      motionLabAudioProjectId === state.project.id &&
+      motionStudioChannelState.projectId === state.project.id &&
+      motionStudioChannelState.sha === analysis.source_sha256);
+    const ready = current && animationMode() === '3d' && !motionLabBusy;
+    for (const key of ['stage','preview','apply']) {
+      const button = panel.querySelector('[data-ms3-' + key + ']');
+      if (button) button.disabled = !ready || !motionStudioChannelState.channels.length;
+    }
+    const add = panel.querySelector('[data-ms3-add]');
+    if (add) add.disabled = !ready || motionStudioChannelState.channels.length >= 8;
+    const status = panel.querySelector('[data-ms3-status]');
+    if (status) status.textContent = !state.project ? 'Open a project to configure channels.' :
+      !current ? 'Analyze or restore a saved WAV to enable independent channels.' :
+      motionStudioChannelState.channels.length + ' channel(s)' +
+        (motionStudioChannelState.dirty ? ' · Changes not staged' :
+          ' · Stage to preview, Apply to save camera motion');
+  }
+
+  function motionStudioRenderChannels() {
+    const panel = qs('#animation-motion-studio-channels');
+    if (!panel) return;
+    const list = panel.querySelector('[data-ms3-list]');
+    if (!list) return;
+    list.replaceChildren();
+    for (const channel of motionStudioChannelState.channels) {
+      const row = document.createElement('section');
+      row.className = 'motion-studio-channel';
+      row.dataset.ms3Channel = channel.id;
+      row.innerHTML = `
+        <div class="motion-studio-channel-heading">
+          <label><input type="checkbox" data-ms3-field="enabled"> Enabled</label>
+          <strong data-ms3-label></strong>
+          <button type="button" class="secondary-button compact" data-ms3-remove>Remove</button>
+        </div>
+        <div class="motion-studio-channel-fields">
+          <label>Name<input data-ms3-field="name" type="text" maxlength="64"></label>
+          <label>Low (Hz)<input data-ms3-field="low_hz" type="number" min="20" max="20000" step="1"></label>
+          <label>High (Hz)<input data-ms3-field="high_hz" type="number" min="30" max="20000" step="1"></label>
+          <label>Camera axis<select data-ms3-field="axis"></select></label>
+          <label>Response<select data-ms3-field="mode">
+            <option value="hits">Beat Hits</option>
+            <option value="intensity">Continuous Intensity</option>
+            <option value="ripple">Ripple / oscillation</option>
+          </select></label>
+          <label>Strength (0–1)<input data-ms3-field="strength" type="number" min="0" max="1" step=".05"></label>
+          <label>Threshold (0–1)<input data-ms3-field="threshold" type="number" min="0" max="1" step=".05"></label>
+          <label>Sensitivity (0–1)<input data-ms3-field="sensitivity" type="number" min="0" max="1" step=".05"></label>
+          <label>Attack (frames)<input data-ms3-field="attack_frames" type="number" min="1" max="120" step="1"></label>
+          <label>Release (frames)<input data-ms3-field="release_frames" type="number" min="1" max="120" step="1"></label>
+          <label>Cooldown (frames)<input data-ms3-field="cooldown_frames" type="number" min="0" max="120" step="1"></label>
+          <label>Offset (frames)<input data-ms3-field="offset_frames" type="number" min="-3000" max="3000" step="1"></label>
+          <label>Start frame<input data-ms3-field="start_frame" type="number" min="0" max="2999" step="1"></label>
+          <label>End frame (exclusive)<input data-ms3-field="end_frame" type="number" min="1" max="3000" step="1"></label>
+        </div>`;
+      const select = row.querySelector('[data-ms3-field="axis"]');
+      for (const [axis, label] of MOTION_STUDIO_AXES) {
+        const option = document.createElement('option');
+        option.value = axis;
+        option.textContent = label;
+        select.appendChild(option);
+      }
+      for (const field of row.querySelectorAll('[data-ms3-field]')) {
+        const name = field.dataset.ms3Field;
+        if (field.type === 'checkbox') field.checked = channel[name] !== false;
+        else field.value = String(channel[name] ?? '');
+      }
+      row.querySelector('[data-ms3-label]').textContent = channel.name;
+      row.querySelector('[data-ms3-remove]').addEventListener('click', () => {
+        motionStudioChannelState.channels = motionStudioChannelState.channels.filter(
+          item => item.id !== channel.id);
+        motionStudioChannelState.dirty = true;
+        motionStudioRenderChannels();
+      });
+      for (const input of row.querySelectorAll('[data-ms3-field]')) {
+        input.addEventListener('change', () => {
+          const name = input.dataset.ms3Field;
+          const index = motionStudioChannelState.channels.findIndex(
+            item => item.id === channel.id);
+          if (index < 0) return;
+          const value = input.type === 'checkbox' ? input.checked :
+            input.type === 'number' ? Number(input.value) : input.value;
+          motionStudioChannelState.channels[index][name] = value;
+          if (name === 'name') row.querySelector('[data-ms3-label]').textContent = value;
+          motionStudioChannelState.dirty = true;
+          motionStudioUpdateChannelButtons();
+        });
+      }
+      list.appendChild(row);
+    }
+    motionStudioUpdateChannelButtons();
+  }
+
+  function motionStudioCreateChannelCard(panel) {
+    const card = document.createElement('article');
+    card.className = 'card glass animation-motion-studio-channels';
+    card.id = 'animation-motion-studio-channels';
+    card.innerHTML = `
+      <div class="card-header"><div>
+        <h2>Independent Sound Channels</h2>
+        <p class="muted">Bass, Snare, Crash or custom frequency bands control
+        independent camera axes. Spectral filters are approximate, not isolated
+        drum stems. Manual camera cues remain separate.</p>
+      </div></div>
+      <p class="muted">Each response is non-drifting and frame-aligned.
+      Use a saved project WAV. Settings are staged in a single editable
+      Motion Lab layer and saved only on Apply.</p>
+      <div data-ms3-list class="motion-studio-channel-list"></div>
+      <div class="motion-studio-channel-actions">
+        <button type="button" class="secondary-button compact" data-ms3-add>Add custom channel</button>
+        <button type="button" class="secondary-button compact" data-ms3-stage>Stage channels</button>
+        <button type="button" class="secondary-button compact" data-ms3-preview>Preview curves</button>
+        <button type="button" class="primary-button compact" data-ms3-apply>Apply to project</button>
+      </div>
+      <p class="muted" role="status" aria-live="polite" data-ms3-status>
+        Analyze a WAV to configure audio channels.</p>`;
+    panel.appendChild(card);
+    card.querySelector('[data-ms3-add]').addEventListener('click', () => {
+      if (motionStudioChannelState.channels.length >= 8) return;
+      const analysis = motionLabAudioAnalysis;
+      if (!analysis || motionLabAudioProjectId !== state.project?.id) return;
+      let ident;
+      do { ident = 'custom-' + (++motionStudioChannelSerial); }
+      while (motionStudioChannelState.channels.some(channel => channel.id === ident));
+      motionStudioChannelState.channels.push({
+        ...motionStudioChannelDefaults(analysis)[0], id: ident, name: 'Custom channel',
+        low_hz: 450, high_hz: 1200, mode: 'intensity', axis: 'translation_y',
+      });
+      motionStudioChannelState.dirty = true;
+      motionStudioRenderChannels();
+    });
+    card.querySelector('[data-ms3-stage]').addEventListener('click',
+      () => void motionStudioStageChannels());
+    card.querySelector('[data-ms3-preview]').addEventListener('click',
+      () => void motionStudioStageChannels('preview'));
+    card.querySelector('[data-ms3-apply]').addEventListener('click',
+      () => void motionStudioStageChannels('apply'));
+    motionStudioRenderChannels();
+  }
+
+  async function motionStudioStageChannels(action = 'stage') {
+    const analysis = motionLabAudioAnalysis;
+    const projectId = state.project?.id;
+    if (!analysis || !projectId || motionLabAudioProjectId !== projectId ||
+        motionStudioChannelState.sha !== analysis.source_sha256 ||
+        animationMode() !== '3d' || motionLabBusy) return;
+    const sha = analysis.source_sha256;
+    const controls = motionStudioChannelState.channels.map(item => ({ ...item }));
+    const fps = Number(state.project.animation.fps);
+    const frames = Number(state.project.animation.max_frames);
+    if (!controls.length || controls.length > 8) return;
+    const ranges = controls.map(channel => ({
+      id: channel.id, low_hz: channel.low_hz, high_hz: channel.high_hz,
+    }));
+    // Bypass remote FFT work for an unchanged set of frequency ranges.
+    const cacheKey = JSON.stringify([projectId, sha, fps, frames, ranges]);
+    const controlsPanel = qs('#animation-motion-studio-channels');
+    const message = controlsPanel?.querySelector('[data-ms3-status]');
+    for (const button of controlsPanel?.querySelectorAll('button') || []) {
+      button.disabled = true;
+    }
+    if (message) message.textContent = 'Analyzing independent frequency bands…';
+    try {
+      let bands = motionStudioBandCache.get(cacheKey);
+      if (!bands) {
+        const response = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
+          '/motion-lab/audio/' + encodeURIComponent(sha) + '/bands', {
+          method: 'POST', body: JSON.stringify({ ranges }),
+        });
+        bands = response.analysis?.bands;
+        if (!bands) throw new Error('Missing channel analysis from the host.');
+        motionStudioBandCache.set(cacheKey, bands);
+        if (motionStudioBandCache.size > 12) motionStudioBandCache.delete(
+          motionStudioBandCache.keys().next().value);
+      }
+      if (state.project?.id !== projectId ||
+          motionLabAudioAnalysis?.source_sha256 !== sha ||
+          Number(state.project.animation.fps) !== fps ||
+          Number(state.project.animation.max_frames) !== frames) return;
+      const channels = controls.map(channel => ({
+        ...channel, envelope: bands[channel.id]?.slice(),
+      }));
+      if (channels.some(channel => !Array.isArray(channel.envelope) ||
+          channel.envelope.length !== frames)) {
+        throw new Error('Frequency response length does not match project frames.');
+      }
+      const layer = {
+        id: 'audio-channels-' + sha.slice(0, 16), type: 'audio_channels',
+        name: 'Independent sound channels', enabled: true, blend: 'add',
+        sha256: sha, start_frame: 0, end_frame: frames,
+        channel_document: {schema_version: 1, source_sha256: sha,
+          fps, max_frames: frames, channels},
+      };
+      const previous = motionLabDraftLayers.findIndex(item =>
+        item.type === 'audio_channels' && item.sha256 === sha);
+      if (previous < 0 && motionLabDraftLayers.length >= 24) {
+        throw new Error('Motion Lab supports at most 24 layers. Remove one before staging.');
+      }
+      if (previous >= 0) motionLabDraftLayers[previous] = layer;
+      else motionLabDraftLayers.push(layer);
+      motionLabEditingIndex = -1;
+      motionStudioChannelState.dirty = false;
+      commitMotionLabDraft();
+      if (action === 'preview') await motionLabPreviewOrApply(false, {curvesOnly:true});
+      else if (action === 'apply') await motionLabPreviewOrApply(true);
+      motionStudioRenderChannels();
+      if (message && state.project?.id === projectId)
+        message.textContent = channels.length + ' sound channels ' +
+          (action === 'apply' ? 'applied to this project.' :
+           action === 'preview' ? 'previewed in Motion Curves.' :
+           'staged in Motion Lab. Preview or Apply to save.');
+    } catch (error) {
+      motionLabNotify('Sound channels: ' + error.message);
+      toast('Sound channel analysis failed', error.message, 'error');
+    } finally {
+      if (state.project?.id === projectId) motionStudioUpdateChannelButtons();
+    }
+  }
+
   // Restore source-bound manual cues and editable markers for both uploaded
   // and reopened WAVs. Stale project requests never overwrite the open editor.
   async function motionStudioHydrateEdits(projectId, analysis, stillCurrent) {
