@@ -2475,6 +2475,7 @@
       }
       motionLabAudioAnalysis = analysis;
       motionLabAudioProjectId = id;
+      motionStudioRestoreChannels(id, analysis);
       motionLabAudioUrl = asset.url;
       motionLabAudioElement = new Audio(asset.url);
       motionLabAudioElement.preload = 'auto';
@@ -2529,6 +2530,8 @@
       motionLabSelectedEvent = null;
       motionDirectorCues = [];
       motionDirectorSelected = null;
+      motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
+      motionStudioRenderChannels();
       motionLabStereoWaveform();
       motionLabAudioPreview();
       motionLabAudioUi();
@@ -6129,6 +6132,7 @@
     if (add) add.disabled = !ready || motionLabDraftLayers.length >= 24 ||
       !motionLabAudioAnalysis || motionLabAudioProjectId !== state.project?.id ||
       Number(motionLabAudioAnalysis.fps) !== Number(state.project?.animation?.fps);
+    motionStudioUpdateChannelButtons();
   }
   async function motionLabAnalyzeAudio() {
     const file = qs('#animation-motion-lab-audio-file')?.files?.[0];
@@ -6146,6 +6150,8 @@
     const uploadToken = ++projectAudioRestoreGeneration;
     motionLabEditedEvents = null;
     motionDirectorCues = [];
+    motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
+    motionStudioRenderChannels();
     motionLabAudioAnalysis = null;
     motionLabAudioProjectId = null;
     motionLabReleaseAudio();
@@ -6262,6 +6268,7 @@
         projectAudioRestoreGeneration === uploadToken))) return;
       motionLabAudioAnalysis = analysis;
       motionLabAudioProjectId = projectId;
+      motionStudioRestoreChannels(projectId, analysis);
       motionLabAudioUrl = URL.createObjectURL(file);
       motionLabAudioElement = new Audio(motionLabAudioUrl);
       motionLabAudioElement.preload = 'auto';
@@ -6688,6 +6695,10 @@
         ? (index + 1) + '. Audio ' + layer.axis.replaceAll('_',' ') +
           ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
           ' · threshold ' + layer.threshold
+        : layer.type === 'audio_channels'
+        ? (index + 1) + '. Sound channels · ' +
+          (layer.channel_document?.channels?.length || 0) + ' channel(s) · additive · ' +
+          layer.start_frame + '–' + (layer.end_frame - 1)
         : layer.type === 'audio_cues'
         ? (index + 1) + '. Audio Motion Director · ' +
           (layer.cue_document?.cues?.length || 0) + ' cue(s) · additive · ' +
@@ -6709,6 +6720,12 @@
       edit.textContent = 'Edit';
       edit.disabled = !ready;
       edit.addEventListener('click', () => {
+        if (layer.type === 'audio_channels') {
+          motionLabEditingIndex = -1;
+          showAnimationTab('audio');
+          motionLabNotify('Edit this sound channel layer in Motion Studio, then Preview or Apply.');
+          return;
+        }
         if (layer.type === 'audio_cues') {
           motionLabEditingIndex = -1;
           showAnimationTab('audio');
@@ -7870,6 +7887,7 @@
       </div>
     `;
     panels.audio.prepend(audioIntro);
+    motionStudioCreateChannelCard(panels.audio);
     // DA3 layout: wide analysis displays are independent of the compact
     // configuration card. Reparenting preserves existing element IDs,
     // event listeners, SVG rendering and draft-marker state.
