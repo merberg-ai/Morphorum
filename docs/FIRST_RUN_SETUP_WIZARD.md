@@ -1,6 +1,6 @@
 # MS6 first-run setup wizard: implementation specification
 
-**Status:** MS6.0 safety architecture and baseline tests prepared; the wizard itself is **not yet implemented**. This is the feature specification, with migration and installer details fixed by [MS6_ARCHITECTURE_BASELINE.md](MS6_ARCHITECTURE_BASELINE.md). The `--setup-wizard` flag and UI are not implemented yet.
+**Status:** MS6.1 first-run detection, setup-state API, CLI overrides, and Welcome/Mode entry screen implemented on `dev-webui`; **MS6.2–MS6.5 remain planned**. Actual model-folder/LoRA wizard pages, Z-Image download and example-project creation are not implemented yet. See [MS6_ARCHITECTURE_BASELINE.md](MS6_ARCHITECTURE_BASELINE.md) for the installer/migration rules.
 
 ## Purpose and boundaries
 
@@ -17,8 +17,8 @@ This feature is **optional for existing installations**, should be restart-safe 
 - On **first WebUI load after a fresh installation**, present the full-screen, theme-aware setup wizard automatically. Detect this on the **server**, not from a browser's local storage or from the mere absence of indexed models.
 - **Use explicit fresh-installer provenance, not presence/absence of settings or projects.** Both current installers already copy `config/default.yaml` to `data/config.yaml` and seed a 120-frame `Default` project on a fresh install. Installation self-tests also write `data/install.json`. MS6.1 must inspect the installation *before* those actions and write an atomic server-owned marker. A legacy/upgraded installation with **no** setup marker is treated as existing and must **not** auto-launch onboarding. A prior user's **zero models indexed** is not proof that they need onboarding. See the decision table in [MS6_ARCHITECTURE_BASELINE.md](MS6_ARCHITECTURE_BASELINE.md).
 - Persist `not_started | in_progress | completed | skipped`, **installer readiness/provenance**, schema version, revision and safe step metadata in an installation-owned, atomically written `data/setup-state.json`. Do not store credentials, raw unsaved folder inventories or tokens. Make the server state authoritative across browser changes and reloads; malformed state must be reported without silent overwrite.
-- Add a **future** CLI option `morphorum serve --setup-wizard` for an explicit **one-launch** wizard override. Provide forwarders for Linux `./run.sh --setup-wizard`, Windows `run.bat --setup-wizard`, and Windows PowerShell `scripts/run_windows.ps1 -SetupWizard`. These are *proposed commands*, **not valid in the current implementation**. Keep the existing `--backend-only`/`-BackendOnly` options unchanged and reject or clearly explain an incompatible forced WebUI wizard in backend-only mode.
-- Make **Reopen Setup Wizard** available from WebUI Settings/Help for ordinary local users. Reopening may populate existing values but must **not wipe** or overwrite them. The CLI override can reopen a completed wizard without clearing its completion state. A new browser, device, or cleared browser cache must not reset a completed installation.
+- **MS6.1 implemented:** `morphorum serve --setup-wizard` forces the entry wizard for the current WebUI server process. Linux `./run.sh --setup-wizard`, Windows `run.bat --setup-wizard`, and Windows PowerShell `scripts/run_windows.ps1 -SetupWizard` forward the override. It does not reset persisted completion or replace saved config. `--setup-wizard` plus `--backend-only` is rejected with a clear startup error. Backend-only keeps the authenticated API with no WebUI wizard.
+- **MS6.1 implemented:** **Setup Wizard** in WebUI Settings reopens Welcome/Mode screens on demand, without clearing model settings, projects, or installer state. The CLI override also reopens previously skipped/completed setup for that process. Saved step and optimistic revision enable resume and conflict warnings. A new browser, device, or cleared browser cache must not reset a completed/skipped installation.
 - If there are no models and onboarding was previously skipped/completed, retain the existing **No generation models available** helpful banner; do not repeatedly force the wizard.
 - No automatic model download, background GPU load, project creation, or animation generation simply from opening a page.
 
@@ -123,3 +123,13 @@ Implementation details:
 - Reuse the current persistent server state and progress APIs. If a future worker/download fails, do not mark setup done or conceal errors.
 - Avoid starting large downloads, loading models or generating any image/video by merely opening the wizard.
 - `dev-webui` remains the development branch until release acceptance. `main` and draft PR #39 are not merged without separate owner approval.
+
+## MS6.1 entry flow available now (2026-10-15)
+
+- A **genuinely fresh** Windows/Linux install receives `data/setup-state.json` during provisioning **before** default user config and the bundled Default project are created. The marker is finalized only after successful installer checks. Existing installations and updates without a marker are treated as legacy and do not auto-open a wizard.
+- The normal WebUI performs a read-only `GET /api/setup/status`. If installation provenance is fresh and setup is incomplete, the **Welcome** screen opens automatically. WebUI/backend-only guidance is on page 2. The models page is an honest placeholder until MS6.2, not a fake setup process.
+- A user may **Skip for now** (persistently suppress future automatic startup) or **Close** (resume later at the server-saved step). Open Settings → **Setup Wizard** to return at any time.
+- `POST /api/setup/progress` requires an explicit setup interaction header and same-origin browser context, validates known steps and a revision, and supports **advance** and **skip** only. Completion, model/LoRA settings, Z-Image downloads, sample creation and rendering are deliberately not wired in MS6.1.
+- A corrupted setup state is preserved and reported without silently rewriting it. The backend-only browser shell is not exposed.
+
+**MS6.1 physical acceptance:** test on clean Windows and Linux installs, a legacy/upgraded installation, Windows `run.bat --setup-wizard`, PowerShell `-SetupWizard`, Linux `./run.sh --setup-wizard`, server restart, browser reload, Skip and Settings reopen. Check existing config/projects/model weights remain unchanged and backend-only rejects the wizard. The substantive configuration and sample projects are for MS6.2–MS6.4.
