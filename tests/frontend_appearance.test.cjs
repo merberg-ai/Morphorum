@@ -9,7 +9,7 @@ const root = path.join(__dirname, '..', 'frontend', 'dist');
 const app = fs.readFileSync(path.join(root, 'assets', 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'assets', 'app.css'), 'utf8');
 const motionCss = fs.readFileSync(path.join(root, 'assets', 'animation.css'), 'utf8');
-const otherCss = ['models.css','image.css','desktop.css']
+const otherCss = ['models.css','image.css','mobile.css','tablet.css','desktop.css']
   .map(n => fs.readFileSync(path.join(root,'assets',n),'utf8'));
 const choices = ['midnight-glass','deep-ocean','amethyst-night','slate-graphite'];
 
