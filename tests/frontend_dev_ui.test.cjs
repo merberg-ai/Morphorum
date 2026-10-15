@@ -43,7 +43,7 @@ test('Active job progress reserves a dedicated desktop header row', () => {
   assert.match(css, /@media\s*\(max-width:\s*1180px\)\s*\{[^}]*\.topbar\s*\{[^}]*grid-template-columns:/s);
   assert.match(css, /\.global-job-status\s*\{\s*grid-row:\s*3;\s*\}/);
   assert.match(phone, /@media\(max-width:640px\)\s*\{[\s\S]*?\.topbar-right\s*\{display:contents;\}/);
-  assert.match(css, /\.global-job-status\s*\{grid-column:1\/-1;grid-row:3;/);
+  assert.match(phone, /\.global-job-status\s*\{grid-column:1\/-1;grid-row:3;/);
   assert.ok(html.indexOf('class="brand-block"') < html.indexOf('class="topbar-right"'));
   assert.ok(html.indexOf('id="runtime-build"') < html.indexOf('id="global-job-status"'));
 });
