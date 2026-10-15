@@ -2525,6 +2525,11 @@
       motionLabReleaseAudio();
       motionLabAudioAnalysis = null;
       motionLabAudioProjectId = null;
+      motionLabEditedEvents = null;
+      motionLabSelectedEvent = null;
+      motionDirectorCues = [];
+      motionDirectorSelected = null;
+      motionLabStereoWaveform();
       motionLabAudioPreview();
       motionLabAudioUi();
     }
@@ -5229,6 +5234,7 @@
         '<p data-beat-summary class="muted">Review candidate hits before assigning.</p></details>' +
         '<p class="muted">Cues save with this WAV. Save cues, then Preview camera cues or Apply camera cues. Existing Motion Lab layers remain additive.</p>';
       waveform.after(panel);
+    panel.hidden = false;
       const options = panel.querySelector('[data-cue-preset]');
       for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
         const option = document.createElement('option');
@@ -5382,8 +5388,15 @@
     let section = qs('#animation-audio-stereo-timeline');
     if (!analysis?.waveform?.channels?.length) {
       if (section) section.hidden = true;
+      const editor = qs('#animation-audio-event-editor');
+      if (editor) editor.hidden = true;
+      const director = qs('#animation-audio-motion-director');
+      if (director) director.hidden = true;
       return;
     }
+    if (section) section.hidden = false;
+    const editor = qs('#animation-audio-event-editor');
+    if (editor) editor.hidden = false;
     if (!section) {
       section = document.createElement('section');
       section.id = 'animation-audio-stereo-timeline';
