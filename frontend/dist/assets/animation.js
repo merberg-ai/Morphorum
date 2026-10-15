@@ -5772,6 +5772,9 @@
   let motionStudioArrangementSelection = '';
   let motionStudioArrangementLoaded = '';
   let motionStudioArrangementSerial = 0;
+  const MS43_URL = '/api/animation/motion-studio/custom-presets';
+  let ms43Presets = [];
+  let ms43Busy = false;
 
   function motionStudioArrangementFrameCount() {
     return Math.max(1, Number(state.project?.animation?.max_frames) || 120);
@@ -6067,6 +6070,151 @@
       'Compose a new continuous motion region';
     motionStudioArrangementSyncRange();
   }
+
+  // Reusable named presets live in Morphorum's data directory, not the project.
+  const ms43El = key => qs('#animation-motion-studio-arrangement')
+    ?.querySelector('[data-ms43-' + key + ']');
+  const ms43Selected = () => ms43Presets.find(p => p.id === ms43El('library')?.value);
+  function ms43Status(message) {
+    if (ms43El('status')) ms43El('status').textContent = message;
+  }
+  function ms43Controls() {
+    const ready = !!state.project && animationMode() === '3d' && !motionLabBusy && !ms43Busy;
+    for (const key of ['load','update','delete','save']) {
+      const control = ms43El(key);
+      if (control) control.disabled = !ready || (key !== 'save' && !ms43Selected());
+    }
+    if (ms43El('refresh')) ms43El('refresh').disabled = ms43Busy;
+    if (ms43El('library')) ms43El('library').disabled = ms43Busy;
+    if (ms43El('name')) ms43El('name').disabled = !ready;
+  }
+  function ms43RenderLibrary(selected = '') {
+    const control = ms43El('library');
+    if (!control) return;
+    const old = selected || control.value;
+    control.replaceChildren();
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Choose saved preset';
+    control.appendChild(blank);
+    for (const item of ms43Presets) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.name + ' · ' + item.preset.replaceAll('-',' ');
+      control.appendChild(option);
+    }
+    control.value = ms43Presets.some(item => item.id === old) ? old : '';
+    ms43Controls();
+  }
+  async function ms43Refresh(selected = '') {
+    if (ms43Busy) return;
+    ms43Busy = true;
+    ms43Controls();
+    ms43Status('Loading saved presets…');
+    try {
+      const data = await api(MS43_URL);
+      ms43Presets = Array.isArray(data.presets) ? data.presets : [];
+      ms43RenderLibrary(selected);
+      ms43Status(ms43Presets.length + ' saved custom presets on this Morphorum installation.');
+    } catch (error) {
+      ms43Status('Could not load preset library: ' + error.message);
+      toast('Preset library unavailable', error.message, 'error');
+    } finally {
+      ms43Busy = false;
+      ms43Controls();
+    }
+  }
+  function ms43Select() {
+    if (ms43Selected()) ms43El('name').value = ms43Selected().name;
+    ms43Controls();
+  }
+  function ms43Load() {
+    const p = ms43Selected(), f = motionStudioArrangementFields();
+    if (!p || !f || ms43Busy || !state.project || animationMode() !== '3d' || motionLabBusy) return;
+    const count = motionStudioArrangementFrameCount();
+    const start = Math.max(0, Math.min(count-1, Math.round(p.start_ratio*count)));
+    const end = Math.max(start+1, Math.min(count, Math.round(p.end_ratio*count)));
+    motionStudioArrangementSelection = '';
+    motionStudioArrangementLoaded = '';
+    f.preset.value = p.preset;
+    f.blend.value = p.blend;
+    motionStudioArrangementRebuildAxes(p.axes);
+    f.strength.value = String(p.strength);
+    f.cycle.value = String(p.cycle_seconds);
+    f.fade.value = String(p.fade_seconds);
+    f.start.value = String(start);
+    f.end.value = String(end);
+    motionStudioRenderArrangement();
+    ms43Status('Loaded "' + p.name + '" into editor. Stage Movement to add it to this project.');
+    toast('Custom preset loaded', p.name + ' is ready to stage.', 'success');
+  }
+  function ms43Payload() {
+    const f = motionStudioArrangementFields();
+    if (!f) return null;
+    motionStudioArrangementSyncRange();
+    const count = motionStudioArrangementFrameCount();
+    return {name:ms43El('name')?.value.trim() || '',
+      preset:f.preset.value, blend:f.blend.value,
+      axes:motionStudioArrangementAxisSelection(),
+      strength:Number(f.strength.value), cycle_seconds:Number(f.cycle.value),
+      fade_seconds:Number(f.fade.value),
+      start_ratio:Number(f.start.value)/count,
+      end_ratio:Number(f.end.value)/count};
+  }
+  async function ms43Save(update = false) {
+    if (ms43Busy || !state.project || animationMode() !== '3d' || motionLabBusy) return;
+    const original = update ? ms43Selected() : null;
+    if (update && !original) return;
+    const payload = ms43Payload();
+    if (!payload?.name || payload.name.length > 64) {
+      toast('Preset name required', 'Enter a name of up to 64 characters.', 'warning');
+      return;
+    }
+    ms43Busy = true;
+    ms43Controls();
+    ms43Status(update ? 'Updating saved preset…' : 'Saving new preset…');
+    try {
+      const result = await api(MS43_URL +
+        (update ? '/' + encodeURIComponent(original.id) : ''), {
+        method:update?'PUT':'POST', body:JSON.stringify(payload),
+      });
+      const list = await api(MS43_URL);
+      ms43Presets = Array.isArray(list.presets) ? list.presets : [];
+      ms43RenderLibrary(result.preset.id);
+      ms43Status('Saved "'+result.preset.name+'". Project layers were not changed.');
+      toast('Custom preset saved', result.preset.name + ' is reusable across projects.', 'success');
+    } catch (error) {
+      ms43Status('Could not save: ' + error.message);
+      toast('Custom preset not saved', error.message, 'error');
+    } finally {
+      ms43Busy = false;
+      ms43Controls();
+    }
+  }
+  async function ms43Delete() {
+    const p = ms43Selected();
+    if (!p || ms43Busy || !state.project || animationMode() !== '3d' || motionLabBusy) return;
+    if (!window.confirm('Delete saved preset "'+p.name+
+      '"? Existing project motion layers remain unchanged.')) return;
+    ms43Busy = true;
+    ms43Controls();
+    try {
+      await api(MS43_URL+'/'+encodeURIComponent(p.id), {method:'DELETE'});
+      ms43Presets = ms43Presets.filter(item => item.id !== p.id);
+      ms43El('library').value = '';
+      ms43El('name').value = '';
+      ms43RenderLibrary();
+      ms43Status('Deleted "'+p.name+'". Existing project motion was not changed.');
+      toast('Custom preset deleted',p.name+' removed from shared library.','success');
+    } catch (error) {
+      ms43Status('Could not delete: '+error.message);
+      toast('Could not delete saved preset',error.message,'error');
+    } finally {
+      ms43Busy = false;
+      ms43Controls();
+    }
+  }
+
   async function motionStudioArrange(action = 'stage') {
     const form = motionStudioArrangementFields();
     if (!form || !state.project || animationMode() !== '3d' || motionLabBusy) return;
