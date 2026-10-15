@@ -184,7 +184,7 @@ Proposed testable batches:
 Each batch must pass CI and owner physical tests before the next. Main remains
 untouched without explicit authorization.
 
-## MS5: Synchronized preview and render/refine (MS5.1 / MS5.2 accepted; MS5.3 physical gate pending)
+## MS5: Synchronized preview and render/refine (MS5.1–MS5.3 accepted; MS5.4 physical gate pending)
 
 - **MS5.1: Project-frame A/B review (physically accepted).**
   Reuse the existing CPU camera preview frame player and sampled PNGs, plus
@@ -211,8 +211,7 @@ untouched without explicit authorization.
   stack on small screens and show a single wide CPU view if no comparison
   is active. The actual historical render may differ from the current
   project motion and seed; this is inspection, not proof of equivalent inputs.
-- **MS5.3: ranged correction/refinement workflow (implemented, physical
-  gate pending).** The A/B Motion Review now offers non-destructive handoff
+- **MS5.3: ranged correction/refinement workflow (physically accepted).** The A/B Motion Review now offers non-destructive handoff
   to **Continuous Camera Motion** and **Live Motion Recording** for an exact
   inclusive [A, B] interval, converting safely to the destination editors'
   exclusive end frame B+1. Continuous correction is always a **new** edit
@@ -229,9 +228,21 @@ untouched without explicit authorization.
   and Loop controls cannot expand to giant toggles in inherited layouts.
   No selective re-render of old diffusion output is implied by this stage;
   that would require its own separate backend contract and confirmation.
-- **MS5.4: final playback/polish physical gate (planned).**
-  Check audio end/loop edges, project reload and multi-FPS timing, missing
-  soundtrack, interrupted renders, and phone-width controls.
+- **MS5.4: final playback/polish physical gate (implemented; awaiting Windows
+  acceptance).** Hardens the existing frame player and render navigation:
+  WAV clocks that end mid-preview fall back seamlessly to the last displayed
+  video frame (no rewinding); silent/missing, shorter or disabled WAV audio
+  does not stall A/B looping. An A=B one-frame range stays still, reset
+  respects A instead of resetting to frame zero, and invalid frame seeks
+  cannot produce NaN frame URLs. Play is blocked when Editor frame count or
+  FPS no longer matches a CPU preview; invalid preview sample maps fall
+  back to the GIF with a warning instead of triggering an endless poll retry.
+  Pending preview submission/polling results and render-history requests
+  are tied to the selected project to avoid flashing stale completed or
+  interrupted outputs after switching/reloading. Existing media-inventory
+  and attached WAV warnings remain in use. CI covers 12/24/30/60 FPS,
+  audio transition, no-WAV operation, one-frame intervals, project races,
+  and mobile checkbox/layout constraints. No new render pipeline.
 
 MS5 is **not all physically complete** until the owner has verified each
 batch. Reuse the existing Motion Lab history, frame player, recorder and
@@ -753,3 +764,77 @@ explicit user staging/recording and application.
   project camera schedules should change without explicit Apply.
 - Do **not** move to MS5.4 or merge draft PR #39 until physical acceptance
   and passing Syntax, Backend and Installer CI checks.
+
+## MS5.3 acceptance and MS5.4 final playback polish (2026-10-15)
+
+The owner confirmed MS5.3 **works as expected** and authorized MS5.4.
+MS5.3 is accepted. MS5.4 is implemented on `dev-webui`; it still
+requires Windows/mobile physical verification before MS6 begins. `main`
+is untouched and PR #39 remains a draft.
+
+### MS5.4 playback and recovery changes
+
+- **Audio clock at the WAV's end:** When an analyzed soundtrack stops before
+  the project or chosen A/B window does, the frame clock continues forward
+  from the last shown frame on a wall timer. The prior behavior could jump
+  backward to the initial frame when audio ended. The WAV is not restarted
+  outside its duration; if the A/B loop returns to frames covered by the
+  WAV, sync may resume at that time. The status explains when playback
+  becomes silent. Missing and unavailable WAV media does not block visual
+  playback. Switching audio sync off mid-preview pauses the WAV owned by
+  the frame player and preserves the current video frame.
+- **Frame navigation edges:** An A=B one-frame range stays on that frame
+  without spinning a needless animation/audio loop. **Start** resets to
+  the selected A frame while A/B mode is enabled, otherwise frame 0.
+  NaN/invalid seek input cannot create invalid render URLs.
+- **Project and preview reconciliation:** Editor FPS or frame count changes
+  block playback of a mismatched CPU preview. Invalid frame-player metadata
+  generates a visible warning and uses the existing GIF fallback. That GIF
+  is approximate-time only, so A/B/seek/comparison require regenerating a
+  valid sampled frame preview.
+- **Asynchronous response isolation:** Project switching or reloading
+  invalidates pending preview requests, preview polls, and render-history
+  responses, including interrupted render results. Responses to old jobs
+  cannot repopulate the new project's preview UI. The active render
+  poller also checks returned project identity.
+- **No new persistence or render mutation:** Existing Motion Lab drafts,
+  before/after comparisons, saved render PNGs, audio attachments and
+  `motion_lab.limits` remain managed by their existing backends.
+
+### MS5.4 Windows physical acceptance checklist
+
+1. Run the CPU Camera Motion Preview with no analyzed WAV and with a
+   project-owned WAV. Verify seeking, A/B looping, playback and Pause at
+   **12, 24, 30 and 60 FPS** using a short test project for each.
+2. With a soundtrack shorter than the project, select an A/B window that
+   crosses the WAV's end. Visual playback should continue **forward** and
+   stop precisely on B or wrap to A. No rewind/freeze when audio stops.
+   Disable audio sync while playing; WAV should pause and the video should
+   continue. Test a range entirely after the WAV's end and a missing/
+   detached WAV; the preview remains usable with a clear status.
+3. Set A and B to the **same frame**. Click Play: it should remain on
+   that frame without runaway playback. Set A=15, B=25, seek to 20 and
+   press **Start**: it should return to frame 15. Disable A/B and press
+   Start again: it should return to frame 0.
+4. Change FPS or frame count in Editor without generating a new CPU
+   preview; Play should refuse with a timing warning. Regenerate preview
+   after restoring settings. Compare completed render PNGs and Motion
+   Curves as in MS5.1–MS5.3, ensuring frame correspondence remains intact.
+5. Switch between two saved projects (or reload the current one) during
+   preview generation or render-history refresh. A late response from the
+   previous project must not appear. Interrupted/incomplete render entries
+   should remain inspectable in Render History but must be ineligible for
+   side-by-side **Compare Render**.
+6. Verify saved project soundtrack restoration and missing-media
+   inventory warnings. Test viewport widths around **390, 640, 650px**
+   and full desktop: no horizontal overflow, no oversized A/B or Loop
+   checkboxes, usable stacked render comparison and correction buttons.
+7. Perform a quick motion recording, punch-in, Update Curves,
+   Capture Before / Compare Draft Curves, Apply, save and reopen.
+   Confirm layer IDs, seeds, source image, imported soundtrack and
+   stored render PNGs are unchanged except for explicit accepted edits.
+
+**CI gate:** Standard Syntax/Node regressions, Python Backend tests and
+Installer checks must be green. MS6 release integration does **not**
+start until owner physically accepts MS5.4. Merge remains separately
+authorized; do not merge draft PR #39 automatically.
