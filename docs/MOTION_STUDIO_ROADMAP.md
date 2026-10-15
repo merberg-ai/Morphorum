@@ -125,7 +125,7 @@ verify no additional contribution. Test disabling a channel, adding a custom
 one, 24/30 FPS, phone layout, and existing manual cue editing. Confirm audio
 analysis errors are shown rather than silently changing camera tracks.
 
-## MS4: Continuous presets and recording improvements (MS4.1 accepted, MS4.2 integration)
+## MS4: Continuous presets and recording improvements (MS4.1 / MS4.2 accepted; timeline cleanup pending Windows verification)
 
 Morphorum already implements gentle drift, wave, spiral, figure-eight, rocking,
 push-in and pull-out native presets. MS4 should **reuse and extend** these,
@@ -144,7 +144,7 @@ Proposed testable batches:
   reuse the current layer history and conflict-checked compositor. No audio
   or GPU rendering is required to edit continuous movement. MS4.1 uses
   **additive** movement only; axis-specific Replace belongs to MS4.2.
-- **MS4.2: Range-based Add/Replace (implemented, physical gate pending).**
+- **MS4.2: Range-based Add/Replace (implemented, physically accepted).**
   Select Add or Replace for a continuous preset and check only the camera
   axes it should affect. The native Motion Lab compiler now accepts an
   optional, strictly validated `axes` list on preset layers; existing
@@ -375,5 +375,38 @@ restore paths are unchanged.
 6. Check phone-width layout and ensure the soundtrack source control remains
    above the motion editors.
 
-MS4.2 is **not yet physically accepted**. Do not merge draft PR #39, modify
-`main`, or start MS4.3 until owner acceptance.
+At the time of this checkpoint MS4.2 was **not yet physically accepted**.
+See the newer checkpoint below. Keep draft PR #39 and `main` unchanged.
+
+## MS4.2 physical acceptance and timeline deletion cleanup (2026-10-15)
+
+The owner reports MS4.2 Add/Replace and relocated Audio Source **working as
+expected on the physical installation**. MS4.2 is accepted. Two timeline UX
+issues were identified for a targeted follow-up, before MS4.3:
+
+- The previous "Unstaged selection" bar was always rendered even after
+  staging a real layer. It had no layer ID and could not be selected, so it
+  looked like a second, stuck region. **Removed:** only actual staged draft
+  preset layers now appear in the timeline. The editable form remains available
+  whether or not it has been staged. Empty timeline explains how to stage.
+- Staged continuous-motion timeline bars now have a **Remove** button. This
+  deletes only that native preset layer from the **draft** via the existing
+  Motion Lab undo/history mechanism. Selected-layer removal clears selection
+  and resets the form; removing a different layer keeps the current selection.
+  Audio/cue/channel/recording/custom layers are never removed from this panel.
+  Final animation schedules are not changed until **Apply to Animation**.
+
+The UI uses the existing theme and responsive layout. Automated frontend tests
+cover staged deletion, selection state, unrelated layer preservation, busy-state
+protection, and the removed phantom bar.
+
+**Physical test for the cleanup:** Stage two movements, remove one, verify the
+remaining bar can still be selected and updated. Remove the selected bar and
+verify it disappears, the editor returns to New Movement, and no Unstaged
+Selection reappears. Use Motion Lab Undo if needed. Apply to Animation, save
+and reopen the project; verify the deleted preset is absent. Recheck audio
+layers and narrow/mobile layout.
+
+**Gate:** This cleanup still needs Windows physical verification. After it
+passes, proceed with **MS4.3 named custom presets**. Keep draft PR #39 and
+`main` untouched until a separate merge review.
