@@ -259,7 +259,7 @@ test('MS5.4 missing WAV, late soundtrack and disabled sync remain silent without
   h.player.pause();
   h.player.shouldSync=()=>false;
   h.player.play();
-  h.clock(1500);
+  h.clock(2500);
   assert.equal(h.player.frame,60);
   h.player.pause();
 });
