@@ -1,0 +1,59 @@
+/* Tablet and intermediate browser presentation.
+   The 641-1180px range is independent of operating system. Wide coarse-pointer
+   devices also use this touch-friendly layout instead of desktop-only chrome.
+   This file changes layout only; shared JS and API calls remain authoritative. */
+
+.app-shell { min-width: 0; max-width: 100%; }
+.workspace, .view.active { min-width: 0; }
+
+/* Navigation stays fully discoverable without requiring horizontal scrolling
+   or borrowing the compact phone bottom bar. */
+.main-nav {
+  width: min(100%, 1260px);
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px;
+}
+.main-nav > .nav-button {
+  flex: 1 1 132px;
+  min-width: 0;
+  min-height: 44px;
+  justify-content: center;
+  text-align: center;
+  padding: 10px 12px;
+}
+.main-nav > .nav-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.grid > .card,
+.settings-grid > .card,
+.animation-layout > .card { min-width: 0; }
+#view-animation .animation-workspace-nav {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+@media (max-width: 900px) {
+  /* Three easy-to-tap navigation buttons per row in portrait tablets. */
+  .main-nav > .nav-button { flex-basis: calc(33.333% - 8px); }
+  .topbar-right { flex-wrap: wrap; }
+  .telemetry-strip {
+    flex: 1 1 100%;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .telemetry-item { min-width: 0; }
+  .runtime-build { margin-left: auto; max-width: min(46vw, 320px); }
+  .settings-internal-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  /* A 641px-wide window must remain usable, including all six destinations. */
+  .main-nav > .nav-button { padding: 10px 6px; }
+  .telemetry-head { font-size: .62rem; }
+  .telemetry-head strong { font-size: .67rem; }
+}
