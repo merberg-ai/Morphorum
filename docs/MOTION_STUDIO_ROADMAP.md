@@ -184,12 +184,34 @@ Proposed testable batches:
 Each batch must pass CI and owner physical tests before the next. Main remains
 untouched without explicit authorization.
 
-## MS5: Synchronized preview and render/refine (not implemented)
+## MS5: Synchronized preview and render/refine (MS5.1 implemented; physical gate pending)
 
-Offer frame-mapped motion preview, recorded frame playback or split view,
-soundtrack-linked seek, A/B loops, ranged correction/take replacement,
-and non-destructive review of completed renders. Detect FPS/frame-count
-mismatches. Reuse Morphorum frame-player and stored render assets.
+- **MS5.1: Project-frame A/B review (implemented; Windows physical gate pending).**
+  Reuse the existing CPU camera preview frame player and sampled PNGs, plus
+  its optional synchronized project soundtrack. Add a bounded A/B playback
+  interval, choose A/B from the current frame, jump to the exact captured
+  recording take's frame range, show six native-axis motion curve values at
+  the current project frame, and open the equivalent frame in Motion Curves.
+  The player maps sparse captured images back to project frames and explicitly
+  identifies when the displayed image comes from an earlier sampled frame;
+  project-frame time stays accurate even if preview quality is low.
+  Guard against project FPS/frame-count mismatches, stale curves and corrupt
+  preview sample maps. No project, take or render output is modified by review.
+- **MS5.2: synchronized split view and completed-render review (planned).**
+  Present the non-destructive CPU preview alongside stored completed-render
+  frames with shared frame seek; confirm rendered frame coverage and metadata
+  before comparing. Never assume generated-frame FPS or count without evidence.
+- **MS5.3: ranged correction/refinement workflow (planned).**
+  Improve selection of a bounded recorded take interval, reuse punch-in and
+  curve editing, stage corrections and review differences before Apply. Define
+  any render-range/refine integration separately with conflict protection.
+- **MS5.4: final playback/polish physical gate (planned).**
+  Check audio end/loop edges, project reload and multi-FPS timing, missing
+  soundtrack, interrupted renders, and phone-width controls.
+
+MS5 is **not all physically complete** until the owner has verified each
+batch. Reuse the existing Motion Lab history, frame player, recorder and
+backend render assets rather than adding duplicate render engines.
 
 ## MS6: Release integration and acceptance (not implemented)
 
@@ -532,3 +554,48 @@ physical verification. `main` remains unchanged; PR #39 remains draft.
 checks; Python recording/camera composition tests run in Backend tests;
 installer checks remain required. Do not begin MS5 or merge PR #39 before
 physical approval of MS4.4.
+
+## MS4.4 acceptance and MS5.1 review checkpoint (2026-10-15)
+
+The owner physically verified **MS4.4 working as expected**. MS4.4 is
+accepted, including recording/gamepad polish and punch-in feathering.
+
+**MS5.1 implementation** on `dev-webui` adds the A/B Motion Review section
+inside the existing **Camera Motion Preview** frame player (not a second
+renderer). CPU preview frames are still mapped to their real project frame
+numbers. The user can mark A/B, type an inclusive range, toggle "Limit playback
+to A/B", replay or stop exactly at B, and choose a recorded draft take to
+review its [start, end) interval as inclusive [start, end-1]. Replaying audio
+loops the optional analyzed soundtrack at the corresponding project time.
+
+The current project frame, time and source image sample index are reported,
+with six-axis native velocity values from freshly compiled Motion Curves when
+their FPS and frame count match. Mismatched project/preview settings warn and
+block range operations. "Open Frame in Curves" pauses the preview and navigates
+to that frame if fresh matching curves exist; otherwise users are instructed
+to update curves. Sampling fewer PNGs than project frames is expected and
+called out, not misrepresented as true image-for-every-frame rendering.
+
+### MS5.1 Windows physical acceptance checklist
+
+1. Open a 3D project, stage or select a recording, click **Update Curves**,
+   then generate a CPU **Camera Motion Preview** in balanced mode.
+2. Mark A and B from the scrubber or enter frame numbers, check **Limit
+   playback to A/B**, play with Loop checked. Playback should jump back to A,
+   with project-frame time and six-axis curve values updating. Uncheck Loop:
+   playback should stop on inclusive B.
+3. Choose a staged **recorded take** and click **Use Take Range**. Its exact
+   [start, end-1] should populate A and B; unrelated draft layers stay intact.
+4. Seek an interior frame and click **Open Frame in Curves**. Verify it opens
+   the matching frame (when curve diagnostics are fresh).
+5. Test with and without analyzed WAV; check audio synchronization at the A/B
+   wrap, pause/seek and one-frame ranges. Do not assume compressed GIF can
+   be sought: A/B review requires the sampled PNG frame player.
+6. Change editor FPS or frame count without regenerating the preview, then
+   attempt review: a mismatch warning should appear. Restore settings and
+   regenerate preview. Try mobile/narrow layout and saved-project reload.
+
+CI tests cover bounded looping, inclusive stop, sampled-frame mapping, API
+metadata validation and accessible review controls. A successful CI pass is
+not physical acceptance; wait for owner testing before MS5.2. Keep `main`
+untouched and draft PR #39 unmerged.
