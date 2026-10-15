@@ -125,7 +125,7 @@ verify no additional contribution. Test disabling a channel, adding a custom
 one, 24/30 FPS, phone layout, and existing manual cue editing. Confirm audio
 analysis errors are shown rather than silently changing camera tracks.
 
-## MS4: Continuous presets and recording improvements (MS4.1 / MS4.2 accepted; timeline cleanup pending Windows verification)
+## MS4: Continuous presets and recording improvements (MS4.1–MS4.3 accepted; MS4.4 physical gate pending)
 
 Morphorum already implements gentle drift, wave, spiral, figure-eight, rocking,
 push-in and pull-out native presets. MS4 should **reuse and extend** these,
@@ -158,7 +158,7 @@ Proposed testable batches:
   sound-channel layers, recordings, prompts, model and soundtrack are
   unchanged by staging. Automated tests cover axis/frame isolation, input
   validation, legacy preset compatibility and no-double-apply.
-- **MS4.3: Named custom presets (implemented; Windows physical gate pending).**
+- **MS4.3: Named custom presets (implemented; physically accepted).**
   Use **My Motion Presets** inside Continuous Camera Motion to save a named
   reusable template from the current editor, choose it again, load it into the
   editor, update its settings, or delete it. A named template includes native
@@ -173,9 +173,13 @@ Proposed testable batches:
   Refresh Library syncs from the server; the API validates every motion
   field and protects other layer types. These templates contain neither
   audio nor recordings, and do not change the native motion compiler.
-- **MS4.4: Recording integration and polish.** Reuse existing keyboard/touch
-  six-axis recording, improve optional controller mapping, add velocity-unit
-  help and configurable axis limits, and validate no abrupt segment jumps.
+- **MS4.4: Recording integration and polish (implemented; physical gate pending).**
+  Uses the existing native six-axis keyboard/touch/gamepad recorder and
+  frame-aligned punch-in splicer. Adds Standard/Swap Sticks controller layouts,
+  contextual per-frame and per-second sensitivity guidance, six project-owned
+  camera increment limits, and an adjustable 0–12-frame feather for transitions
+  inside a punch-in. No new recording engine, FPS conversion or independent
+  render schedule is introduced.
 
 Each batch must pass CI and owner physical tests before the next. Main remains
 untouched without explicit authorization.
@@ -467,3 +471,64 @@ name conflicts, invalid axes/values, corrupt library protection and the
 loading into the new-editor state, percentage-based frame scaling and
 non-destructive stage. Syntax/backend/installer GitHub Actions must pass,
 then Windows and mobile behavior must be physically verified before MS4.4.
+
+## MS4.3 acceptance and MS4.4 recording polish checkpoint (2026-10-15)
+
+The owner physically verified **MS4.3 My Motion Presets works as expected**.
+MS4.3 is accepted. MS4.4 is now implemented on `dev-webui`, awaiting
+physical verification. `main` remains unchanged; PR #39 remains draft.
+
+### MS4.4 implementation
+
+- **Optional gamepad layout:** Standard mapping retains left-stick translate
+  X/Y, right-stick look (yaw/pitch), triggers Z and shoulder buttons roll.
+  Swap Sticks reverses the two thumbsticks only. Axis invert checkboxes still
+  apply after all keyboard/touch/gamepad sources are combined. No controller
+  access is required; unavailable browser gamepads leave other inputs intact.
+- **Velocity units:** Recording sensitivity is a native **per-frame**
+  increment: X/Y/Z in scene units/frame, pitch/yaw/roll in degrees/frame.
+  A live hint shows equivalent peak movement per second at project FPS.
+  The actual movement is lower while easing, inside the deadzone or at partial
+  stick pressure, and later clips under the project safety limits.
+- **Project-specific axis limits:** A collapsible **Camera safety limits**
+  panel exposes the six existing `motion_lab.limits` values. Each input
+  validates finite values from 0.00001 to 30, preserves other axes, and marks
+  the project dirty; limits are not saved without **Save** or **Apply**.
+  Composition still enforces the already-existing native limit logic and
+  reports per-axis clipping in diagnostics. Limits control final composed
+  signals from **all** motion layers, not just recordings. Changing limits
+  does not destructively clamp raw sample rows in the saved recording.
+- **Punch-in transition feather:** A 0–12 frame option defaults to 3.
+  During a punch-in, the original take's armed axis samples are crossfaded
+  into the incoming interval using smoothstep near both ends. Unarmed axes,
+  frame 0, and all frames outside the punch window are unchanged. A value of
+  zero retains the previous exact hard replacement behavior. Short windows
+  may not reach 100% replacement when both feathers overlap.
+- Existing response easing, release tail, deterministic sample clock,
+  take undo/history, end-frame validation, armed-axis restrictions, and
+  protection against incomplete punch-ins remain intact.
+
+### Physical acceptance checklist
+
+1. Load a 3D project and inspect **Live Motion Recording**. Confirm the
+   safety limits display the project defaults, the sensitivity hint reflects
+   project FPS, and touch/keyboard recording still makes a draft take.
+2. Enable gamepad if available. Try **Standard** and **Swap Sticks**; verify
+   that only translation/look sticks swap, while Z and Roll remain on the
+   triggers/shoulder buttons. Without a controller, verify keyboard/touch.
+3. Set a smaller Move X or Yaw limit (e.g., 0.015 scene units/frame and
+   0.15 degrees/frame). Confirm the Editor reports unsaved settings.
+   Preview existing layers and check per-axis clipping diagnostics. Save or
+   Apply and reopen; limits should persist. Restore preferred limits afterward.
+4. Record a long take with movement on X and yaw. Punch into a short middle
+   frame range on X only. With feather set to 3, verify the edges join more
+   gently, yaw and outside frames remain unchanged, and Undo restores the
+   original take. Test feather 0 for exact replacement. A punch-in must
+   still complete its entire selected interval to be committed.
+5. Recheck phone-width layout, axis inversion, release tail, optional
+   gamepad security messaging, and unchanged soundtrack/audio layers.
+
+**CI gate:** Node recorder frame-clock and punch-in tests run from Syntax
+checks; Python recording/camera composition tests run in Backend tests;
+installer checks remain required. Do not begin MS5 or merge PR #39 before
+physical approval of MS4.4.
