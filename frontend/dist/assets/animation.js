@@ -5195,6 +5195,7 @@
     let panel = qs('#animation-audio-motion-director');
     const waveform = qs('#animation-audio-stereo-timeline');
     if (!waveform || !motionLabAudioAnalysis) return;
+    if (panel) panel.hidden = false;
     if (!panel) {
       panel = document.createElement('section');
       panel.id = 'animation-audio-motion-director';
@@ -5234,7 +5235,6 @@
         '<p data-beat-summary class="muted">Review candidate hits before assigning.</p></details>' +
         '<p class="muted">Cues save with this WAV. Save cues, then Preview camera cues or Apply camera cues. Existing Motion Lab layers remain additive.</p>';
       waveform.after(panel);
-    panel.hidden = false;
       const options = panel.querySelector('[data-cue-preset]');
       for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
         const option = document.createElement('option');
