@@ -64,14 +64,46 @@ navigation, waveform zoom/seek, markers, Find Beats, and video/audio export.
 Existing project media and imported motion must still work. Do not promote
 MS1/MS2 to main before this gate passes.
 
-## MS3: Independent sound channels (not implemented)
+## MS3: Independent sound channels (MS3a integrated; physical acceptance pending)
 
-Add DMS-inspired Bass/Snare/Crash/custom channels with per-channel frequency
-bands, thresholds, transient/intensity/ripple modes, attack/return,
-strength, offsets, active intervals, overlap and non-drifting pulse math.
-Offer cached analysis and per-channel recalculation. Keep manual cues and
-raw events independent. Include a readable spectrum display and optional
-channel-from-peak controls after the core channel engine is stable.
+**MS3a now implemented** on `dev-webui`:
+
+- Visible **Independent Sound Channels** workspace inside Motion Studio with
+  Bass, Snare, Crash defaults and up to 8 editable custom channels.
+- Independent low/high frequencies, native camera axis, Hits/Intensity/Ripple
+  response, enable, strength, threshold, sensitivity, attack/release, cooldown,
+  start/end frame and signed offset for each channel.
+- On-demand, checksum-verified managed WAV FFT analysis per frequency range.
+  This never changes or uploads another copy of the soundtrack; the new
+  `POST /api/animation/projects/<id>/motion-lab/audio/<sha256>/bands`
+  endpoint analyzes the **saved** PCM WAV at the current project FPS and frame
+  count. Per-band results are normalized and cached for repeated previews.
+- One native, additive, source-bound `audio_channels` Motion Lab layer carries
+  up to eight separately editable channels. Re-stage replaces the existing
+  layer for that WAV, preventing doubling; unrelated manual cues, recordings,
+  camera base tracks, prompts and soundtrack remain untouched.
+- Explicit Stage, Preview Curves and Apply buttons. Apply uses the existing
+  camera-conflict/rebase protections. Channel editing resumes from the saved
+  layer when reopening a project WAV.
+- Hits use balanced attack/return pulses. Intensity and Ripple calculate
+  bounded camera **displacements** before converting to per-frame velocities;
+  all responses return to the original camera path with no persistent drift.
+- Windows/mobile responsive controls; CI tests cover input bounds, short and
+  corrupt WAV, overlap, additive composition, no-doubling, and API wiring.
+
+**MS3b still planned:** interactive per-band spectrum visualization, richer
+presets, detailed preview curves and sound-channel waveform overlays, enhanced
+audio analysis caching, instrument-aware labels and usability polish.
+Spectral targeting does **not** separate instrumental stems.
+
+**MS3 physical test gate:** open an existing 3D project with a saved WAV;
+inspect Motion Studio's Independent Sound Channels card. Start with Bass
+on Translation Z, Snare on Pitch, Crash on Roll; change one channel's
+frequency, threshold or response; Stage, Preview Curves, Apply, reopen the
+project and confirm settings and camera movement persist. Apply again to
+verify no additional contribution. Test disabling a channel, adding a custom
+one, 24/30 FPS, phone layout, and existing manual cue editing. Confirm audio
+analysis errors are shown rather than silently changing camera tracks.
 
 ## MS4: Continuous presets and recording improvements (not implemented)
 
@@ -134,3 +166,15 @@ the previously verified automated checks (613 passed, 1 skipped).
 Proceed with MS3 on `dev-webui` without merging the draft PR or changing
 `main`. Retain `dev-audio` as a reference checkpoint only.
 
+
+## MS3a source checkpoint (2026-10-15)
+
+The independent frequency-channel engine and WebUI are implemented on the
+permanent `dev-webui` branch, **not merged into `main`**. Draft PR #39
+continues as a review/test gate. Automated checks completed: **638 Python
+tests passed, 1 skipped**, successful Morphorum self-test, Syntax/browser
+regressions and Windows/Linux installer workflows. The accepted MS1/MS2
+foundation remains part of the branch.
+
+**Physical Windows and Android browser acceptance of MS3a is still pending.**
+MS3b spectrum and channel authoring polish, MS4/MS5/MS6 remain future work.
