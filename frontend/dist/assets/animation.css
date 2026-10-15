@@ -3059,3 +3059,58 @@ dialog#animation-deforum-dialog {
   .motion-studio-channel-fields { grid-template-columns:1fr; }
   .motion-studio-channel-actions { grid-template-columns:1fr; }
 }
+
+/* MS3b: accessible log-frequency and per-channel time-domain inspection. */
+.motion-studio-spectrum-panel, .motion-studio-response-panel {
+  min-width:0;
+  padding:12px;
+  display:grid;
+  gap:10px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--panel) 92%,transparent);
+}
+.motion-studio-spectrum-heading {
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:end;
+  min-width:0;
+}
+.motion-studio-spectrum-heading strong { flex:1 1 170px; }
+.motion-studio-spectrum-heading label {
+  flex:1 1 140px;
+  min-width:0;
+  display:grid;
+  gap:4px;
+}
+.motion-studio-spectrum-heading select { width:100%;min-width:0; }
+.motion-studio-spectrum-heading button { min-height:42px; }
+[data-ms3-spectrum-svg], [data-ms3-envelope-svg] {
+  width:100%;
+  height:auto;
+  display:block;
+  min-width:0;
+  border-radius:8px;
+  background:color-mix(in srgb,var(--panel) 88%,transparent);
+  color:var(--text);
+}
+[data-ms3-spectrum-svg] {
+  cursor:ew-resize;
+  touch-action:none;
+  user-select:none;
+}
+[data-ms3-spectrum-svg]:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
+[data-ms3-spectrum-caption], [data-ms3-envelope-status] {
+  overflow-wrap:anywhere;
+  font-size:.78rem;
+  line-height:1.45;
+}
+@media(max-width:640px) {
+  .motion-studio-spectrum-panel, .motion-studio-response-panel {padding:10px;}
+  .motion-studio-spectrum-heading label {flex:1 1 140px;}
+  .motion-studio-spectrum-heading button {flex:1 1 100%;min-height:44px;}
+}
