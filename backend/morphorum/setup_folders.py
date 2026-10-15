@@ -80,7 +80,7 @@ def _family_evidence(path: Path, kind: str) -> str | None:
         return "flux"
     if "sdxl" in filename or "sd_xl" in filename:
         return "sdxl"
-    raise ValueError("Unrecognized safetensors header")
+    return None
 
 
 def _candidates(root: Path, kind: str, *, recursive: bool) -> tuple[list[Path], int, bool]:
