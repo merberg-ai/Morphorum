@@ -46,3 +46,19 @@ feature rules may have additional breakpoints appropriate to their controls.
 Browser WebUI changes are integrated directly on `dev-webui`. Each accepted
 batch gets a descriptive checkpoint commit on that branch; `main` remains
 unchanged until deliberate promotion.
+
+## W1 checkpoint (2026-10-15)
+
+The first `dev-webui` batch separates shared, phone, tablet and desktop
+application-wide presentation without splitting HTML, JavaScript, or backend
+API behavior. Eleven phone media blocks were moved from `app.css` to
+`mobile.css`; tablet navigation and mid-width sizing were introduced;
+feature-owned responsive rules stayed with their components.
+
+Verification at checkpoint: source-level checks passed, including four new
+responsive contract tests and ten existing `frontend_dev_ui` assertions
+executed against the committed source in a lightweight test harness. Syntax
+and backend GitHub Actions are configured to run on `dev-webui` pushes.
+Full GitHub Actions results and physical Windows/Android viewport acceptance
+are **not yet independently verified**. Use this commit as the rollback
+point for the first batch; do not promote to `main` before visual acceptance.
