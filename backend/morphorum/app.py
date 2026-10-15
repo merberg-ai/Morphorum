@@ -124,6 +124,9 @@ from .system_info import (
 )
 
 from .setup_state import SetupStateError, SetupStateConflict, setup_status, update_setup
+from .setup_folders import (
+    SetupFolderError, SetupFolderConflict, inspect_folder, save_setup_folders,
+)
 
 BACKEND_ONLY = os.getenv("MORPHORUM_BACKEND_ONLY", "") == "1"
 
@@ -334,6 +337,45 @@ def api_setup_progress(request: Request, payload: dict[str, Any]) -> dict[str, A
         os.environ.pop("MORPHORUM_SETUP_WIZARD", None)
     return setup_status(forced=os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1",
                         backend_only=False)
+
+
+def _require_webui_setup_action(request: Request) -> None:
+    """Explicit same-origin browser-only configuration step."""
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=409, detail="Setup folder configuration requires WebUI mode.")
+    if request.headers.get("x-morphorum-setup") != "1":
+        raise HTTPException(status_code=403, detail="Setup action header required.")
+    origin = request.headers.get("origin")
+    if origin and origin.rstrip("/") != str(request.base_url).rstrip("/"):
+        raise HTTPException(status_code=403, detail="Setup requires a same-origin WebUI request.")
+    if request.headers.get("sec-fetch-site") == "cross-site":
+        raise HTTPException(status_code=403, detail="Cross-site setup requests are forbidden.")
+
+
+@app.post("/api/setup/folders/check")
+def api_setup_folder_check(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    _require_webui_setup_action(request)
+    try:
+        return inspect_folder(
+            family=payload.get("family"), kind=payload.get("kind"),
+            path=payload.get("path"),
+        )
+    except SetupFolderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/setup/folders/save")
+def api_setup_folder_save(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    _require_webui_setup_action(request)
+    try:
+        return save_setup_folders(
+            kind=payload.get("kind"), paths=payload.get("paths"),
+            expected=payload.get("expected"),
+        )
+    except SetupFolderConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SetupFolderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/settings")
