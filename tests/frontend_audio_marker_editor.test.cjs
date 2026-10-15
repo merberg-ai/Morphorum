@@ -7,7 +7,7 @@ const js = fs.readFileSync(path.join(__dirname, '..', 'frontend/dist/assets/anim
 const css = fs.readFileSync(path.join(__dirname, '..', 'frontend/dist/assets/animation.css'), 'utf8');
 
 test('DA3.1 edits a separate copy of detector events rather than analysis output', () => {
-  assert.match(js, /motionLabEditedEvents = \(analysis\.events\?\.events \|\| \[\]\)\.map\(e => \(\{\.\.\.e, enabled:true\}\)\)/);
+  assert.match(js, /const original = \(analysis\.events\?\.events \|\| \[\]\)\.map\(e => \(\{ \.\.\.e, enabled: true \}\)\)/);
   assert.match(js, /function motionLabEventChange\(action\)/);
   assert.match(js, /action === 'reset'/);
   assert.match(js, /action === 'remove'/);
