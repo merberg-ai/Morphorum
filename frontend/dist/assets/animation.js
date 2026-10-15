@@ -5770,6 +5770,7 @@
       layer.type !== 'audio_channels' && layer.type !== 'recording' &&
       layer.type !== 'keyframes' &&
       layer.id === motionStudioArrangementSelection &&
+      (layer.blend || 'add') === 'add' &&
       MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === layer.preset)) || null;
   }
   function motionStudioArrangementFields() {
@@ -5832,6 +5833,7 @@
   function motionStudioArrangementSelect(id) {
     const layer = motionLabDraftLayers.find(item => item.id === id &&
       item.type !== 'audio' && item.type !== 'recording' &&
+      (item.blend || 'add') === 'add' &&
       MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === item.preset));
     motionStudioArrangementSelection = layer?.id || '';
     motionStudioArrangementLoaded = '';
@@ -5886,7 +5888,7 @@
     if (seek) seek.max = String(count - 1);
     const layers = motionLabDraftLayers.filter(l => l.type === 'preset' ||
       (!l.type && MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === l.preset)));
-    const addLane = (label, start, end, selected, id, enabled) => {
+    const addLane = (label, start, end, selected, id, enabled, editable = true) => {
       const row = document.createElement('div');
       row.className = 'motion-studio-arrangement-lane';
       const title = document.createElement('span');
@@ -5905,17 +5907,24 @@
       bar.title = label + ': frame ' + start + ' through ' + (end-1) +
         '. Select to edit.';
       bar.setAttribute('aria-label',bar.title);
-      bar.addEventListener('click', () => motionStudioArrangementSelect(id));
+      if (editable) bar.addEventListener('click', () => motionStudioArrangementSelect(id));
+      else {
+        bar.disabled = true;
+        bar.title += ' This layer uses Replace; edit in Camera Motion Composer.';
+      }
       track.appendChild(bar);
       row.append(title,track);
       lanes.appendChild(row);
     };
     for (const layer of layers) {
+      const additive = (layer.blend || 'add') === 'add' &&
+        MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === layer.preset);
       addLane((layer.preset || 'preset').replaceAll('-',' ') +
-        (layer.enabled === false ? ' (disabled)' : ''),
+        (layer.enabled === false ? ' (disabled)' : '') +
+        (!additive ? ' (replace / composer)' : ''),
         Number(layer.start_frame),Number(layer.end_frame),
         layer.id === motionStudioArrangementSelection,
-        layer.id,layer.enabled !== false);
+        layer.id,layer.enabled !== false,additive);
     }
     const form = motionStudioArrangementFields();
     if (form) {
