@@ -5893,6 +5893,24 @@
     motionStudioArrangementLoaded = '';
     motionStudioRenderArrangement();
   }
+  function motionStudioArrangementRemove(id) {
+    if (!state.project || animationMode() !== '3d' || motionLabBusy) return;
+    const index = motionLabDraftLayers.findIndex(item =>
+      item.id === id && (item.type === 'preset' || !item.type) &&
+      MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === item.preset));
+    if (index < 0) return;
+    const [removed] = motionLabDraftLayers.splice(index, 1);
+    if (motionStudioArrangementSelection === id) {
+      motionStudioArrangementSelection = '';
+      motionStudioArrangementLoaded = '';
+      motionStudioArrangementResetFields();
+    }
+    commitMotionLabDraft();
+    motionLabNotify('Removed ' + removed.preset.replaceAll('-', ' ') +
+      ' from the motion draft. Apply to Animation to save the removal.');
+    toast('Movement removed',
+      'Removed from the draft. Undo is available in Camera Motion Composer.', 'success');
+  }
   function motionStudioArrangementSeek(frame) {
     const audio = motionLabAudioElement;
     if (!audio || motionLabAudioProjectId !== state.project?.id) return;
@@ -5968,6 +5986,18 @@
       }
       track.appendChild(bar);
       row.append(title,track);
+      if (editable) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'secondary-button compact motion-studio-arrangement-remove';
+        remove.textContent = 'Remove';
+        remove.title = 'Remove this staged movement from the draft (Undo available)';
+        remove.setAttribute('aria-label', 'Remove ' + label +
+          ', frames ' + start + ' through ' + (end-1));
+        remove.disabled = !state.project || animationMode() !== '3d' || motionLabBusy;
+        remove.addEventListener('click', () => motionStudioArrangementRemove(id));
+        row.appendChild(remove);
+      }
       lanes.appendChild(row);
     };
     for (const layer of layers) {
@@ -5980,15 +6010,13 @@
         layer.id === motionStudioArrangementSelection,
         layer.id,layer.enabled !== false,editable);
     }
-    const form = motionStudioArrangementFields();
-    if (form) {
-      const s = Math.max(0,Math.min(count-1,Number(form.start.value) || 0));
-      const e = Math.max(s+1,Math.min(count,Number(form.end.value) || count));
-      addLane('Unstaged selection',s,e,false,'',true);
-    }
+    // The input range is a form draft, not a real layer. Never show a phantom
+    // "Unstaged selection" lane that cannot be selected or removed.
     const caption = panel.querySelector('[data-ms4-lane-status]');
-    if (caption) caption.textContent = layers.length +
-      ' continuous layer(s) in the Motion Lab draft. Other audio, cue, curve and recorded layers are preserved.';
+    if (caption) caption.textContent = layers.length
+      ? layers.length + ' staged continuous movement(s) in the Motion Lab draft. ' +
+        'Select a bar to edit or Remove it. Other layer types are preserved.'
+      : 'No staged movements. Choose a preset and click + Stage Movement to add one.';
     motionStudioArrangementPlayhead();
   }
   function motionStudioRenderArrangement() {
