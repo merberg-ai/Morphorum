@@ -74,6 +74,11 @@ def detect_audio_events(
         return {"analysis_version": ANALYSIS_VERSION, "hop_ms": 1000 * hop / sample_rate,
                 "sample_rate": sample_rate, "channels": channels,
                 "duration_seconds": length / sample_rate, "events": []}
+    # SciPy reduces nperseg automatically on short tracks but retains the
+    # caller's old noverlap, which otherwise raises instead of analyzing a
+    # perfectly valid short project WAV. Bound both explicitly.
+    fft_size = min(fft_size, length)
+    hop = min(hop, max(1, fft_size // 2))
     freqs, times, transform = stft(
         mono, fs=sample_rate, window="hann", nperseg=fft_size,
         noverlap=fft_size - hop, boundary="zeros", padded=True,
