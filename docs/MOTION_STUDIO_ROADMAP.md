@@ -125,7 +125,7 @@ verify no additional contribution. Test disabling a channel, adding a custom
 one, 24/30 FPS, phone layout, and existing manual cue editing. Confirm audio
 analysis errors are shown rather than silently changing camera tracks.
 
-## MS4: Continuous presets and recording improvements (next stage)
+## MS4: Continuous presets and recording improvements (MS4.1 accepted, MS4.2 integration)
 
 Morphorum already implements gentle drift, wave, spiral, figure-eight, rocking,
 push-in and pull-out native presets. MS4 should **reuse and extend** these,
@@ -133,7 +133,7 @@ rather than copy them into a second composer or replace the camera engine.
 
 Proposed testable batches:
 
-- **MS4.1: Unified motion arrangement (implemented, CI/physical gate).**
+- **MS4.1: Unified motion arrangement (implemented, physically accepted).**
   A visible **Continuous Camera Motion** card in Motion Studio reuses the
   native Motion Lab preset engine and layer stack. It shows existing preset
   regions across the project frame timeline, synchronized audio playhead and
@@ -144,10 +144,20 @@ Proposed testable batches:
   reuse the current layer history and conflict-checked compositor. No audio
   or GPU rendering is required to edit continuous movement. MS4.1 uses
   **additive** movement only; axis-specific Replace belongs to MS4.2.
-- **MS4.2: Range-based Add/Replace.** Make it explicit whether a motion
-  pattern layers on the existing camera path or replaces motion on selected
-  axes inside a specified time range; avoid overwriting other axes, manual
-  cues, sound channels, original source image or project configuration.
+- **MS4.2: Range-based Add/Replace (implemented, physical gate pending).**
+  Select Add or Replace for a continuous preset and check only the camera
+  axes it should affect. The native Motion Lab compiler now accepts an
+  optional, strictly validated `axes` list on preset layers; existing
+  presets without that list retain their original behavior. Replace resets
+  only the selected axis increments, **only inside the selected frame range**,
+  respecting the existing layer order, project camera-base conflict policy and
+  per-axis safety limits. The 'Still / Clear Selected Axes' preset is exposed
+  in Replace mode. Editing an existing movement retains its ID and avoids
+  doubling layers. Save/reopen and native animation render use the same layer
+  data, not a separate preview renderer. Existing manual audio cues,
+  sound-channel layers, recordings, prompts, model and soundtrack are
+  unchanged by staging. Automated tests cover axis/frame isolation, input
+  validation, legacy preset compatibility and no-double-apply.
 - **MS4.3: Named custom presets.** Save and reload user-defined combinations,
   including axis mappings, strength and timing, with a clear distinction
   between a reusable preset and a project's saved motion layers.
@@ -328,3 +338,42 @@ Features to exercise in physical acceptance:
 **MS4.1 physical acceptance is pending.** Do not proceed to MS4.2 Replace
 modes until this gate is accepted. Keep draft PR #39 unmerged and `main`
 unchanged.
+
+## MS4.1 acceptance and MS4.2 / Audio Source layout checkpoint (2026-10-15)
+
+The project owner confirmed that **MS4.1 works as expected** on the physical
+Morphorum installation. MS4.1 is accepted.
+
+**MS4.2 implementation:** the existing continuous-motion editor now has an
+Add/Replace selector and a preset-aware checkbox group for camera axes.
+The native compiler filters a preset to those selected axes. The selected
+frame interval is unchanged and exclusive at the end; Replace does not
+clear camera motion outside the range, nor any unchecked axis. The user can
+stage, inspect curves, apply, reopen and edit the existing layer rather than
+creating duplicates. The existing ML0 Camera Motion Composer continues to
+work with legacy preset layers and their default full-preset axis set.
+
+**Audio Source layout improvement:** the real source controls (local WAV
+selector, saved-project soundtrack button, action buttons) are reparented as
+the first card directly below the Motion Studio introduction, above both the
+continuous-motion arrangement and Independent Sound Channels. No duplicate
+IDs or event handlers are introduced. The existing WAV and saved-soundtrack
+restore paths are unchanged.
+
+**MS4.2 physical test:**
+1. Open a saved-soundtrack 3D project. Confirm **Audio Source** appears first
+   and still loads the saved audio and/or local WAV successfully.
+2. In Continuous Camera Motion choose Wave, Add, only Move X. Stage and
+   preview. Other axes should retain their earlier movement.
+3. Change that same region to Replace, choose Move X and Y, adjust frame
+   range and preview. Motion on unchecked axes and outside the range should
+   be preserved.
+4. Choose Still / Clear Selected Axes in Replace mode for a short range,
+   select only Roll, and verify other five axes remain.
+5. Apply, reopen and reapply the same region, confirming mask/blend persistence
+   and that movement isn't doubled. Recheck audio-reactive layers and cues.
+6. Check phone-width layout and ensure the soundtrack source control remains
+   above the motion editors.
+
+MS4.2 is **not yet physically accepted**. Do not merge draft PR #39, modify
+`main`, or start MS4.3 until owner acceptance.
