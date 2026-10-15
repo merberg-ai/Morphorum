@@ -137,3 +137,40 @@ test('MS5.1 exposes accessible A/B review and take selection on preview panel',(
     assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
   }
 });
+
+test('MS5.1 A/B loop seeks analyzed WAV back to frame A and pauses cleanly',()=>{
+  const h=createPlayer();
+  const audio={
+    readyState:4,duration:30,paused:true,currentTime:0,playCalls:0,pauseCalls:0,
+    play(){this.paused=false;this.playCalls++;return Promise.resolve();},
+    pause(){this.paused=true;this.pauseCalls++;},
+  };
+  h.player.getAudio=()=>audio;
+  h.player.shouldSync=()=>true;
+  h.player.load({id:'audio',result:{fps:10,source_frames:80,
+    captured_frame_numbers:[0,20,40,60,79]}});
+  assert.ok(h.player.setReviewRange(20,29,true));
+  assert.equal(audio.currentTime,2);
+  h.player.play();
+  assert.equal(audio.currentTime,2);
+  assert.equal(audio.paused,false);
+  audio.currentTime=3.1; // Frame 31, two frames beyond inclusive B.
+  h.clock(3100);
+  assert.equal(h.player.frame,21);
+  assert.equal(audio.currentTime,2.1);
+  assert.ok(audio.playCalls>=2);
+  h.player.pause();
+  assert.equal(audio.paused,true);
+});
+
+test('MS5.1 integration compares preview against Editor FPS and frame count',()=>{
+  const js=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets','animation.js'),'utf8');
+  assert.match(js,/function motionReviewMatch\(\)/);
+  assert.match(js,/frames!==player\.count\|\|Math\.abs\(fps-player\.fps\)>1e-6/);
+  assert.match(js,/function motionReviewTakeRange\(\)/);
+  assert.match(js,/motionReviewSet\(layer\.start_frame,layer\.end_frame-1,true\)/);
+  assert.match(js,/function motionReviewOpenCurves\(\)/);
+  assert.match(js,/motionLabVisual\.setFrame\(frame\)/);
+  assert.match(js,/motionReviewBind\(\)/);
+  assert.match(js,/function motionReviewFrame\(\{frame,fps,frames,previewSampleFrame\}\)/);
+});
