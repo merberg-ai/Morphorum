@@ -6195,8 +6195,11 @@
   async function ms43Delete() {
     const p = ms43Selected();
     if (!p || ms43Busy || !state.project || animationMode() !== '3d' || motionLabBusy) return;
-    if (!window.confirm('Delete saved preset "'+p.name+
-      '"? Existing project motion layers remain unchanged.')) return;
+    if (!(await window.MorphorumDialog.confirm({
+      title:'Delete saved custom preset?',
+      message:'Remove "'+p.name+'" from the shared library? Existing project motion layers remain unchanged.',
+      variant:'danger',confirmText:'Delete Preset',cancelText:'Keep Preset',
+    }))) return;
     ms43Busy = true;
     ms43Controls();
     try {
