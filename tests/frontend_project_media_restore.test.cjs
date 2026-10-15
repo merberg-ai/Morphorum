@@ -33,6 +33,10 @@ function makeContext(project, api) {
   const program = `
     let motionLabAudioAnalysis = null, motionLabAudioProjectId = null;
     let motionLabAudioElement = null, motionLabAudioUrl = null;
+    async function motionStudioHydrateEdits() { return true; }
+    function motionStudioConnectAudioTransport() {}
+    function motionLabStereoWaveform() {}
+    function motionDirectorPanel() {}
     ${source.slice(begin, end)}
     this.restoreProjectMedia = restoreProjectMedia;
     this.mediaState = () => projectMedia;
