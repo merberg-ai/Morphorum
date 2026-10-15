@@ -35,7 +35,7 @@ test('DA3.3 timeline view and editing history stay integrated', () => {
 });
 
 test('Parseq-inspired layout places source and actions before waveform, controls after', () => {
-  assert.match(js, /analysisWorkspace\.prepend\(audioSourceDock\)/);
+  assert.match(js, /audioIntro\.after\(audioSourceDock\)/);
   assert.match(js, /audioSourceDock\.appendChild\(audioActions\)/);
   assert.match(js, /panels\.audio\.appendChild\(audioCard\)/);
   assert.match(js, /data-wave-left-time/);
