@@ -4703,10 +4703,13 @@
     const axis = index => Number.isFinite(Number(pad.axes?.[index])) ? Number(pad.axes[index]) : 0;
     const button = index => Number.isFinite(Number(pad.buttons?.[index]?.value))
       ? Number(pad.buttons[index].value) : 0;
-    values.translation_x += axis(0);
-    values.translation_y += -axis(1);
-    values.rotation_y += axis(2);
-    values.rotation_x += -axis(3);
+    const swapped = qs('#animation-motion-lab-gamepad-profile')?.value === 'swapped';
+    const moveStick = swapped ? 2 : 0;
+    const lookStick = swapped ? 0 : 2;
+    values.translation_x += axis(moveStick);
+    values.translation_y += -axis(moveStick + 1);
+    values.rotation_y += axis(lookStick);
+    values.rotation_x += -axis(lookStick + 1);
     values.translation_z += button(7) - button(6);
     values.rotation_z += button(5) - button(4);
     if ([...pad.axes || [], button(4),button(5),button(6),button(7)]
@@ -7409,6 +7412,41 @@
     motionLabNotify('Audio motion draft layer added. Preview Curves before Apply.');
     void motionLabPreviewOrApply(false,{curvesOnly:true});
   }
+  const MOTION_RECORD_DEFAULT_LIMITS = {
+    translation_x:.12, translation_y:.12, translation_z:.12,
+    rotation_x:2, rotation_y:2, rotation_z:2,
+  };
+  function motionLabSyncRecordingLimits() {
+    const limits = state.project?.motion_lab?.limits || {};
+    qsa('[data-motion-record-limit]').forEach(input => {
+      const axis = input.dataset.motionRecordLimit;
+      input.value = String(limits[axis] ?? MOTION_RECORD_DEFAULT_LIMITS[axis]);
+    });
+    const status = qs('#animation-motion-record-limits-status');
+    if (status) status.textContent = 'Limits loaded from project (translation: units/frame, rotation: degrees/frame).';
+  }
+  function motionLabChangeRecordingLimit(input) {
+    if (!state.project || motionLabBusy || motionLabRecorder?.active) return;
+    const axis = input.dataset.motionRecordLimit;
+    if (!(axis in MOTION_RECORD_DEFAULT_LIMITS)) return;
+    const value = Number(input.value);
+    if (!input.value.trim() || !Number.isFinite(value) ||
+        value < .00001 || value > 30) {
+      input.value = String(state.project.motion_lab?.limits?.[axis] ??
+        MOTION_RECORD_DEFAULT_LIMITS[axis]);
+      toast('Invalid safety limit','Choose a value between 0.00001 and 30.','warning');
+      return;
+    }
+    const lab = state.project.motion_lab || {};
+    state.project.motion_lab = {
+      ...lab, limits: {
+        ...MOTION_RECORD_DEFAULT_LIMITS, ...(lab.limits || {}), [axis]:value,
+      },
+    };
+    const status = qs('#animation-motion-record-limits-status');
+    if (status) status.textContent = 'Project safety limits changed. Save or Apply to persist them.';
+    markDirty({validate:false});
+  }
   function motionLabRecordingUi() {
     const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
     const active = Boolean(motionLabRecorder?.active);
@@ -7430,12 +7468,20 @@
           control.disabled = !ready || active;
           return;
         }
-        if (control.matches('[data-motion-record-axis], [data-motion-record-invert]') ||
+        if (control.matches('[data-motion-record-axis], [data-motion-record-invert], [data-motion-record-limit]') ||
             control.closest('.animation-motion-recording-controls')) {
           control.disabled = !ready || active;
         }
       });
     motionLabPunchUi();
+    const units = qs('#animation-motion-record-unit-help');
+    const fps = Number(state.project?.animation?.fps || 24);
+    const move = Number(qs('#animation-motion-lab-record-translation')?.value || .025);
+    const angle = Number(qs('#animation-motion-lab-record-rotation')?.value || .5);
+    if (units) units.textContent = 'Sensitivity is per frame. At ' + fps +
+      ' FPS, full input is up to ' + (move * fps).toFixed(3) +
+      ' scene units/second or ' + (angle * fps).toFixed(2) +
+      ' degrees/second before smoothing and safety limits.';
     if (!state.project) motionLabRecordStatus('Select a project');
     else if (animationMode() !== '3d') motionLabRecordStatus('3D Motion required');
     else if (!active) motionLabRecordStatus('Ready');
@@ -7489,7 +7535,8 @@
           throw new Error('Target take changed during recording. No edits were applied.');
         }
         motionLabDraftLayers[context.index] =
-          window.MorphorumMotionLabSplicePunchIn(existing, take);
+          window.MorphorumMotionLabSplicePunchIn(existing, take,
+            {featherFrames:context.featherFrames});
       } catch (error) {
         motionLabRecorder = null;
         motionLabNotify('Punch-in canceled: ' + (error?.message || String(error)));
@@ -7548,6 +7595,7 @@
     const deadzone = Number(qs('#animation-motion-lab-record-deadzone')?.value);
     const response = Number(qs('#animation-motion-lab-record-response')?.value);
     const tailFrames = Number(qs('#animation-motion-lab-record-tail')?.value);
+    const featherFrames = Number(qs('#animation-motion-lab-punch-feather')?.value);
     let punch = null;
     if (isPunch) {
       const raw = qs('#animation-motion-lab-punch-target')?.value;
@@ -7561,7 +7609,8 @@
         motionLabNotify('Punch-in requires a recorded target, matching FPS, an interval inside it and axes armed on that take.');
         return;
       }
-      punch = {index, id:target.id, snapshot:JSON.stringify(target), endFrame};
+      punch = {index, id:target.id, snapshot:JSON.stringify(target), endFrame,
+        featherFrames};
     }
 
     if (!Number.isInteger(startFrame) || startFrame < 0 || startFrame >= count ||
@@ -7569,7 +7618,8 @@
         !Number.isFinite(rotationScale) || rotationScale <= 0 ||
         !Number.isFinite(deadzone) || deadzone < 0 || deadzone > .5 ||
         !Number.isFinite(response) || response < .05 || response > 1 ||
-        !Number.isInteger(tailFrames) || tailFrames < 0 || tailFrames > 12) {
+        !Number.isInteger(tailFrames) || tailFrames < 0 || tailFrames > 12 ||
+        !Number.isInteger(featherFrames) || featherFrames < 0 || featherFrames > 12) {
       motionLabNotify('Check recording start, sensitivity, deadzone, response and release-tail settings.');
       return;
     }
@@ -7718,6 +7768,7 @@
     motionLabHistory = [motionLabDraftLayers.map(layer => ({ ...layer }))];
     motionLabHistoryIndex = 0;
     motionLabVisual?.clear();
+    motionLabSyncRecordingLimits();
     renderMotionLabDraft();
   }
   function renderMotionLabDraft() {
@@ -9270,6 +9321,13 @@
       showRender(event.target.value);
     });
 
+    qsa('[data-motion-record-limit]').forEach(input => {
+      input.addEventListener('change', () => motionLabChangeRecordingLimit(input));
+    });
+    for (const id of ['animation-motion-lab-record-translation',
+      'animation-motion-lab-record-rotation']) {
+      qs('#' + id)?.addEventListener('change', motionLabRecordingUi);
+    }
     window.addEventListener('keydown', event => {
       if (!motionLabRecorder?.active || !MOTION_RECORD_KEYMAP[event.code]) return;
       if (event.repeat) return;
