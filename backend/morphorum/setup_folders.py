@@ -50,13 +50,13 @@ def _family_evidence(path: Path, kind: str) -> str | None:
             with path.open("rb") as handle:
                 size_bytes = handle.read(8)
                 if len(size_bytes) != 8:
-                    return None
+                    raise ValueError("Unrecognized safetensors header")
                 length = struct.unpack("<Q", size_bytes)[0]
                 if length < 2 or length > MAX_HEADER_BYTES:
-                    return None
+                    raise ValueError("Unrecognized safetensors header")
                 header = json.loads(handle.read(length))
             if not isinstance(header, dict):
-                return None
+                raise ValueError("Unrecognized safetensors header")
             meta = header.get("__metadata__") or {}
             info = " ".join(str(meta.get(k, ""))[:250] for k in (
                 "ss_base_model_version", "base_model", "baseModel", "modelspec.architecture",
@@ -80,7 +80,7 @@ def _family_evidence(path: Path, kind: str) -> str | None:
         return "flux"
     if "sdxl" in filename or "sd_xl" in filename:
         return "sdxl"
-    return None
+    raise ValueError("Unrecognized safetensors header")
 
 
 def _candidates(root: Path, kind: str, *, recursive: bool) -> tuple[list[Path], int, bool]:
