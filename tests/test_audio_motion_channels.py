@@ -71,7 +71,7 @@ def test_two_same_axis_channels_sum_exactly():
 
 
 @pytest.mark.parametrize("field,value", [
-    ("axis", "yaw"), ("low_hz", 100), ("high_hz", 40),
+    ("axis", "yaw"), ("low_hz", 150), ("high_hz", 40),
     ("threshold", float("nan")), ("envelope", [0.] * 4),
     ("attack_frames", 0), ("strength", 2), ("enabled", "true"),
     ("mode", "noise"), ("offset_frames", 5000),
