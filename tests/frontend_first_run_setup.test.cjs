@@ -14,7 +14,7 @@ function harness(serverStatus){
   const calls=[];
   const status=()=>({...serverStatus});
   const element=id=>({
-    id,hidden:id!=='first-run-overlay',textContent:'',disabled:false,children:[],
+    id,hidden:true,textContent:'',disabled:false,children:[],
     listeners:{},appendChild(child){this.children.push(child);},
     replaceChildren(){this.children=[];},
     addEventListener(name,cb){this.listeners[name]=cb;},
