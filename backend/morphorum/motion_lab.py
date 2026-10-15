@@ -358,6 +358,19 @@ def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any
         preset = str(raw.get("preset", "")).strip().lower()
         if preset not in PRESETS:
             raise MotionLabError(f"Layer {index + 1} has an unsupported preset: {preset}.")
+        # Optional axis mask permits Replace of ONLY selected axes within this
+        # layer's frame interval. Legacy presets omit axes and remain identical.
+        mask = raw.get("axes")
+        if mask is not None:
+            if (not isinstance(mask, list) or not mask or
+                len(mask) != len(set(str(axis) for axis in mask)) or
+                any(not isinstance(axis, str) or axis not in PRESET_AXES[preset]
+                    for axis in mask)):
+                raise MotionLabError(
+                    f"Layer {index + 1} axes must be a nonempty unique subset "
+                    f"of the {preset} preset axes."
+                )
+            mask = [axis for axis in AXES if axis in mask]
         output.append({
             "id": str(raw.get("id") or f"layer-{index + 1}")[:64],
             "type": "preset",
@@ -369,6 +382,7 @@ def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any
             "strength": _number(raw.get("strength", 0.5), "Layer strength", 0, 1),
             "cycle_seconds": _number(raw.get("cycle_seconds", 8), "Cycle seconds", 0.2, 600),
             "fade_seconds": _number(raw.get("fade_seconds", 0.5), "Fade seconds", 0, 120),
+            **({"axes": mask} if mask is not None else {}),
         })
     if len({item["id"] for item in output}) != len(output):
         raise MotionLabError("Motion layer IDs must be unique.")
@@ -645,6 +659,9 @@ def compile_motion_lab(
                           if track[frame]}
             else:
                 values = _preset_frame(layer, frame, fps)
+                if "axes" in layer:
+                    values = {axis: delta for axis, delta in values.items()
+                              if axis in layer["axes"]}
             for axis, delta in values.items():
                 if layer["blend"] == "replace":
                     signals[axis][frame] = delta
