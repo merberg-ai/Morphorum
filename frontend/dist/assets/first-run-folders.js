@@ -5,6 +5,7 @@
   const LABELS = {sdxl:'SDXL', flux:'FLUX', zimage:'Z-Image'};
   const cache = {};
   let currentView = null;
+  let renderGeneration = 0;
   const tags = (tag, className, label) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -199,13 +200,15 @@
   }
   async function render(container,kind) {
     if(!FAMILIES[kind]) return;
+    const generation=++renderGeneration;
     container.replaceChildren();
     append(container,tags('p','first-run-note','Loading existing host folder settings…'));
     try {
       const state=await getState(kind);
-      if (currentView && currentView.container !== container) return;
+      if (generation !== renderGeneration) return;
       build(container,kind,state);
     } catch(error) {
+      if (generation !== renderGeneration) return;
       container.replaceChildren();
       append(container,tags('p','first-run-folder-report','Could not load folder settings: '+error.message));
       toast('Setup folders unavailable',error.message,'error');
@@ -218,6 +221,29 @@
     if(modified(state)) throw new Error('There are unsaved folder edits. Use Save Folders & Scan, or remove/revert those edits before continuing.');
     return true;
   }
-  function reset(){delete cache.models;delete cache.loras;currentView=null;}
-  window.MorphorumSetupFolders={render,beforeNext,reset};
+  async function welcome(container) {
+    const details = tags('p','first-run-note','Checking host installation diagnostics…');
+    append(container,details);
+    try {
+      const info = await api('/api/system');
+      const disk = (info.checks || []).find(c => c.name === 'disk space');
+      const cuda = (info.checks || []).find(c => c.name === 'CUDA');
+      const devices = info.gpu?.devices || [];
+      const gpu = devices.length ? devices.map(d => d.name).join(', ')
+        : 'No NVIDIA GPU detected (generation may be unavailable or slower)';
+      details.textContent = 'Morphorum ' + (info.version || 'unknown version') +
+        ' · ' + (info.platform || 'Unknown platform') +
+        ' · GPU: ' + gpu +
+        ' · CUDA: ' + (cuda ? (cuda.ok ? 'available' : 'unavailable') : 'not reported') +
+        ' · Storage: ' + (disk?.detail || 'not available');
+      if(!info.ok) append(container,
+        tags('p','first-run-folder-report',
+          'Some host checks need attention. You can continue configuring folders; review system diagnostics before attempting generation.'));
+    } catch(error) {
+      details.textContent='Installation diagnostics unavailable: '+error.message+
+        '. You can still configure model directories.';
+    }
+  }
+  function reset(){delete cache.models;delete cache.loras;currentView=null;renderGeneration++;}
+  window.MorphorumSetupFolders={render,beforeNext,reset,welcome};
 })();
