@@ -31,7 +31,7 @@ from .animation_projects import (
 from .project_assets import (
     ProjectAssetError, ProjectAssetTooLarge, catalog as project_asset_catalog,
     read_bounded, source_descriptor, soundtrack_descriptor, soundtrack_path,
-    motion_wav_descriptor, motion_wav_path,
+    motion_wav_descriptor, motion_wav_path, catalog_with_warnings as project_media_catalog,
 )
 from .animation_motion import SOURCE_MAX_BYTES
 from .imported_soundtrack import MAX_IMPORT_AUDIO_BYTES
@@ -894,8 +894,8 @@ def api_hybrid_frame_file(project_id: str, frame_number: int):
 def api_project_assets(project_id: str) -> dict[str, Any]:
     """DB2.3 read-only project-owned media catalog. No server file paths."""
     try:
-        load_animation_project(project_id)
-        return {"schema_version": 1, "assets": project_asset_catalog(project_id)}
+        project = load_animation_project(project_id)
+        return project_media_catalog(project_id, project)
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ProjectAssetError as exc:
@@ -921,6 +921,29 @@ def api_download_attached_soundtrack(project_id: str):
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio/{sha256}/analysis")
+def api_restore_motion_lab_audio_analysis(project_id: str, sha256: str) -> dict[str, Any]:
+    """Reanalyze a verified project-owned WAV for the currently saved FPS/frames.
+
+    A browser reopening the project must not need to re-upload its local file.
+    This uses the same bounded decoder as the original analysis endpoint.
+    """
+    try:
+        project = load_animation_project(project_id)
+        path = motion_wav_path(project_id, sha256)
+        animation = project.get("animation") or {}
+        result = analyze_managed_wav(
+            project_id, path.read_bytes(),
+            fps=float(animation.get("fps", 12)),
+            frames=int(animation.get("max_frames", 120)),
+        )
+        return {"status": "analyzed", "analysis": result}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (ProjectAssetError, AudioMotionError, OSError, ValueError, OverflowError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
