@@ -74,6 +74,28 @@ def test_legacy_install_without_marker_is_never_forced(isolated, prior):
         selected / "project.json").read_bytes()) == before
 
 
+def test_interrupted_install_cannot_be_forced_into_wizard(isolated):
+    path, _, _, _ = isolated
+    prepared = setup.prepare_install()
+    assert prepared["ready"] is False
+    state = setup.setup_status(forced=True)
+    assert state["status"] == "not_started"
+    assert state["ready"] is False
+    assert state["show_wizard"] is False
+    with pytest.raises(setup.SetupStateError, match="incomplete"):
+        setup.update_setup(action="advance", step="modes",
+                           revision=prepared["revision"], forced=True)
+    assert json.loads(path.read_text(encoding="utf-8")) == prepared
+
+
+def test_legacy_override_is_read_only_until_explicit_progress(isolated):
+    path, _, _, _ = isolated
+    first = setup.setup_status(forced=True)
+    second = setup.setup_status(forced=True)
+    assert first["show_wizard"] and second["show_wizard"]
+    assert not path.exists(), "Forced launch alone cannot change the disk"
+
+
 def test_progress_resume_skip_and_optimistic_revision(isolated):
     path, _, _, _ = isolated
     setup.prepare_install()
