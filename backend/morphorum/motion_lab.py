@@ -300,6 +300,27 @@ def normalize_layers(layers: Any, project: dict[str, Any]) -> list[dict[str, Any
                 raw, index=index, count=count, start=start, end=end, mode=mode,
             ))
             continue
+        if kind == "audio_channels":
+            from .audio_motion_channels import validate_channel_document, compile_channel_tracks
+            from .audio_motion import AudioMotionError
+            try:
+                document = validate_channel_document(raw.get("channel_document"), fps=fps, frames=count)
+                if raw.get("sha256") != document["source_sha256"]:
+                    raise AudioMotionError("Channel layer WAV source hash mismatch.")
+                if mode != "add":
+                    raise AudioMotionError("Audio channel layers must use additive blending.")
+                velocities = compile_channel_tracks(document, fps=fps, frames=count)
+            except AudioMotionError as exc:
+                raise MotionLabError(str(exc)) from exc
+            output.append({
+                "id": str(raw.get("id") or f"layer-{index + 1}")[:64],
+                "type": "audio_channels", "enabled": raw.get("enabled", True) is True,
+                "blend": "add", "start_frame": start, "end_frame": end,
+                "sha256": document["source_sha256"],
+                "name": str(raw.get("name") or "Audio sound channels")[:96],
+                "channel_document": document, "velocities": velocities,
+            })
+            continue
         if kind == "audio_cues":
             from .audio_motion_cues import validate_cues
             from .audio_motion_presets import cue_velocity_tracks
@@ -619,7 +640,7 @@ def compile_motion_lab(
             elif layer["type"] == "audio":
                 pulse = layer["pulses"][frame - layer["start_frame"]]
                 values = {layer["axis"]: pulse} if pulse else {}
-            elif layer["type"] == "audio_cues":
+            elif layer["type"] in ("audio_cues", "audio_channels"):
                 values = {axis: track[frame] for axis, track in layer["velocities"].items()
                           if track[frame]}
             else:
