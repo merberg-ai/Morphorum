@@ -184,7 +184,7 @@ Proposed testable batches:
 Each batch must pass CI and owner physical tests before the next. Main remains
 untouched without explicit authorization.
 
-## MS5: Synchronized preview and render/refine (MS5.1 accepted; MS5.2 physical gate pending)
+## MS5: Synchronized preview and render/refine (MS5.1 / MS5.2 accepted; MS5.3 physical gate pending)
 
 - **MS5.1: Project-frame A/B review (physically accepted).**
   Reuse the existing CPU camera preview frame player and sampled PNGs, plus
@@ -197,8 +197,8 @@ untouched without explicit authorization.
   project-frame time stays accurate even if preview quality is low.
   Guard against project FPS/frame-count mismatches, stale curves and corrupt
   preview sample maps. No project, take or render output is modified by review.
-- **MS5.2: synchronized split view and completed-render review (implemented;
-  physical gate pending).** The existing frame player now displays the sampled
+- **MS5.2: synchronized split view and completed-render review (physically
+  accepted).** The existing frame player now displays the sampled
   CPU preview beside the **exact stored PNG** for the same project frame.
   Select a render from the current project's saved render history and click
   **Compare Render**. A new read-only API examines its frozen manifest and
@@ -211,10 +211,24 @@ untouched without explicit authorization.
   stack on small screens and show a single wide CPU view if no comparison
   is active. The actual historical render may differ from the current
   project motion and seed; this is inspection, not proof of equivalent inputs.
-- **MS5.3: ranged correction/refinement workflow (planned).**
-  Improve selection of a bounded recorded take interval, reuse punch-in and
-  curve editing, stage corrections and review differences before Apply. Define
-  any render-range/refine integration separately with conflict protection.
+- **MS5.3: ranged correction/refinement workflow (implemented, physical
+  gate pending).** The A/B Motion Review now offers non-destructive handoff
+  to **Continuous Camera Motion** and **Live Motion Recording** for an exact
+  inclusive [A, B] interval, converting safely to the destination editors'
+  exclusive end frame B+1. Continuous correction is always a **new** edit
+  region and cannot overwrite a previously selected staged preset.
+  Punch-in requires a selected recorded take whose range and FPS contain
+  the entire A/B interval; its arming mask is restricted to recorded axes
+  and normal feather/target snapshot/incomplete-take protections apply.
+  Neither handoff stages a layer or begins recording automatically.
+  **Capture Before Curves** and **Compare Draft Curves** reuse native
+  non-mutating Motion Lab preview compilation and report per-axis changed
+  frames and peak absolute changes inside A/B, plus counts of unexpected
+  changes outside. Only explicit **Apply to Animation** saves a correction.
+  On MS5.2's Preview panel, checkbox sizes are now capped at 16px so A/B
+  and Loop controls cannot expand to giant toggles in inherited layouts.
+  No selective re-render of old diffusion output is implied by this stage;
+  that would require its own separate backend contract and confirmation.
 - **MS5.4: final playback/polish physical gate (planned).**
   Check audio end/loop edges, project reload and multi-FPS timing, missing
   soundtrack, interrupted renders, and phone-width controls.
@@ -667,3 +681,75 @@ invalidates in-flight metadata responses.
 CI covers Python manifest completeness, invalid/missing PNGs, render identity,
 frontend stale-response guards, matching render-frame URLs and responsive
 markup. Physical acceptance is required **before MS5.3**.
+
+## MS5.2 acceptance and MS5.3 ranged correction checkpoint (2026-10-15)
+
+The project owner reported MS5.2 **working as expected**, and requested a
+fix for a giant checkbox under **Compare saved render**. MS5.2 is accepted.
+
+The MS5.3 pass is implemented on `dev-webui`, awaiting Windows physical
+verification. The checkbox fix sizes all checkboxes within the existing CPU
+Preview frame player at 16 × 16 CSS pixels, with fixed flex/min/max sizing
+and native browser appearance. This specifically covers **A/B enabled** and
+the preview playback **Loop** control without affecting range sliders or
+other app-wide control styles.
+
+### Ranged correction workflow
+
+1. Open a **3D** project, **Update Curves**, and generate a matching CPU
+   preview. Enable A/B and choose the exact inclusive region (e.g. A=30,
+   B=55), then optionally select a recorded draft take.
+2. To measure changes, click **Capture Before Curves**. This performs a
+   non-mutating Motion Lab preview compilation and stores baseline six-axis
+   series in memory for the selected project, FPS and frame interval.
+3. Click **Prepare Continuous Correction** to open the existing Continuous
+   Camera Motion editor in Audio Motion. The new movement form gets
+   `start_frame=A` and `end_frame=B+1`, with the old selected layer
+   cleared so staging **cannot silently overwrite it**. Set a native preset,
+   axes and Add/Replace, and explicitly click **+ Stage Movement**.
+4. Alternatively, select a recorded take containing the entire A/B
+   interval at matching FPS and click **Prepare Recording Punch-in**. The
+   existing Live Recording editor opens with Punch-in mode, the target
+   take's draft index, exact start/exclusive end and only recorded axes
+   armed. The user must explicitly press Record and finish every frame.
+   Native target-snapshot conflict protection, optional feather and Undo
+   remain the source of truth; no duplicate punch algorithm is introduced.
+5. Return to Preview and click **Compare Draft Curves**. It compiles current
+   Motion Lab draft curves again without applying them and reports changed
+   frame counts and peak |delta| by axis **within** A/B, plus any changes
+   **outside** A/B. This is a numerical trajectory comparison, **not**
+   a diffusion render comparison and not a guarantee that later layers
+   cannot affect a saved render. Review spillover and Undo any unwanted
+   changes using Motion Lab history.
+6. Click **Apply to Animation** only when satisfied. Any actual re-rendering
+   or partial replacement of a completed diffusion render is **not**
+   included in MS5.3 and remains explicitly out of scope.
+
+If a project, FPS, frame count or selected interval changes, capture a new
+baseline before comparing. The baseline is discarded whenever the CPU
+preview is cleared/replaced or the project switches. Comparison guards
+against invalid ranges, 2D projects, active recording, busy Motion Lab,
+missing target, mismatched FPS, and non-finite curves. Source images,
+soundtrack, render output and existing project layers are untouched until
+explicit user staging/recording and application.
+
+### MS5.3 Windows physical verification
+
+- Confirm the former oversized checkbox under Compare saved render is
+  normal-sized (16px) on both desktop and mobile; Loop and A/B checkboxes
+  remain easy to click, and the timeline slider retains full width.
+- Select A=30, B=55 and prepare Continuous Correction. Verify the editor
+  opens as New Movement with frames 30–55 inclusive (end exclusive 56).
+  Prior staged motion stays unchanged until Stage Movement is clicked.
+- Capture Before Curves, stage a narrow axis Replace correction, then
+  Compare Draft Curves: only expected axis/frames should differ; non-zero
+  outside-frame changes should be called out explicitly. Undo and recheck.
+- Select a recorded take and prepare a contained A/B punch-in. Verify
+  target, armed axes, start, exclusive end, optional feather, and that
+  recording does not auto-start. Reject out-of-bounds or different-FPS
+  target; incomplete punch-in must not alter original take.
+- Recheck with WAV soundtrack, split saved render enabled, 12/24/30 FPS,
+  narrow/mobile layout, and project switch. Neither saved render PNG nor
+  project camera schedules should change without explicit Apply.
+- Do **not** move to MS5.4 or merge draft PR #39 until physical acceptance
+  and passing Syntax, Backend and Installer CI checks.
