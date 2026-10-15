@@ -3394,3 +3394,48 @@ dialog#animation-deforum-dialog {
   .motion-review-render-chooser {display:grid;grid-template-columns:1fr;}
   .motion-review-render-chooser button {width:100%;}
 }
+
+
+/* MS5.3: keep preview checkboxes physically checkbox-sized, never full-width. */
+#view-animation #animation-motion-frame-player input[type="checkbox"] {
+  appearance:auto;
+  display:inline-block;
+  width:16px !important;
+  height:16px !important;
+  min-width:16px;
+  min-height:16px;
+  max-width:16px;
+  max-height:16px;
+  flex:0 0 16px;
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  accent-color:var(--accent);
+}
+#view-animation .motion-review-loop-toggle,
+#view-animation .animation-motion-player-actions label,
+#view-animation .animation-motion-gif-sync label {
+  align-items:center;
+  justify-content:flex-start;
+}
+.motion-review-refine {
+  display:grid;min-width:0;gap:10px;padding-top:12px;
+  border-top:1px solid var(--border);
+}
+.motion-review-refine h4 {margin:0;font-size:.95rem;}
+.motion-review-refine p {margin:0;overflow-wrap:anywhere;}
+.motion-review-refine-actions {display:flex;gap:8px;flex-wrap:wrap;}
+.motion-review-refine-actions button {min-height:42px;max-width:100%;}
+.motion-review-refine-results {
+  min-width:0;overflow-wrap:anywhere;
+  padding:10px;border:1px solid var(--border);border-radius:9px;
+  font-size:.83rem;line-height:1.5;
+}
+.motion-review-refine-results[hidden] {display:none;}
+@media(max-width:640px) {
+  .motion-review-refine-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .motion-review-refine-actions button {width:100%;min-width:0;white-space:normal;}
+}
+@media(max-width:390px) {
+  .motion-review-refine-actions {grid-template-columns:1fr;}
+}
