@@ -6,7 +6,7 @@ directory. Browser-selected paths do not survive reload; **uploaded copies do**.
 ## Project-open workflow
 
 1. Open the saved `project.json` through the regular project API.
-2. Read `GET /api/animation/projects/<id>/assets`. The response includes
+2. Read `GET /api/animation/projects/<id>/media-inventory`. The response includes
    checksummed, server-owned asset descriptors and independently collected
    `warnings` for damaged/missing files. One corrupt asset does not hide other
    good files. No host filesystem paths are returned.
