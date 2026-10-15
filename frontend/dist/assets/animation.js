@@ -3122,6 +3122,15 @@
       },
       getAudio: () => motionLabAudioProjectId === state.project?.id ? motionLabAudioElement : null,
       shouldSync: () => Boolean(qs('#animation-motion-lab-audio-sync')?.checked),
+      canPlay: () => {
+        const issue = motionReviewMatch();
+        if(issue) {
+          motionReviewStatus(issue);
+          motionFramePlayer?.pause();
+          return false;
+        }
+        return true;
+      },
       status: message => motionGifSyncStatus(message),
     });
     return motionFramePlayer;
@@ -3300,12 +3309,21 @@
       if (result) result.hidden = false;
       motionGifPreviewUrl = job.url;
       motionGifPreviewFps = Number(job.result?.fps || state.project?.animation?.fps || 12);
+      let loadedFrames = false;
       if (job.result?.frame_player_samples && ensureMotionFramePlayer()) {
-        motionFramePlayer.load(job);
-        if (image) image.hidden = true;
-      } else if (image) {
-        image.hidden = false;
-        image.src = job.url + '?v=' + Date.now();
+        try {
+          motionFramePlayer.load(job);
+          loadedFrames = true;
+        } catch (error) {
+          motionFramePlayer.clear();
+          motionReviewStatus('Frame player unavailable: ' + error.message +
+            '. GIF fallback has approximate timing and cannot be A/B scrubbed.');
+          toast('Frame preview metadata invalid', error.message, 'warning', 6500);
+        }
+      }
+      if (image) {
+        image.hidden = loadedFrames;
+        if (!loadedFrames) image.src = job.url + '?v=' + Date.now();
       }
       if (motionFramePlayer?.jobId === job.id) {
         motionGifSyncStatus('Frame player ready: seek, pause, loop and optional WAV sync.');
@@ -3340,11 +3358,15 @@
   async function pollMotionPreview(jobId) {
     try {
       const job = await api('/api/animation/motion-preview/' + encodeURIComponent(jobId));
+      // A project switch clears motionJobId. Never show an old response,
+      // even when the HTTP request started before the switch/reload.
+      if (state.motionJobId !== jobId) return;
       updateMotionProgress(job);
       if (job.status === 'completed' || job.status === 'failed') { finishMotionPreview(job); return; }
       state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 350);
     } catch (_) {
-      state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 1000);
+      if (state.motionJobId === jobId)
+        state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 1000);
     }
   }
 
@@ -3352,6 +3374,7 @@
     if (!state.project || state.motionJobId || motionPreviewStarting ||
         animationRenderStarting || renderIsActive()) return;
     motionPreviewStarting = true;
+    const requestedProjectId = state.project.id;
     motionLabSyncQuickActions();
     const button = qs('#animation-generate-motion-preview');
     if (button) {
@@ -3379,12 +3402,14 @@
           },
         }),
       });
+      if (state.project?.id !== requestedProjectId) return;
       state.motionJobId = job.id;
       updateMotionProgress(job);
       motionLabSyncQuickActions();
       renderSourceState();
       pollMotionPreview(job.id);
     } catch (error) {
+      if (state.project?.id !== requestedProjectId) return;
       state.motionJobId = null;
       if (button) {
         button.classList.remove('busy');
