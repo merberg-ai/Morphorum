@@ -59,3 +59,13 @@ def test_invalid_frame_mapping_is_rejected():
         event_frame_index(float("nan"), fps=30, max_frames=100)
     with pytest.raises(AudioMotionError):
         event_frame_index(0.25, fps=0, max_frames=100)
+
+
+def test_short_valid_audio_uses_bounded_stft_overlap():
+    """A 100-ms WAV must remain analyzable when the FFT is larger than the clip."""
+    import numpy as np
+    samples = np.zeros(800, dtype=np.float32)
+    samples[120] = 0.8
+    result = detect_audio_events(samples, sample_rate=8000)
+    assert result["duration_seconds"] == pytest.approx(0.1)
+    assert isinstance(result["events"], list)
