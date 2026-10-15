@@ -2672,6 +2672,125 @@
   }
 
   let motionFramePlayer = null;
+
+  // MS5.1: project-frame review metadata is kept outside saved motion layers.
+  let motionReviewRange={start:0,end:0};
+  const motionReviewEl=key=>qs('#animation-motion-review-'+key);
+  function motionReviewStatus(message) {
+    const node=motionReviewEl('status');
+    if(node)node.textContent=message;
+  }
+  function motionReviewMatch() {
+    const player=motionFramePlayer;
+    if(!player?.jobId)return 'Generate a camera motion preview first.';
+    const frames=Number(qs('#animation-max-frames')?.value||
+      state.project?.animation?.max_frames);
+    const fps=Number(qs('#animation-fps')?.value||state.project?.animation?.fps);
+    if(frames!==player.count||Math.abs(fps-player.fps)>1e-6)
+      return 'Timing mismatch: preview '+player.count+' frames @ '+player.fps+
+        ' FPS, Editor '+frames+' frames @ '+fps+' FPS. Regenerate camera preview.';
+    return '';
+  }
+  function motionReviewRefreshTakes() {
+    const select=motionReviewEl('take');
+    if(!select)return;
+    const old=select.value;
+    select.replaceChildren();
+    const empty=document.createElement('option');
+    empty.value='';empty.textContent='Choose staged take';select.appendChild(empty);
+    for(const layer of motionLabDraftLayers) {
+      if(layer.type!=='recording')continue;
+      const option=document.createElement('option');
+      option.value=layer.id;
+      option.textContent=(layer.name||'Recorded take')+' ('+
+        layer.start_frame+'–'+(layer.end_frame-1)+')';
+      select.appendChild(option);
+    }
+    if(motionLabDraftLayers.some(x=>x.type==='recording'&&x.id===old))select.value=old;
+  }
+  function motionReviewFrame({frame,fps,frames,previewSampleFrame}) {
+    const mismatch=motionReviewMatch(),value=motionReviewEl('values');
+    if(mismatch){
+      motionReviewStatus(mismatch);
+      if(value)value.textContent='Comparison unavailable until project and preview timing match.';
+      return;
+    }
+    motionReviewStatus('Project frame '+frame+' ('+(frame/fps).toFixed(3)+
+      's) · CPU preview sample from frame '+previewSampleFrame);
+    const visual=motionLabVisual;
+    if(!value)return;
+    if(!visual?.series||visual.stale||visual.count!==frames||
+        Math.abs(visual.fps-fps)>1e-6){
+      value.textContent='Curves unavailable, stale or mismatched. Update Curves to compare six-axis values.';
+      return;
+    }
+    value.textContent=['translation_x','translation_y','translation_z',
+      'rotation_x','rotation_y','rotation_z'].map((axis,i)=>
+      ['X','Y','Z','Pitch','Yaw','Roll'][i]+' '+
+      Number(visual.series[axis][frame]).toFixed(i<3?4:3))
+      .join(' · ')+' · native units/frame';
+  }
+  function motionReviewSet(start,end,enabled=true) {
+    if(!motionFramePlayer?.jobId||motionReviewMatch()||
+        !motionFramePlayer.setReviewRange(start,end,enabled)) {
+      motionReviewStatus('Invalid range or timing. Choose A ≤ B within this preview.');
+      return false;
+    }
+    motionReviewRange={start,end};
+    return true;
+  }
+  function motionReviewEditRange() {
+    if(!motionFramePlayer?.jobId)return;
+    const a=motionReviewEl('a'),b=motionReviewEl('b');
+    const start=Number(a?.value),end=Number(b?.value);
+    if(!a?.value.trim()||!b?.value.trim()||
+        !motionReviewSet(start,end,motionReviewEl('enabled')?.checked)){
+      if(a)a.value=String(motionReviewRange.start);
+      if(b)b.value=String(motionReviewRange.end);
+    }
+  }
+  function motionReviewTakeRange() {
+    const id=motionReviewEl('take')?.value;
+    const layer=motionLabDraftLayers.find(x=>x.type==='recording'&&x.id===id);
+    if(!layer){motionReviewStatus('Select a recorded draft take first.');return;}
+    if(!motionFramePlayer?.jobId||Number(layer.fps)!==motionFramePlayer.fps||
+       layer.start_frame<0||layer.end_frame>motionFramePlayer.count||
+       layer.end_frame<=layer.start_frame){
+      motionReviewStatus('Recorded take and preview frames/FPS do not match.');
+      return;
+    }
+    motionReviewSet(layer.start_frame,layer.end_frame-1,true);
+  }
+  function motionReviewOpenCurves() {
+    const problem=motionReviewMatch();
+    if(problem){motionReviewStatus(problem);return;}
+    const frame=motionFramePlayer.frame;
+    motionFramePlayer.pause();
+    showAnimationTab('curves');
+    if(!motionLabVisual?.series||motionLabVisual.stale||
+       motionLabVisual.count!==motionFramePlayer.count||
+       Math.abs(motionLabVisual.fps-motionFramePlayer.fps)>1e-6) {
+      motionLabNotify('Update Curves to review frame '+frame+' at matching FPS.');
+      return;
+    }
+    motionLabVisual.setFrame(frame);
+  }
+  function motionReviewBind() {
+    for(const key of ['a','b','enabled'])
+      motionReviewEl(key)?.addEventListener('change',motionReviewEditRange);
+    motionReviewEl('mark-a')?.addEventListener('click',()=>{
+      if(!motionFramePlayer?.jobId)return;
+      const frame=motionFramePlayer.frame;
+      motionReviewSet(frame,Math.max(frame,motionReviewRange.end),true);
+    });
+    motionReviewEl('mark-b')?.addEventListener('click',()=>{
+      if(!motionFramePlayer?.jobId)return;
+      const frame=motionFramePlayer.frame;
+      motionReviewSet(Math.min(frame,motionReviewRange.start),frame,true);
+    });
+    motionReviewEl('use-take')?.addEventListener('click',motionReviewTakeRange);
+    motionReviewEl('curves')?.addEventListener('click',motionReviewOpenCurves);
+  }
   function ensureMotionFramePlayer() {
     if (motionFramePlayer || !window.MorphorumMotionFramePlayer) return motionFramePlayer;
     const root = qs('#animation-motion-frame-player');
@@ -2684,6 +2803,16 @@
       loop: qs('#animation-motion-frame-loop'),
       scrub: qs('#animation-motion-frame-scrub'),
       time: qs('#animation-motion-frame-time'),
+      rangeEnabled:motionReviewEl('enabled'),
+      rangeStart:motionReviewEl('a'),
+      rangeEnd:motionReviewEl('b'),
+      onFrame:motionReviewFrame,
+      onLoad:({frames})=>{
+        motionReviewRange={start:0,end:frames-1};
+        motionReviewRefreshTakes();
+        const mismatch=motionReviewMatch();
+        if(mismatch)motionReviewStatus(mismatch);
+      },
       getAudio: () => motionLabAudioProjectId === state.project?.id ? motionLabAudioElement : null,
       shouldSync: () => Boolean(qs('#animation-motion-lab-audio-sync')?.checked),
       status: message => motionGifSyncStatus(message),
@@ -2745,6 +2874,10 @@
   }
   function clearMotionPreviewResult() {
     motionFramePlayer?.clear();
+    motionReviewRange={start:0,end:0};
+    motionReviewStatus('Generate a camera preview to begin reviewing frames.');
+    const values=motionReviewEl('values');
+    if(values)values.textContent='Update Motion Curves to compare six-axis values.';
     motionGifSyncRun++;
     motionGifPreviewUrl = null;
     motionGifPreviewFps = null;
@@ -7774,6 +7907,7 @@
     renderMotionLabDraft();
   }
   function renderMotionLabDraft() {
+    motionReviewRefreshTakes();
     const project = state.project;
     const is3d = animationMode() === '3d';
     const ready = Boolean(project && is3d && !motionLabBusy);
@@ -9123,6 +9257,7 @@
   }
 
   function bind() {
+    motionReviewBind();
     bindHybrid();
     qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
     qs('#animation-expand-all')?.addEventListener('click', () => setAllAnimationCards(false));
