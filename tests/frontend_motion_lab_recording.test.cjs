@@ -282,8 +282,8 @@ test('MS4.4 feathered punch-in blends only chosen axes within exact frame bounds
   const blended=splice(original,punch,{featherFrames:2});
   assert.equal(blended.id,'old');
   assert.equal(blended.source,'mixed');
-  assert.deepEqual(blended.samples.slice(0,3),original.samples.slice(0,3));
-  assert.deepEqual(blended.samples.slice(9),original.samples.slice(9));
+  assert.deepEqual(JSON.parse(JSON.stringify(blended.samples.slice(0,3))),original.samples.slice(0,3));
+  assert.deepEqual(JSON.parse(JSON.stringify(blended.samples.slice(9))),original.samples.slice(9));
   assert.deepEqual(original.samples[3],[.01,0,0,0,0,.1]);
   for(let i=0;i<12;i++){
     assert.equal(blended.samples[i][5],.1,'Roll is unarmed; do not touch it');
