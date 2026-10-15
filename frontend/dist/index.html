@@ -376,6 +376,29 @@
             </div>
           </article>
 
+          <article class="card glass animation-project-media-card" id="animation-project-media">
+            <div class="card-header"><div><h2>Saved Project Media</h2>
+              <p class="muted">Images and audio are stored with this project. They are restored from the Morphorum host, not from your browser's previous file selections.</p>
+            </div></div>
+            <p class="muted" id="animation-media-status" role="status" aria-live="polite">Open a project to check its saved media.</p>
+            <div class="animation-media-warnings" id="animation-media-warnings" role="alert" hidden></div>
+            <div class="animation-media-audio" id="animation-media-soundtrack" hidden>
+              <strong>Attached soundtrack</strong>
+              <span id="animation-media-soundtrack-name" class="muted"></span>
+              <audio id="animation-media-soundtrack-player" controls preload="metadata"></audio>
+              <div class="animation-media-offset-row">
+                <label>Audio offset (seconds) <input id="animation-media-offset" type="number" step=".01" min="-30" max="30" value="0"></label>
+                <button id="animation-media-offset-save" class="secondary-button compact" type="button">Save offset</button>
+              </div>
+            </div>
+            <div class="animation-media-audio" id="animation-media-motion-audio" hidden>
+              <strong>Saved Motion Lab WAV</strong>
+              <label>Audio track <select id="animation-media-wav-select" aria-label="Saved Motion Lab WAV"></select></label>
+              <audio id="animation-media-wav-player" controls preload="metadata"></audio>
+              <p id="animation-media-wav-note" class="muted">Audio analysis is restored for the saved project frame rate and duration.</p>
+            </div>
+          </article>
+
           <article class="card glass animation-depth-card" id="animation-depth-card" data-animation-mode="3d">
             <div class="card-header">
               <div>
