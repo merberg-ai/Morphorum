@@ -2858,6 +2858,183 @@
     });
   }
 
+
+  // MS5.3: reuse existing native motion editor and punch-in controls.
+  // Preparing never stages or applies a layer. The preview transport remains
+  // display-only even if it is comparing an older completed render.
+  let motionRefineBaseline=null;
+  const motionRefineEl=key=>qs('#animation-motion-refine-'+key);
+  const MOTION_REFINE_AXES=['translation_x','translation_y','translation_z',
+    'rotation_x','rotation_y','rotation_z'];
+  function motionRefineStatus(message) {
+    if(motionRefineEl('status'))motionRefineEl('status').textContent=message;
+  }
+  function motionRefineClear(message='Capture Before Curves before staging a new correction.') {
+    motionRefineBaseline=null;
+    if(motionRefineEl('results')){
+      motionRefineEl('results').hidden=true;
+      motionRefineEl('results').textContent='';
+    }
+    if(message)motionRefineStatus(message);
+  }
+  function motionRefineRange() {
+    const project=state.project,player=motionFramePlayer;
+    if(!project || animationMode()!=='3d' || !player?.jobId ||
+       motionLabBusy || motionLabRecorder?.active || motionReviewMatch() ||
+       !motionReviewEl('enabled')?.checked)return null;
+    const a=motionReviewEl('a'),b=motionReviewEl('b');
+    if(!a?.value.trim() || !b?.value.trim())return null;
+    const start=Number(a.value),end=Number(b.value);
+    if(!Number.isInteger(start)||!Number.isInteger(end)||
+       start<0 || end>=player.count || start>end)return null;
+    return {projectId:project.id,start,end,frames:player.count,fps:player.fps};
+  }
+  function motionRefineRequireRange() {
+    const range=motionRefineRange();
+    if(!range)motionRefineStatus('Choose a 3D project, generate a matching CPU preview, enable A/B, and select valid frames. Stop recording or other Motion Lab operations first.');
+    return range;
+  }
+  function motionRefineContinuous() {
+    const range=motionRefineRequireRange();
+    if(!range)return;
+    const form=motionStudioArrangementFields();
+    if(!form)return motionRefineStatus('Continuous Motion editor is unavailable.');
+    motionFramePlayer.pause();
+    // Explicitly force New Movement: do not overwrite a previously selected
+    // staged preset just because the editor still remembers its selection.
+    motionStudioArrangementSelection='';
+    motionStudioArrangementLoaded='';
+    motionStudioArrangementResetFields();
+    form.start.value=String(range.start);
+    form.end.value=String(range.end+1); // editor range uses exclusive end
+    motionStudioArrangementSyncRange('start');
+    showAnimationTab('audio');
+    motionRefineStatus('Frames '+range.start+'–'+range.end+
+      ' transferred to a NEW Continuous Camera Motion region. Select axes, preset and Add/Replace, then click + Stage Movement. No layer has been changed yet.');
+    motionLabNotify('Ranged continuous correction prepared. Stage Movement only when ready; Undo remains available.');
+  }
+  function motionRefinePunch() {
+    const range=motionRefineRequireRange();
+    if(!range)return;
+    const selected=motionReviewEl('take')?.value;
+    const index=motionLabDraftLayers.findIndex(layer=>layer.type==='recording'&&layer.id===selected);
+    const take=motionLabDraftLayers[index];
+    if(!take)return motionRefineStatus('Select a staged recorded take in A/B Motion Review before preparing a punch-in.');
+    if(Number(take.fps)!==range.fps || range.start<take.start_frame ||
+       range.end>=take.end_frame || !Array.isArray(take.axes) || !take.axes.length ||
+       !take.axes.every(axis=>MOTION_REFINE_AXES.includes(axis))){
+      return motionRefineStatus('The A/B interval must fit entirely inside the selected take at the same FPS, with valid recorded axes. Nothing was changed.');
+    }
+    motionFramePlayer.pause();
+    const mode=qs('#animation-motion-lab-record-mode');
+    const target=qs('#animation-motion-lab-punch-target');
+    const start=qs('#animation-motion-lab-record-start');
+    const end=qs('#animation-motion-lab-punch-end');
+    if(!mode||!target||!start||!end)
+      return motionRefineStatus('Recording punch-in controls are unavailable.');
+    mode.value='punch';
+    motionLabPunchUi(); // regenerate index mapping from current draft order
+    if(!Array.from(target.options).some(item=>item.value===String(index)))
+      return motionRefineStatus('Selected take no longer exists in the draft. Refresh your selection.');
+    target.value=String(index);
+    start.value=String(range.start);
+    end.value=String(range.end+1); // punch-in is exclusive-end
+    // Match arming to the target take; punch validation rejects other axes.
+    qsa('[data-motion-record-axis]').forEach(control=>{
+      control.checked=take.axes.includes(control.dataset.motionRecordAxis);
+    });
+    motionLabRecordingUi();
+    showAnimationTab('recording');
+    motionRefineStatus('Punch-in prepared for frames '+range.start+'–'+range.end+
+      '. Review armed axes and feather, then press Record to capture the entire interval. The take remains unchanged until recording finishes.');
+    motionLabNotify('Punch-in prepared in Recording. An incomplete capture is discarded; successful punch-in supports Undo.');
+  }
+  function motionRefineSnapshot(range,visual) {
+    return {
+      projectId:range.projectId,frames:range.frames,fps:range.fps,
+      start:range.start,end:range.end,
+      series:Object.fromEntries(MOTION_REFINE_AXES.map(axis=>
+        [axis,visual.series[axis].slice()])),
+    };
+  }
+  function motionRefineFresh(range) {
+    const visual=motionLabVisual;
+    return Boolean(visual?.series && !visual.stale &&
+      visual.count===range.frames && Math.abs(visual.fps-range.fps)<1e-6 &&
+      MOTION_REFINE_AXES.every(axis=>Array.isArray(visual.series[axis]) &&
+        visual.series[axis].length===range.frames));
+  }
+  async function motionRefineBefore() {
+    const range=motionRefineRequireRange();
+    if(!range)return;
+    if(!motionLabDraftLayers.length)
+      return motionRefineStatus('Add an initial draft layer, then capture its curve baseline.');
+    motionRefineClear('Capturing baseline from the current Motion Lab draft…');
+    motionLabVisual?.invalidate(); // a failed compilation must not look fresh
+    await motionLabPreviewOrApply(false,{curvesOnly:true});
+    if(state.project?.id!==range.projectId || !motionRefineFresh(range)){
+      motionRefineStatus('Could not capture fresh curves. Check the Motion Lab diagnostics and try again.');
+      return;
+    }
+    motionRefineBaseline=motionRefineSnapshot(range,motionLabVisual);
+    motionRefineStatus('Before snapshot captured for frames '+range.start+'–'+range.end+
+      '. Now stage a new continuous correction or finish a punch-in, then Compare Draft Curves before Apply.');
+  }
+  async function motionRefineDiff() {
+    const range=motionRefineRequireRange(),before=motionRefineBaseline;
+    if(!range)return;
+    if(!before || before.projectId!==range.projectId ||
+       before.frames!==range.frames || Math.abs(before.fps-range.fps)>1e-6 ||
+       before.start!==range.start || before.end!==range.end){
+      motionRefineStatus('Capture Before Curves for this exact A/B interval before comparing.');
+      return;
+    }
+    motionRefineStatus('Compiling revised draft curves (no animation Apply)…');
+    motionLabVisual?.invalidate();
+    await motionLabPreviewOrApply(false,{curvesOnly:true});
+    if(state.project?.id!==range.projectId || !motionRefineFresh(range)){
+      motionRefineStatus('Updated draft curves were not available. No changes have been applied.');
+      return;
+    }
+    const after=motionLabVisual.series;
+    const details=[];
+    let changesOutside=0,changedAxes=0;
+    for(const axis of MOTION_REFINE_AXES) {
+      let inCount=0,peak=0,outer=0;
+      for(let frame=0;frame<range.frames;frame++){
+        const delta=Math.abs(after[axis][frame]-before.series[axis][frame]);
+        if(!Number.isFinite(delta)){
+          motionRefineStatus('Comparison contains invalid motion values. Nothing was applied.');
+          return;
+        }
+        if(delta>1e-7){
+          if(frame>=range.start && frame<=range.end){
+            inCount++;peak=Math.max(peak,delta);
+          }else outer++;
+        }
+      }
+      if(inCount)changedAxes++;
+      changesOutside+=outer;
+      if(inCount||outer)details.push(axis.replaceAll('_',' ')+
+        ': '+inCount+' frame(s) inside, peak |Δ| '+peak.toFixed(5)+
+        (outer?', '+outer+' outside':''));
+    }
+    const summary=details.length ? details.join(' · ') :
+      'No changes detected from the captured baseline.';
+    const out=motionRefineEl('results');
+    if(out){out.hidden=false;out.textContent=summary;}
+    motionRefineStatus('Draft comparison: '+changedAxes+' axis/axes changed within A/B; '+
+      changesOutside+' outside-frame axis changes.'+
+      (changesOutside?' Review spillover before Apply.':' Only the selected frame range differs.')+
+      ' No saved animation or render was modified.');
+  }
+  function motionRefineBind() {
+    motionRefineEl('continuous')?.addEventListener('click',motionRefineContinuous);
+    motionRefineEl('punch')?.addEventListener('click',motionRefinePunch);
+    motionRefineEl('before')?.addEventListener('click',()=>void motionRefineBefore());
+    motionRefineEl('diff')?.addEventListener('click',()=>void motionRefineDiff());
+  }
+
   function motionReviewSet(start,end,enabled=true) {
     if(!motionFramePlayer?.jobId||motionReviewMatch()||
         !motionFramePlayer.setReviewRange(start,end,enabled)) {
@@ -3005,6 +3182,7 @@
   function clearMotionPreviewResult() {
     motionFramePlayer?.clear();
     motionCompareClear('Generate a CPU camera preview to compare with a completed render.');
+    motionRefineClear('Generate a fresh CPU preview and enable A/B to prepare corrections.');
     motionReviewRange={start:0,end:0};
     motionReviewStatus('Generate a camera preview to begin reviewing frames.');
     const values=motionReviewEl('values');
@@ -9390,6 +9568,7 @@
   function bind() {
     motionReviewBind();
     motionCompareBind();
+    motionRefineBind();
     bindHybrid();
     qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
     qs('#animation-expand-all')?.addEventListener('click', () => setAllAnimationCards(false));
