@@ -3114,3 +3114,26 @@ dialog#animation-deforum-dialog {
   .motion-studio-spectrum-heading label {flex:1 1 140px;}
   .motion-studio-spectrum-heading button {flex:1 1 100%;min-height:44px;}
 }
+
+/* W2/MS3: reuse a verified attached project soundtrack with one host-side action. */
+.animation-motion-saved-soundtrack {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px;
+  min-width:0;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:10px;
+}
+.animation-motion-saved-soundtrack button { flex:0 1 auto; min-height:44px; }
+.animation-motion-saved-soundtrack [role="status"] {
+  flex:1 1 230px;
+  min-width:0;
+  overflow-wrap:anywhere;
+  line-height:1.45;
+}
+@media(max-width:640px) {
+  .animation-motion-saved-soundtrack { align-items:stretch; }
+  .animation-motion-saved-soundtrack button { width:100%; }
+}
