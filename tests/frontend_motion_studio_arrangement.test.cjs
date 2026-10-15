@@ -98,6 +98,13 @@ test('preview stages native preset then invokes existing curve diagnostics',asyn
   assert.equal(layers.length,1);
 });
 
+test('existing Replace presets are read-only in MS4.1 until axis-aware MS4.2',()=>{
+  assert.match(js,/\(layer\.blend \|\| 'add'\) === 'add'/);
+  assert.match(js,/bar\.disabled = true/);
+  assert.match(js,/edit in Camera Motion Composer/);
+  assert.match(js,/blend:'add'/);
+});
+
 test('invalid movement never modifies draft or starts preview',async()=>{
   const {ctx,layers,inputs,actions}=harness();
   inputs.cycle.value='0';
