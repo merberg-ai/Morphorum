@@ -53,7 +53,7 @@ function harness(serverStatus){
       MorphorumToast:(...args)=>messages.push(args),
       MorphorumSetupFolders:{render:(container,kind)=>{
         container.appendChild({tag:'p',textContent:kind+' folder editor'});
-      },beforeNext:()=>true,reset:()=>{}},
+      },beforeNext:()=>true,reset:()=>{},welcome:()=>{}},
     },
   };
   vm.runInNewContext(script,context);
