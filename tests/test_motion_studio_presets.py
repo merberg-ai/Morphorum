@@ -90,12 +90,12 @@ def test_update_delete_and_duplicate_names_do_not_change_project_layers(client):
 
 
 @pytest.mark.parametrize("patch", [
-    {"name": ""}, {"name": "n" * 65}, {"name": "Unsafe\\nname"},
+    {"name": ""}, {"name": "n" * 65}, {"name": "Unsafe\nname"},
     {"preset": "anything"}, {"blend": "multiply"},
     {"preset": "still", "blend": "add"},
     {"axes": []}, {"axes": ["translation_x", "translation_x"]},
     {"axes": ["rotation_x"]}, {"strength": 1.5},
-    {"strength": float("inf")}, {"strength": "0.5"},
+    {"strength": "0.5"},
     {"cycle_seconds": .1}, {"fade_seconds": -1},
     {"start_ratio": -.1}, {"end_ratio": 1.1},
     {"start_ratio": .8, "end_ratio": .8},
@@ -124,3 +124,9 @@ def test_library_max_64_entries(client):
         assert client.post(base, json=form(name=f"Motion {index:02d}")).status_code == 201
     assert client.post(base, json=form(name="Overflow")).status_code == 409
     assert len(client.get(base).json()["presets"]) == 64
+
+
+def test_non_finite_numbers_cannot_enter_library(client):
+    with pytest.raises(library.CustomPresetError):
+        library.create_custom_preset(form(strength=float("inf")))
+    assert library.list_custom_presets() == []
