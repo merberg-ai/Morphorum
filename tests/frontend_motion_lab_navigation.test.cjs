@@ -55,7 +55,7 @@ test('Tool switching highlights the desktop sidebar, preserves selections, and s
   context.motionLabRecorder.active=true;
   context.selectTab('monitor');
   assert.equal(stopReason,'tab-change');
-  assert.equal(sidebar[9].attrs['aria-current'],'page');
+  assert.equal(sidebar[keys.indexOf('monitor')].attrs['aria-current'],'page');
   assert.equal(stored.at(-1)[1],'monitor');
   context.motionLabRecorder.active=false;
   context.selectTab('media');
