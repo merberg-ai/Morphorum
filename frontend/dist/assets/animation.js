@@ -6856,12 +6856,11 @@
   // Audio Motion is a dedicated Motion Lab workspace using the same draft
   // camera layers, project, and render controls.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs'];
+  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'];
   const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
   let animationTab = 'motion';
   let projectWizard = null;
   function showAnimationTab(name, { persist = true } = {}) {
-    if (name === 'audio') name = 'motion-import';
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'motion';
     if (name !== 'curves') motionLabVisual?.pause();
     if (name !== 'preview') motionFramePlayer?.pause();
@@ -7313,10 +7312,9 @@
       motion: 'Overview', wizard: 'New Project Wizard', projects: 'Project Manager', editor: 'Project Editor',
       composer: 'Camera Composer', recording: 'Live Recording',
       curves: 'Motion Curves', preview: 'Camera Preview',
-      'motion-import': 'Import Motion Settings', audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
+      'motion-import': 'Import Motion Settings', audio: 'Motion Studio', monitor: 'Render Monitor', outputs: 'Outputs',
     };
     for (const [name, label] of Object.entries(names)) {
-      if (name === 'audio') continue;
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.animationTab = name;
@@ -7348,7 +7346,7 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs']) {
+    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -7376,13 +7374,7 @@
     }
     const motionIntro = qs('#animation-motion-lab-intro');
     if (motionIntro) panels.motion.appendChild(motionIntro);
-    // Preserve legacy Audio Motion DOM and controls without exposing its tab.
-    const hiddenAudioPanel = document.createElement('section');
-    hiddenAudioPanel.hidden = true;
-    hiddenAudioPanel.id = 'animation-panel-audio';
-    hiddenAudioPanel.dataset.animationPanel = 'audio';
-    panels['motion-import'].after(hiddenAudioPanel);
-    panels.audio = hiddenAudioPanel;
+    // Motion Studio is a first-class workspace; reuse the existing Audio Motion DOM.
     const cards = [
       ['composer', '#animation-motion-lab-composer'],
       ['recording', '#animation-motion-lab-recording'],
@@ -7406,6 +7398,7 @@
       ['curves', 'Motion Curves & Camera Path', 'Edit frame-aligned keyframes using the full-width plots.'],
       ['preview', 'Camera Motion Preview', 'Inspect 2D or 3D camera motion before rendering.'],
       ['motion-import', 'Import Motion Settings', 'Preview Deforum Motion Studio schedules and align soundtrack audio.'],
+      ['audio', 'Motion Studio', 'Compose manual camera cues against music, edit beats and preview or apply motion to this project.'],
       ['monitor', 'Render Monitor', 'Watch progress, frame previews, and job diagnostics.'],
       ['projects', 'Project Manager', 'Search, review, rename, and safely archive your animation projects.'],
       ['editor', 'Project Editor', 'Configure projects, prompts, resolution, and timelines.'],
@@ -7491,8 +7484,8 @@
     audioIntro.innerHTML = `
       <div class="animation-audio-workspace-heading">
         <div>
-          <p class="eyebrow">MOTION LAB / AUDIO MOTION</p>
-          <h2>Make your camera move to the music</h2>
+          <p class="eyebrow">MOTION LAB / MOTION STUDIO</p>
+          <h2>Motion Studio: compose to your soundtrack</h2>
           <p class="muted">Analyze a WAV, select the beats you want, and add
           camera movement to your Motion Lab layers. Audio motion is part of
           the same project, not a separate animation or render.</p>
@@ -7516,16 +7509,76 @@
       </div>
     `;
     panels.audio.prepend(audioIntro);
+    // DA3 layout: wide analysis displays are independent of the compact
+    // configuration card. Reparenting preserves existing element IDs,
+    // event listeners, SVG rendering and draft-marker state.
+    const analysisWorkspace = document.createElement('article');
+    analysisWorkspace.id = 'animation-audio-analysis-workspace';
+    analysisWorkspace.className = 'card glass animation-audio-analysis-workspace';
+    const analysisHeading = document.createElement('div');
+    analysisHeading.className = 'animation-audio-analysis-heading';
+    analysisHeading.innerHTML = '<h2>Audio analysis & drum timeline</h2>' +
+      '<p class="muted">Full-width envelope, stereo waveform, playback and marker editing.</p>';
+    analysisWorkspace.appendChild(analysisHeading);
+    const audioPreview = qs('#animation-motion-lab-audio-preview');
+    if (audioPreview) {
+      const legacyDetails = document.createElement('details');
+      legacyDetails.className = 'animation-audio-legacy-envelope';
+      legacyDetails.innerHTML = '<summary>Additional envelope diagnostics</summary>';
+      legacyDetails.appendChild(audioPreview);
+      analysisWorkspace.appendChild(legacyDetails);
+    }
+    panels.audio.appendChild(analysisWorkspace);
+    // Parseq-inspired workflow: source first, full-width waveform next,
+    // detection and motion response below. Keep original live controls.
+    const audioSourceDock = document.createElement('div');
+    audioSourceDock.className = 'animation-audio-source-dock';
+    audioSourceDock.innerHTML = '<strong>Audio source</strong>';
+    analysisWorkspace.prepend(audioSourceDock);
+    // DA3.3a: keep editable timeline and inspector together; separate configuration
+    // into source, detection and camera-response groups without cloning controls.
+    const audioCard = qs('#animation-motion-lab-audio');
+    const controls = audioCard?.querySelector('.animation-motion-audio-controls');
+    if (controls) {
+      const fields = Array.from(controls.children);
+      const sections = [
+        ['Audio source', fields.slice(0,2), true],
+        ['Beat detection', [fields[2],fields[3],fields[4],fields[6]], false],
+        ['Camera response', [fields[5],fields[7],fields[8],fields[9]], false],
+      ];
+      for (const [label, elements, opened] of sections) {
+        const details = document.createElement('details');
+        details.className = 'animation-audio-config-group';
+        details.open = opened;
+        const summary = document.createElement('summary');
+        summary.textContent = label;
+        const grid = document.createElement('div');
+        grid.className = 'animation-audio-config-grid';
+        for (const field of elements) if (field) grid.appendChild(field);
+        details.append(summary,grid);
+        controls.appendChild(details);
+        if (label === 'Audio source') {
+          details.open = true;
+          audioSourceDock.appendChild(details);
+        }
+      }
+    }
+    // Position source actions beside the file controls; camera/detection
+    // tuning remains after the waveform rather than pushing it offscreen.
+    const audioActions = audioCard?.querySelector('.animation-motion-recording-actions');
+    if (audioActions) audioSourceDock.appendChild(audioActions);
+    if (audioCard) panels.audio.appendChild(audioCard);
     const audioPlaceholder = document.createElement('div');
     audioPlaceholder.className = 'animation-audio-preview-placeholder';
     audioPlaceholder.innerHTML = '<strong>Beat analysis preview</strong><p>Choose a WAV file and select Analyze WAV. Your detected beats and audio levels will appear here before you add any motion.</p>';
-    qs('#animation-motion-lab-audio-preview')?.before(audioPlaceholder);
+    analysisWorkspace.querySelector('#animation-motion-lab-audio-preview')?.before(audioPlaceholder);
     qs('#animation-audio-back-motion')?.addEventListener('click', () => showAnimationTab('motion'));
     qs('#animation-audio-review-motion')?.addEventListener('click', () => showAnimationTab('curves'));
     qs('#animation-audio-apply')?.addEventListener('click', () => {
       const apply = qs('#animation-motion-lab-apply');
       if (apply && !apply.disabled) apply.click();
     });
+
 
     setupDeforumMotionImport(panels['motion-import']);
     motionLabSetupQuickActions(panels.motion);
