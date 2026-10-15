@@ -12,6 +12,11 @@ set "MORPH_ARGS=-BackendOnly"
 shift
 :parse
 if "%~1"=="" goto launch
+if /I "%~1"=="--setup-wizard" (
+    set "MORPH_ARGS=!MORPH_ARGS! -SetupWizard"
+    shift
+    goto parse
+)
 if /I "%~1"=="--lan" (
     set "MORPH_ARGS=!MORPH_ARGS! -Lan"
     shift
