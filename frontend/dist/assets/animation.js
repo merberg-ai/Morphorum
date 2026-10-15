@@ -2599,7 +2599,7 @@
       : (state.project?.animation?.source_image ? 'Saved start image missing or unreadable. Re-upload to repair.' :
         requiresSource ? 'No starting image uploaded.' : 'No image uploaded. Prompt mode does not require one.');
     if (fileInput) fileInput.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
-    if (clear) clear.disabled = !state.project || !hasSource || Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    if (clear) clear.disabled = !state.project || !state.project?.animation?.source_image || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     // A source photo is optional: Motion Lab falls back to a calibration grid.
     if (preview) preview.disabled = !state.project || Boolean(state.motionJobId) || renderActive || state.depthBusy;
     const overlay = qs('#animation-preview-highlight-holes');
@@ -2742,6 +2742,7 @@
       clearMotionPreviewResult();
       renderSourceState();
       renderDepthState();
+      void restoreProjectMedia();
       toast('Source image uploaded', payload.source.width + ' × ' + payload.source.height + ' · ' + file.name, 'success');
     } catch (error) {
       toast('Source image upload failed', error.message, 'error', 7000);
@@ -2765,6 +2766,7 @@
       clearMotionPreviewResult();
       renderSourceState();
       renderDepthState();
+      void restoreProjectMedia();
       toast('Source image cleared', 'The project source image was removed.', 'success');
     } catch (error) {
       toast('Could not clear source image', error.message, 'error', 6500);
@@ -3958,6 +3960,7 @@
 
       await loadProjectList();
       fillForm();
+      void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
       await loadRenderHistory();
@@ -4297,6 +4300,7 @@
       state.timelineSelection = null;
       state.depthPreview = null;
       fillForm();
+      void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
       await loadRenderHistory();
@@ -4340,6 +4344,7 @@
       state.depthPreview = null;
       await loadProjectList();
       fillForm();
+      void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
       await loadRenderHistory();
@@ -5145,6 +5150,7 @@
         ' seconds · frame-aligned full-band RMS.';
       const badge = qs('#animation-motion-lab-audio-status');
       if (badge) badge.textContent = 'WAV ready';
+      void restoreProjectMedia();
     } catch (error) {
       if (status) status.textContent = 'Audio import failed: ' + (error?.message || error);
       motionLabNotify('Audio import failed: ' + (error?.message || error));
@@ -6234,6 +6240,7 @@
         attachmentText.textContent='Attached: '+result.soundtrack.filename+
           ' · offset '+result.soundtrack.offset_seconds.toFixed(2)+'s.';
         offsetButton.disabled=false;
+        void restoreProjectMedia();
         progress('Soundtrack attached',result.soundtrack.filename+' saved. New renders will freeze it for video export.','success');
       }catch(error){
         attachmentText.textContent='Attachment failed: '+error.message;
@@ -6252,6 +6259,7 @@
         if(attachmentProject()!==projectId)return;
         attachmentText.textContent='Attached: '+result.soundtrack.filename+
           ' · offset '+result.soundtrack.offset_seconds.toFixed(2)+'s.';
+        void restoreProjectMedia();
         progress('Audio offset saved',result.soundtrack.offset_seconds.toFixed(2)+' seconds.','success');
       }catch(error){progress('Audio offset save failed',error.message,'error');}
       finally{offsetButton.disabled=false;}
@@ -6818,6 +6826,47 @@
       if (file) uploadSourceImage(file);
     });
     qs('#animation-clear-source')?.addEventListener('click', clearSourceImage);
+    qs('#animation-source-preview')?.addEventListener('error', event => {
+      const id = state.project?.id;
+      if (!id || !event.target.currentSrc.includes('/projects/' + encodeURIComponent(id) + '/')) return;
+      if (projectMedia.projectId !== id) return;
+      projectMedia.loading = false;
+      projectMedia.assets = projectMedia.assets.filter(asset => asset.kind !== 'source_image');
+      projectMediaWarning('Saved start image could not be decoded. Upload it again to repair the project.');
+      renderProjectMedia();
+    });
+    qs('#animation-media-wav-select')?.addEventListener('change', event => {
+      const checksum = event.target.value;
+      if (!projectMediaAssets('motion_lab_wav').some(wav => wav.sha256 === checksum)) return;
+      projectMedia.selectedWav = checksum;
+      renderProjectMedia();
+      void restoreSavedMotionWav(checksum);
+    });
+    qs('#animation-media-offset-save')?.addEventListener('click', async () => {
+      const id = state.project?.id;
+      const seconds = Number(qs('#animation-media-offset')?.value);
+      if (!id || !Number.isFinite(seconds) || Math.abs(seconds) > 30) {
+        toast('Invalid soundtrack offset', 'Choose an offset between -30 and 30 seconds.', 'warning');
+        return;
+      }
+      const button = qs('#animation-media-offset-save');
+      setBusy(button, true);
+      try {
+        const result = await api('/api/animation/projects/' + encodeURIComponent(id) +
+          '/motion-import/soundtrack-offset', {
+          method: 'PUT', body: JSON.stringify({ offset_seconds: seconds }),
+        });
+        if (state.project?.id !== id) return;
+        projectMedia.soundtrack = result.soundtrack;
+        renderProjectMedia();
+        toast('Soundtrack offset saved', seconds.toFixed(2) + ' seconds.', 'success');
+      } catch (error) {
+        toast('Could not save soundtrack offset', error.message, 'error');
+      } finally {
+        setBusy(button, false);
+      }
+    });
+
     qs('#animation-generate-depth')?.addEventListener('click', () => generateDepthPreview(false));
     qs('#animation-recompute-depth')?.addEventListener('click', () => generateDepthPreview(true));
     qs('#animation-clear-depth')?.addEventListener('click', clearDepthPreview);
