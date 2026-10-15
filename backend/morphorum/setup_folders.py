@@ -71,7 +71,8 @@ def _family_evidence(path: Path, kind: str) -> str | None:
             if "sdxl" in text or "sd_xl" in text or "conditioner.embedders." in text:
                 return "sdxl"
         except (OSError, ValueError, UnicodeError, TypeError, OverflowError):
-            return None
+            # Filename evidence still matters when a candidate has no valid header.
+            pass
     # Filename clues only when explicit; these are not proof of family.
     if "z-image" in filename or "zimage" in filename:
         return "zimage"
