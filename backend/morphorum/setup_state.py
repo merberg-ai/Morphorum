@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from .paths import DATA_DIR, PROJECTS_DIR, USER_CONFIG, ensure_runtime_dirs
+from .paths import DATA_DIR, PROJECTS_DIR, USER_CONFIG, INSTALL_MANIFEST, ensure_runtime_dirs
 
 SETUP_STATE_FILE = DATA_DIR / "setup-state.json"
 STEPS = ("welcome", "modes", "models", "loras", "zimage", "examples", "finish")
@@ -82,7 +82,7 @@ def prepare_install() -> dict[str, Any] | None:
             return existing
         # An interrupted old install is conservatively treated as legacy,
         # even if the model index is empty. No project or setting is touched.
-        if USER_CONFIG.exists() or (PROJECTS_DIR.exists() and
+        if USER_CONFIG.exists() or INSTALL_MANIFEST.exists() or (PROJECTS_DIR.exists() and
                                      any(PROJECTS_DIR.iterdir())):
             return None
         ensure_runtime_dirs()
