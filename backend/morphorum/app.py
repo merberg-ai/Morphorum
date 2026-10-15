@@ -894,12 +894,22 @@ def api_hybrid_frame_file(project_id: str, frame_number: int):
 def api_project_assets(project_id: str) -> dict[str, Any]:
     """DB2.3 read-only project-owned media catalog. No server file paths."""
     try:
-        project = load_animation_project(project_id)
-        return project_media_catalog(project_id, project)
+        load_animation_project(project_id)
+        return {"schema_version": 1, "assets": project_asset_catalog(project_id)}
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ProjectAssetError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/media-inventory")
+def api_project_media_inventory(project_id: str) -> dict[str, Any]:
+    """WebUI-specific partial recovery inventory; does not alter strict assets API."""
+    try:
+        project = load_animation_project(project_id)
+        return project_media_catalog(project_id, project)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/animation/projects/{project_id}/motion-import/soundtrack/file")
