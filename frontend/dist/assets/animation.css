@@ -3018,3 +3018,44 @@ dialog#animation-deforum-dialog {
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
+
+/* MS3: project-owned independent sound-channel composer. */
+#animation-motion-studio-channels { min-width:0; display:grid; gap:13px; }
+#animation-motion-studio-channels .card-header { min-width:0; }
+.motion-studio-channel-list { display:grid; gap:12px; min-width:0; }
+.motion-studio-channel {
+  min-width:0; border:1px solid var(--border); border-radius:12px;
+  padding:13px; background:color-mix(in srgb,var(--panel) 92%,transparent);
+  display:grid;gap:12px;
+}
+.motion-studio-channel-heading {
+  display:flex; align-items:center; flex-wrap:wrap; gap:12px; min-width:0;
+}
+.motion-studio-channel-heading strong { flex:1 1 110px; min-width:0; overflow-wrap:anywhere; }
+.motion-studio-channel-heading label { display:inline-flex; flex-direction:row; align-items:center; gap:8px; }
+.motion-studio-channel-fields {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));
+  gap:11px; min-width:0;
+}
+.motion-studio-channel-fields label { min-width:0; display:grid; gap:5px; }
+.motion-studio-channel-fields input,
+.motion-studio-channel-fields select { min-width:0; width:100%; box-sizing:border-box; }
+.motion-studio-channel-actions {
+  display:flex; flex-wrap:wrap; gap:9px; align-items:center;
+}
+.motion-studio-channel-actions button, .motion-studio-channel-heading button {
+  min-height:42px;
+}
+#animation-motion-studio-channels [data-ms3-status] {
+  white-space:normal; overflow-wrap:anywhere;
+}
+@media(max-width:640px) {
+  .motion-studio-channel { padding:11px; }
+  .motion-studio-channel-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .motion-studio-channel-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .motion-studio-channel-actions button { width:100%; min-width:0; min-height:44px; }
+}
+@media(max-width:390px) {
+  .motion-studio-channel-fields { grid-template-columns:1fr; }
+  .motion-studio-channel-actions { grid-template-columns:1fr; }
+}
