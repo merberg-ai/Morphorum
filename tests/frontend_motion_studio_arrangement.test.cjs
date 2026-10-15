@@ -41,7 +41,9 @@ function harness() {
   };
   vm.runInNewContext(js.slice(start,end)+`
     motionStudioArrangementSyncRange = () => {};
+    motionStudioArrangementResetFields = () => {};
     this.stage = motionStudioArrange;
+    this.remove = motionStudioArrangementRemove;
     this.choose = motionStudioArrangementSelect;
     this.selection = () => motionStudioArrangementSelection;
     this.setSelection = (value) => {motionStudioArrangementSelection=value;};
@@ -64,6 +66,9 @@ test('arrangement mounts in existing Motion Studio, not a second camera composit
   assert.match(css,/\.motion-studio-arrangement-timeline/);
   assert.match(css,/@media \(max-width:640px\)/);
   assert.match(css,/\.motion-studio-arrangement-actions/);
+  assert.match(js,/motionStudioArrangementRemove\(id\)/);
+  assert.match(css,/\.motion-studio-arrangement-remove/);
+  assert.doesNotMatch(js,/addLane\('Unstaged selection'/);
 });
 
 test('stage and update same preset without doubling or deleting sound layers',async()=>{
@@ -89,6 +94,44 @@ test('stage and update same preset without doubling or deleting sound layers',as
   assert.equal(layers[1].strength,.3);
   assert.equal(layers[0],untouched);
   assert.equal(commitCount(),2);
+});
+
+test('removing a staged continuous movement preserves unrelated layers',async()=>{
+  const {ctx,layers,commitCount,actions}=harness();
+  const sound={id:'sound-1',type:'audio_channels',sha256:'b'.repeat(64)};
+  layers.push(sound);
+  await ctx.stage('stage');
+  const movementId=layers[1].id;
+  assert.equal(ctx.selection(),movementId);
+  ctx.remove(movementId);
+  assert.equal(layers.length,1);
+  assert.strictEqual(layers[0],sound);
+  assert.equal(ctx.selection(),'');
+  assert.equal(commitCount(),2);
+  assert.ok(actions.some(value=>value.startsWith('toast:Movement removed')));
+  ctx.remove('sound-1');
+  ctx.remove('missing-layer');
+  assert.equal(layers.length,1);
+  assert.equal(commitCount(),2);
+});
+
+test('removing another staged movement keeps the selected layer editable',async()=>{
+  const {ctx,layers,commitCount}=harness();
+  await ctx.stage('stage');
+  const firstId=layers[0].id;
+  ctx.setSelection('');
+  await ctx.stage('stage');
+  const secondId=layers[1].id;
+  assert.notEqual(secondId,firstId);
+  ctx.remove(firstId);
+  assert.equal(ctx.selection(),secondId);
+  assert.equal(layers.length,1);
+  assert.equal(layers[0].id,secondId);
+  assert.equal(commitCount(),3);
+  ctx.motionLabBusy=true;
+  ctx.remove(secondId);
+  assert.equal(layers.length,1);
+  assert.equal(commitCount(),3);
 });
 
 test('preview stages native preset then invokes existing curve diagnostics',async()=>{
