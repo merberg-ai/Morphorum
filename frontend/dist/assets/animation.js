@@ -5035,6 +5035,8 @@
       motionLabNotify('WAV exceeds 20 MiB.');
       return;
     }
+    // A manual selection wins over any in-flight automatic project restore.
+    ++projectAudioRestoreGeneration;
     motionLabAudioAnalysis = null;
     motionLabAudioProjectId = null;
     motionLabReleaseAudio();
