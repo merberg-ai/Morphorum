@@ -2531,7 +2531,7 @@
       soundtrack: null, selectedWav: previous };
     renderProjectMedia();
     try {
-      const inventory = await api('/api/animation/projects/' + encodeURIComponent(id) + '/assets');
+      const inventory = await api('/api/animation/projects/' + encodeURIComponent(id) + '/media-inventory');
       if (token !== projectMediaGeneration || state.project?.id !== id) return;
       const assets = Array.isArray(inventory.assets) ? inventory.assets : [];
       const warnings = Array.isArray(inventory.warnings) ? inventory.warnings.slice() : [];
