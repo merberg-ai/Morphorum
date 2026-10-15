@@ -3220,3 +3220,53 @@ dialog#animation-deforum-dialog {
   .motion-studio-arrangement-fields,
   .motion-studio-arrangement-actions {grid-template-columns:1fr;}
 }
+
+/* MS4.2: axis-limited Add/Replace with accessible, compact axis selection. */
+.motion-studio-arrangement-axis-mask {
+  min-width:0; border:1px solid var(--border); border-radius:10px;
+  padding:12px; display:grid;gap:9px;
+}
+.motion-studio-arrangement-axis-mask legend {
+  font-weight:650; padding:0 5px; font-size:.88rem;
+}
+.motion-studio-arrangement-axes {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
+  min-width:0;
+}
+.motion-studio-arrangement-axes label {
+  display:flex; gap:8px;align-items:center; min-width:0;
+  padding:8px 10px; border:1px solid var(--border);border-radius:8px;
+  line-height:1.3;
+}
+.motion-studio-arrangement-axes input {
+  min-width:17px;min-height:17px;flex:0 0 auto;
+}
+.motion-studio-arrangement-axis-mask p {margin:0; overflow-wrap:anywhere;}
+.animation-audio-source-dock {
+  min-width:0; display:grid;gap:12px; width:100%;
+}
+.animation-audio-source-dock .animation-audio-config-group {
+  min-width:0; margin:0;
+}
+.animation-audio-source-dock .animation-audio-config-grid {
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));
+  min-width:0;
+}
+.animation-audio-source-dock .animation-motion-recording-actions {
+  display:flex;flex-wrap:wrap;gap:9px;
+}
+.animation-audio-source-dock .animation-motion-recording-actions button {
+  min-height:44px;
+}
+@media(max-width:640px) {
+  .motion-studio-arrangement-axes {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .animation-audio-source-dock .animation-motion-recording-actions button {
+    flex:1 1 150px;
+  }
+}
+@media(max-width:390px) {
+  .motion-studio-arrangement-axes {grid-template-columns:1fr;}
+  .animation-audio-source-dock .animation-motion-recording-actions button {
+    width:100%;
+  }
+}
