@@ -18,9 +18,11 @@ function harness() {
   let commits=0;
   const actions=[];
   const inputs = Object.fromEntries([
-    ['preset','wave'],['strength','.65'],['cycle','2'],
+    ['preset','wave'],['blend','add'],['strength','.65'],['cycle','2'],
     ['fade','.1'],['start','12'],['end','36'],
   ].map(([k,value])=>[k,{value}]));
+  const selectedAxes = [{value:'translation_x'},{value:'translation_y'}];
+  inputs.axes = {querySelectorAll:()=>selectedAxes};
   const panel={querySelector:selector=>{
     const key=selector.match(/^\[data-ms4-(\w+)\]$/)?.[1];
     return inputs[key] || null;
@@ -44,7 +46,7 @@ function harness() {
     this.selection = () => motionStudioArrangementSelection;
     this.setSelection = (value) => {motionStudioArrangementSelection=value;};
   `,ctx);
-  return {ctx,layers,inputs,actions,commitCount:()=>commits};
+  return {ctx,layers,inputs,selectedAxes,actions,commitCount:()=>commits};
 }
 
 test('arrangement mounts in existing Motion Studio, not a second camera compositor',()=>{
@@ -56,9 +58,9 @@ test('arrangement mounts in existing Motion Studio, not a second camera composit
     assert.match(backend,new RegExp('"'+name+'"'));
     assert.ok(js.includes("['"+name+"'"),name);
   }
-  // The Still preset only zeroes axes in Replace mode; adding it has no
-  // effect. MS4.1 exposes additive presets, while Replace waits for MS4.2.
-  assert.doesNotMatch(js,/\['still', 'Still \/ Reset'\]/);
+  assert.ok(js.includes("['still', 'Still / Clear Selected Axes']"));
+  assert.match(js,/data-ms4-blend/);
+  assert.match(js,/data-ms4-axes/);
   assert.match(css,/\.motion-studio-arrangement-timeline/);
   assert.match(css,/@media \(max-width:640px\)/);
   assert.match(css,/\.motion-studio-arrangement-actions/);
@@ -74,6 +76,7 @@ test('stage and update same preset without doubling or deleting sound layers',as
   assert.equal(first.type,'preset');
   assert.equal(first.preset,'wave');
   assert.equal(first.blend,'add');
+  assert.deepEqual(Array.from(first.axes), ['translation_x','translation_y']);
   assert.equal(first.start_frame,12);
   assert.equal(first.end_frame,36);
   assert.equal(commitCount(),1);
@@ -98,11 +101,27 @@ test('preview stages native preset then invokes existing curve diagnostics',asyn
   assert.equal(layers.length,1);
 });
 
-test('existing Replace presets are read-only in MS4.1 until axis-aware MS4.2',()=>{
-  assert.match(js,/\(layer\.blend \|\| 'add'\) === 'add'/);
-  assert.match(js,/bar\.disabled = true/);
-  assert.match(js,/edit in Camera Motion Composer/);
-  assert.match(js,/blend:'add'/);
+test('MS4.2 allows editing native replace presets with a selected axis mask',async()=>{
+  const {ctx,layers,inputs,selectedAxes}=harness();
+  inputs.preset.value='spiral';
+  inputs.blend.value='replace';
+  selectedAxes.splice(0,selectedAxes.length,{value:'translation_z'},{value:'rotation_z'});
+  await ctx.stage('stage');
+  assert.equal(layers[0].blend,'replace');
+  assert.deepEqual(Array.from(layers[0].axes),['translation_z','rotation_z']);
+  assert.match(js,/motionStudioArrangementRebuildAxes/);
+  assert.match(backend,/if "axes" in layer/);
+});
+test('Still without Replace or without selected axes is refused',async()=>{
+  const {ctx,inputs,layers,selectedAxes,actions}=harness();
+  inputs.preset.value='still';
+  await ctx.stage('stage');
+  assert.equal(layers.length,0);
+  inputs.blend.value='replace';
+  selectedAxes.splice(0);
+  await ctx.stage('stage');
+  assert.equal(layers.length,0);
+  assert.equal(actions.includes('apply'),false);
 });
 
 test('invalid movement never modifies draft or starts preview',async()=>{
