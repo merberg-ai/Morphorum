@@ -103,6 +103,11 @@
         window.MorphorumToast?.('Setup state needs attention', latest.warning, 'warning', 7000);
         return;
       }
+      if (latest.provenance === 'fresh_installer' && !latest.ready) {
+        window.MorphorumToast?.('Installation unfinished',
+          'Finish or repair Morphorum before continuing first-run setup.', 'warning', 7000);
+        return;
+      }
       if (!reopen && !latest.show_wizard) return;
       snapshot = latest;
       manual = reopen || latest.forced_for_launch;
@@ -111,7 +116,7 @@
       previousFocus = document.activeElement;
       qs('overlay').hidden = false;
       page();
-      qs('next').focus();
+      (qs('next').disabled ? qs('close') : qs('next')).focus();
     } catch (error) {
       window.MorphorumToast?.('First-run setup unavailable', error.message, 'warning', 6500);
     }
