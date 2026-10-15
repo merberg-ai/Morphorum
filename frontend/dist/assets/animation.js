@@ -2717,6 +2717,7 @@
     }
     motionReviewStatus('Project frame '+frame+' ('+(frame/fps).toFixed(3)+
       's) · CPU preview sample from frame '+previewSampleFrame);
+    motionCompareFrame(frame);
     const visual=motionLabVisual;
     if(!value)return;
     if(!visual?.series||visual.stale||visual.count!==frames||
@@ -2730,6 +2731,132 @@
       Number(visual.series[axis][frame]).toFixed(i<3?4:3))
       .join(' · ')+' · native units/frame';
   }
+
+  // MS5.2: comparison is display-only; validated historical PNGs are shown
+  // beside the existing CPU preview, never inserted into project/layer data.
+  let motionCompareMetadata=null;
+  let motionCompareRequest=0;
+  const motionCompareEl=key=>qs('#animation-motion-compare-'+key);
+  function motionCompareStatus(message){
+    const node=motionCompareEl('status');
+    if(node)node.textContent=message;
+  }
+  function motionCompareClear(message='Choose a completed render to compare.'){
+    ++motionCompareRequest;
+    motionCompareMetadata=null;
+    const wrap=motionCompareEl('render-wrap');
+    if(wrap)wrap.hidden=true;
+    const img=motionCompareEl('render-image');
+    if(img)img.removeAttribute('src');
+    const frameLabel=motionCompareEl('frame-label');
+    if(frameLabel)frameLabel.textContent='';
+    motionCompareStatus(message);
+  }
+  function motionCompareFrame(frame) {
+    const meta=motionCompareMetadata;
+    if(!meta)return;
+    const player=motionFramePlayer;
+    const problem=motionReviewMatch();
+    if(!player?.jobId || problem || meta.project_id!==state.project?.id ||
+       meta.frames!==player.count || Math.abs(meta.fps-player.fps)>1e-6){
+      motionCompareClear(problem||'Preview or project timing changed. Reload the comparison.');
+      return;
+    }
+    const img=motionCompareEl('render-image');
+    const url='/api/animation/renders/'+encodeURIComponent(meta.project_id)+
+      '/'+encodeURIComponent(meta.render_id)+'/frames/'+frame;
+    if(img && img.getAttribute('src')!==url)img.src=url;
+    const frameLabel=motionCompareEl('frame-label');
+    if(frameLabel)frameLabel.textContent='Exact render frame '+frame+
+      ' of '+(meta.frames-1)+' · '+(frame/meta.fps).toFixed(3)+'s';
+  }
+  async function motionCompareRefresh() {
+    const select=motionCompareEl('select');
+    if(!select)return;
+    const projectId=state.project?.id;
+    const token=++motionCompareRequest;
+    motionCompareMetadata=null;
+    if(motionCompareEl('render-wrap'))motionCompareEl('render-wrap').hidden=true;
+    select.replaceChildren();
+    const blank=document.createElement('option');
+    blank.value='';blank.textContent='Choose a saved render';
+    select.appendChild(blank);
+    if(!projectId || !motionFramePlayer?.jobId){
+      motionCompareStatus('Generate a CPU preview for this project first.');
+      return;
+    }
+    motionCompareStatus('Loading this project’s saved renders…');
+    try {
+      const data=await api('/api/animation/projects/'+encodeURIComponent(projectId)+'/renders');
+      if(token!==motionCompareRequest || projectId!==state.project?.id ||
+         !motionFramePlayer?.jobId)return;
+      for(const render of (Array.isArray(data.renders)?data.renders:[])){
+        if(!render?.id || render.project_id!==projectId)continue;
+        const option=document.createElement('option');
+        option.value=render.id;
+        option.textContent=render.id+' · '+(render.status||'unknown')+
+          ' · '+(render.total_frames||'?')+' frames';
+        select.appendChild(option);
+      }
+      motionCompareStatus(select.options.length>1
+        ?'Choose a completed render, then Compare Render. This never changes project files.'
+        :'No saved renders found for this project.');
+    }catch(error){
+      if(token===motionCompareRequest)motionCompareStatus('Cannot list saved renders: '+error.message);
+    }
+  }
+  async function motionCompareLoad(){
+    const id=motionCompareEl('select')?.value;
+    const projectId=state.project?.id;
+    const player=motionFramePlayer;
+    const previewId=player?.jobId;
+    const problem=motionReviewMatch();
+    if(!id || !projectId || !previewId || problem){
+      motionCompareClear(problem||'Select a render and generate a CPU preview first.');
+      return;
+    }
+    const token=++motionCompareRequest;
+    motionCompareMetadata=null;
+    if(motionCompareEl('render-wrap'))motionCompareEl('render-wrap').hidden=true;
+    motionCompareStatus('Checking render manifest and PNG frame coverage…');
+    try{
+      const meta=await api('/api/animation/renders/'+encodeURIComponent(projectId)+
+        '/'+encodeURIComponent(id)+'/review-metadata');
+      if(token!==motionCompareRequest || state.project?.id!==projectId ||
+         motionFramePlayer?.jobId!==previewId)return;
+      if(!meta.ready){
+        motionCompareStatus('Render not available for comparison: '+
+          (Array.isArray(meta.issues)?meta.issues.join(' '):'incomplete metadata.'));
+        return;
+      }
+      if(meta.project_id!==projectId || meta.render_id!==id ||
+         meta.frames!==player.count || Math.abs(meta.fps-player.fps)>1e-6 ||
+         motionReviewMatch()){
+        motionCompareStatus('Render timing mismatch: render '+meta.frames+' frames @ '+
+          meta.fps+' FPS; CPU preview '+player.count+' frames @ '+player.fps+
+          ' FPS. Choose a compatible render and regenerate preview if needed.');
+        return;
+      }
+      motionCompareMetadata={project_id:projectId,render_id:id,
+        frames:meta.frames,fps:meta.fps};
+      const wrap=motionCompareEl('render-wrap');
+      if(wrap)wrap.hidden=false;
+      motionCompareStatus('Comparing completed render '+id+
+        ' with CPU preview. Both images follow the same project-frame clock.');
+      motionCompareFrame(player.frame);
+    }catch(error){
+      if(token===motionCompareRequest)motionCompareStatus('Cannot load render metadata: '+error.message);
+    }
+  }
+  function motionCompareBind(){
+    motionCompareEl('refresh')?.addEventListener('click',()=>void motionCompareRefresh());
+    motionCompareEl('load')?.addEventListener('click',()=>void motionCompareLoad());
+    motionCompareEl('clear')?.addEventListener('click',()=>motionCompareClear());
+    motionCompareEl('render-image')?.addEventListener('error',()=>{
+      if(motionCompareMetadata)motionCompareClear('Stored PNG frame is unavailable. Render comparison was stopped.');
+    });
+  }
+
   function motionReviewSet(start,end,enabled=true) {
     if(!motionFramePlayer?.jobId||motionReviewMatch()||
         !motionFramePlayer.setReviewRange(start,end,enabled)) {
@@ -2810,6 +2937,8 @@
       onLoad:({frames})=>{
         motionReviewRange={start:0,end:frames-1};
         motionReviewRefreshTakes();
+        motionCompareClear('CPU preview loaded. Select a saved render for side-by-side review.');
+        void motionCompareRefresh();
         const mismatch=motionReviewMatch();
         if(mismatch)motionReviewStatus(mismatch);
       },
@@ -2874,6 +3003,7 @@
   }
   function clearMotionPreviewResult() {
     motionFramePlayer?.clear();
+    motionCompareClear('Generate a CPU camera preview to compare with a completed render.');
     motionReviewRange={start:0,end:0};
     motionReviewStatus('Generate a camera preview to begin reviewing frames.');
     const values=motionReviewEl('values');
@@ -9258,6 +9388,7 @@
 
   function bind() {
     motionReviewBind();
+    motionCompareBind();
     bindHybrid();
     qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
     qs('#animation-expand-all')?.addEventListener('click', () => setAllAnimationCards(false));
