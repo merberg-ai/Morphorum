@@ -70,6 +70,11 @@ from .animation_render import (
     animation_render_manager,
 )
 from .motion_lab import MotionLabError, PRESETS as MOTION_LAB_PRESETS, compile_motion_lab
+from .motion_studio_presets import (
+    CustomPresetError, CustomPresetConflict, CustomPresetMissing,
+    list_custom_presets, create_custom_preset, update_custom_preset,
+    delete_custom_preset,
+)
 from .audio_motion import AudioMotionError
 from .audio_motion_upload import MAX_AUDIO_BYTES, analyze_managed_wav
 from .animation_hybrid_extract import hybrid_extraction_manager
@@ -540,6 +545,51 @@ def api_trash_animation_project(project_id: str) -> dict[str, Any]:
 @app.get("/api/animation/motion-lab/presets")
 def api_motion_lab_presets() -> dict[str, Any]:
     return {"presets": list(MOTION_LAB_PRESETS)}
+
+
+def _motion_studio_preset_error(exc: CustomPresetError) -> HTTPException:
+    if isinstance(exc, CustomPresetConflict):
+        code = 409
+    elif isinstance(exc, CustomPresetMissing):
+        code = 404
+    else:
+        code = 400
+    return HTTPException(status_code=code, detail=str(exc))
+
+
+@app.get("/api/animation/motion-studio/custom-presets")
+def api_motion_studio_custom_presets() -> dict[str, Any]:
+    try:
+        return {"presets": list_custom_presets()}
+    except CustomPresetError as exc:
+        raise _motion_studio_preset_error(exc) from exc
+
+
+@app.post("/api/animation/motion-studio/custom-presets", status_code=201)
+def api_create_motion_studio_custom_preset(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return {"preset": create_custom_preset(payload)}
+    except CustomPresetError as exc:
+        raise _motion_studio_preset_error(exc) from exc
+
+
+@app.put("/api/animation/motion-studio/custom-presets/{preset_id}")
+def api_update_motion_studio_custom_preset(
+    preset_id: str, payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return {"preset": update_custom_preset(preset_id, payload)}
+    except CustomPresetError as exc:
+        raise _motion_studio_preset_error(exc) from exc
+
+
+@app.delete("/api/animation/motion-studio/custom-presets/{preset_id}")
+def api_delete_motion_studio_custom_preset(preset_id: str) -> dict[str, str]:
+    try:
+        delete_custom_preset(preset_id)
+        return {"status": "removed"}
+    except CustomPresetError as exc:
+        raise _motion_studio_preset_error(exc) from exc
 
 
 @app.get("/api/animation/projects/{project_id}/motion-lab/audio-cues/{source_sha256}")
