@@ -2445,7 +2445,9 @@
       : motionLabAudioProjectId === project?.id &&
         motionLabAudioAnalysis?.source_sha256 === selectedWav.sha256
         ? 'Saved WAV restored for synchronized Motion Curves playback and analysis.'
-        : 'Restoring saved WAV analysis for this project…';
+        : warnings.some(message => message.startsWith('Could not restore saved Motion Lab WAV'))
+          ? 'Saved WAV could not be analyzed. See the media warning above.'
+          : 'Restoring saved WAV analysis for this project…';
     renderSourceState();
   }
 
@@ -6845,6 +6847,20 @@
       if (file) uploadSourceImage(file);
     });
     qs('#animation-clear-source')?.addEventListener('click', clearSourceImage);
+    // Audio duration is only known after the browser loads the remote file's
+    // metadata. Refresh the visible label without mutating project state.
+    qs('#animation-media-soundtrack-player')?.addEventListener('loadedmetadata', renderProjectMedia);
+    for (const id of ['animation-media-soundtrack-player', 'animation-media-wav-player']) {
+      qs('#' + id)?.addEventListener('error', event => {
+        const projectId = state.project?.id;
+        if (!projectId || projectMedia.projectId !== projectId ||
+            !event.target.currentSrc.includes('/projects/' + encodeURIComponent(projectId) + '/')) return;
+        projectMediaWarning(id === 'animation-media-soundtrack-player'
+          ? 'Attached soundtrack cannot be played in this browser. Check the audio file or its format.'
+          : 'Saved Motion Lab WAV could not be played in this browser.');
+        renderProjectMedia();
+      });
+    }
     qs('#animation-source-preview')?.addEventListener('error', event => {
       const id = state.project?.id;
       if (!id || !event.target.currentSrc.includes('/projects/' + encodeURIComponent(id) + '/')) return;
