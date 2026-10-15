@@ -248,13 +248,61 @@ MS5 is **not all physically complete** until the owner has verified each
 batch. Reuse the existing Motion Lab history, frame player, recorder and
 backend render assets rather than adding duplicate render engines.
 
-## MS6: Release integration and acceptance (not implemented)
+## MS6: Release integration, first-run setup and acceptance (planned)
 
-Run complete Python, Node and installer CI plus physical Windows and mobile
-regressions; validate 12/24/30/60 FPS, long music, multiple channels/cues,
-save/close/reopen, disabled/missing media, native render/audio mux and no
-duplicate contribution after reapply. Update public docs after acceptance
-and merge by explicit project-owner approval only.
+**MS6 now includes an installation-wide, page-by-page First-Run Setup Wizard.**
+This is a *new feature*, separate from Morphorum's existing New Project Wizard.
+Detailed implementation contract, CLI semantics, per-page UX, example templates
+and testing matrix: **[FIRST_RUN_SETUP_WIZARD.md](FIRST_RUN_SETUP_WIZARD.md)**.
+The wizard is **planned, not implemented**; no `--setup-wizard` flag or
+automatic launch currently exists.
+
+### MS6 delivery sequence
+
+- **MS6.0 — Baseline and safety design.** Accept the MS5.4 Windows physical
+  test gate before coding the release step. Inventory default/install configs,
+  existing project assets, settings and both launch modes. Preserve `main`,
+  draft PR #39, existing saved projects and downloaded model weights.
+- **MS6.1 — Automatic fresh-install detection and CLI override.** Add
+  persistent server-owned wizard state, resumability, and one-launch
+  `--setup-wizard` override (plus Windows PowerShell `-SetupWizard`).
+  Open wizard automatically on the first WebUI visit of a genuinely fresh
+  installation; never force it merely because no models are indexed.
+  Explain that **WebUI is default** on port 7865, while backend-only is a
+  separate authenticated API mode normally on port 7866. Mode changes
+  require a restart. Backend-only mode itself has no browser wizard.
+- **MS6.2 — Guided model and LoRA paths.** Welcome/diagnostics; typed
+  server-host directory paths; server-side existence/readability checks;
+  family-specific model and LoRA identification; explicit save/rescan and
+  confirmation before overwriting existing config. Empty readable folders
+  or LoRAs alone must **not** pass checkpoint validation. LoRAs are optional.
+  Avoid assuming browser file pickers can browse host directories over LAN.
+- **MS6.3 — Optional managed Z-Image-Turbo download.** Explain its purpose
+  and approximately 33 GB size, show available space and destination,
+  reuse managed-model status/progress/resume API, and offer **Download Now**
+  or **Not Now** without automatic downloads or premature Ready claims.
+- **MS6.4 — Two starter animations.** Offer **Gentle Dolly In** and **Gentle
+  Dolly Out**: 3D, **512×512**, **48 frames / 12 FPS**, matching scene/prompt
+  with conservative, opposite-direction Z camera movement. Instantiate
+  valid canonical schedules with unique project IDs and family-appropriate
+  model settings. Never start GPU generation automatically. If no checkpoint
+  is available, allow opening an editable example with a conspicuous
+  not-render-ready notice. Finish by opening the **chosen project in
+  the existing Project Editor**, not a duplicate editing interface.
+- **MS6.5 — Full release acceptance and documentation.** Run complete
+  Python, Node and installer CI plus physical Windows, Linux and mobile
+  regressions. Verify auto-first-run, forced reopen, state recovery,
+  invalid model/LoRA folder detection, downloads/skip, both examples,
+  12/24/30/60 FPS, long music, multiple channels/cues,
+  save/close/reopen, disabled/missing media, native render/audio mux and
+  no duplicate camera contributions after reapply. Update public README,
+  INSTALLATION, GETTING_STARTED and setup guidance **after implementation**.
+  Review any merge into `main` as a distinct, explicitly authorized action.
+
+**Gate:** MS5.4 physical testing is not assumed complete by scheduling
+MS6. The owner must accept it before MS6 implementation begins, and the
+wizard must pass clean-install and upgraded-install regression testing
+before this branch is considered release-ready.
 
 ## Safety and interoperability
 
