@@ -6407,6 +6407,10 @@
         ? (index + 1) + '. Audio ' + layer.axis.replaceAll('_',' ') +
           ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
           ' · threshold ' + layer.threshold
+        : layer.type === 'audio_cues'
+        ? (index + 1) + '. Audio Motion Director · ' +
+          (layer.cue_document?.cues?.length || 0) + ' cue(s) · additive · ' +
+          layer.start_frame + '–' + (layer.end_frame - 1)
         : layer.type === 'keyframes'
         ? (index + 1) + '. Custom ' + layer.axis.replaceAll('_', ' ') +
           ' · ' + layer.blend + ' · ' + layer.interpolation +
@@ -6424,6 +6428,12 @@
       edit.textContent = 'Edit';
       edit.disabled = !ready;
       edit.addEventListener('click', () => {
+        if (layer.type === 'audio_cues') {
+          motionLabEditingIndex = -1;
+          showAnimationTab('audio');
+          motionLabNotify('Edit this Director layer in Motion Studio, then Save and Preview.');
+          return;
+        }
         if (layer.type === 'keyframes') {
           motionLabEditingIndex = -1;
           const axisField = qs('#animation-motion-lab-key-axis');
