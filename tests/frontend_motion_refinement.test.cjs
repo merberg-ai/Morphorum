@@ -56,6 +56,8 @@ function harness() {
     showAnimationTab:name=>{tab=name;},
     qsa:selector=>selector==='[data-motion-record-axis]'?armed:[],
     qs:selector=>{
+      const refineKey=selector.match(/^#animation-motion-refine-(.+)$/)?.[1];
+      if(refineKey)return nodes[refineKey]||null;
       const keys={
         '#animation-motion-lab-record-mode':'mode',
         '#animation-motion-lab-punch-target':'target',
