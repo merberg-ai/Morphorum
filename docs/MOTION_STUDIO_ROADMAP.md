@@ -125,12 +125,31 @@ verify no additional contribution. Test disabling a channel, adding a custom
 one, 24/30 FPS, phone layout, and existing manual cue editing. Confirm audio
 analysis errors are shown rather than silently changing camera tracks.
 
-## MS4: Continuous presets and recording improvements (not implemented)
+## MS4: Continuous presets and recording improvements (next stage)
 
-Bring DMS-style drift, wave, spiral, rocking, reveal and fly-through
-compositions to current Motion Lab. Add range-based Add/Replace, named custom
-presets, explicit velocity units and axis limits, and improved controller
-configurations without rewriting existing recorded takes or advanced tracks.
+Morphorum already implements gentle drift, wave, spiral, figure-eight, rocking,
+push-in and pull-out native presets. MS4 should **reuse and extend** these,
+rather than copy them into a second composer or replace the camera engine.
+
+Proposed testable batches:
+
+- **MS4.1: Unified motion arrangement.** Add a visible, frame-ranged continuous
+  motion layer editor in Motion Studio, synchronized with the project audio
+  waveform. Preset choice, intensity, cycle, fade and start/end time should
+  be intuitive on desktop and mobile. Stage and Preview before Apply.
+- **MS4.2: Range-based Add/Replace.** Make it explicit whether a motion
+  pattern layers on the existing camera path or replaces motion on selected
+  axes inside a specified time range; avoid overwriting other axes, manual
+  cues, sound channels, original source image or project configuration.
+- **MS4.3: Named custom presets.** Save and reload user-defined combinations,
+  including axis mappings, strength and timing, with a clear distinction
+  between a reusable preset and a project's saved motion layers.
+- **MS4.4: Recording integration and polish.** Reuse existing keyboard/touch
+  six-axis recording, improve optional controller mapping, add velocity-unit
+  help and configurable axis limits, and validate no abrupt segment jumps.
+
+Each batch must pass CI and owner physical tests before the next. Main remains
+untouched without explicit authorization.
 
 ## MS5: Synchronized preview and render/refine (not implemented)
 
@@ -259,3 +278,16 @@ Lab → Motion Studio, click **Use Saved Project Soundtrack**. Confirm the
 waveform, spectrum, markers and channel controls appear without a file
 upload. Repeat with another project, and with MP3 if FFmpeg is configured.
 Verify manual cues still persist and export audio offset is unchanged.
+
+## Saved soundtrack reuse physical acceptance (2026-10-15)
+
+The project owner confirmed **Use Saved Project Soundtrack** works as expected
+on the physical Morphorum test installation. The completed integration
+checkpoint is `c85d6f6`; the feature reuses the verified project attachment
+without asking for another browser upload. Existing manual WAV import remains
+available. Mark this quality-of-life batch **accepted**.
+
+Next: MS4.1 continuous camera motion arrangement in the visible Motion Studio
+workspace, built on the already existing native preset system rather than
+introducing duplicate math. This is a planned stage, **not yet implemented**.
+Leave draft PR #39 unmerged and `main` unchanged.
