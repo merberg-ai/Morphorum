@@ -922,6 +922,18 @@
                   </div>
                   <p id="animation-motion-review-status" class="muted" role="status" aria-live="polite">Generate a camera motion preview to begin reviewing frames.</p>
                   <p id="animation-motion-review-values" class="muted" role="status">Update Motion Curves to compare six-axis values at the current frame.</p>
+                  <section class="motion-review-refine" aria-label="Ranged motion corrections">
+                    <h4>Refine this A/B range</h4>
+                    <p class="muted">Prepare a targeted correction without automatically changing the animation. Use the same frame range for new continuous motion or a guarded punch-in on an existing recorded take.</p>
+                    <div class="motion-review-refine-actions">
+                      <button id="animation-motion-refine-continuous" type="button" class="secondary-button compact">Prepare Continuous Correction</button>
+                      <button id="animation-motion-refine-punch" type="button" class="secondary-button compact">Prepare Recording Punch-in</button>
+                      <button id="animation-motion-refine-before" type="button" class="secondary-button compact">Capture Before Curves</button>
+                      <button id="animation-motion-refine-diff" type="button" class="secondary-button compact">Compare Draft Curves</button>
+                    </div>
+                    <p class="muted" id="animation-motion-refine-status" role="status" aria-live="polite">Set and enable an A/B range, then prepare a correction. Capture the current curves before staging to measure the difference later.</p>
+                    <div class="motion-review-refine-results" id="animation-motion-refine-results" hidden></div>
+                  </section>
                 </section>
                 <p class="muted" id="animation-motion-frame-note">Frames are drawn from up to 72 CPU preview samples. Playback follows the project frame clock.</p>
               </div>
