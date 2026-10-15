@@ -346,7 +346,7 @@ test('Preview and render locks include pending API requests and active operation
   assert.match(js,/let animationRenderStarting = false/);
   assert.match(js,/const locked = motionLabBusy \|\| motionPreviewBusy \|\| renderBusy/);
   assert.match(js,/const isStop = id === 'animation-motion-lab-stop-recording'/);
-  assert.match(js,/motionPreviewStarting = true;\s*motionLabSyncQuickActions\(\)/);
+  assert.match(js,/motionPreviewStarting = true;\s*const requestedProjectId = state\.project\.id;\s*motionLabSyncQuickActions\(\)/);
   assert.match(js,/animationRenderStarting = true;\s*motionLabSyncQuickActions\(\)/);
   assert.match(js,/motionPreviewStarting = false;\s*renderSourceState\(\)/);
   assert.match(js,/animationRenderStarting = false;\s*renderSourceState\(\)/);
