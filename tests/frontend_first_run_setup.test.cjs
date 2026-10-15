@@ -10,6 +10,7 @@ const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const css=fs.readFileSync(path.join(root,'assets','first-run-setup.css'),'utf8');
 
 function harness(serverStatus){
+  if (serverStatus.ready === undefined) serverStatus.ready = true;
   const listeners={};
   const calls=[];
   const status=()=>({...serverStatus});
