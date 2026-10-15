@@ -3361,3 +3361,37 @@ dialog#animation-deforum-dialog {
   .motion-review-actions {display:grid;grid-template-columns:1fr;}
   .motion-review-actions label {min-width:0;}
 }
+
+
+/* MS5.2: non-destructive side-by-side review of saved render PNGs. */
+.motion-review-split {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;align-items:start;min-width:0;
+}
+.motion-review-split:has(> .motion-review-split-image[hidden]) {grid-template-columns:minmax(0,1fr);}
+.motion-review-split-image {
+  min-width:0;display:grid;gap:6px;overflow:hidden;
+}
+.motion-review-split-image[hidden] {display:none !important;}
+.motion-review-split-image img {
+  width:100%;height:auto;max-height:440px;object-fit:contain;
+  display:block;border-radius:8px;background:var(--panel);
+}
+.motion-review-render-chooser {
+  display:flex;gap:10px;flex-wrap:wrap;align-items:end;min-width:0;
+  border-top:1px solid var(--border);padding-top:12px;
+}
+.motion-review-render-chooser label {
+  flex:1 1 210px;display:grid;gap:6px;min-width:0;
+}
+.motion-review-render-chooser select {width:100%;min-width:0;}
+.motion-review-render-chooser button {min-height:40px;}
+.motion-review-render-chooser p {flex:1 1 100%;margin:0;overflow-wrap:anywhere;}
+@media(max-width:650px) {
+  .motion-review-split {grid-template-columns:minmax(0,1fr);}
+  .motion-review-render-chooser button {flex:1 1 130px;}
+}
+@media(max-width:390px) {
+  .motion-review-render-chooser {display:grid;grid-template-columns:1fr;}
+  .motion-review-render-chooser button {width:100%;}
+}
