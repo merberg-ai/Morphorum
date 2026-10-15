@@ -2479,6 +2479,10 @@
       motionLabAudioElement = new Audio(asset.url);
       motionLabAudioElement.preload = 'auto';
       motionLabAudioElement.load();
+      if (!(await motionStudioHydrateEdits(id, analysis, () =>
+        token === projectAudioRestoreGeneration && state.project?.id === id &&
+        projectMedia.selectedWav === sha256))) return;
+      motionStudioConnectAudioTransport();
       // Reload the most recently saved layer's editing choices alongside its
       // analysis. Keep the currently saved camera tracks untouched.
       const savedLayer = (state.project.motion_lab?.layers || []).slice().reverse()
@@ -2499,6 +2503,8 @@
         ' frames, ' + Number(analysis.duration_seconds).toFixed(2) + ' seconds).';
       const badge = qs('#animation-motion-lab-audio-status');
       if (badge) badge.textContent = 'Saved WAV ready';
+      motionLabStereoWaveform();
+      motionDirectorPanel();
       motionLabAudioPreview();
       motionLabAudioUi();
     } catch (error) {
@@ -5705,6 +5711,63 @@
       ' attack candidates in view (orange kick, pink snare, gray highs). ' +
       'Markers represent spectral candidates, not isolated instruments.';
   }
+  // Restore source-bound manual cues and editable markers for both uploaded
+  // and reopened WAVs. Stale project requests never overwrite the open editor.
+  async function motionStudioHydrateEdits(projectId, analysis, stillCurrent) {
+    const sha = analysis?.source_sha256;
+    if (!projectId || !sha) return false;
+    const calls = await Promise.allSettled([
+      api('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/audio-markers/' + encodeURIComponent(sha)),
+      api('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/audio-cues/' + encodeURIComponent(sha)),
+    ]);
+    if (!stillCurrent() || state.project?.id !== projectId) return false;
+    const original = (analysis.events?.events || []).map(e => ({ ...e, enabled: true }));
+    motionLabEditedEvents = original;
+    motionLabSelectedEvent = null;
+    motionLabMarkersDirty = false;
+    motionLabMarkerUndo = [];
+    motionLabMarkerRedo = [];
+    motionDirectorCues = [];
+    motionDirectorSelected = null;
+    motionDirectorDirty = false;
+    motionDirectorBulkUndo = null;
+    motionDirectorPreviewMatches = false;
+    const markers = calls[0].status === 'fulfilled' ? calls[0].value?.markers : null;
+    if (markers && Math.abs(Number(markers.duration_seconds) -
+                           Number(analysis.duration_seconds)) <= .001) {
+      const baseline = new Map(original.map(e => [e.id, e]));
+      motionLabEditedEvents = markers.events.map(e => ({
+        ...baseline.get(e.id), ...e,
+        strength: baseline.get(e.id)?.strength ?? e.strength ?? 1,
+        source: baseline.get(e.id)?.source ?? (e.id.startsWith('manual-') ? 'manual' : 'saved'),
+      }));
+    } else if (markers) {
+      motionLabNotify('Saved audio markers have a mismatched duration; detector markers are shown.');
+    } else if (calls[0].status === 'rejected') {
+      motionLabNotify('Could not restore saved marker edits: ' + calls[0].reason?.message);
+    }
+    const doc = calls[1].status === 'fulfilled' ? calls[1].value?.cues : null;
+    if (doc && Math.abs(Number(doc.duration_seconds) -
+                        Number(analysis.duration_seconds)) <= .001) {
+      motionDirectorCues = doc.cues.map(cue => ({ ...cue }));
+    } else if (doc) {
+      motionLabNotify('Saved camera cues have a mismatched audio duration.');
+    } else if (calls[1].status === 'rejected') {
+      motionLabNotify('Could not restore saved camera cues: ' + calls[1].reason?.message);
+    }
+    return true;
+  }
+
+  function motionStudioConnectAudioTransport() {
+    if (!motionLabAudioElement) return;
+    for (const type of ['timeupdate', 'play', 'pause', 'seeked', 'ended']) {
+      motionLabAudioElement.addEventListener(type, motionLabWavePlayhead);
+    }
+    motionLabWavePlayhead();
+  }
+
   function motionLabAudioPreview() {
     const preview = qs('#animation-motion-lab-audio-preview');
     const plot = qs('#animation-motion-lab-audio-plot');
@@ -5799,7 +5862,9 @@
       return;
     }
     // A manual selection wins over any in-flight automatic project restore.
-    ++projectAudioRestoreGeneration;
+    const uploadToken = ++projectAudioRestoreGeneration;
+    motionLabEditedEvents = null;
+    motionDirectorCues = [];
     motionLabAudioAnalysis = null;
     motionLabAudioProjectId = null;
     motionLabReleaseAudio();
@@ -5912,12 +5977,15 @@
           Number(analysis.fps) !== Number(state.project.animation.fps)) {
         throw new Error('Audio frame alignment changed; analyze again.');
       }
+      if (!(await motionStudioHydrateEdits(projectId, analysis, () =>
+        projectAudioRestoreGeneration === uploadToken))) return;
       motionLabAudioAnalysis = analysis;
       motionLabAudioProjectId = projectId;
       motionLabAudioUrl = URL.createObjectURL(file);
       motionLabAudioElement = new Audio(motionLabAudioUrl);
       motionLabAudioElement.preload = 'auto';
       motionLabAudioElement.load();
+      motionStudioConnectAudioTransport();
       motionLabAudioSyncStatus('Ready to play with Motion Curves playback.');
       const peak = Math.max(0, ...motionLabAudioSignal());
       const thresholdField = qs('#animation-motion-lab-audio-threshold');
@@ -5926,6 +5994,8 @@
         // analysis scale without seeing the envelope.
         thresholdField.value = Math.min(.1, peak * .55).toFixed(3);
       }
+      motionLabStereoWaveform();
+      motionDirectorPanel();
       motionLabAudioPreview();
       if (status) status.textContent = 'Analyzed ' + file.name + ': ' +
         analysis.values.length + ' frames · ' + analysis.duration_seconds.toFixed(2) +
