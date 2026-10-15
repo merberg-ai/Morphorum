@@ -5738,6 +5738,266 @@
   let motionStudioChannelSerial = 0;
   const motionStudioBandCache = new Map();
 
+  // MS3b spectrum is derived from a verified project WAV, never from browser
+  // file paths. All edits below are local until Stage/Preview/Apply.
+  let motionStudioSpectrum = {
+    projectId: '', sha: '', points: [], maxHz: 20000, loading: false, error: '',
+  };
+  let motionStudioSelectedChannel = '';
+  let motionStudioDraggingEdge = '';
+  let motionStudioSpectrumToken = 0;
+  const motionStudioSpectrumCache = new Map();
+  let motionStudioBandPreview = { projectId: '', sha: '', fps: 0, frames: 0,
+    ranges: '', bands: null };
+
+  const motionStudioSpectrumX = (hz, max) =>
+    34 + 666 * Math.log(Math.max(20, Math.min(max, hz)) / 20) /
+      Math.log(max / 20);
+  function motionStudioSpectrumFrequency(clientX, svg, max) {
+    const bounds = svg.getBoundingClientRect();
+    const px = (clientX - bounds.left) * 720 / Math.max(1, bounds.width);
+    const ratio = Math.max(0, Math.min(1, (px - 34) / 666));
+    return 20 * (max / 20) ** ratio;
+  }
+
+  function motionStudioSelectedBand() {
+    const channels = motionStudioChannelState.channels;
+    return channels.find(channel => channel.id === motionStudioSelectedChannel) ||
+      channels[0] || null;
+  }
+
+  function motionStudioBandRanges(channels) {
+    return channels.map(({id, low_hz, high_hz}) => ({id, low_hz, high_hz}));
+  }
+
+  function motionStudioShowBandPreview() {
+    const panel = qs('#animation-motion-studio-channels');
+    const svg = panel?.querySelector('[data-ms3-envelope-svg]');
+    const label = panel?.querySelector('[data-ms3-envelope-status]');
+    if (!svg || !label) return;
+    const selected = motionStudioSelectedBand();
+    const preview = motionStudioBandPreview;
+    const analysis = motionLabAudioAnalysis;
+    const valid = selected && analysis && state.project?.id === preview.projectId &&
+      preview.sha === analysis.source_sha256 &&
+      Number(state.project.animation.fps) === preview.fps &&
+      Number(state.project.animation.max_frames) === preview.frames;
+    const analyzed = valid && preview.bands && preview.ranges ===
+      JSON.stringify(motionStudioBandRanges(motionStudioChannelState.channels));
+    const envelope = analyzed && preview.bands[selected.id];
+    svg.replaceChildren();
+    if (!envelope?.length) {
+      label.textContent = 'Analyze the current channel ranges to preview their normalized energy.';
+      return;
+    }
+    const NS = 'http://www.w3.org/2000/svg';
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1','24'); line.setAttribute('x2','710');
+    line.setAttribute('y1','144'); line.setAttribute('y2','144');
+    line.setAttribute('stroke','currentColor'); line.setAttribute('opacity','.3');
+    svg.appendChild(line);
+    const graph = document.createElementNS(NS, 'path');
+    const stride = Math.max(1, Math.ceil(envelope.length / 340));
+    const path = [];
+    for (let i=0;i<envelope.length;i+=stride) {
+      const energy = Math.max(0, Math.min(1, Number(envelope[i]) || 0));
+      const x = 24 + 686*i / Math.max(1,envelope.length - 1);
+      path.push((path.length ? 'L' : 'M') + x.toFixed(2) + ',' +
+        (144 - 120*energy).toFixed(2));
+    }
+    graph.setAttribute('d',path.join(' '));
+    graph.setAttribute('fill','none'); graph.setAttribute('stroke','var(--accent)');
+    graph.setAttribute('stroke-width','2');
+    graph.setAttribute('stroke-linejoin','round');
+    svg.appendChild(graph);
+    const gate = document.createElementNS(NS,'line');
+    const y = 144 - 120 * Math.max(0, Math.min(1, Number(selected.threshold) || 0));
+    for (const [key,val] of Object.entries({
+      x1:24, x2:710, y1:y, y2:y,
+      stroke:'var(--warn)', 'stroke-dasharray':'5 5', opacity:.85,
+    })) gate.setAttribute(key,String(val));
+    svg.appendChild(gate);
+    label.textContent = selected.name + ' · ' + selected.low_hz + '–' +
+      selected.high_hz + ' Hz · ' + envelope.length + ' project frames · ' +
+      'dashed line = threshold (energy only, not camera velocity)';
+  }
+
+  function motionStudioDrawSpectrum() {
+    const panel = qs('#animation-motion-studio-channels');
+    const svg = panel?.querySelector('[data-ms3-spectrum-svg]');
+    const caption = panel?.querySelector('[data-ms3-spectrum-caption]');
+    const selected = motionStudioSelectedBand();
+    const picker = panel?.querySelector('[data-ms3-select]');
+    if (!svg || !caption || !picker) return;
+    picker.replaceChildren();
+    for (const channel of motionStudioChannelState.channels) {
+      const option = document.createElement('option');
+      option.value = channel.id;
+      option.textContent = channel.name + ' (' + channel.low_hz + '–' + channel.high_hz + ' Hz)';
+      picker.appendChild(option);
+    }
+    if (selected) {
+      motionStudioSelectedChannel = selected.id;
+      picker.value = selected.id;
+    }
+    picker.disabled = !selected;
+    svg.replaceChildren();
+    const state = motionStudioSpectrum;
+    const current = state.projectId === motionLabAudioProjectId &&
+      state.sha === motionLabAudioAnalysis?.source_sha256 &&
+      state.projectId === motionStudioChannelState.projectId;
+    const points = current ? state.points : [];
+    const max = Math.max(21, state.maxHz || 20000);
+    svg.setAttribute('aria-label', selected ?
+      'Spectrum for ' + selected.name + ', ' + selected.low_hz + ' to ' +
+      selected.high_hz + ' Hz. Drag a band edge or press arrow keys to edit.'
+      : 'Frequency spectrum: no sound channel selected');
+    const NS = 'http://www.w3.org/2000/svg';
+    const el = (type, attributes) => {
+      const node = document.createElementNS(NS,type);
+      for (const [key,value] of Object.entries(attributes)) node.setAttribute(key,String(value));
+      svg.appendChild(node);
+      return node;
+    };
+    el('line',{x1:34,y1:150,x2:700,y2:150,stroke:'currentColor',opacity:.4});
+    for (const hz of [20,50,100,250,500,1000,2500,5000,10000,20000]) {
+      if (hz > max) continue;
+      const x = motionStudioSpectrumX(hz,max);
+      el('line',{x1:x,y1:18,x2:x,y2:150,stroke:'currentColor',opacity:.10});
+      const text = el('text',{x,y:165,'text-anchor':'middle',fill:'currentColor',
+        'font-size':'12',opacity:.75});
+      text.textContent = hz >= 1000 ? (hz/1000) + 'k' : String(hz);
+    }
+    if (points.length) {
+      const outline = points.map((point,i)=>
+        (i?'L':'M') + motionStudioSpectrumX(point.hz,max).toFixed(2) +
+        ',' + (150-126*Math.max(0,Math.min(1,point.level))).toFixed(2)).join(' ');
+      el('path',{d:outline,fill:'none',stroke:'var(--accent)','stroke-width':2,
+        'stroke-linejoin':'round'});
+    }
+    if (selected) {
+      const low = motionStudioSpectrumX(selected.low_hz,max);
+      const high = motionStudioSpectrumX(selected.high_hz,max);
+      el('rect',{x:low,y:18,width:Math.max(0,high-low),height:132,
+        fill:'var(--accent)',opacity:.15});
+      for (const x of [low,high]) {
+        el('line',{x1:x,y1:18,x2:x,y2:150,stroke:'var(--accent)',
+          'stroke-width':3});
+        el('circle',{cx:x,cy:22,r:6,fill:'var(--accent)'});
+      }
+    }
+    caption.textContent = !current ? 'Open a project WAV to inspect its frequency profile.' :
+      state.loading ? 'Analyzing saved WAV spectrum…' :
+      state.error ? 'Spectrum unavailable: ' + state.error :
+      !points.length ? 'Spectrum unavailable.' :
+      'Time-averaged FFT of the saved WAV, ' + (max/1000).toFixed(1) +
+      ' kHz upper range. Select a channel, then drag either band edge or use the keyboard arrows.';
+    motionStudioShowBandPreview();
+  }
+
+  function motionStudioEditBandEdge(hz, edge) {
+    const selected = motionStudioSelectedBand();
+    if (!selected || motionLabAudioProjectId !== state.project?.id ||
+        motionStudioSpectrum.loading) return;
+    const upper = Math.min(20000, Math.floor(motionStudioSpectrum.maxHz || 20000));
+    if (upper <= 40) return;
+    const snapped = Math.max(20, Math.min(upper, Math.round(hz)));
+    if (edge === 'low') selected.low_hz = Math.min(snapped, selected.high_hz - 10);
+    else selected.high_hz = Math.max(snapped, selected.low_hz + 10);
+    selected.low_hz = Math.max(20, Math.min(selected.low_hz, upper - 10));
+    selected.high_hz = Math.min(upper, Math.max(selected.high_hz, selected.low_hz + 10));
+    motionStudioChannelState.dirty = true;
+    // Change the two numerical controls without discarding keyboard focus.
+    const row = Array.from(qs('#animation-motion-studio-channels')?.querySelectorAll(
+      '[data-ms3-channel]') || []).find(node=>node.dataset.ms3Channel === selected.id);
+    if (row) {
+      for (const field of ['low_hz','high_hz']) {
+        const input = row.querySelector('[data-ms3-field="' + field + '"]');
+        if (input) input.value = String(selected[field]);
+      }
+    }
+    motionStudioDrawSpectrum();
+    motionStudioUpdateChannelButtons();
+  }
+
+  async function motionStudioFetchSpectrum(projectId, sha, refresh = false) {
+    const token = ++motionStudioSpectrumToken;
+    const cacheKey = projectId + '|' + sha;
+    const cached = !refresh && motionStudioSpectrumCache.get(cacheKey);
+    motionStudioSpectrum = { projectId, sha, points: [], maxHz: 20000,
+      loading: !cached, error: '' };
+    if (cached) {
+      motionStudioSpectrum = {...motionStudioSpectrum,
+        points:cached.spectrum,maxHz:cached.frequency_max_hz,loading:false};
+      motionStudioDrawSpectrum();
+      return;
+    }
+    motionStudioDrawSpectrum();
+    try {
+      const result = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/audio/' + encodeURIComponent(sha) + '/spectrum');
+      if (token !== motionStudioSpectrumToken || state.project?.id !== projectId ||
+          motionLabAudioAnalysis?.source_sha256 !== sha) return;
+      const data = result.analysis;
+      if (!Array.isArray(data?.spectrum) || data.spectrum.length > 128 ||
+          data.spectrum.length < 32 || !data.spectrum.every(item =>
+            Number.isFinite(item.hz) && Number.isFinite(item.level) &&
+            item.hz >= 20 && item.level >= 0 && item.level <= 1)) {
+        throw new Error('Host returned invalid spectrum data.');
+      }
+      motionStudioSpectrumCache.set(cacheKey,data);
+      if (motionStudioSpectrumCache.size > 10) motionStudioSpectrumCache.delete(
+        motionStudioSpectrumCache.keys().next().value);
+      motionStudioSpectrum = {projectId,sha,points:data.spectrum,
+        maxHz:data.frequency_max_hz,loading:false,error:''};
+    } catch (error) {
+      if (token !== motionStudioSpectrumToken || state.project?.id !== projectId) return;
+      motionStudioSpectrum.loading = false;
+      motionStudioSpectrum.error = error.message;
+    }
+    motionStudioDrawSpectrum();
+  }
+
+  async function motionStudioInspectChannels() {
+    const projectId = state.project?.id;
+    const analysis = motionLabAudioAnalysis;
+    if (!projectId || !analysis || motionLabAudioProjectId !== projectId) return;
+    const sha = analysis.source_sha256;
+    const frames = Number(state.project.animation.max_frames);
+    const fps = Number(state.project.animation.fps);
+    const ranges = motionStudioBandRanges(motionStudioChannelState.channels);
+    if (!ranges.length || ranges.length > 8) return;
+    const key = JSON.stringify([projectId,sha,fps,frames,ranges]);
+    const btn = qs('#animation-motion-studio-channels')?.querySelector('[data-ms3-inspect]');
+    if (btn) btn.disabled = true;
+    try {
+      let bands = motionStudioBandCache.get(key);
+      if (!bands) {
+        const response = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
+          '/motion-lab/audio/' + encodeURIComponent(sha) + '/bands', {
+          method:'POST',body:JSON.stringify({ranges}),
+        });
+        bands = response.analysis?.bands;
+        if (!bands) throw new Error('Missing saved WAV frequency analysis.');
+        motionStudioBandCache.set(key,bands);
+        if (motionStudioBandCache.size > 12) motionStudioBandCache.delete(
+          motionStudioBandCache.keys().next().value);
+      }
+      if (state.project?.id !== projectId || motionLabAudioAnalysis?.source_sha256 !== sha ||
+          Number(state.project.animation.fps) !== fps ||
+          Number(state.project.animation.max_frames) !== frames) return;
+      motionStudioBandPreview = { projectId,sha, fps, frames,
+        ranges:JSON.stringify(ranges),bands };
+      motionStudioShowBandPreview();
+    } catch (error) {
+      if (state.project?.id === projectId) {
+        motionLabNotify('Frequency preview: ' + error.message);
+      }
+    } finally {
+      if (state.project?.id === projectId) motionStudioUpdateChannelButtons();
+    }
+  }
+
   function motionStudioChannelDefaults(analysis) {
     const end = Number(analysis.values.length);
     return [
