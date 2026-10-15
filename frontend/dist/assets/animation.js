@@ -1881,6 +1881,8 @@
   function fillForm() {
     const project = state.project;
     syncMotionLabDraft();
+    // Reload limits even when the user refreshes the same project ID.
+    motionLabSyncRecordingLimits();
     state.loading = true;
     try {
       renderProjectSelect();
