@@ -184,9 +184,9 @@ Proposed testable batches:
 Each batch must pass CI and owner physical tests before the next. Main remains
 untouched without explicit authorization.
 
-## MS5: Synchronized preview and render/refine (MS5.1 implemented; physical gate pending)
+## MS5: Synchronized preview and render/refine (MS5.1 accepted; MS5.2 physical gate pending)
 
-- **MS5.1: Project-frame A/B review (implemented; Windows physical gate pending).**
+- **MS5.1: Project-frame A/B review (physically accepted).**
   Reuse the existing CPU camera preview frame player and sampled PNGs, plus
   its optional synchronized project soundtrack. Add a bounded A/B playback
   interval, choose A/B from the current frame, jump to the exact captured
@@ -197,10 +197,20 @@ untouched without explicit authorization.
   project-frame time stays accurate even if preview quality is low.
   Guard against project FPS/frame-count mismatches, stale curves and corrupt
   preview sample maps. No project, take or render output is modified by review.
-- **MS5.2: synchronized split view and completed-render review (planned).**
-  Present the non-destructive CPU preview alongside stored completed-render
-  frames with shared frame seek; confirm rendered frame coverage and metadata
-  before comparing. Never assume generated-frame FPS or count without evidence.
+- **MS5.2: synchronized split view and completed-render review (implemented;
+  physical gate pending).** The existing frame player now displays the sampled
+  CPU preview beside the **exact stored PNG** for the same project frame.
+  Select a render from the current project's saved render history and click
+  **Compare Render**. A new read-only API examines its frozen manifest and
+  checks render completion, original FPS/length, unique contiguous frame
+  record coverage, and physical existence of all PNG frames. Incomplete,
+  interrupted, missing, invalid, or preview-incompatible renders cannot
+  be compared. Shared scrubbing, A/B looping, WAV playback and the Curves
+  jump all reuse the existing single frame clock. No render data is changed;
+  failed image reads stop the comparison with a visible error. Split panels
+  stack on small screens and show a single wide CPU view if no comparison
+  is active. The actual historical render may differ from the current
+  project motion and seed; this is inspection, not proof of equivalent inputs.
 - **MS5.3: ranged correction/refinement workflow (planned).**
   Improve selection of a bounded recorded take interval, reuse punch-in and
   curve editing, stage corrections and review differences before Apply. Define
@@ -599,3 +609,61 @@ CI tests cover bounded looping, inclusive stop, sampled-frame mapping, API
 metadata validation and accessible review controls. A successful CI pass is
 not physical acceptance; wait for owner testing before MS5.2. Keep `main`
 untouched and draft PR #39 unmerged.
+
+## MS5.1 acceptance and MS5.2 checkpoint (2026-10-15)
+
+The owner physically verified **MS5.1 works as expected** and approved
+moving to MS5.2. MS5.1 is accepted. MS5.2 is implemented on `dev-webui`,
+awaiting Windows physical verification. `main` remains untouched; PR #39
+remains draft and unmerged.
+
+### MS5.2 implementation
+
+The frame-controlled **Camera Motion Preview** presents a new
+**Compare saved render** dropdown and Compare / Refresh / Hide buttons.
+The existing CPU preview remains the frame/time authority, while a second
+image shows the exact completed render PNG for the same frame, without GIF
+approximations. The unchanged soundtrack transport, A/B loop, and six-axis
+curve readout share that project frame. Since CPU preview quality is sampled,
+its image may be the most recent captured source frame; the saved rendered
+PNG is the precise frame number. The UI labels that distinction.
+
+The read-only `GET /api/animation/renders/{project_id}/{render_id}/review-metadata`
+checks identity and examines the stored render's **frozen** FPS and frame
+count, completeness of every unique frame record from 0 through N-1,
+actual PNG file existence, and `completed` status. A mismatch between
+the render, current editor, and CPU preview is explicitly rejected.
+This is not a render engine and does not create, edit, export, or resume
+a render or apply Motion Lab changes. Other projects' render IDs are
+unavailable for selection. Rapid project switching or a new preview
+invalidates in-flight metadata responses.
+
+### MS5.2 physical verification
+
+1. Open a 3D project with a previously **completed** real animation render.
+   Create a fresh CPU **Camera Motion Preview** at the **same FPS and frame
+   count**. Use the A/B Motion Review section in the Preview workspace.
+2. Select the completed render under **Compare saved render**, then click
+   **Compare Render**. Confirm split images appear; CPU is geometry-only
+   (possibly sparse captured samples) and right image is the exact saved PNG.
+3. Scrub to frames 0, a middle frame, and the last frame. Confirm both
+   images follow the same frame number and that the rendered PNG changes
+   with the shared player. Test A/B looping and manual seeking with and
+   without analyzed WAV.
+4. Select **Hide Comparison**; CPU player should return to a full-width
+   view without deleting anything. Refresh Renders, re-select and compare.
+5. Change editor FPS or frame count without regenerating CPU preview.
+   Review should reject invalid timing and hide the mismatched render.
+   Restore project timing and regenerate.
+6. If there is an incomplete, interrupted, or cancelled previous render,
+   select it and verify the UI refuses comparison with a readable message.
+   The preview must remain functional and no render should be resumed.
+7. Test a phone-width screen: split frames should stack vertically, controls
+   should fit the viewport. Switch projects while loading comparison and
+   verify an old render never appears under the new project.
+8. Confirm saved motion layers, source/soundtrack, stored render files,
+   seeds, FPS and frame counts remain unchanged.
+
+CI covers Python manifest completeness, invalid/missing PNGs, render identity,
+frontend stale-response guards, matching render-frame URLs and responsive
+markup. Physical acceptance is required **before MS5.3**.
