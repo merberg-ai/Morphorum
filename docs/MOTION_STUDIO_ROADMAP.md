@@ -158,9 +158,21 @@ Proposed testable batches:
   sound-channel layers, recordings, prompts, model and soundtrack are
   unchanged by staging. Automated tests cover axis/frame isolation, input
   validation, legacy preset compatibility and no-double-apply.
-- **MS4.3: Named custom presets.** Save and reload user-defined combinations,
-  including axis mappings, strength and timing, with a clear distinction
-  between a reusable preset and a project's saved motion layers.
+- **MS4.3: Named custom presets (implemented; Windows physical gate pending).**
+  Use **My Motion Presets** inside Continuous Camera Motion to save a named
+  reusable template from the current editor, choose it again, load it into the
+  editor, update its settings, or delete it. A named template includes native
+  preset, Add/Replace, selected axes, strength, cycle/fade seconds and
+  **project-relative start/end fractions**; loading it scales the range to
+  the destination project's frame count. Templates are saved atomically in
+  `data/motion-studio-presets.json` and shared by any browser/client connected
+  to the same Morphorum instance. They are **not** stored inside individual
+  project files and do **not** change motion layers until the user explicitly
+  clicks **Stage Movement** and later **Apply to Animation**. Names must be
+  unique (case-insensitive), 1–64 printable characters, with up to 64 templates.
+  Refresh Library syncs from the server; the API validates every motion
+  field and protects other layer types. These templates contain neither
+  audio nor recordings, and do not change the native motion compiler.
 - **MS4.4: Recording integration and polish.** Reuse existing keyboard/touch
   six-axis recording, improve optional controller mapping, add velocity-unit
   help and configurable axis limits, and validate no abrupt segment jumps.
@@ -410,3 +422,48 @@ layers and narrow/mobile layout.
 **Gate:** This cleanup still needs Windows physical verification. After it
 passes, proceed with **MS4.3 named custom presets**. Keep draft PR #39 and
 `main` untouched until a separate merge review.
+
+## MS4.2 timeline cleanup acceptance and MS4.3 implementation (2026-10-15)
+
+The project owner confirmed the MS4.2 follow-up timeline cleanup **works as
+expected** on Windows. MS4.2 and its Remove control / phantom-bar correction
+are accepted. **MS4.3 is implemented on `dev-webui`, awaiting owner physical
+verification.** Leave `main` unchanged, and keep draft PR #39 unmerged.
+
+### My Motion Presets behavior
+
+1. Open a 3D animation project and visit **Motion Studio → Continuous Camera
+   Motion → My Motion Presets**. Set movement type, Add/Replace, axis mask,
+   strength, cycle/fade, and start/end frame selection in the editor.
+2. Enter a unique name and choose **Save as New**. The preset persists on the
+   Morphorum server and does not create a project motion layer.
+3. Choose the saved preset and click **Load to Editor**. Loading does **not**
+   stage it. Verify the current editor's mode, axis mask and numeric values.
+   On a longer/shorter target project, start/end frames are proportionally
+   scaled to the target frame count with at least one frame of coverage.
+4. Click **+ Stage Movement** to add a new Motion Lab draft layer (existing
+   selected layer is deselected when a named preset loads). **Preview Curves**
+   and **Apply to Animation** continue through the native compiler.
+5. To revise a named template, select it, change the editor fields or name,
+   then click **Update Saved**. This updates the library item only; it does
+   not rewrite any existing project layer.
+6. **Delete Saved** uses the standard confirmation dialog. Deleting a library
+   item does not delete a staged motion layer or camera schedules. Removing a
+   staged movement instead uses the separate MS4.2 timeline **Remove** action.
+7. Open a different project and/or different browser connected to the same
+   Morphorum server, choose **Refresh Library**, and verify the template
+   remains available. Restart Morphorum to verify on-disk persistence.
+
+**Storage:** `data/motion-studio-presets.json` is managed by Morphorum, using
+atomic replacement on writes. It can be backed up together with the `data/`
+directory. This implementation shares templates within **one Morphorum
+installation**; cross-installation exchange/import is a separate enhancement.
+The API routes are `GET/POST /api/animation/motion-studio/custom-presets`,
+`PUT/DELETE /api/animation/motion-studio/custom-presets/{preset_id}`.
+
+**Regression gate:** Backend API tests cover persistence, create/update/delete,
+name conflicts, invalid axes/values, corrupt library protection and the
+64-preset bound. Browser regression tests cover saving without staging,
+loading into the new-editor state, percentage-based frame scaling and
+non-destructive stage. Syntax/backend/installer GitHub Actions must pass,
+then Windows and mobile behavior must be physically verified before MS4.4.
