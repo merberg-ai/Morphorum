@@ -5878,6 +5878,13 @@
     if (!lanes) return;
     lanes.replaceChildren();
     const count = motionStudioArrangementFrameCount();
+    const fps = motionStudioArrangementFps();
+    const ruler = panel.querySelector('[data-ms4-ruler]');
+    if (ruler) ruler.textContent = '0.00s    ·    ' +
+      (count/2/fps).toFixed(2) + 's    ·    ' + (count/fps).toFixed(2) +
+      's (project end, ' + count + ' frames @ ' + fps + ' FPS)';
+    const seek = panel.querySelector('[data-ms4-seek]');
+    if (seek) seek.max = String(count - 1);
     const layers = motionLabDraftLayers.filter(l => l.type === 'preset' ||
       (!l.type && MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === l.preset)));
     const addLane = (label, start, end, selected, id, enabled) => {
