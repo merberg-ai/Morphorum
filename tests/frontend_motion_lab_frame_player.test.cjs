@@ -174,3 +174,135 @@ test('MS5.1 integration compares preview against Editor FPS and frame count',()=
   assert.match(js,/motionReviewBind\(\)/);
   assert.match(js,/function motionReviewFrame\(\{frame,fps,frames,previewSampleFrame\}\)/);
 });
+
+
+test('MS5.4 A/B one-frame range is stable and reset returns to A',()=>{
+  const h=createPlayer();
+  h.player.load({id:'single',result:{fps:24,source_frames:48,
+    captured_frame_numbers:[0,24,47]}});
+  assert.ok(h.player.setReviewRange(19,19,true));
+  h.player.play();
+  assert.equal(h.player.frame,19);
+  assert.equal(h.player.active,false);
+  assert.equal(h.play.textContent,'▶ Play');
+  assert.equal(h.player.tickId,null);
+  assert.ok(h.player.setReviewRange(12,20,true));
+  h.player.seek(18);
+  h.reset.handlers.click();
+  assert.equal(h.player.frame,12,'Start must respect A/B interval');
+  h.player.pause();
+});
+
+for (const fps of [12,24,30,60]) {
+  test('MS5.4 frame boundary, loop and exact time at '+fps+' FPS',()=>{
+    const h=createPlayer();
+    h.player.load({id:'fps-'+fps,result:{fps,source_frames:fps*4,
+      captured_frame_numbers:[0,Math.floor(fps*2),fps*4-1]}});
+    assert.ok(h.player.setReviewRange(fps,fps*2-1,true));
+    h.player.play();
+    h.clock(500);
+    assert.equal(h.player.frame,Math.floor(fps*1.5));
+    h.clock(1300);
+    assert.equal(h.player.frame,fps+Math.floor(fps*.3),'A/B should wrap by project frame');
+    assert.match(h.time.textContent,new RegExp('frame '+h.player.frame+'/'));
+    h.player.pause();
+    assert.equal(h.player.active,false);
+  });
+}
+
+test('MS5.4 short WAV ends: playback transitions to wall-clock without jumping backward',()=>{
+  const h=createPlayer(), notices=[];
+  const audio={
+    readyState:4,duration:2.5,paused:true,currentTime:0,
+    playCalls:0,pauseCalls:0,
+    play(){this.paused=false;this.playCalls++;return Promise.resolve();},
+    pause(){this.paused=true;this.pauseCalls++;},
+  };
+  h.player.getAudio=()=>audio;
+  h.player.shouldSync=()=>true;
+  h.player.status=message=>notices.push(message);
+  h.player.load({id:'short',result:{fps:10,source_frames:50,
+    captured_frame_numbers:[0,10,20,30,40,49]}});
+  h.loop.checked=false;
+  assert.ok(h.player.setReviewRange(20,40,true));
+  h.player.play();
+  audio.currentTime=2.4;
+  h.clock(400);
+  assert.equal(h.player.frame,24);
+  audio.currentTime=2.5;
+  audio.paused=true;
+  h.clock(500);
+  assert.equal(h.player.frame,24);
+  h.clock(1100);
+  assert.equal(h.player.frame,30,'Video advances after WAV end');
+  h.clock(2500);
+  assert.equal(h.player.frame,40,'Playback stops at inclusive B');
+  assert.equal(h.player.active,false);
+  assert.ok(notices.some(msg=>/Soundtrack ended/.test(msg)));
+  assert.ok(audio.pauseCalls>=1);
+});
+
+test('MS5.4 missing WAV, late soundtrack and disabled sync remain silent without stalling',()=>{
+  const h=createPlayer(), audio={
+    readyState:0,duration:NaN,paused:true,currentTime:0,
+    play(){throw Error('Must not play unavailable audio');},
+    pause(){this.paused=true;},
+  };
+  h.player.getAudio=()=>audio;
+  h.player.shouldSync=()=>true;
+  h.player.load({id:'missing',result:{fps:24,source_frames:120,
+    captured_frame_numbers:[0,24,60,119]}});
+  h.loop.checked=false;
+  h.player.play();
+  h.clock(1000);
+  assert.equal(h.player.frame,24);
+  h.player.pause();
+  h.player.shouldSync=()=>false;
+  h.player.play();
+  h.clock(1500);
+  assert.equal(h.player.frame,60);
+  h.player.pause();
+});
+
+test('MS5.4 seek with invalid frame never produces NaN URLs or audio offsets',()=>{
+  const h=createPlayer(), audio={
+    readyState:4,duration:10,paused:true,currentTime:0,
+    play(){this.paused=false;return Promise.resolve();},
+    pause(){this.paused=true;},
+  };
+  h.player.getAudio=()=>audio;
+  h.player.shouldSync=()=>true;
+  h.player.load({id:'bad-seek',result:{fps:12,source_frames:24,
+    captured_frame_numbers:[0,10,23]}});
+  h.player.seek(NaN);
+  assert.equal(h.player.frame,0);
+  assert.equal(audio.currentTime,0);
+  assert.match(h.image.src,/\/frames\/0$/);
+  h.player.seek(Infinity);
+  assert.equal(h.player.frame,0);
+});
+
+test('MS5.4 disabling audio sync during playback pauses WAV and continues the same frame clock',()=>{
+  const h=createPlayer();
+  let enabled=true;
+  const audio={
+    readyState:4,duration:12,paused:true,currentTime:0,
+    play(){this.paused=false;return Promise.resolve();},
+    pause(){this.paused=true;},
+  };
+  h.player.getAudio=()=>audio;
+  h.player.shouldSync=()=>enabled;
+  h.player.load({id:'toggle',result:{fps:30,source_frames:180,
+    captured_frame_numbers:[0,30,60,120,179]}});
+  h.player.play();
+  audio.currentTime=1.5;
+  h.clock(500);
+  assert.equal(h.player.frame,45);
+  enabled=false;
+  h.clock(600);
+  assert.equal(h.player.frame,45);
+  assert.equal(audio.paused,true);
+  h.clock(1100);
+  assert.equal(h.player.frame,60);
+  h.player.pause();
+});
