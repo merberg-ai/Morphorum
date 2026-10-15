@@ -2712,6 +2712,7 @@
     const mismatch=motionReviewMatch(),value=motionReviewEl('values');
     if(mismatch){
       motionReviewStatus(mismatch);
+      motionCompareClear(mismatch);
       if(value)value.textContent='Comparison unavailable until project and preview timing match.';
       return;
     }
