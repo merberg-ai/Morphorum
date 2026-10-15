@@ -59,6 +59,13 @@ Verification at checkpoint: source-level checks passed, including four new
 responsive contract tests and ten existing `frontend_dev_ui` assertions
 executed against the committed source in a lightweight test harness. Syntax
 and backend GitHub Actions are configured to run on `dev-webui` pushes.
-Full GitHub Actions results and physical Windows/Android viewport acceptance
-are **not yet independently verified**. Use this commit as the rollback
-point for the first batch; do not promote to `main` before visual acceptance.
+At the original checkpoint, full GitHub Actions and physical viewport testing
+were still pending. The project owner subsequently confirmed the layouts
+looked correct on mobile and desktop; W1 is accepted for release.
+
+## W1 acceptance (2026-10-15)
+
+The project owner verified that the updated responsive WebUI displays as
+expected on mobile and desktop. This accepted W1 batch is ready for inclusion
+in `main` with W2. Existing feature code continues to share the same backend
+and browser scripts across device types.
