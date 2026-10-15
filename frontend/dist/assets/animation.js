@@ -8778,10 +8778,18 @@
     panels.audio.appendChild(analysisWorkspace);
     // Parseq-inspired workflow: source first, full-width waveform next,
     // detection and motion response below. Keep original live controls.
-    const audioSourceDock = document.createElement('div');
-    audioSourceDock.className = 'animation-audio-source-dock';
-    audioSourceDock.innerHTML = '<strong>Audio source</strong>';
-    analysisWorkspace.prepend(audioSourceDock);
+    const audioSourceDock = document.createElement('section');
+    audioSourceDock.className = 'card glass animation-audio-source-dock';
+    audioSourceDock.id = 'animation-audio-source-dock';
+    audioSourceDock.innerHTML = '<div class="card-header"><div>' +
+      '<h2>Audio Source</h2>' +
+      '<p class="muted">Use the soundtrack already attached to this project, ' +
+      'or select a WAV from your device. Start here before arranging motion.</p>' +
+      '</div></div>';
+    // Keep the actual file input, saved-soundtrack button and event handlers:
+    // move the existing controls without cloning any element or creating new IDs.
+    // This card stays immediately below the Motion Studio introduction.
+    audioIntro.after(audioSourceDock);
     // DA3.3a: keep editable timeline and inspector together; separate configuration
     // into source, detection and camera-response groups without cloning controls.
     const audioCard = qs('#animation-motion-lab-audio');
@@ -8789,7 +8797,7 @@
     if (controls) {
       const fields = Array.from(controls.children);
       const sections = [
-        ['Audio source', fields.slice(0,2), true],
+        ['Choose audio', fields.slice(0,2), true],
         ['Beat detection', [fields[2],fields[3],fields[4],fields[6]], false],
         ['Camera response', [fields[5],fields[7],fields[8],fields[9]], false],
       ];
@@ -8804,7 +8812,7 @@
         for (const field of elements) if (field) grid.appendChild(field);
         details.append(summary,grid);
         controls.appendChild(details);
-        if (label === 'Audio source') {
+        if (label === 'Choose audio') {
           details.open = true;
           audioSourceDock.appendChild(details);
         }
