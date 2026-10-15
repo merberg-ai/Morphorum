@@ -16,6 +16,7 @@ function harness(apiHandler) {
   const el=()=>({textContent:'',hidden:false,value:'',src:'',children:[],
     replaceChildren(){this.children=[];},
     appendChild(node){this.children.push(node);},
+    get options(){return this.children;},
     getAttribute(key){return key==='src' ? this.src : null;},
     removeAttribute(key){if(key==='src')this.src='';},
   });
@@ -49,6 +50,7 @@ test('MS5.2 lists current project renders and follows shared frame seek with exa
   });
   await h.refresh();
   assert.equal(h.fields.select.children.length,2);
+  assert.match(h.fields.status.textContent,/Choose a completed render/);
   h.fields.select.value='render-1';
   await h.load();
   assert.equal(h.fields['render-wrap'].hidden,false);
