@@ -2348,6 +2348,8 @@
   // open starts with a verified inventory and rehydrates its media players.
   let projectMediaGeneration = 0;
   let projectAudioRestoreGeneration = 0;
+  let motionLabSoundtrackBusy = false;
+  let motionLabSoundtrackStatus = '';
   let projectMedia = {
     projectId: '', loading: false, assets: [], warnings: [],
     soundtrack: null, selectedWav: '',
@@ -2414,6 +2416,18 @@
       }
     }
     if (offsetSave) offsetSave.disabled = !soundtrack || !projectMedia.soundtrack;
+    const savedUse = qs('#animation-motion-lab-use-soundtrack');
+    const savedStatus = qs('#animation-motion-lab-soundtrack-info');
+    if (savedUse) savedUse.disabled = !soundtrack || !current || loading ||
+      motionLabSoundtrackBusy || Boolean(motionLabBusy) || animationMode() !== '3d';
+    if (savedStatus) savedStatus.textContent = motionLabSoundtrackBusy
+      ? 'Preparing the saved soundtrack on the Morphorum host…'
+      : motionLabSoundtrackStatus && current
+        ? motionLabSoundtrackStatus
+        : soundtrack ? 'Available: ' + (projectMedia.soundtrack?.filename || soundtrack.filename) +
+          ' · ' + (projectMedia.soundtrack?.format || 'audio').toUpperCase() +
+          '. Use without uploading again. Compressed formats need host FFmpeg.'
+        : 'No project soundtrack attached. Choose a WAV or attach audio in Import Motion Settings.';
 
     if (wavRow) wavRow.hidden = wavs.length === 0;
     if (wavSelect) {
@@ -2518,10 +2532,11 @@
     if (token === projectAudioRestoreGeneration) renderProjectMedia();
   }
 
-  async function restoreProjectMedia({ resetAudio = false } = {}) {
+  async function restoreProjectMedia({ resetAudio = false, preferredWav = '' } = {}) {
     const id = state.project?.id;
     const token = ++projectMediaGeneration;
     if (resetAudio) {
+      motionLabSoundtrackStatus = '';
       ++projectAudioRestoreGeneration;
       motionLabReleaseAudio();
       motionLabAudioAnalysis = null;
@@ -2575,7 +2590,7 @@
         layer.type === 'audio' && wavs.some(wav => wav.sha256 === layer.sha256));
       const currentAnalysisSha = motionLabAudioProjectId === id
         ? motionLabAudioAnalysis?.source_sha256 : '';
-      const chosen = [currentAnalysisSha, previous, lastAudioLayer?.sha256, wavs[0]?.sha256]
+      const chosen = [preferredWav, currentAnalysisSha, previous, lastAudioLayer?.sha256, wavs[0]?.sha256]
         .find(sha => sha && wavs.some(wav => wav.sha256 === sha)) || '';
       projectMedia = { projectId: id, loading: false, assets, warnings,
         soundtrack, selectedWav: chosen };
@@ -6486,6 +6501,48 @@
       Number(motionLabAudioAnalysis.fps) !== Number(state.project?.animation?.fps);
     motionStudioUpdateChannelButtons();
   }
+  async function motionLabUseProjectSoundtrack() {
+    const projectId = state.project?.id;
+    const soundtrack = projectMediaAssets('soundtrack')[0];
+    if (!projectId || !soundtrack || animationMode() !== '3d' ||
+        motionLabSoundtrackBusy || motionLabBusy) return;
+    // Prevent an in-flight selection from replacing another project or WAV.
+    const token = projectAudioRestoreGeneration;
+    motionLabSoundtrackBusy = true;
+    motionLabSoundtrackStatus = '';
+    renderProjectMedia();
+    try {
+      const response = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/use-soundtrack', {method:'POST'});
+      if (state.project?.id !== projectId || token !== projectAudioRestoreGeneration) return;
+      const sha = response.asset?.sha256;
+      if (!/^[a-f0-9]{64}$/.test(String(sha || '')) ||
+          response.analysis?.source_sha256 !== sha) {
+        throw new Error('The host did not return a valid saved Motion Lab WAV.');
+      }
+      // The recovered WAV is now a project asset. Reuse the W2 loader, which
+      // restores waveform, manual cues, markers, spectrum and sound channels.
+      await restoreProjectMedia({preferredWav:sha});
+      if (state.project?.id !== projectId) return;
+      const filename = response.soundtrack?.filename || soundtrack.filename;
+      motionLabSoundtrackStatus = 'Loaded project soundtrack: ' + filename +
+        (response.converted_to_pcm ? ' (converted to PCM WAV on host).' :
+          ' (original PCM WAV).') +
+        ' Export soundtrack and saved synchronization offset are unchanged.';
+      const info = qs('#animation-motion-lab-audio-info');
+      if (info) info.textContent = motionLabSoundtrackStatus;
+      toast('Project soundtrack loaded', filename + ' is ready in Motion Studio.', 'success');
+    } catch (error) {
+      if (state.project?.id !== projectId) return;
+      motionLabSoundtrackStatus = 'Could not use saved soundtrack: ' +
+        (error?.message || String(error));
+      toast('Project soundtrack unavailable', error?.message || String(error), 'error');
+    } finally {
+      motionLabSoundtrackBusy = false;
+      if (state.project?.id === projectId) renderProjectMedia();
+    }
+  }
+
   async function motionLabAnalyzeAudio() {
     const file = qs('#animation-motion-lab-audio-file')?.files?.[0];
     const projectId = state.project?.id;
@@ -8472,6 +8529,8 @@
     qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
     qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
     qs('#animation-motion-lab-analyze-audio')?.addEventListener('click', () => void motionLabAnalyzeAudio());
+    qs('#animation-motion-lab-use-soundtrack')?.addEventListener('click',
+      () => void motionLabUseProjectSoundtrack());
     qs('#animation-motion-lab-add-audio')?.addEventListener('click', motionLabAddAudio);
     qs('#animation-motion-lab-audio-sync')?.addEventListener('change', event => {
       if (!event.target.checked) motionLabAudioElement?.pause();
