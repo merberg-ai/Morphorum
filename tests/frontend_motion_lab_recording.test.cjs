@@ -68,7 +68,7 @@ test('ML2 frame clock fills dropped callbacks without duplicating frames', () =>
   assert.equal(take.samples.length, 4);
   assert.equal(take.startFrame, 4);
   assert.equal(take.endFrame, 8);
-  assert.deepEqual(take.sources, ['keyboard']);
+  assert.deepEqual(Array.from(take.sources), ['keyboard']);
 });
 
 test('ML2 frame zero is forced stationary even with held input', () => {
@@ -96,7 +96,7 @@ test('ML2 response smoothing and stop tail return motion to zero deterministical
   const take = h.recorder.stop('manual');
   assert.equal(take.samples.length, 5);
   assert.equal(take.samples.at(-1)[0], 0);
-  assert.deepEqual(take.sources, ['touch']);
+  assert.deepEqual(Array.from(take.sources), ['touch']);
 });
 
 test('ML2 auto-stop respects project frame bounds exactly once', () => {
@@ -121,8 +121,8 @@ test('ML2 recording card is wired into Motion Lab with mobile-safe controls', ()
     'animation-motion-lab-stick-rotate',
     'animation-motion-lab-record-gamepad',
   ]) assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
-  assert.match(animation, /const recording = qs\('#animation-motion-lab-recording'\)/);
-  assert.match(animation, /panels\.motion\.appendChild\(recording\)/);
+  assert.match(animation, /\['recording', '#animation-motion-lab-recording'\]/);
+  assert.match(animation, /if \(card\) panels\[name\]\.appendChild\(card\)/);
   assert.match(animation, /new window\.MorphorumMotionLabFrameRecorder/);
   assert.match(animation, /visibilitychange/);
   assert.match(animation, /pointercancel/);
@@ -155,7 +155,7 @@ test('ML2 quick actions stay available during scrolling and use the canonical co
     'animation-motion-lab-apply']) {
     assert.ok(animation.includes("['" + id + "',"), 'dock missing ' + id);
   }
-  assert.match(animation, /button\.disabled = active \|\| !original \|\| original\.disabled/);
+  assert.match(animation, /button\.disabled = \(!isStop && \(active \|\| locked\)\) \|\| !original \|\| original\.disabled/);
   assert.match(animation, /original\.click\(\)/);
   assert.match(css, /\.animation-motion-lab-quick-actions\s*\{[^}]*position:sticky;bottom:8px/s);
   assert.match(css, /@media\(max-width:640px\)[\s\S]*animation-motion-lab-quick-actions/s);
@@ -214,7 +214,7 @@ test('ML3.1 WAV analysis has a live pre-layer envelope and threshold preview', (
   assert.match(animation, /motionLabAudioPreview\(\);/);
   assert.match(animation, /thresholdField\.value = Math\.min\(\.1, peak \* \.55\)\.toFixed\(3\)/);
   assert.match(animation, /i \+ pulseLength <= values\.length/);
-  assert.match(animation, /for \(const id of \['threshold','attack','release','distance'\]\)/);
+  assert.match(animation, /for \(const id of \['threshold','attack','release','distance','band','detection','sensitivity'\]\)/);
   assert.match(css, /#animation-motion-lab-audio-plot \{/);
   assert.match(css, /@media\(max-width:540px\) \{#animation-motion-lab-audio-plot/);
 });
