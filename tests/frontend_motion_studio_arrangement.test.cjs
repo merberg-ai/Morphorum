@@ -52,10 +52,13 @@ test('arrangement mounts in existing Motion Studio, not a second camera composit
   assert.match(js,/motionStudioRenderArrangement\(\)/);
   assert.match(js,/motionStudioArrangementPlayhead\)/);
   for(const name of ['gentle-drift','wave','spiral','figure-eight',
-    'rocking','push-in','pull-out','still']) {
+    'rocking','push-in','pull-out']) {
     assert.match(backend,new RegExp('"'+name+'"'));
     assert.ok(js.includes("['"+name+"'"),name);
   }
+  // The Still preset only zeroes axes in Replace mode; adding it has no
+  // effect. MS4.1 exposes additive presets, while Replace waits for MS4.2.
+  assert.doesNotMatch(js,/\['still', 'Still \/ Reset'\]/);
   assert.match(css,/\.motion-studio-arrangement-timeline/);
   assert.match(css,/@media \(max-width:640px\)/);
   assert.match(css,/\.motion-studio-arrangement-actions/);
