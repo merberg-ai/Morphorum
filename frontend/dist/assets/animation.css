@@ -3278,3 +3278,30 @@ dialog#animation-deforum-dialog {
     width:100%;
   }
 }
+
+
+/* MS4.3: responsive, theme-aware shared camera preset library. */
+.motion-studio-custom-presets {
+  min-width:0; display:grid; gap:12px; padding:13px;
+  border:1px solid var(--border); border-radius:12px;
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+}
+.motion-studio-custom-presets h3 {margin:0 0 6px;font-size:1rem;}
+.motion-studio-custom-presets p {margin:0;overflow-wrap:anywhere;}
+.motion-studio-custom-fields {
+  min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;
+}
+.motion-studio-custom-fields label {min-width:0;display:grid;gap:6px;}
+.motion-studio-custom-fields input,.motion-studio-custom-fields select {
+  width:100%;min-width:0;box-sizing:border-box;
+}
+.motion-studio-custom-actions {display:flex;gap:9px;flex-wrap:wrap;}
+.motion-studio-custom-actions button {min-height:44px;}
+@media(max-width:640px) {
+  .motion-studio-custom-fields {grid-template-columns:1fr;}
+  .motion-studio-custom-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .motion-studio-custom-actions button {width:100%;min-width:0;}
+}
+@media(max-width:390px) {
+  .motion-studio-custom-actions {grid-template-columns:1fr;}
+}
