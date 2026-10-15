@@ -36,7 +36,7 @@ function harness() {
   }};
   const state={project:{id:'project-a',animation:{mode:'3d',fps:24,max_frames:120}}};
   const ctx={
-    state,motionLabDraftLayers:layers,motionLabBusy:false,motionLabAudioElement:null,
+    state,selectedAxes,motionLabDraftLayers:layers,motionLabBusy:false,motionLabAudioElement:null,
     motionLabAudioProjectId:null,
     motionLabNotify(message){actions.push('notify:'+message);},
     toast(...args){actions.push('toast:'+args[0]);},
