@@ -3840,7 +3840,9 @@
     }
   }
 
+  let renderHistoryGeneration = 0;
   function resetRenderUi() {
+    ++renderHistoryGeneration;
     window.clearTimeout(state.renderPollTimer);
     state.renderPollTimer = null;
     state.renderJobId = null;
@@ -4037,9 +4039,13 @@
 
   async function loadRenderHistory() {
     if (!state.project?.id) { resetRenderUi(); return; }
+    const projectId = state.project.id;
+    const token = ++renderHistoryGeneration;
     try {
-      const payload = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) + '/renders');
-      const renders = Array.isArray(payload.renders) ? payload.renders : [];
+      const payload = await api('/api/animation/projects/' + encodeURIComponent(projectId) + '/renders');
+      if (token !== renderHistoryGeneration || state.project?.id !== projectId) return;
+      const renders = Array.isArray(payload.renders) ? payload.renders :
+        [];
       populateRenderHistory(renders);
       if (!state.renderJobId && renders.length) {
         renderAnimationJob(renders[0]);
@@ -4049,14 +4055,18 @@
         await loadVideoExportHistory();
       }
     } catch (error) {
-      toast('Could not load animation render history', error.message, 'warning', 6000);
+      if (token === renderHistoryGeneration && state.project?.id === projectId)
+        toast('Could not load animation render history', error.message, 'warning', 6000);
     }
   }
 
   async function showRender(renderId) {
     if (!renderId) { renderAnimationJob(null); return; }
+    const projectId = state.project?.id;
     try {
       const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
+      if (state.project?.id !== projectId ||
+          (job.project_id && job.project_id !== projectId)) return;
       renderAnimationJob(job);
       await loadVideoExportHistory();
       if (renderIsActive(job)) pollAnimationRender(job.id);
@@ -4070,7 +4080,8 @@
     if (!renderId || renderId !== state.renderJobId) return;
     try {
       const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
-      if (renderId !== state.renderJobId) return;
+      if (renderId !== state.renderJobId ||
+          (job.project_id && job.project_id !== state.project?.id)) return;
       renderAnimationJob(job);
       if (renderIsActive(job)) {
         state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 700);
