@@ -43,6 +43,7 @@
       paragraph('Morphorum creates AI images and camera-driven animations on your computer. This setup will help you configure model folders, optional LoRAs, and a small starter project.');
       paragraph('Models are not included in a fresh installation. Downloads require your permission; opening this wizard will never download weights, generate frames or alter existing projects.');
       paragraph('This wizard configures model folders first, then optional LoRAs. Managed Z-Image download and starter projects follow in subsequent releases.');
+      void window.MorphorumSetupFolders?.welcome(content);
     } else if (step === 'modes') {
       heading('WebUI: the default');
       paragraph('Morphorum runs a local Python backend and opens a browser interface, normally at http://127.0.0.1:7865. Closing a browser tab does not automatically stop a running render.');
@@ -53,7 +54,7 @@
       void window.MorphorumSetupFolders?.render(content,step);
     } else {
       heading('This page is scheduled for the next MS6 implementation pass');
-      paragraph('Your progress is saved on the Morphorum host, not in browser storage. Model and LoRA folder verification begins in MS6.2, followed by the optional Z-Image download and two 512 × 512 dolly examples.');
+      paragraph('Your progress is saved on the Morphorum host, not in browser storage. Model and LoRA folder verification is available now; managed Z-Image download and two 512 × 512 dolly examples will follow in MS6.3 and MS6.4.');
       paragraph('Close to resume here later, or Skip for now to return to the normal WebUI. Your existing settings and projects remain untouched.');
     }
     qs('back').disabled = position === 0;
