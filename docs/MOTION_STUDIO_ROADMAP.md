@@ -254,15 +254,22 @@ backend render assets rather than adding duplicate render engines.
 This is a *new feature*, separate from Morphorum's existing New Project Wizard.
 Detailed implementation contract, CLI semantics, per-page UX, example templates
 and testing matrix: **[FIRST_RUN_SETUP_WIZARD.md](FIRST_RUN_SETUP_WIZARD.md)**.
+**MS6.0 architecture/baseline is committed:**
+[MS6_ARCHITECTURE_BASELINE.md](MS6_ARCHITECTURE_BASELINE.md).
 The wizard is **planned, not implemented**; no `--setup-wizard` flag or
 automatic launch currently exists.
 
 ### MS6 delivery sequence
 
-- **MS6.0 — Baseline and safety design.** Accept the MS5.4 Windows physical
-  test gate before coding the release step. Inventory default/install configs,
-  existing project assets, settings and both launch modes. Preserve `main`,
-  draft PR #39, existing saved projects and downloaded model weights.
+- **MS6.0 — Baseline and safety design (implemented; CI/owner gate pending).**
+  Audit default/install configs, preseeded starter project, settings and both
+  launch modes. Lock legacy-safe fresh-install provenance, versioned atomic
+  state, CLI conflicts and no-side-effect read endpoints before MS6.1. New
+  `tests/test_ms60_onboarding_baseline.py` guards WebUI default and user
+  asset/settings preservation. Existing users must never be forced through
+  setup due solely to empty model lists. Owner acceptance of the MS5.4
+  physical test remains the gate to feature-bearing MS6.1. Preserve `main`,
+  draft PR #39, saved projects and model weights.
 - **MS6.1 — Automatic fresh-install detection and CLI override.** Add
   persistent server-owned wizard state, resumability, and one-launch
   `--setup-wizard` override (plus Windows PowerShell `-SetupWizard`).
@@ -886,3 +893,26 @@ is untouched and PR #39 remains a draft.
 Installer checks must be green. MS6 release integration does **not**
 start until owner physically accepts MS5.4. Merge remains separately
 authorized; do not merge draft PR #39 automatically.
+
+## MS6.0 baseline design checkpoint (2026-10-15)
+
+**Branch:** `dev-webui`, draft PR #39 still open; `main` unchanged.
+
+The first-run architecture and release safety rules are now documented in
+[MS6_ARCHITECTURE_BASELINE.md](MS6_ARCHITECTURE_BASELINE.md). The audit
+confirmed a key detection pitfall: **both Windows and Linux installers copy
+`data/config.yaml` and seed the bundled `Default` animation during a clean
+install**, while self-test creates `data/install.json`. Therefore the
+wizard will use explicit installer provenance recorded *before* these
+normal provisioning steps. Absence of setup state on an older installation
+means **legacy/existing**, not automatically fresh.
+
+The baseline regression suite tests the existing CLI mode defaults, installer
+semantics, readable-but-empty model directories, LoRA-only directories,
+settings preservation and safe 512px animation project creation. This is
+preparatory, **not the wizard implementation**; server setup routes, launcher
+flags, pages, model verification and new example templates belong to MS6.1–6.4.
+
+**Next gate:** finish CI and confirm the MS5.4 Windows physical acceptance
+before beginning MS6.1. A go-ahead for MS6.0 planning alone is not proof
+that the last physical regression has been completed. Do not merge PR #39.
