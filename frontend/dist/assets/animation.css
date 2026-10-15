@@ -3328,3 +3328,36 @@ dialog#animation-deforum-dialog {
 @media(max-width:390px) {
   .animation-motion-axis-limit-grid {grid-template-columns:1fr;}
 }
+
+
+/* MS5.1: synchronized, frame-accurate CPU preview A/B review controls. */
+.motion-review-window {
+  display:grid;gap:10px;min-width:0;
+  padding:12px;border:1px solid var(--border);border-radius:12px;
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+}
+.motion-review-window h3 {margin:0;font-size:1rem;}
+.motion-review-window p {margin:0;overflow-wrap:anywhere;line-height:1.45;}
+.motion-review-controls {
+  display:grid;grid-template-columns:minmax(170px,1.2fr) repeat(2,minmax(100px,1fr));
+  gap:10px;min-width:0;align-items:end;
+}
+.motion-review-controls label {min-width:0;display:grid;gap:5px;}
+.motion-review-controls input[type=number] {width:100%;min-width:0;box-sizing:border-box;}
+.motion-review-controls .motion-review-loop-toggle {
+  display:flex;gap:8px;align-items:center;min-height:40px;
+}
+.motion-review-actions {display:flex;gap:8px;flex-wrap:wrap;align-items:end;}
+.motion-review-actions button {min-height:40px;}
+.motion-review-actions label {min-width:min(100%,180px);flex:1 1 180px;display:grid;gap:5px;}
+.motion-review-actions select {width:100%;min-width:0;}
+@media(max-width:640px) {
+  .motion-review-controls {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .motion-review-loop-toggle {grid-column:1/-1;}
+  .motion-review-actions button {flex:1 1 155px;}
+}
+@media(max-width:390px) {
+  .motion-review-controls {grid-template-columns:1fr;}
+  .motion-review-actions {display:grid;grid-template-columns:1fr;}
+  .motion-review-actions label {min-width:0;}
+}
