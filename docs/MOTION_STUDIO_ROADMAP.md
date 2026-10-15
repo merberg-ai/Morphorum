@@ -64,7 +64,7 @@ navigation, waveform zoom/seek, markers, Find Beats, and video/audio export.
 Existing project media and imported motion must still work. Do not promote
 MS1/MS2 to main before this gate passes.
 
-## MS3: Independent sound channels (MS3a integrated; physical acceptance pending)
+## MS3: Independent sound channels (MS3a physically accepted; MS3b source-validated)
 
 **MS3a now implemented** on `dev-webui`:
 
@@ -91,10 +91,30 @@ MS1/MS2 to main before this gate passes.
 - Windows/mobile responsive controls; CI tests cover input bounds, short and
   corrupt WAV, overlap, additive composition, no-doubling, and API wiring.
 
-**MS3b still planned:** interactive per-band spectrum visualization, richer
-presets, detailed preview curves and sound-channel waveform overlays, enhanced
-audio analysis caching, instrument-aware labels and usability polish.
-Spectral targeting does **not** separate instrumental stems.
+**MS3b implemented, source-validated (physical acceptance pending):**
+- A **time-averaged logarithmic spectrum** (20 Hz to the WAV Nyquist or
+  20 kHz), calculated from up to 48 PCM windows and returned as a bounded
+  96-point visualization by
+  `GET /api/animation/projects/<id>/motion-lab/audio/<sha256>/spectrum`.
+  This is not a real-time spectrogram or source separation.
+- Select any Bass/Snare/Crash/custom channel to highlight its passband on
+  the spectrum. Drag the low/high edge with mouse or touch, or focus the
+  spectrum and use arrow keys with the keyboard edge selector. The numeric
+  inputs stay synchronized and nothing is applied until Stage/Apply.
+- **Analyze channel responses** previews the selected channel's normalized
+  energy per project frame, with a visible threshold guide. Changing band
+  frequencies invalidates that preview until rerun; the existing Preview
+  Curves control is the authoritative native camera velocity preview.
+- Bounded spectrum and frame-analysis caching by project/WAV SHA-256,
+  with project-switch race guards and no new file upload or project mutation.
+  The existing single-layer non-doubling and source-bound behavior remains.
+- CI: 646 Python tests passed, 1 skipped; Morphorum self-test, frontend
+  regressions and Windows/Linux installer workflows passed.
+
+**Remaining optional MS3 polish:** live/time-varying spectrogram, combined
+multi-channel velocity overlay and additional preset packs. Those are not
+claimed as implemented. Spectral targeting does **not** separate instrumental
+stems.
 
 **MS3 physical test gate:** open an existing 3D project with a saved WAV;
 inspect Motion Studio's Independent Sound Channels card. Start with Bass
@@ -178,3 +198,19 @@ foundation remains part of the branch.
 
 **Physical Windows and Android browser acceptance of MS3a is still pending.**
 MS3b spectrum and channel authoring polish, MS4/MS5/MS6 remain future work.
+
+## MS3a physical acceptance and MS3b checkpoint (2026-10-15)
+
+The project owner tested MS3a on the physical installation and confirmed
+independent sound channels **work as expected**. MS3a is accepted.
+On that basis MS3b was built on the same `dev-webui` branch. CI for the
+spectrum/preview implementation: **646 passed, 1 skipped** in Python,
+successful Morphorum self-test, Syntax, installer and Node browser checks.
+
+**MS3b physical acceptance remains pending.** Open a saved-WAV project in
+Motion Studio; the new frequency spectrum should appear above the channel
+list. Select Bass, Snare and Crash in turn, verify each highlighted range,
+drag low/high limits, test touch/keyboard arrows, choose Analyze channel
+responses, review the envelope and threshold, then Stage, Preview Curves
+and Apply. Reopen the project and confirm range persistence and unchanged
+manual cue layers. Do not merge into `main` before acceptance.
