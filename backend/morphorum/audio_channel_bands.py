@@ -108,3 +108,56 @@ def analyze_frequency_bands(data: bytes, *, fps: float, frames: int,
         "schema_version": 1, "fps": fps, "max_frames": frames,
         "sample_rate": rate, "nyquist_hz": nyquist, "bands": output,
     }
+
+
+def analyze_frequency_spectrum(data: bytes, *, bins: int = 96) -> dict:
+    """Bounded log-frequency spectrum for the interactive Motion Studio editor.
+
+    Sample at most 48 evenly spaced WAV windows, independently of project FPS.
+    Values show the whole recording's relative frequency distribution, not a
+    time-varying FFT or source-separated instruments. Never touch project state.
+    """
+    import numpy as np
+
+    if type(bins) is not int or not 32 <= bins <= 128:
+        raise AudioMotionError("Spectrum must use 32–128 display bins.")
+    pcm, rate = _decode_pcm(data)
+    nyquist = rate / 2
+    fft_size = 8192 if rate >= 16000 else 4096
+    window = np.hanning(fft_size).astype(np.float32)
+    freqs = np.fft.rfftfreq(fft_size, 1 / rate)
+    upper = min(20000., float(nyquist))
+    centers = np.geomspace(20., upper, bins)
+    # Using a max over each log-width bucket retains narrow instrument peaks.
+    edges = np.geomspace(20., upper, bins + 1)
+    bucket = [
+        np.where((freqs >= edges[i]) &
+                 (freqs < edges[i + 1] if i + 1 < bins else freqs <= edges[i + 1]))[0]
+        for i in range(bins)
+    ]
+    accumulated = np.zeros(bins, dtype=np.float64)
+    samples = min(48, max(1, math.ceil(len(pcm) / fft_size)))
+    for center in np.linspace(0, len(pcm) - 1, samples, dtype=np.int64):
+        start = int(center) - fft_size // 2
+        left, right = max(0, start), min(len(pcm), start + fft_size)
+        segment = np.zeros(fft_size, dtype=np.float32)
+        if right > left:
+            segment[left - start:left - start + right - left] = pcm[left:right]
+        spectrum = np.abs(np.fft.rfft(segment * window))
+        for i, indices in enumerate(bucket):
+            if len(indices):
+                accumulated[i] += float(spectrum[indices].max())
+    highest = max(float(accumulated.max()), 1e-12)
+    return {
+        "schema_version": 1,
+        "sample_rate": rate,
+        "nyquist_hz": nyquist,
+        "frequency_min_hz": 20.,
+        "frequency_max_hz": upper,
+        "spectrum": [
+            {"hz": round(float(hz), 3),
+             "level": round(min(1., float(accumulated[i]) / highest), 6)}
+            for i, hz in enumerate(centers)
+        ],
+        "summary": "Time-averaged spectrum; approximate bands, not isolated audio stems.",
+    }
