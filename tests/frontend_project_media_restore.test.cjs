@@ -35,6 +35,8 @@ function makeContext(project, api) {
     let motionLabAudioElement = null, motionLabAudioUrl = null;
     async function motionStudioHydrateEdits() { return true; }
     function motionStudioRestoreChannels() {}
+    let motionStudioChannelState = { projectId: '', sha: '', channels: [], dirty: false };
+    function motionStudioRenderChannels() {}
     function motionStudioConnectAudioTransport() {}
     function motionLabStereoWaveform() {}
     function motionDirectorPanel() {}
