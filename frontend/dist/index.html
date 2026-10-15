@@ -882,6 +882,24 @@
                   <span id="animation-motion-frame-time" class="muted">0.00s</span>
                 </div>
                 <input id="animation-motion-frame-scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Seek camera preview project frame">
+                <section class="motion-review-window" aria-label="Synchronized motion review">
+                  <h3>A/B Motion Review</h3>
+                  <p class="muted">Review exact project frames, including a recorded take's range. Changes here never edit the original take or saved animation.</p>
+                  <div class="motion-review-controls">
+                    <label class="motion-review-loop-toggle"><input id="animation-motion-review-enabled" type="checkbox"> Limit playback to A/B</label>
+                    <label>Frame A <input id="animation-motion-review-a" type="number" min="0" max="0" step="1" value="0"></label>
+                    <label>Frame B (inclusive) <input id="animation-motion-review-b" type="number" min="0" max="0" step="1" value="0"></label>
+                  </div>
+                  <div class="motion-review-actions">
+                    <button id="animation-motion-review-mark-a" type="button" class="secondary-button compact">Set A = current frame</button>
+                    <button id="animation-motion-review-mark-b" type="button" class="secondary-button compact">Set B = current frame</button>
+                    <label>Review recorded take <select id="animation-motion-review-take"><option value="">Choose staged take</option></select></label>
+                    <button id="animation-motion-review-use-take" type="button" class="secondary-button compact">Use Take Range</button>
+                    <button id="animation-motion-review-curves" type="button" class="secondary-button compact">Open Frame in Curves</button>
+                  </div>
+                  <p id="animation-motion-review-status" class="muted" role="status" aria-live="polite">Generate a camera motion preview to begin reviewing frames.</p>
+                  <p id="animation-motion-review-values" class="muted" role="status">Update Motion Curves to compare six-axis values at the current frame.</p>
+                </section>
                 <p class="muted" id="animation-motion-frame-note">Frames are drawn from up to 72 CPU preview samples. Playback follows the project frame clock.</p>
               </div>
               <img id="animation-motion-preview-image" alt="Motion-only animation GIF fallback" hidden>
