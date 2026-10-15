@@ -64,7 +64,7 @@ navigation, waveform zoom/seek, markers, Find Beats, and video/audio export.
 Existing project media and imported motion must still work. Do not promote
 MS1/MS2 to main before this gate passes.
 
-## MS3: Independent sound channels (MS3a physically accepted; MS3b source-validated)
+## MS3: Independent sound channels (MS3a and MS3b physically accepted)
 
 **MS3a now implemented** on `dev-webui`:
 
@@ -91,7 +91,7 @@ MS1/MS2 to main before this gate passes.
 - Windows/mobile responsive controls; CI tests cover input bounds, short and
   corrupt WAV, overlap, additive composition, no-doubling, and API wiring.
 
-**MS3b implemented, source-validated (physical acceptance pending):**
+**MS3b implemented and physically accepted:**
 - A **time-averaged logarithmic spectrum** (20 Hz to the WAV Nyquist or
   20 kHz), calculated from up to 48 PCM windows and returned as a bounded
   96-point visualization by
@@ -214,3 +214,48 @@ drag low/high limits, test touch/keyboard arrows, choose Analyze channel
 responses, review the envelope and threshold, then Stage, Preview Curves
 and Apply. Reopen the project and confirm range persistence and unchanged
 manual cue layers. Do not merge into `main` before acceptance.
+
+## MS3b physical acceptance / saved project soundtrack reuse (2026-10-15)
+
+The project owner confirmed the MS3b interactive spectrum and channel energy
+preview **work as expected** in the physical Morphorum test installation.
+MS3b is accepted; no merge to `main` is authorized.
+
+### New quality-of-life integration: Use Saved Project Soundtrack
+
+The user observed that Motion Studio previously required another WAV upload
+even when the open project already had a soundtrack attachment. The
+**Use Saved Project Soundtrack** button now appears next to the regular PCM
+WAV selector, enabled only for a 3D project with a verified saved soundtrack.
+
+- The endpoint `POST /api/animation/projects/<id>/motion-lab/use-soundtrack`
+  verifies the existing project-owned soundtrack via its SHA-256 and size.
+- Compatible PCM WAV is analyzed directly, with no browser upload or host-side
+  conversion. MP3, OGG, FLAC and incompatible WAV formats use the Morphorum
+  host's configured FFmpeg (`MORPHORUM_FFMPEG` or `PATH`) to create a bounded
+  PCM WAV copy for Motion Lab. FFmpeg is not needed for valid PCM WAV.
+- Conversion remains bounded by the existing Motion Lab **3-minute** maximum
+  and **20 MiB** analyzed WAV limit. Conversion errors and missing FFmpeg
+  are shown in the WebUI with a practical explanation.
+- The resulting managed WAV goes through the existing W2 media inventory and
+  restoration flow. Motion Studio recovers waveform, markers, manual camera
+  cues, spectrum and independent sound channels using that WAV.
+- This is **explicitly initiated** by the user. Opening a project does not
+  automatically start an expensive audio conversion or modify any camera
+  tracks. Repeating the action with the same WAV is idempotent.
+- The original attached soundtrack, checksum, export offset, project FPS,
+  frame count, camera tracks and unrelated Motion Lab layers remain unchanged.
+  The video-export offset is not baked into analysis.
+- The old manual WAV selection still works and is available as an alternative.
+  If the soundtrack cannot be used, the previous Motion Studio audio remains
+  selected.
+
+CI after this integration: **652 Python tests passed, 1 skipped**, Morphorum
+self-test, browser Node regressions and installer checks passed. Physical
+Windows/mobile acceptance of this soundtrack-reuse control is still pending.
+
+**Physical test:** Open a project with an attached soundtrack. Under Motion
+Lab → Motion Studio, click **Use Saved Project Soundtrack**. Confirm the
+waveform, spectrum, markers and channel controls appear without a file
+upload. Repeat with another project, and with MP3 if FFmpeg is configured.
+Verify manual cues still persist and export audio offset is unchanged.
