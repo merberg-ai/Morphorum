@@ -974,6 +974,22 @@ def api_download_attached_soundtrack(project_id: str):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio/{sha256}/spectrum")
+def api_motion_lab_frequency_spectrum(project_id: str, sha256: str) -> dict[str, Any]:
+    """Read a checksum-verified saved WAV for bounded log-scale spectrum display."""
+    from .audio_channel_bands import analyze_frequency_spectrum
+    try:
+        load_animation_project(project_id)
+        data = motion_wav_path(project_id, sha256).read_bytes()
+        return {"source_sha256": sha256, "analysis": analyze_frequency_spectrum(data)}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (AudioMotionError, OSError, ValueError, TypeError, OverflowError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/projects/{project_id}/motion-lab/audio/{sha256}/bands")
 def api_motion_lab_frequency_channels(project_id: str, sha256: str,
                                       payload: dict[str, Any]) -> dict[str, Any]:
