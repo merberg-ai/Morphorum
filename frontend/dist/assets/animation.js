@@ -2686,6 +2686,8 @@
     const frames=Number(qs('#animation-max-frames')?.value||
       state.project?.animation?.max_frames);
     const fps=Number(qs('#animation-fps')?.value||state.project?.animation?.fps);
+    if(!Number.isInteger(frames)||frames<1||!Number.isFinite(fps)||fps<=0||fps>240)
+      return 'Invalid Editor frame count or FPS. Correct the settings before reviewing.';
     if(frames!==player.count||Math.abs(fps-player.fps)>1e-6)
       return 'Timing mismatch: preview '+player.count+' frames @ '+player.fps+
         ' FPS, Editor '+frames+' frames @ '+fps+' FPS. Regenerate camera preview.';
