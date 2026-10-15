@@ -5752,7 +5752,22 @@
     ['gentle-drift', 'Gentle Drift'], ['wave', 'Wave'],
     ['spiral', 'Spiral'], ['figure-eight', 'Figure Eight'],
     ['rocking', 'Rocking'], ['push-in', 'Push In'], ['pull-out', 'Pull Out'],
+    ['still', 'Still / Clear Selected Axes'],
   ];
+  const MOTION_STUDIO_PRESET_AXES = {
+    'gentle-drift':['translation_x','translation_y','rotation_y'],
+    'wave':['translation_x','translation_y','rotation_y'],
+    'spiral':['translation_x','translation_y','translation_z','rotation_z'],
+    'figure-eight':['translation_x','translation_y'],
+    'rocking':['rotation_x','rotation_z'],
+    'push-in':['translation_z'],'pull-out':['translation_z'],
+    'still':['translation_x','translation_y','translation_z',
+      'rotation_x','rotation_y','rotation_z'],
+  };
+  const MOTION_STUDIO_AXIS_NAMES = {
+    translation_x:'Move X',translation_y:'Move Y',translation_z:'Move Z',
+    rotation_x:'Pitch',rotation_y:'Yaw',rotation_z:'Roll',
+  };
   let motionStudioArrangementProjectId = '';
   let motionStudioArrangementSelection = '';
   let motionStudioArrangementLoaded = '';
@@ -5770,7 +5785,6 @@
       layer.type !== 'audio_channels' && layer.type !== 'recording' &&
       layer.type !== 'keyframes' &&
       layer.id === motionStudioArrangementSelection &&
-      (layer.blend || 'add') === 'add' &&
       MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === layer.preset)) || null;
   }
   function motionStudioArrangementFields() {
@@ -5785,6 +5799,8 @@
       end:panel.querySelector('[data-ms4-end]'),
       startSlide:panel.querySelector('[data-ms4-start-slide]'),
       endSlide:panel.querySelector('[data-ms4-end-slide]'),
+      blend:panel.querySelector('[data-ms4-blend]'),
+      axes:panel.querySelector('[data-ms4-axes]'),
     } : null;
   }
   function motionStudioArrangementResetFields() {
@@ -5792,12 +5808,51 @@
     if (!fields) return;
     const count = motionStudioArrangementFrameCount();
     fields.preset.value = 'wave';
+    fields.blend.value = 'add';
+    motionStudioArrangementRebuildAxes();
     fields.strength.value = '.65';
     fields.cycle.value = '2';
     fields.fade.value = '.1';
     fields.start.value = '0';
     fields.end.value = String(count);
     motionStudioArrangementSyncRange('start');
+  }
+  function motionStudioArrangementRebuildAxes(selectedAxes = null) {
+    const fields = motionStudioArrangementFields();
+    if (!fields?.axes) return;
+    const available = MOTION_STUDIO_PRESET_AXES[fields.preset.value] || [];
+    // Only auto-reset on a new preset; editing blend keeps checked axes.
+    const old = selectedAxes || Array.from(fields.axes.querySelectorAll('input:checked'))
+      .map(item=>item.value);
+    fields.axes.replaceChildren();
+    for (const axis of available) {
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = axis;
+      input.checked = selectedAxes === null
+        ? (old.length ? old.includes(axis) : true)
+        : selectedAxes.includes(axis);
+      input.dataset.ms4Axis = axis;
+      label.append(input,document.createTextNode(MOTION_STUDIO_AXIS_NAMES[axis]));
+      fields.axes.appendChild(label);
+    }
+    if (fields.preset.value === 'still' && fields.blend.value === 'add')
+      fields.blend.value = 'replace';
+    motionStudioArrangementShowBlendHelp();
+  }
+  function motionStudioArrangementShowBlendHelp() {
+    const fields = motionStudioArrangementFields();
+    if (!fields) return;
+    const help = fields.panel.querySelector('[data-ms4-blend-help]');
+    if (help) help.textContent = fields.blend.value === 'replace'
+      ? 'Replace resets only the checked camera axes during the selected frame range. Other axes and frames keep their existing motion. Later layers still apply in layer order.'
+      : 'Add layers movement onto the checked axes without discarding earlier motion. Change the order in Camera Motion Composer.';
+  }
+  function motionStudioArrangementAxisSelection() {
+    const fields = motionStudioArrangementFields();
+    return Array.from(fields?.axes?.querySelectorAll('input:checked') || [])
+      .map(input => input.value);
   }
   function motionStudioArrangementSyncRange(edited = '') {
     const fields = motionStudioArrangementFields();
@@ -5832,8 +5887,7 @@
   }
   function motionStudioArrangementSelect(id) {
     const layer = motionLabDraftLayers.find(item => item.id === id &&
-      item.type !== 'audio' && item.type !== 'recording' &&
-      (item.blend || 'add') === 'add' &&
+      (item.type === 'preset' || !item.type) &&
       MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === item.preset));
     motionStudioArrangementSelection = layer?.id || '';
     motionStudioArrangementLoaded = '';
@@ -5917,14 +5971,14 @@
       lanes.appendChild(row);
     };
     for (const layer of layers) {
-      const additive = (layer.blend || 'add') === 'add' &&
-        MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === layer.preset);
+      const editable = MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === layer.preset);
       addLane((layer.preset || 'preset').replaceAll('-',' ') +
         (layer.enabled === false ? ' (disabled)' : '') +
-        (!additive ? ' (replace / composer)' : ''),
+        ' · ' + (layer.blend || 'add') +
+        (!editable ? ' (Camera Composer)' : ''),
         Number(layer.start_frame),Number(layer.end_frame),
         layer.id === motionStudioArrangementSelection,
-        layer.id,layer.enabled !== false,additive);
+        layer.id,layer.enabled !== false,editable);
     }
     const form = motionStudioArrangementFields();
     if (form) {
@@ -5955,6 +6009,9 @@
     }
     if (active && active.id !== motionStudioArrangementLoaded) {
       fields.preset.value = active.preset;
+      fields.blend.value = active.blend || 'add';
+      motionStudioArrangementRebuildAxes(
+        Array.isArray(active.axes) ? active.axes : MOTION_STUDIO_PRESET_AXES[active.preset]);
       fields.strength.value = String(active.strength);
       fields.cycle.value = String(active.cycle_seconds);
       fields.fade.value = String(active.fade_seconds);
@@ -5989,6 +6046,8 @@
     motionStudioArrangementSyncRange();
     const data = {
       preset:form.preset.value,
+      blend:form.blend.value,
+      axes:motionStudioArrangementAxisSelection(),
       strength:Number(form.strength.value),
       cycle_seconds:Number(form.cycle.value),
       fade_seconds:Number(form.fade.value),
@@ -5996,6 +6055,10 @@
       end_frame:Number(form.end.value),
     };
     if (!MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === data.preset) ||
+        !['add','replace'].includes(data.blend) ||
+        (data.preset === 'still' && data.blend !== 'replace') ||
+        !Array.isArray(data.axes) || !data.axes.length ||
+        data.axes.some(axis => !MOTION_STUDIO_PRESET_AXES[data.preset].includes(axis)) ||
         !Number.isFinite(data.strength) || data.strength < 0 || data.strength > 1 ||
         !Number.isFinite(data.cycle_seconds) || data.cycle_seconds < .2 ||
         data.cycle_seconds > 600 || !Number.isFinite(data.fade_seconds) ||
@@ -6004,7 +6067,7 @@
         data.start_frame < 0 || data.end_frame > count ||
         data.end_frame <= data.start_frame) {
       motionLabNotify('Check movement strength, cycle, fade and frame range.');
-      toast('Invalid motion region','Check values and try again.','warning');
+      toast('Invalid motion region','Choose at least one valid axis; Still requires Replace. Check timing and strength.','warning');
       return;
     }
     const existing = motionStudioArrangementActiveLayer();
@@ -6014,7 +6077,7 @@
     }
     const id = existing?.id || 'motion-studio-cont-' +
       (++motionStudioArrangementSerial) + '-' + Date.now().toString(36);
-    const layer = {id,type:'preset',blend:'add',enabled:existing?.enabled !== false,...data};
+    const layer = {id,type:'preset',enabled:existing?.enabled !== false,...data};
     const index = existing ? motionLabDraftLayers.findIndex(x=>x.id===existing.id) : -1;
     if (index >= 0) motionLabDraftLayers[index] = layer;
     else motionLabDraftLayers.push(layer);
@@ -6048,6 +6111,10 @@
       </div>
       <div class="motion-studio-arrangement-fields">
         <label>Continuous preset<select data-ms4-preset></select></label>
+        <label>Blend method<select data-ms4-blend>
+          <option value="add">Add motion</option>
+          <option value="replace">Replace selected axes in range</option>
+        </select></label>
         <label>Strength (0–1)<input type="number" data-ms4-strength
           min="0" max="1" step=".05" value=".65"></label>
         <label>Cycle (seconds)<input type="number" data-ms4-cycle
@@ -6059,6 +6126,12 @@
         <label>End frame (exclusive)<input type="number" data-ms4-end
           min="1" step="1" value="120"></label>
       </div>
+      <fieldset class="motion-studio-arrangement-axis-mask">
+        <legend>Camera axes affected by this region</legend>
+        <div data-ms4-axes class="motion-studio-arrangement-axes"></div>
+        <p class="muted" data-ms4-blend-help>
+          Add motion only on checked camera axes.</p>
+      </fieldset>
       <div class="motion-studio-arrangement-range">
         <label>Start<input type="range" data-ms4-start-slide min="0"
           max="119" step="1" value="0"></label>
@@ -6077,9 +6150,10 @@
         <p>All segments are frame aligned. Start is inclusive, end is exclusive;
         cycle and fade use seconds at the current project FPS. Movement is
         in Morphorum's native scene units per frame (translation) and degrees
-        per frame (rotation). MS4.1 uses additive layers only, so manual cues
-        and sound channels remain untouched. Preview does not save animation
-        schedules; Apply uses existing Motion Lab safeguards.</p>
+        per frame (rotation). Add combines motion; Replace affects only the
+        selected axes during the region. Existing manual cues, audio and other
+        axes remain as separate layers. Layer order determines the final mix.
+        Preview does not save schedules; Apply uses existing safeguards.</p>
       </details>`;
     for (const [key,label] of MOTION_STUDIO_CONTINUOUS_PRESETS) {
       const item=document.createElement('option');
@@ -6089,6 +6163,10 @@
     }
     panel.appendChild(card);
     const s = key=>card.querySelector('[data-ms4-'+key+']');
+    s('preset').addEventListener('change',()=>{
+      motionStudioArrangementRebuildAxes(MOTION_STUDIO_PRESET_AXES[s('preset').value] || []);
+    });
+    s('blend').addEventListener('change',motionStudioArrangementShowBlendHelp);
     const sync = key=>()=>{
       motionStudioArrangementSyncRange(key);
     };
