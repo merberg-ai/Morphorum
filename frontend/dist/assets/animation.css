@@ -3137,3 +3137,86 @@ dialog#animation-deforum-dialog {
   .animation-motion-saved-soundtrack { align-items:stretch; }
   .animation-motion-saved-soundtrack button { width:100%; }
 }
+
+/* MS4.1: continuous-motion arrangement inside Motion Studio. */
+.motion-studio-arrangement { display:grid; gap:14px; min-width:0; }
+.motion-studio-arrangement-playback,
+.motion-studio-arrangement-timeline,
+.motion-studio-arrangement-range {
+  display:grid; gap:9px; min-width:0;
+  padding:12px; border:1px solid var(--border); border-radius:12px;
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+}
+.motion-studio-arrangement-playback label,
+.motion-studio-arrangement-range label {
+  min-width:0; display:grid; gap:6px;
+}
+.motion-studio-arrangement input[type="range"] {
+  width:100%; min-width:0; touch-action:pan-y;
+}
+.motion-studio-arrangement-timeline {
+  position:relative; overflow:hidden;
+}
+.motion-studio-arrangement-ruler {
+  font-size:.8rem; color:var(--text-muted,var(--text));
+  overflow-wrap:anywhere;
+}
+.motion-studio-arrangement-lanes { display:grid; gap:8px; min-width:0; }
+.motion-studio-arrangement-lane {
+  display:grid; grid-template-columns:minmax(90px,170px) minmax(0,1fr);
+  align-items:center; gap:10px; min-width:0;
+}
+.motion-studio-arrangement-label {
+  font-size:.81rem; overflow-wrap:anywhere; line-height:1.35;
+  text-transform:capitalize;
+}
+.motion-studio-arrangement-track {
+  position:relative; border-radius:8px; min-width:0;
+  height:40px; background:color-mix(in srgb,var(--accent) 7%,transparent);
+  border:1px solid var(--border); overflow:hidden;
+}
+.motion-studio-arrangement-bar {
+  position:absolute;top:4px;bottom:4px;
+  min-height:30px; width:auto; max-width:100%; min-width:0;
+  border:1px solid var(--accent); border-radius:6px;
+  color:var(--text); background:color-mix(in srgb,var(--accent) 34%,var(--panel));
+  padding:3px 6px; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; font-size:.75rem; cursor:pointer;
+}
+.motion-studio-arrangement-bar.selected {
+  outline:2px solid var(--accent); outline-offset:-2px;
+}
+.motion-studio-arrangement-bar.disabled { opacity:.4; }
+.motion-studio-arrangement-playhead {
+  position:absolute;top:20px;bottom:10px;
+  width:2px;background:var(--warn,var(--accent)); pointer-events:none;
+  z-index:2; opacity:.7;
+}
+.motion-studio-arrangement-playhead[hidden] {display:none;}
+.motion-studio-arrangement-fields {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr));
+  gap:11px; min-width:0;
+}
+.motion-studio-arrangement-fields label {
+  min-width:0;display:grid;gap:5px;
+}
+.motion-studio-arrangement-fields input,
+.motion-studio-arrangement-fields select {
+  width:100%;min-width:0;box-sizing:border-box;
+}
+.motion-studio-arrangement-range {grid-template-columns:1fr 1fr;}
+.motion-studio-arrangement-range span {grid-column:1/-1;}
+.motion-studio-arrangement-actions {display:flex;flex-wrap:wrap;gap:10px;}
+.motion-studio-arrangement-actions button {min-height:44px;}
+@media (max-width:640px) {
+  .motion-studio-arrangement-lane {grid-template-columns:1fr;gap:4px;}
+  .motion-studio-arrangement-range {grid-template-columns:1fr;}
+  .motion-studio-arrangement-actions {
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .motion-studio-arrangement-actions button {min-width:0;width:100%;}
+}
+@media (max-width:390px) {
+  .motion-studio-arrangement-fields,
+  .motion-studio-arrangement-actions {grid-template-columns:1fr;}
+}
