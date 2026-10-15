@@ -66,7 +66,7 @@ test('project open restores image, soundtrack offset and stored WAV analysis', a
   const calls = [];
   const { ctx, nodes } = makeContext(project(), async url => {
     calls.push(url);
-    if (url.endsWith('/assets')) return { assets: [sourceImage, soundtrack, wav], warnings: [] };
+    if (url.endsWith('/media-inventory')) return { assets: [sourceImage, soundtrack, wav], warnings: [] };
     if (url.endsWith('/motion-import/soundtrack')) return { soundtrack: { filename: 'song.mp3', offset_seconds: .35 } };
     if (url.endsWith('/analysis')) return { analysis: { source_sha256: sha,
       filename: wav.filename, fps: 24, values: Array(12).fill(0), duration_seconds: .5 } };
@@ -74,7 +74,7 @@ test('project open restores image, soundtrack offset and stored WAV analysis', a
   });
   await ctx.restoreProjectMedia({ resetAudio: true });
   assert.deepEqual(calls, [
-    '/api/animation/projects/my-project/assets',
+    '/api/animation/projects/my-project/media-inventory',
     '/api/animation/projects/my-project/motion-import/soundtrack',
     '/audio/' + sha + '/analysis',
   ]);
@@ -88,7 +88,7 @@ test('project open restores image, soundtrack offset and stored WAV analysis', a
 test('missing media reports warnings but retains project and valid assets', async () => {
   const selected = project();
   const { ctx, nodes } = makeContext(selected, async url => {
-    assert.ok(url.endsWith('/assets'));
+    assert.ok(url.endsWith('/media-inventory'));
     return { assets: [], warnings: ['Saved start image is missing.', 'Audio track is missing.'] };
   });
   await ctx.restoreProjectMedia({ resetAudio: true });
