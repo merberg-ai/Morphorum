@@ -3305,3 +3305,26 @@ dialog#animation-deforum-dialog {
 @media(max-width:390px) {
   .motion-studio-custom-actions {grid-template-columns:1fr;}
 }
+
+
+/* MS4.4: recorder polish, native-axis limits and controller mapping. */
+.animation-motion-record-limits {
+  min-width:0; border:1px solid var(--border); border-radius:12px;
+  padding:12px; display:grid;gap:10px;
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+}
+.animation-motion-record-limits summary {cursor:pointer;font-weight:650;}
+.animation-motion-record-limits p {margin:8px 0;overflow-wrap:anywhere;}
+.animation-motion-axis-limit-grid {
+  display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0;
+}
+.animation-motion-axis-limit-grid label {display:grid;gap:5px;min-width:0;}
+.animation-motion-axis-limit-grid input {width:100%;min-width:0;box-sizing:border-box;}
+.animation-motion-axis-limit-grid small {color:var(--muted);}
+#animation-motion-record-unit-help {margin:0;overflow-wrap:anywhere;}
+@media(max-width:700px) {
+  .animation-motion-axis-limit-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media(max-width:390px) {
+  .animation-motion-axis-limit-grid {grid-template-columns:1fr;}
+}
