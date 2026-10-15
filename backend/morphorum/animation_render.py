@@ -3,6 +3,8 @@ from __future__ import annotations
 import gc
 import json
 import random
+import re
+import math
 import shutil
 import threading
 import time
@@ -1134,6 +1136,81 @@ class AnimationRenderManager:
             f"{job.current_frame + 1 if results else 0}.",
         )
         return job.public()
+
+    def review_metadata(self, project_id: str, render_id: str) -> dict[str, Any]:
+        """Read-only proof that a completed render has every expected PNG.
+
+        Do not infer frame completeness from last_completed_frame: interrupted
+        and manually modified renders can contain gaps or stale files.
+        """
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", project_id) or not re.fullmatch(
+            r"[A-Za-z0-9_-]{1,100}", render_id
+        ):
+            raise AnimationRenderError("Invalid project or render identifier.")
+        path = _manifest_path(project_id, render_id)
+        if not path.is_file():
+            raise AnimationRenderError("Animation render manifest not found.")
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise AnimationRenderError("Render manifest is unreadable.") from exc
+        if not isinstance(manifest, dict) or manifest.get("project_id") != project_id or (
+            manifest.get("id") != render_id
+        ):
+            raise AnimationRenderError("Render identity mismatch.")
+        project = manifest.get("project")
+        animation = project.get("animation") if isinstance(project, dict) else None
+        raw_fps = animation.get("fps") if isinstance(animation, dict) else None
+        raw_frames = manifest.get("total_frames")
+        try:
+            fps = float(raw_fps)
+        except (ValueError, TypeError, OverflowError):
+            fps = 0
+        valid_fps = math.isfinite(fps) and 0 < fps <= 240
+        valid_frames = (isinstance(raw_frames, int) and not isinstance(raw_frames, bool)
+                        and 1 <= raw_frames <= MAX_RENDER_FRAMES)
+        frames = raw_frames if valid_frames else 0
+        issues: list[str] = []
+        if not valid_fps or not valid_frames:
+            issues.append("Render manifest has invalid or missing FPS/frame count.")
+        if valid_frames and isinstance(animation, dict) and (
+            animation.get("max_frames") != frames
+        ):
+            issues.append("Render manifest frame count differs from its frozen project.")
+        if manifest.get("status") != "completed":
+            issues.append("Render is not completed.")
+        records = manifest.get("results")
+        indices: set[int] = set()
+        if not isinstance(records, list) or len(records) != frames:
+            issues.append("Rendered frame records are incomplete.")
+        if isinstance(records, list):
+            for item in records[:MAX_RENDER_FRAMES + 1]:
+                frame = item.get("frame") if isinstance(item, dict) else None
+                if not isinstance(frame, int) or isinstance(frame, bool) or (
+                    valid_frames and not 0 <= frame < frames
+                ) or frame in indices:
+                    issues.append("Render frame record indices are invalid or duplicated.")
+                    break
+                indices.add(frame)
+            if len(records) > MAX_RENDER_FRAMES:
+                issues.append("Render frame records exceed safety bounds.")
+        if valid_frames and len(indices) != frames:
+            issues.append("Render frame coverage contains gaps.")
+        if not issues and any(
+            not _frame_path(project_id, render_id, frame).is_file()
+            for frame in range(frames)
+        ):
+            issues.append("One or more rendered PNG frames are missing.")
+        return {
+            "project_id": project_id,
+            "render_id": render_id,
+            "status": str(manifest.get("status") or "unknown"),
+            "fps": fps if valid_fps else None,
+            "frames": frames if valid_frames else None,
+            "recorded_frames": len(indices),
+            "ready": not issues,
+            "issues": issues,
+        }
 
     def frame_path(
         self,
