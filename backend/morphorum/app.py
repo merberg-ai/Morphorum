@@ -582,6 +582,34 @@ def api_save_audio_markers(project_id: str, payload: dict[str, Any]) -> dict[str
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.post("/api/animation/projects/{project_id}/motion-lab/use-soundtrack")
+def api_use_project_soundtrack_for_motion(project_id: str) -> dict[str, Any]:
+    """Analyze an attached soundtrack as a managed Motion Lab WAV.
+
+    Converts compressed audio with the host FFmpeg when needed. Does not
+    change the soundtrack, source project, FPS, frame count or camera tracks.
+    """
+    from .project_soundtrack_motion import analyze_project_soundtrack
+    try:
+        project = load_animation_project(project_id)
+        animation = project["animation"]
+        result = analyze_project_soundtrack(
+            project_id, fps=float(animation["fps"]),
+            frames=int(animation["max_frames"]),
+        )
+        return {
+            "status": "analyzed", **result,
+            "asset": motion_wav_descriptor(
+                project_id, result["analysis"]["source_sha256"]),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (AudioMotionError, OSError, ValueError, OverflowError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/projects/{project_id}/motion-lab/audio-analyze")
 async def api_motion_lab_audio_analyze(project_id: str, request: Request) -> dict[str, Any]:
     """Decode and retain bounded project-owned WAV, without modifying camera tracks."""
