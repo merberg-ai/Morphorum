@@ -133,10 +133,17 @@ rather than copy them into a second composer or replace the camera engine.
 
 Proposed testable batches:
 
-- **MS4.1: Unified motion arrangement.** Add a visible, frame-ranged continuous
-  motion layer editor in Motion Studio, synchronized with the project audio
-  waveform. Preset choice, intensity, cycle, fade and start/end time should
-  be intuitive on desktop and mobile. Stage and Preview before Apply.
+- **MS4.1: Unified motion arrangement (implemented, CI/physical gate).**
+  A visible **Continuous Camera Motion** card in Motion Studio reuses the
+  native Motion Lab preset engine and layer stack. It shows existing preset
+  regions across the project frame timeline, synchronized audio playhead and
+  frame-accurate seek, editable numerical and touch/keyboard range sliders,
+  preset, strength, cycle, fade, and start/end controls. Select any existing
+  preset region to update it in place rather than doubling its contribution.
+  Explicit **Stage Movement**, **Preview Curves**, and **Apply to Animation**
+  reuse the current layer history and conflict-checked compositor. No audio
+  or GPU rendering is required to edit continuous movement. MS4.1 uses
+  **additive** movement only; axis-specific Replace belongs to MS4.2.
 - **MS4.2: Range-based Add/Replace.** Make it explicit whether a motion
   pattern layers on the existing camera path or replaces motion on selected
   axes inside a specified time range; avoid overwriting other axes, manual
@@ -291,3 +298,33 @@ Next: MS4.1 continuous camera motion arrangement in the visible Motion Studio
 workspace, built on the already existing native preset system rather than
 introducing duplicate math. This is a planned stage, **not yet implemented**.
 Leave draft PR #39 unmerged and `main` unchanged.
+
+## MS4.1 native continuous-motion arrangement checkpoint (2026-10-15)
+
+The new continuous motion editor is installed on `dev-webui` in the existing
+Motion Studio. Its UI and native preset layers share **one** motion-layer
+history, validation, preview/apply API and project persistence. This is a
+front-end integration of already-tested native presets, not new camera math.
+
+Features to exercise in physical acceptance:
+
+1. Open a 3D project with saved soundtrack; navigate to Motion Studio.
+2. Locate **Continuous Camera Motion** (above the Sound Channels card).
+   Observe the project-length ruler, audio frame seek and initial empty
+   arrangement.
+3. Stage a **Gentle Drift** for the entire timeline. Adjust the Start/End
+   sliders or numerical frame fields (end frame is exclusive), then Preview
+   Curves. Apply to Animation and verify camera movement.
+4. Select the existing colored region. Edit it to **Spiral** for a portion of
+   the timeline and re-stage. The same layer must be updated (not duplicated).
+   Undo/Redo and Preview Curves should reflect these changes.
+5. Keep a saved audio-reactive channel and manual cue in the same project;
+   staging/updating a continuous preset must **not** remove either.
+6. Save, reopen, verify the continuous preset layer is retained; test audio
+   seeking and sliders on desktop and phone, and a no-soundtrack project.
+7. Verify prompts, model settings, attached soundtrack, source image,
+   original render and offsets remain unchanged by draft edits.
+
+**MS4.1 physical acceptance is pending.** Do not proceed to MS4.2 Replace
+modes until this gate is accepted. Keep draft PR #39 unmerged and `main`
+unchanged.
