@@ -874,7 +874,30 @@
                 <span class="muted" id="animation-motion-gif-sync-status" role="status">Analyze WAV to enable synchronized preview audio.</span>
               </div>
               <div id="animation-motion-frame-player" class="animation-motion-frame-player" hidden>
-                <img id="animation-motion-frame-image" alt="Frame-controlled camera preview">
+                <div class="motion-review-split" id="animation-motion-review-split">
+                  <div class="motion-review-split-image">
+                    <span class="field-label">CPU camera preview · sampled geometry</span>
+                    <img id="animation-motion-frame-image" alt="Frame-controlled camera preview">
+                  </div>
+                  <div class="motion-review-split-image" id="animation-motion-compare-render-wrap" hidden>
+                    <span class="field-label">Saved render · exact PNG frame</span>
+                    <img id="animation-motion-compare-render-image" alt="Corresponding completed animation render frame">
+                    <p class="muted" id="animation-motion-compare-frame-label"></p>
+                  </div>
+                </div>
+                <section class="motion-review-render-chooser" aria-label="Compare completed render">
+                  <label>Compare saved render
+                    <select id="animation-motion-compare-select">
+                      <option value="">No render selected</option>
+                    </select>
+                  </label>
+                  <button type="button" id="animation-motion-compare-load" class="secondary-button compact">Compare Render</button>
+                  <button type="button" id="animation-motion-compare-refresh" class="secondary-button compact">Refresh Renders</button>
+                  <button type="button" id="animation-motion-compare-clear" class="secondary-button compact">Hide Comparison</button>
+                  <p class="muted" id="animation-motion-compare-status" role="status" aria-live="polite">
+                    Generate a CPU camera preview to compare against a completed render.
+                  </p>
+                </section>
                 <div class="animation-motion-player-actions">
                   <button id="animation-motion-frame-play" type="button" class="secondary-button compact">▶ Play</button>
                   <button id="animation-motion-frame-reset" type="button" class="secondary-button compact">↺ Start</button>
