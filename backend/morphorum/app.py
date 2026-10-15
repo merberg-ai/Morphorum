@@ -123,6 +123,8 @@ from .system_info import (
     windows_gpu_process_memory,
 )
 
+from .setup_state import SetupStateError, SetupStateConflict, setup_status, update_setup
+
 BACKEND_ONLY = os.getenv("MORPHORUM_BACKEND_ONLY", "") == "1"
 
 FRONTEND_DIR = ROOT / "frontend" / "dist"
@@ -292,6 +294,46 @@ def system_gpu_memory() -> dict[str, Any]:
 @app.get("/api/install")
 def installed() -> dict:
     return install_manifest()
+
+
+@app.get("/api/setup/status")
+def api_setup_status() -> dict[str, Any]:
+    return setup_status(
+        forced=os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1",
+        backend_only=BACKEND_ONLY,
+    )
+
+
+@app.post("/api/setup/progress")
+def api_setup_progress(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=409, detail="First-run setup requires WebUI mode.")
+    # Explicit user-interaction header prevents cross-origin HTML form posts;
+    # browsers cannot send it cross-site without a CORS preflight.
+    if request.headers.get("x-morphorum-setup") != "1":
+        raise HTTPException(status_code=403, detail="Setup action header required.")
+    origin = request.headers.get("origin")
+    expected = str(request.base_url).rstrip("/")
+    if origin and origin.rstrip("/") != expected:
+        raise HTTPException(status_code=403, detail="Setup requires a same-origin WebUI request.")
+    if request.headers.get("sec-fetch-site") == "cross-site":
+        raise HTTPException(status_code=403, detail="Cross-site setup requests are forbidden.")
+    forced = os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1"
+    manual = payload.get("manual") is True
+    try:
+        updated = update_setup(action=payload.get("action"),
+                               step=payload.get("step"),
+                               revision=payload.get("revision"),
+                               forced=forced or manual)
+    except SetupStateConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SetupStateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated["status"] == "skipped" and forced:
+        # An explicit Skip also dismisses the override for this process.
+        os.environ.pop("MORPHORUM_SETUP_WIZARD", None)
+    return setup_status(forced=os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1",
+                        backend_only=False)
 
 
 @app.get("/api/settings")
