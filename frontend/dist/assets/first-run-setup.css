@@ -1,0 +1,36 @@
+/* MS6.1: installer onboarding overlay, independent from New Project Wizard. */
+.first-run-overlay[hidden] {display:none !important;}
+.first-run-overlay {
+  position:fixed;inset:0;z-index:1200;
+  display:grid;place-items:center;
+  padding:clamp(10px,3vw,30px);
+  background:rgba(4,7,12,.84);
+  backdrop-filter:blur(8px);
+  overflow-y:auto;
+}
+.first-run-dialog {
+  display:flex;flex-direction:column;gap:14px;
+  width:min(100%,680px);max-height:calc(100dvh - 26px);
+  padding:clamp(14px,3vw,28px);overflow-y:auto;
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:18px;
+  box-shadow:0 16px 70px rgba(0,0,0,.42);
+}
+.first-run-header {display:flex;align-items:flex-start;justify-content:space-between;gap:16px;min-width:0;}
+.first-run-header h2 {font-size:clamp(1.35rem,3vw,1.95rem);margin:4px 0 6px;line-height:1.2;}
+.first-run-header p {margin:0;}
+.first-run-content {display:grid;gap:12px;line-height:1.55;min-height:125px;overflow-wrap:anywhere;}
+.first-run-content p {margin:0;}
+.first-run-content h3 {font-size:1.05rem;margin:6px 0 0;}
+.first-run-buttons {display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;border-top:1px solid var(--border);padding-top:14px;}
+.first-run-buttons button,.first-run-header button {min-height:40px;white-space:normal;}
+.first-run-error {padding:9px;border:1px solid rgba(244,120,120,.45);border-radius:9px;}
+.first-run-error[hidden] {display:none;}
+@media (max-width:550px) {
+  .first-run-overlay {padding:8px;align-items:start;}
+  .first-run-dialog {width:100%;min-width:0;max-height:calc(100dvh - 16px);margin:auto 0;}
+  .first-run-buttons {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .first-run-buttons button {min-width:0;width:100%;}
+  .first-run-buttons #first-run-next {grid-column:1/-1;}
+}
