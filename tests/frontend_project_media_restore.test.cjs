@@ -37,6 +37,10 @@ function makeContext(project, api) {
     function motionStudioRestoreChannels() {}
     let motionStudioChannelState = { projectId: '', sha: '', channels: [], dirty: false };
     function motionStudioRenderChannels() {}
+    let motionStudioSpectrumToken = 0;
+    let motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
+    let motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
+    let motionStudioSelectedChannel = '';
     function motionStudioConnectAudioTransport() {}
     function motionLabStereoWaveform() {}
     function motionDirectorPanel() {}
