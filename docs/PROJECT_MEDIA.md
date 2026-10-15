@@ -72,7 +72,7 @@ no media, source only, attached soundtrack, saved Motion Lab WAV, all three,
 several WAVs, and missing/corrupt assets. Verify that switching projects
 does not show the previous project's audio or image.
 
-Work is on `dev-webui`; keep `main` unchanged pending physical acceptance.
+Development remains on `dev-webui`. Accepted checkpoints may be promoted into `main` through a reviewed pull request.
 
 ## W2 checkpoint — 2026-10-15
 
@@ -87,10 +87,9 @@ Source-level validation: 5 new Node project-media tests + 10 existing
 parses, and five additional integration checks pass. Four new Python tests
 were added for valid and damaged assets, but the **full Python test suite and
 GitHub Actions results have not been verified** from this remote session.
-Physical Windows + Android/browser acceptance remains pending.
+At initial checkpoint, physical Windows + Android/browser acceptance was pending.
 
-The W2 checkpoint commit is the rollback point for this batch. Do not
-promote this implementation to `main` until it has been physically accepted.
+The W2 implementation checkpoint is the rollback point for this batch.
 
 ## W2 final source checkpoint (post-compatibility review)
 
@@ -104,4 +103,13 @@ Final remote source validation: **15/15** targeted frontend tests passed in a
 JavaScript source-test harness, with **6/6** additional contract assertions.
 Relevant JavaScript parsed successfully. This is not a full GitHub Actions,
 Python backend, Windows or Android acceptance run. Those remain for physical
-verification before promoting `dev-webui` to `main`.
+verification as recorded at the time of the source checkpoint.
+
+## W2 release acceptance (2026-10-15)
+
+The project owner confirmed the restored project image and audio behavior
+**works as expected** on the test installation. W2 is accepted for promotion
+to `main`, together with the previously accepted W1 responsive layouts.
+This is physical user acceptance, not a claim that every media-failure
+scenario was exercised or that the full backend suite has passed. The
+release checkpoint is the commit recording this acceptance on `dev-webui`.
