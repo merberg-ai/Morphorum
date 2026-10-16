@@ -743,7 +743,8 @@
     if (state.activeJobId !== jobId) return;
     const healthKey = 'image:' + jobId;
     try {
-      const job = await api(`/api/generation/jobs/${encodeURIComponent(jobId)}`);
+      const job = await window.MorphorumPollHealth.request(signal =>
+        api(`/api/generation/jobs/${encodeURIComponent(jobId)}`, {signal}));
       if (state.activeJobId !== jobId) return;
       window.MorphorumPollHealth?.recovered(healthKey);
       updateProgress(job);
