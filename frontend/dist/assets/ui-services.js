@@ -197,6 +197,44 @@
     "animation-motion-lab-strength": {title: "Motion layer strength", body: "Scales the amount of camera motion from this layer. It is different from diffusion retention strength."},
     "animation-motion-lab-cycle": {title: "Cycle duration", body: "Length of a repeated movement in seconds. Shorter cycles repeat more often."},
     "animation-motion-lab-blend": {title: "Layer blending", body: "Add combines motion with existing curves; Replace overwrites affected axes. Preview the result before applying."},
+    "image-model-select": {title: "Image checkpoint", body: "This checkpoint is used for single-image generation. Animation projects save a separate checkpoint selection."},
+    "image-resolution-preset": {title: "Image size presets", body: "Choose a model-aware image size or enter width and height in pixels. Larger images demand more GPU memory."},
+    "image-width": {title: "Image width", body: "Output width in pixels. SDXL requires multiples of 8; Flux and Z-Image require multiples of 16."},
+    "image-height": {title: "Image height", body: "Output height in pixels. The swap control exchanges width and height without changing pixel count."},
+    "image-steps": {title: "Diffusion steps", body: "Denoising iterations per image. Turbo and Schnell models often use fewer steps; more steps are not always better."},
+    "image-sampler": {title: "Image sampler", body: "The model-dependent denoising algorithm. Image Generation and the animation Project Editor have independent sampler selectors."},
+    "image-guidance": {title: "CFG / guidance", body: "Controls how strongly prompt text steers generation. Supported ranges vary by model; some variants require guidance zero."},
+    "image-seed": {title: "Image seed", body: "Seeds help reproduce noise with identical settings. A value of -1 requests an automatic random seed; dice fills a random value."},
+    "image-seed-mode": {title: "Image seed mode", body: "Fixed reuses a seed, Increment changes it per image, and Random chooses a new seed for each batch output."},
+    "image-seed-increment": {title: "Image seed increment", body: "Signed integer added to the seed for each successive image when Increment mode is selected."},
+    "image-count": {title: "Batch image count", body: "Number of images to generate in one request, from 1 to 32. More outputs increase rendering time and storage."},
+    "animation-max-frames": {title: "Animation length", body: "Total number of animation frames. Duration in seconds is the total divided by FPS; schedules use frame indices."},
+    "animation-width": {title: "Animation width", body: "Output width in pixels. Match the selected checkpoint's resolution alignment and GPU memory."},
+    "animation-height": {title: "Animation height", body: "Output height in pixels. SDXL aligns to 8 pixels, Flux and Z-Image to 16."},
+    "animation-prompt-transition": {title: "Prompt transitions", body: "Blend interpolates text between prompt keyframes; Hold retains one prompt until the next keyframe."},
+    "animation-cadence-preset": {title: "Cadence preset", body: "Fixed presets redraw every N frames; Custom enables a keyframed cadence schedule. Camera transforms run between anchors."},
+    "animation-temporal-mode": {title: "Temporal blending mode", body: "Forward uses previous-frame information; Depth-aligned blending also uses neighbor anchors where projected depth is reliable."},
+    "animation-temporal-mix": {title: "Temporal blend strength", body: "Fraction from 0 to 1 controlling how neighboring 3D frames contribute during depth-aligned blending."},
+    "animation-temporal-contrast": {title: "Appearance guard", body: "RGB intensity difference threshold, 1–255, used to guard blending where frame appearances differ."},
+    "animation-start-mode": {title: "Animation start mode", body: "Prompt generates frame 0 from text. Starting Image uses an uploaded image exactly for frame 0."},
+    "animation-source-file": {title: "Starting image", body: "Upload PNG, JPEG, WebP or BMP. Required for Starting Image mode, optional as a camera preview reference for Prompt mode."},
+    "animation-border-mode": {title: "Border handling", body: "Replicate stretches visible edge pixels; Wrap samples the opposite edge when 2D motion exposes empty borders."},
+    "animation-angle": {title: "2D rotation", body: "Flat-image rotation in degrees per frame. A constant nonzero value repeatedly rotates the image."},
+    "animation-zoom": {title: "2D zoom", body: "Multiplicative factor per frame. 1.0 means no zoom, 1.005 slowly zooms in, 0.995 slowly zooms out. Must be positive."},
+    "animation-translation-x": {title: "2D pan X", body: "Signed horizontal shift in pixels per frame. Motion accumulates over successive frames."},
+    "animation-translation-y": {title: "2D pan Y", body: "Signed vertical shift in pixels per frame. Use the camera preview to confirm direction."},
+    "animation-noise": {title: "Animation noise", body: "Uniform noise amount in the generation schedule. Try subtle values such as 0:(0.02) to maintain frame continuity."},
+    "animation-seed-increment": {title: "Frame seed increment", body: "Signed integer added to the per-frame seed when Seed behavior is Increment. Fixed and Random ignore it."},
+    "animation-3d-preset": {title: "3D camera preset", body: "Applying a preset replaces six camera schedules with gentle per-frame values; it does not change FOV or automatically save."},
+    "animation-3d-translation-x": {title: "3D translation X", body: "Signed horizontal movement in scene units per frame, based on estimated depth rather than pixel positions."},
+    "animation-3d-translation-y": {title: "3D translation Y", body: "Signed vertical movement in scene units per frame. Cumulative movement can shift the whole scene out of view."},
+    "animation-3d-rotation-x": {title: "3D pitch", body: "Rotation about camera X in degrees per frame. Repeated pitch can point the camera away from the scene."},
+    "animation-3d-rotation-z": {title: "3D roll", body: "Rotation about camera Z in degrees per frame. Small values accumulate across long animations."},
+    "animation-3d-hole-fill": {title: "3D hole fill", body: "Nearest or background-aware filling handles uncovered pixels. It cannot recover a projection with no visible pixels."},
+    "animation-motion-lab-preset": {title: "Composer preset", body: "Select a layer motion shape; Add creates a draft. Applying draft motion to the animation is a separate action."},
+    "animation-motion-lab-fade": {title: "Composer fade", body: "Fade time in seconds for easing the start and end of a motion layer."},
+    "animation-motion-lab-start": {title: "Composer start frame", body: "Zero-based animation frame where this draft motion layer begins."},
+    "animation-motion-lab-end": {title: "Composer end frame", body: "End frame for this draft layer; enter zero to continue until the project ends."},
   });
   const HELP_PANEL_ID = 'morphorum-context-help-tooltip';
   let helpEnabled = true, activeHelp = null, helpPinned = false, helpPanel = null;
@@ -265,9 +303,9 @@
     // Keep the button *outside* the label to avoid activating its input.
     const wrapper = document.createElement('div');
     wrapper.className = 'morphorum-help-field';
-    if (label.classList.contains('animation-span-2')) {
-      label.classList.remove('animation-span-2');
-      wrapper.classList.add('animation-span-2');
+    // Retain spanning labels in their original grid column after wrapping.
+    for (const layoutClass of ['animation-span-2', 'image-resolution-preset-field']) {
+      if (label.classList.contains(layoutClass)) wrapper.classList.add(layoutClass);
     }
     const button = document.createElement('button');
     button.type = 'button';

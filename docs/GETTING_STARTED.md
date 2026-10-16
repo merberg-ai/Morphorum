@@ -205,3 +205,19 @@ control. A high-resolution VRAM notice is advisory. None of these actions
 automatically modifies the project, and an indexed model is not a guarantee
 that its weights still exist or GPU memory is sufficient. Complete pre-render
 validation is planned for a later milestone.
+
+## Contextual generation help and units
+
+Image Generation and Motion Lab offer small **(?)** help buttons alongside
+common model, seed, sampler, resolution, cadence, generation and camera controls.
+Hover, focus or tap to show explanations. **Settings → Appearance → Contextual
+Help** can hide these tips without hiding errors or warnings.
+
+Image dimensions and 2D pan use pixels (px); 2D/3D rotations use degrees per
+frame; 3D translation uses estimated scene units per frame. These are repeated
+per-frame motions, not final camera positions. Camera Composer fade and cycle
+are seconds. Duration equals total frames divided by FPS.
+
+Schedules accept frame-indexed values such as `0:(0.65), 48:(0.5)`; the
+timeline's interpolation controls how values change between keyframes.
+Help messages never mutate a saved project or trigger generation.

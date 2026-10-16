@@ -928,3 +928,13 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
   .morphorum-help-trigger {width:40px;height:40px;min-width:40px;min-height:40px;}
   .morphorum-help-field > label > span:first-child {padding-inline-end:46px;}
 }
+
+/* P2.4: contextual-help wrapping must preserve the full-width image preset. */
+.morphorum-help-field.image-resolution-preset-field {grid-column:1/-1;min-width:0;}
+.morphorum-help-field.image-resolution-preset-field > label {min-width:0;}
+.morphorum-help-field.image-resolution-preset-field select {min-width:0;width:100%;}
+.morphorum-help-field > label > span:first-child {min-width:0;max-width:100%;line-height:1.4;}
+.morphorum-help-field > label > span:first-child small {font-size:.75em;white-space:normal;}
+@media(max-width:480px) {
+  .morphorum-help-field > label > span:first-child {overflow-wrap:anywhere;}
+}

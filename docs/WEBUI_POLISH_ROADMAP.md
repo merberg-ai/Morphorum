@@ -30,7 +30,7 @@ render behavior.
 - [x] P2.1 safety: Preserve unsaved checkpoint and sampler choices, including a deliberately cleared model; keep missing checkpoint IDs and reject stale fetches.
 - [x] P2.2 initial: Clarify separate still-image and project-specific animation checkpoint selectors.
 - [x] P2.3: Read-only indexed checkpoint/family/variant/sampler/resolution compatibility summary with missing-model guidance and navigation to Model Manager; preserve unsupported saved samplers for explicit repair.
-- [ ] P2.4: Extend context help and inline units to remaining generation settings.
+- [x] P2.4: Add optional contextual help to Image Generation and remaining animation, cadence and camera controls; show pixels, degrees and frame units plus an inline schedule example.
 - [ ] P2.5: Actionable pre-render validation, no destructive automatic repair.
 - [ ] P2.6: Explain cumulative 3D motion and warn about risky camera schedules.
 
