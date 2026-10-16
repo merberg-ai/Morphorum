@@ -14,7 +14,7 @@ This guide covers the supported Windows and Linux installers, first launch, netw
 | Disk space | At least **8 GiB free** for initial runtime checks, plus model weights, caches and outputs; Z-Image-Turbo is approximately **33 GB** |
 | Internet | Needed for source, managed runtime/dependencies, and any models you download |
 | Git | Installed automatically on supported setups, or install it yourself |
-| FFmpeg + FFprobe | Used for video export and source-video/audio conversion; Windows installer may use `winget`, Linux distribution packages (managed Linux builds require glibc 2.28+ and kernel 4.18+). In Settings → Storage → FFmpeg Manager, select auto-detection or supply a custom executable and test it. An optional verified managed installer can download an FFmpeg/FFprobe pair into the Morphorum installation; no system-wide changes are made. |
+| FFmpeg + FFprobe | Required for video export and source-video/audio inspection/conversion. In **Settings → Storage → FFmpeg Manager**, choose system Auto-detect, a custom FFmpeg executable with matching FFprobe, or an **optional managed local download** under `tools/ffmpeg/current/bin`. The managed package is not downloaded automatically and does not change system PATH; compatible Windows and Linux builds are available. See the [FFmpeg Manager guide](FFMPEG_MANAGER.md). |
 
 Use the default installation directory if you are not sure. Avoid installing inside a source-controlled project or an existing folder containing unrelated files.
 
@@ -154,6 +154,12 @@ The machine running Morphorum is the server. Connecting devices use its **actual
 Updates use guarded Git operations and normally preserve the data directories. They may refuse to continue if you have uncommitted changes in Git-tracked files. **Do not run `git reset --hard` just to silence a warning.**
 
 For Windows, the initial port preference lives at `data\server-port.txt` and is used by subsequent normal launches. Linux uses the launcher defaults or environment overrides.
+
+### Updating Morphorum-managed FFmpeg
+
+Application updates **do not** automatically download or update FFmpeg binaries. Manage them separately in **Settings → Storage → FFmpeg Manager**. Select the desired source, run **Test FFmpeg / FFprobe**, and **Save Settings**. Managed FFmpeg files live under `tools/ffmpeg/current/bin` and are excluded from Git. If you back up a portable Morphorum installation, you may optionally retain `tools/ffmpeg/` to preserve its verified package; the active FFmpeg **source selection** is stored separately in your data/configuration.
+
+[FFmpeg Manager instructions](FFMPEG_MANAGER.md) explain supported architectures, GPL licensing, checksum verification and the CPU-only media acceptance script.
 
 ## What to back up
 
