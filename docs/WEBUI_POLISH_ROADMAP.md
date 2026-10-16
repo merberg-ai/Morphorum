@@ -394,6 +394,26 @@ Code on `dev-webui`:
 - No FFmpeg download was performed in this turn, and no live Windows
   execution was available. The updater and `main` remain unchanged.
 
+### P4.4.4 Windows acceptance defect and repair, 2026-10-16
+
+- Physical test on `D:\\Morphorum-test` downloaded the BtbN Windows x64
+  release package but failed during encoder verification with
+  `name 'subprocess' is not defined`. The new `_validate_encoders`
+  function used `subprocess.run()` without importing the module.
+  No managed installation was promoted from the failed staging directory.
+- Fixed the missing `import subprocess` on `dev-webui`. Managed install
+  transitions and errors now publish stage-specific Runtime Console events,
+  including a bounded failure reason. They are emitted on stage changes rather
+  than every download progress event to avoid Console spam.
+- Added a Python regression explicitly checking the subprocess dependency
+  and a failed background installation reaching the Runtime Console.
+  **These tests still need a verified CI/pytest result.**
+- **Windows retest required:** Update `dev-webui`, restart the backend,
+  retry Install (the previous failed download was cleaned up and may need to
+  download again), check that FFmpeg and FFprobe are reported as installed,
+  then run `scripts/ffmpeg_acceptance.py --mode managed`.
+  This initial Windows physical test was **not a pass** and remains open.
+
 #### Outstanding P4.4 physical acceptance (must not mark complete before testing)
 
 - [ ] Windows test host: update `dev-webui`, open Settings → Storage →
