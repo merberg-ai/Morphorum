@@ -18,6 +18,7 @@
     submitting: false,
     unloading: false,
     historyRefreshing: false,
+    feedbackJobId: null,
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -698,6 +699,26 @@
   }
 
   function finishJob(job) {
+    if (state.feedbackJobId === job.id) {
+      const ops = window.MorphorumOperations;
+      const token = ops?.begin('image-job-final',
+        job.status === 'completed' ? 'Finalizing image results' : 'Image generation stopped',
+        'Updating Image Generation results and status…', 'image');
+      ops?.finish('image-job-final', token, {
+        tone: job.status === 'completed' ? 'success'
+          : (job.status === 'cancelled' ? 'warning' : 'error'),
+        title: job.status === 'completed' ? 'Image generation complete'
+          : job.status === 'cancelled' ? 'Image generation cancelled' : 'Image generation failed',
+        message: job.status === 'completed'
+          ? (job.results?.length || 0) + ' image(s) are available in Results.'
+          : job.status === 'cancelled'
+            ? 'Completed images were kept. You can change settings and try again.'
+            : String(job.error || job.message || 'Unknown generation error.') +
+              ' Check the model and Console before retrying.',
+        view: 'image',
+      });
+      state.feedbackJobId = null;
+    }
     window.clearTimeout(state.pollTimer);
     state.pollTimer = null;
     state.activeJobId = null;
@@ -768,6 +789,7 @@
         body: JSON.stringify(buildPayload()),
       });
       state.activeJobId = job.id;
+      state.feedbackJobId = job.id;
       window.MorphorumOperations?.finish('image-submit', operation, {
         title: 'Image generation queued',
         message: 'Job ' + job.id + ' accepted. Use Image Generation for live progress and cancellation.',

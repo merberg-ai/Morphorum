@@ -125,3 +125,11 @@ test('Auto-updated motion curves avoid repeated banners and project switches ret
   assert.match(clear,/motionPreviewOperation = null/);
   assert.match(clear,/state\.motionJobId = null/);
 });
+
+test('Image terminal jobs replace the queued notice only when this browser submitted the job',()=>{
+  assert.match(image,/feedbackJobId: null/);
+  assert.match(image,/state\.feedbackJobId = job\.id/);
+  assert.match(image,/if \(state\.feedbackJobId === job\.id\)/);
+  assert.match(image,/ops\?\.finish\('image-job-final'/);
+  assert.match(image,/state\.feedbackJobId = null/);
+});
