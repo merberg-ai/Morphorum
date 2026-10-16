@@ -239,3 +239,26 @@ The renderer still validates the actual frames during generation. Preflight
 does not guarantee that a GPU has enough free VRAM or that a complex 3D
 camera projection will remain visible for every frame. No project data is
 changed or saved by the check.
+
+## 3D Camera Safety (P2.6)
+
+Camera translation and rotation are per-frame changes, not absolute end
+positions. A constant 3D Z move or Y rotation accumulates across dozens of
+frames, and a 3D projection may eventually contain **no visible pixels**.
+
+In Project Editor under **3D Camera Schedules**, choose **Review 3D Render
+Safety**. Morphorum opens Render Monitor and runs the normal read-only
+preflight check, which gives warnings about unusually strong movement,
+cumulative camera travel, and narrow fields of view. These estimates use
+sampled schedules. They do not run the depth model or predict pixel coverage.
+A real **Camera Preview** helps evaluate projected coverage before a render.
+
+If a live render's depth/camera warp fails, its error now reports the failed
+frame, resolved camera-axis values, the count of source samples remaining
+inside the view, and last successfully measured coverage when available.
+The guidance explains which settings to soften. No camera values are
+automatically modified, and no synthetic replacement frames are inserted.
+
+Physical Windows/Android acceptance for P2.5 and P2.6 is bundled for the
+next available test session. Do not merge these development changes to
+main before that acceptance.

@@ -32,12 +32,12 @@ render behavior.
 - [x] P2.3: Read-only indexed checkpoint/family/variant/sampler/resolution compatibility summary with missing-model guidance and navigation to Model Manager; preserve unsupported saved samplers for explicit repair.
 - [x] P2.4: Add optional contextual help to Image Generation and remaining animation, cadence and camera controls; show pixels, degrees and frame units plus an inline schedule example.
 - [x] P2.5: Add read-only backend preflight endpoint, Check Render results, first-issue navigation, and automatic preflight before render submit; block errors and explicitly review warnings without modifying project data.
-- [ ] P2.6: Explain cumulative 3D motion and warn about risky camera schedules.
+- [x] P2.6: Advisory risk analysis of sampled per-frame/cumulative 3D motion and narrow FOV; improved diagnostics for failed projections including real last-successful coverage.
 
 ## P6 early safety
 
 - [x] Optional depth-service discovery failures no longer prevent project loading.
-- [ ] Add last-successful projected-coverage and resolved camera diagnostics to 3D warp failure messages.
+- [x] Add last-successful projected-coverage and resolved camera diagnostics to 3D warp failure messages.
 
 ## P7 package policy (proposal, not implemented)
 
@@ -89,3 +89,11 @@ Contextual help icons use trusted static text, real buttons beside form labels, 
 - The submitted render freezes the same collected browser draft that was checked. If the project changes during the async check/dialog, submission is canceled and the user must check again.
 - In large projects, per-frame generation-parameter checking samples up to 500 frames and prominently warns that remaining frames are checked during generation. GPU/model-inference health and cumulative camera projection are not guaranteed by preflight.
 - Test source-image versus prompt start, missing or incomplete checkpoints, incompatible sampler, alignment, invalid schedules, missing prompt, unsaved edits, navigation, warnings and cancellations, desktop and mobile. Physical Windows GPU acceptance required before merge.
+
+## P2.6 acceptance and deferred hardware testing
+
+- A no-GPU, no-depth estimate looks for unusually large single-frame motion, accumulated scene-space translation/rotation, and narrow FOV combined with motion. It returns warnings, **not blockers**.
+- Checks are sampled for long schedules and are not actual coverage predictions. Exact pixel coverage depends on the source image, depth estimator, and camera position; Camera Preview remains the visual reference.
+- The Project Editor offers **Review 3D Render Safety** to switch to Render Monitor and invoke the existing read-only P2.5 preflight check; it never saves or starts generation.
+- Live 3D zero-projection errors include frame, counts of points in front and within image bounds, resolved camera axes, and last successful projected coverage if known. No image pixels, depth, motion schedules, or renderer recovery behavior are altered.
+- P2.5 and P2.6 physical tests are **deferred at user request**. Keep main unchanged pending a combined Windows/Android acceptance pass.

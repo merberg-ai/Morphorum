@@ -10348,6 +10348,11 @@
       () => motionLabPreviewOrApply(true));
     qs('#animation-export-video')?.addEventListener('click', startVideoExport);
 
+    qs('#animation-camera-safety-check')?.addEventListener('click', () => {
+      if (!state.project) return;
+      showAnimationTab('monitor');
+      checkRenderPreflight();
+    });
     qs('#animation-preflight-check')?.addEventListener('click', checkRenderPreflight);
     qs('#animation-preflight-fix')?.addEventListener('click', showFirstPreflightFix);
     qs('#animation-start-render')?.addEventListener('click', startAnimationRender);

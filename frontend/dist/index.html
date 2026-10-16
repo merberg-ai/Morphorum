@@ -576,6 +576,11 @@
               <label data-help-topic="animation-3d-projection-mode"><span>3D projection quality</span><select id="animation-3d-projection-mode" disabled><option value="legacy">Classic projection</option><option value="splat">Smooth subpixel projection</option></select></label>
               <label data-help-topic="animation-3d-hole-fill"><span>Exposed-pixel fill</span><select id="animation-3d-hole-fill" disabled><option value="nearest">Nearest visible pixel</option><option value="background">Background-aware fill</option></select></label>
             </div>
+            <div class="notice subtle animation-camera-safety-note">
+              <strong>3D motion safety</strong>
+              <span>3D translation and rotation are applied again at each frame, so small values can accumulate. A long dolly or orbit may leave no visible pixels. Render preflight estimates risky schedules without loading depth; use Camera Preview to inspect actual projected coverage. Warnings cannot guarantee every frame is safe.</span>
+              <button type="button" class="secondary-button compact" id="animation-camera-safety-check">Review 3D Render Safety</button>
+            </div>
             <div class="notice subtle">
               <strong>Projection details</strong>
               <span>Smooth subpixel projection improves edges during movement. Background-aware fill can help reduce exposed gaps. For subtle motion, start with Translation Z between ±0.02 and ±0.08 scene units and rotation between ±0.25° and ±1° per frame. Larger changes can quickly amplify across frames.</span>
