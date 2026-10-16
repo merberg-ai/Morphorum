@@ -18,7 +18,6 @@ import shutil
 import stat
 import tarfile
 import threading
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -37,11 +36,11 @@ MANAGED_ROOT = ffmpeg_tools.ROOT / "tools" / "ffmpeg"
 MAX_RELEASE_JSON = 3 * 1024 * 1024
 MAX_DOWNLOAD_BYTES = 480 * 1024 * 1024
 MAX_BINARY_BYTES = 400 * 1024 * 1024
-MAX_DOC_BYTES = 12 * 1024 * 1024
 NETWORK_TIMEOUT = 30
 READ_SIZE = 1024 * 1024
-DONE = {"installed", "failed", "cancelled"}
 DOWNLOAD_STATES = {"checking", "downloading", "verifying", "extracting", "installing"}
+REQUIRED_ENCODERS = frozenset({"libx264", "libvpx-vp9", "aac", "libopus"})
+ENCODER_TIMEOUT = 12
 # Static GPL variants include required video codec support. No shared DLL/so dependencies.
 ASSETS = {
     ("windows", "x86_64"): "ffmpeg-n8.1-latest-win64-gpl-8.1.zip",
@@ -226,6 +225,38 @@ def _extract(archive: Path, staging: Path, cancel: threading.Event) -> None:
             (bin_dir / name).chmod(0o755)
 
 
+def _validate_encoders(executable: Path) -> list[str]:
+    """Verify codecs required by _ffmpeg_command before promoting binaries.
+
+    FFmpeg's -version output is not evidence that MP4/WebM encoding will work.
+    Treat a missing mandatory video/audio encoder as a failed installation.
+    """
+    try:
+        completed = subprocess.run(
+            [str(executable), "-hide_banner", "-encoders"],
+            stdin=subprocess.DEVNULL, capture_output=True, text=True,
+            timeout=ENCODER_TIMEOUT, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ManagedFFmpegError(
+            "Could not inspect managed FFmpeg encoders: " + type(exc).__name__
+        ) from exc
+    if completed.returncode:
+        raise ManagedFFmpegError("Managed FFmpeg could not list available encoders.")
+    detected: set[str] = set()
+    for line in completed.stdout.splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and re.fullmatch(r"[VAS][A-Z.]{5}", fields[0]):
+            detected.add(fields[1])
+    missing = sorted(REQUIRED_ENCODERS - detected)
+    if missing:
+        raise ManagedFFmpegError(
+            "Managed FFmpeg is missing required MP4/WebM/audio encoders: " +
+            ", ".join(missing) + ". Previous version kept."
+        )
+    return sorted(REQUIRED_ENCODERS)
+
+
 def _notice(staging: Path, record: dict[str, Any]) -> None:
     # Binary source/attribution links are saved with every install and survive
     # the removal of the downloaded archive. The app does not claim a license.
@@ -254,19 +285,47 @@ class ManagedFFmpegManager:
         self._cancel = threading.Event()
         self._job: dict[str, Any] | None = None
 
-    def _owned(self) -> bool:
-        current = self.root / "current"
-        if current.is_symlink():
+    def _owned_at(self, candidate: Path) -> bool:
+        if candidate.is_symlink() or not candidate.is_dir():
             return False
-        record = current / "installation.json"
+        record = candidate / "installation.json"
         try:
             info = json.loads(record.read_text(encoding="utf-8"))
-            return info.get("managed_by") == "Morphorum" and info.get("provider") == PROJECT_URL
+            if info.get("managed_by") != "Morphorum" or info.get("provider") != PROJECT_URL:
+                return False
+            return all((candidate / "bin" / ffmpeg_tools._bin_name(name)).is_file()
+                       for name in ("ffmpeg", "ffprobe"))
         except (OSError, ValueError, AttributeError):
             return False
 
+    def _owned(self) -> bool:
+        return self._owned_at(self.root / "current")
+
+    def _recover_previous(self) -> bool:
+        """Restore a valid prior installation after a crash mid-rename.
+
+        Never guess if multiple backups exist and never replace user files.
+        """
+        current = self.root / "current"
+        if current.exists() or current.is_symlink() or not self.root.is_dir():
+            return False
+        backups = [
+            item for item in self.root.glob(".previous-*")
+            if re.fullmatch(r"\.previous-[a-f0-9]{32}", item.name)
+            and not item.is_symlink() and item.is_dir()
+        ]
+        if len(backups) != 1 or not self._owned_at(backups[0]):
+            return False
+        try:
+            backups[0].rename(current)
+        except OSError:
+            return False
+        return True
+
     def status(self) -> dict[str, Any]:
         with self._lock:
+            if not (self._job and self._job["status"] in DOWNLOAD_STATES):
+                self._recover_previous()
             job = dict(self._job) if self._job else None
         current = self.root / "current"
         artifact = supported_asset()
@@ -300,6 +359,7 @@ class ManagedFFmpegManager:
         with self._lock:
             if self._job and self._job["status"] in DOWNLOAD_STATES:
                 raise ManagedFFmpegError("Managed FFmpeg installation is already running.")
+            self._recover_previous()
             self._clean_abandoned_staging()
             if ((self.root / "current").exists() or (self.root / "current").is_symlink()) and not self._owned():
                 raise ManagedFFmpegError(
@@ -368,6 +428,7 @@ class ManagedFFmpegManager:
                     "Downloaded FFmpeg/FFprobe could not run (" +
                     str(ff_error or pr_error) + "). Previous installation kept."
                 )
+            encoders = _validate_encoders(binary)
             _check_cancel(cancel)
             if busy_check is not None and busy_check():
                 raise ManagedFFmpegError(
@@ -391,7 +452,8 @@ class ManagedFFmpegManager:
                     swapped_old = False
                 raise
             self._update(job_id, status="installed", message="Managed FFmpeg and FFprobe are ready.",
-                         progress=100.0, version=ff_ver, probe_version=pr_ver, error=None)
+                         progress=100.0, version=ff_ver, probe_version=pr_ver,
+                         encoders=encoders, error=None)
         except _Cancelled as exc:
             self._update(job_id, status="cancelled", message=str(exc), error=None)
         except Exception as exc:
