@@ -525,6 +525,163 @@
     }
   }
 
+  const FFMPEG_BUSY_STATES = new Set([
+    'checking', 'downloading', 'verifying', 'extracting', 'installing',
+  ]);
+  function displayBytes(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) return '0 MB';
+    return (number / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+  function renderManagedFFmpeg(info) {
+    const box = qs('#ffmpeg-manager-install-panel');
+    if (!box) return;
+    const job = info.job || null;
+    const active = job && FFMPEG_BUSY_STATES.has(job.status);
+    const install = qs('#ffmpeg-manager-install');
+    const cancel = qs('#ffmpeg-manager-cancel');
+    const remove = qs('#ffmpeg-manager-remove');
+    const progress = qs('#ffmpeg-manager-install-progress');
+    const label = qs('#ffmpeg-manager-install-status');
+    const meta = qs('#ffmpeg-manager-install-meta');
+    if (install) {
+      install.disabled = !info.supported || active || state.ffmpegManagerActionBusy;
+      install.textContent = info.installed ? 'Update / Reinstall managed FFmpeg' :
+        'Install managed FFmpeg';
+    }
+    if (cancel) {
+      cancel.hidden = !active;
+      cancel.disabled = !active || state.ffmpegManagerActionBusy;
+    }
+    if (remove) {
+      remove.hidden = !info.installed;
+      remove.disabled = active || state.ffmpegManagerActionBusy;
+    }
+    if (progress) {
+      progress.hidden = !active;
+      progress.value = Math.max(0, Math.min(100, Number(job?.progress) || 0));
+    }
+    if (label) label.textContent = job
+      ? (job.message || job.status) +
+        (job.error ? ' ' + job.error : '') +
+        (active && job.total_bytes
+          ? ' (' + displayBytes(job.downloaded_bytes) + ' / ' +
+            displayBytes(job.total_bytes) + ')' : '')
+      : info.installed ? 'Managed FFmpeg installed.' : info.message;
+    if (meta) meta.textContent =
+      'Package: ' + (info.asset_name || 'Unsupported architecture') +
+      '\nInstalled location: ' + info.managed_path +
+      '\nProvider: BtbN FFmpeg-Builds · GPL static builds';
+    if (job) {
+      const ops = window.MorphorumOperations;
+      const key = 'ffmpeg-managed';
+      if (active) {
+        if (state.ffmpegManagerJobId !== job.id || !state.ffmpegManagerOperation) {
+          if (state.ffmpegManagerOperation) ops?.retire(key);
+          state.ffmpegManagerJobId = job.id;
+          state.ffmpegManagerOperation = ops?.begin(key, 'Installing managed FFmpeg',
+            'Fetching and verifying an upstream package…', 'settings');
+        }
+        ops?.update(key, state.ffmpegManagerOperation, {
+          title: 'Managed FFmpeg: ' + job.status,
+          message: label?.textContent || job.message,
+          progress: Number(job.progress) || 0,
+        });
+      } else if (state.ffmpegManagerJobId !== job.id) {
+        // Recover a completed job after browser reload without claiming to
+        // have submitted it from this tab.
+        state.ffmpegManagerJobId = job.id;
+      } else if (state.ffmpegManagerOperation) {
+        ops?.finish(key, state.ffmpegManagerOperation, {
+          tone: job.status === 'installed' ? 'success' :
+            job.status === 'cancelled' ? 'warning' : 'error',
+          title: job.status === 'installed'
+            ? 'Managed FFmpeg installed'
+            : job.status === 'cancelled'
+              ? 'Managed FFmpeg installation cancelled' : 'Managed FFmpeg installation failed',
+          message: label?.textContent || job.message, view: 'settings',
+        });
+        state.ffmpegManagerOperation = null;
+        if (job.status === 'installed' && ensureFFmpegSettings().mode === 'managed') {
+          void checkFFmpegSettings({quiet: true});
+          window.dispatchEvent(new CustomEvent('morphorum:settings-changed',
+            {detail: state.settings}));
+        }
+      }
+    }
+  }
+
+  async function refreshManagedFFmpeg() {
+    window.clearTimeout(state.ffmpegManagedTimer);
+    state.ffmpegManagedTimer = null;
+    const request = (state.ffmpegManagedRequest || 0) + 1;
+    state.ffmpegManagedRequest = request;
+    try {
+      const info = await api('/api/tools/ffmpeg/managed');
+      if (request !== state.ffmpegManagedRequest) return;
+      window.MorphorumPollHealth?.recovered('ffmpeg-managed');
+      renderManagedFFmpeg(info);
+      if (info.job && FFMPEG_BUSY_STATES.has(info.job.status))
+        state.ffmpegManagedTimer = window.setTimeout(refreshManagedFFmpeg, 900);
+    } catch (error) {
+      if (request !== state.ffmpegManagedRequest) return;
+      const status = qs('#ffmpeg-manager-install-status');
+      if (status) status.textContent =
+        'Could not check managed FFmpeg installation. Check backend connectivity.';
+      window.MorphorumPollHealth?.failed('ffmpeg-managed', 'Managed FFmpeg', 'settings');
+      state.ffmpegManagedTimer = window.setTimeout(refreshManagedFFmpeg, 5000);
+    }
+  }
+
+  async function managedFFmpegAction(action) {
+    if (state.ffmpegManagerActionBusy) return;
+    if (action === 'remove') {
+      const accepted = await window.MorphorumDialog.confirm({
+        title: 'Remove Morphorum-managed FFmpeg?',
+        message: 'Only the verified FFmpeg installation in this Morphorum folder is removed. ' +
+          'Existing videos, projects and separately installed FFmpeg copies are kept.',
+        variant: 'danger', confirmText: 'Remove managed FFmpeg', cancelText: 'Keep installed',
+      });
+      if (!accepted) return;
+    }
+    state.ffmpegManagerActionBusy = true;
+    const key = 'ffmpeg-manager-action';
+    const token = window.MorphorumOperations?.begin(key,
+      action === 'install' ? 'Starting managed FFmpeg install' :
+        action === 'remove' ? 'Removing managed FFmpeg' : 'Cancelling installation',
+      'Contacting Morphorum backend…', 'settings');
+    try {
+      await api('/api/tools/ffmpeg/managed' +
+        (action === 'install' ? '/install' : action === 'cancel' ? '/cancel' : ''),
+        {method: action === 'remove' ? 'DELETE' : 'POST'});
+      window.MorphorumOperations?.finish(key, token, {
+        title: action === 'install' ? 'Managed FFmpeg download accepted'
+          : action === 'cancel' ? 'Cancel requested' : 'Managed FFmpeg removed',
+        message: action === 'install'
+          ? 'Checking upstream release; progress appears below.'
+          : action === 'cancel' ? 'The installer will stop safely at its next checkpoint.'
+          : 'Managed FFmpeg binaries were removed. Existing renders and exports are unchanged.',
+        view: 'settings',
+      });
+      if (action === 'remove' && ensureFFmpegSettings().mode === 'managed') {
+        void checkFFmpegSettings({quiet: true});
+        window.dispatchEvent(new CustomEvent('morphorum:settings-changed',
+          {detail: state.settings}));
+      }
+    } catch (error) {
+      window.MorphorumOperations?.finish(key, token, {
+        tone: 'error',
+        title: action === 'install' ? 'Could not start managed FFmpeg' :
+          action === 'cancel' ? 'Could not cancel FFmpeg installation' :
+            'Managed FFmpeg removal failed',
+        message: error.message, view: 'settings',
+      });
+    } finally {
+      state.ffmpegManagerActionBusy = false;
+      void refreshManagedFFmpeg();
+    }
+  }
+
   function createFFmpegManagerCard() {
     const config = ensureFFmpegSettings();
     const card = document.createElement('article');
@@ -569,12 +726,50 @@
       ? 'D:\\Tools\\ffmpeg\\bin\\ffmpeg.exe' : '/usr/local/bin/ffmpeg';
     customPath.value = config.custom_path;
     pathField.append(pathTitle, customPath);
+    const managedPanel = document.createElement('section');
+    managedPanel.id = 'ffmpeg-manager-install-panel';
+    managedPanel.className = 'ffmpeg-install-panel';
     const managedNote = document.createElement('div');
     managedNote.id = 'ffmpeg-manager-managed-note';
     managedNote.className = 'path-message';
     managedNote.textContent =
-      'Local managed install: tools/ffmpeg/current/bin inside Morphorum. ' +
-      'Automatic verified downloads are scheduled for P4.4.3 and are not available in this build.';
+      'Optional: download a verified GPL static FFmpeg/FFprobe pair into ' +
+      'tools/ffmpeg/current/bin. The download is started only by clicking Install.';
+    const actions = document.createElement('div');
+    actions.className = 'ffmpeg-install-actions';
+    const install = makeButton('Install managed FFmpeg', 'primary-button compact busy-button');
+    install.id = 'ffmpeg-manager-install';
+    install.addEventListener('click', () => void managedFFmpegAction('install'));
+    const cancel = makeButton('Cancel download', 'secondary-button compact');
+    cancel.id = 'ffmpeg-manager-cancel';
+    cancel.hidden = true;
+    cancel.addEventListener('click', () => void managedFFmpegAction('cancel'));
+    const remove = makeButton('Remove managed FFmpeg', 'secondary-button compact');
+    remove.id = 'ffmpeg-manager-remove';
+    remove.hidden = true;
+    remove.addEventListener('click', () => void managedFFmpegAction('remove'));
+    actions.append(install, cancel, remove);
+    const installProgress = document.createElement('progress');
+    installProgress.id = 'ffmpeg-manager-install-progress';
+    installProgress.max = 100;
+    installProgress.value = 0;
+    installProgress.hidden = true;
+    installProgress.setAttribute('aria-label', 'Managed FFmpeg installation progress');
+    const installStatus = document.createElement('div');
+    installStatus.id = 'ffmpeg-manager-install-status';
+    installStatus.className = 'path-message';
+    installStatus.setAttribute('role','status');
+    installStatus.textContent = 'Checking local installation…';
+    const installMeta = document.createElement('pre');
+    installMeta.id = 'ffmpeg-manager-install-meta';
+    installMeta.className = 'ffmpeg-manager-details';
+    const provider = document.createElement('a');
+    provider.href = 'https://github.com/BtbN/FFmpeg-Builds';
+    provider.target = '_blank';
+    provider.rel = 'noopener noreferrer';
+    provider.textContent = 'Provider, sources and GPL license details';
+    managedPanel.append(managedNote, actions, installProgress, installStatus,
+      installMeta, provider);
     const status = document.createElement('p');
     status.id = 'ffmpeg-manager-status';
     status.className = 'path-message';
@@ -589,7 +784,7 @@
     function syncMode() {
       config.mode = mode.value;
       pathField.hidden = config.mode !== 'custom';
-      managedNote.hidden = config.mode !== 'managed';
+      managedPanel.hidden = config.mode !== 'managed';
       status.textContent = 'Selection changed. Test this configuration, then Save Settings to activate it.';
       details.textContent = '';
       state.ffmpegRequestId = (state.ffmpegRequestId || 0) + 1;
@@ -608,9 +803,9 @@
       markSettingsDirty();
     });
     pathField.hidden = config.mode !== 'custom';
-    managedNote.hidden = config.mode !== 'managed';
+    managedPanel.hidden = config.mode !== 'managed';
     grid.append(modeField, pathField);
-    card.append(header, grid, managedNote, status, details, test);
+    card.append(header, grid, managedPanel, status, details, test);
     return card;
   }
 
@@ -952,6 +1147,7 @@
     renderSettingsDirtyState();
     loader.hidden = true;
     container.hidden = false;
+    void refreshManagedFFmpeg();
   }
 
   async function loadSettings({ announce = false } = {}) {
