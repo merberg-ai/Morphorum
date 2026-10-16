@@ -473,7 +473,7 @@ def api_managed_ffmpeg_install() -> dict[str, Any]:
         raise HTTPException(status_code=409, detail=
             "Wait for active video exports and hybrid extractions before changing FFmpeg.")
     try:
-        job = managed_ffmpeg_manager.start()
+        job = managed_ffmpeg_manager.start(busy_check=_ffmpeg_binary_busy)
         emit_console("info", "runtime", "Managed FFmpeg installation requested.")
         return job
     except ManagedFFmpegError as exc:
