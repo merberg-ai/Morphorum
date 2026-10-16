@@ -5906,7 +5906,7 @@
       motionLabDraftLayers.length + ' draft layer(s)';
     const audioStatus = qs('#animation-audio-workspace-status');
     if (audioStatus) audioStatus.textContent = !state.project ? 'Open a project in Editor first.' :
-      motionLabDraftLayers.length + ' Motion Lab draft layer(s) · Add audio, review, then apply.';
+      motionLabDraftLayers.length + ' Motion Lab draft layer(s) · Review curves, then apply when ready.';
   }
   function motionLabSetupQuickActions(panel) {
     const dock = document.createElement('div');
@@ -9577,7 +9577,7 @@
 
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
   const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'];
-  const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
+  const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview']);
   let animationTab = 'motion';
   let projectWizard = null;
   function showAnimationTab(name, { persist = true } = {}) {
