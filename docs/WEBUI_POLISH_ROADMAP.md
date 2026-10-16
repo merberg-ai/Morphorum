@@ -408,18 +408,19 @@ Code on `dev-webui`:
 - Added a Python regression explicitly checking the subprocess dependency
   and a failed background installation reaching the Runtime Console.
   **These tests still need a verified CI/pytest result.**
-- **Windows retest required:** Update `dev-webui`, restart the backend,
-  retry Install (the previous failed download was cleaned up and may need to
-  download again), check that FFmpeg and FFprobe are reported as installed,
-  then run `scripts/ffmpeg_acceptance.py --mode managed`.
-  This initial Windows physical test was **not a pass** and remains open.
+- **Windows retest passed, user-reported 2026-10-16:** The corrected managed
+  FFmpeg installer completed successfully in `D:\\Morphorum-test`, and the
+  user ran `scripts/ffmpeg_acceptance.py --mode managed` and reported all
+  tests passing: MP4/H.264/AAC, WebM/VP9/Opus, FFprobe, hybrid frame
+  extraction and MP3/OGG/FLAC conversion. The original import failure is
+  resolved; other recovery, alternate-mode, Linux install and CI checks remain.
 
 #### Outstanding P4.4 physical acceptance (must not mark complete before testing)
 
-- [ ] Windows test host: update `dev-webui`, open Settings → Storage →
-  FFmpeg Manager, select Managed → Install, verify checksum/progress/FFprobe,
-  Save Settings, restart, then run
-  `.\.venv\Scripts\python.exe scripts\ffmpeg_acceptance.py --mode managed`.
+- [x] Windows managed installation and media acceptance (user-reported
+  2026-10-16): install succeeded on `D:\\Morphorum-test`, and
+  `scripts/ffmpeg_acceptance.py --mode managed` passed all checks.
+  Restart persistence and lifecycle edge cases remain on the checklist.
 - [ ] Linux host: install Managed to the local `tools/ffmpeg/current/bin`
   and run `./.venv/bin/python scripts/ffmpeg_acceptance.py --mode managed`.
   BtbN Linux builds require glibc 2.28+ and Linux kernel 4.18+.
