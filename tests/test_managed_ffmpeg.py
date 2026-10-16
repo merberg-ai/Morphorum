@@ -173,6 +173,8 @@ def test_success_installs_after_verified_unpack_and_preserves_ownership(tmp_path
     monkeypatch.setattr(managed, "_download", download)
     monkeypatch.setattr(ffmpeg_tools, "_version",
         lambda path, command: (command + " version test", None))
+    monkeypatch.setattr(managed, "_validate_encoders",
+        lambda _binary: sorted(managed.REQUIRED_ENCODERS))
     m = managed.ManagedFFmpegManager(tmp_path / "tools" / "ffmpeg")
     m._job = {"id": "successful", "status": "checking"}
     m._run("successful", threading.Event())
@@ -195,6 +197,8 @@ def test_update_preserves_previous_install_when_job_starts_during_download(tmp_p
     monkeypatch.setattr(managed, "_download", download)
     monkeypatch.setattr(ffmpeg_tools, "_version",
                         lambda path, command: (command + " version test", None))
+    monkeypatch.setattr(managed, "_validate_encoders",
+                        lambda _binary: sorted(managed.REQUIRED_ENCODERS))
     manager = managed.ManagedFFmpegManager(tmp_path / "ffmpeg")
     manager._job = {"id": "initial", "status": "checking"}
     manager._run("initial", threading.Event())
@@ -207,6 +211,67 @@ def test_update_preserves_previous_install_when_job_starts_during_download(tmp_p
     assert "video export" in manager.status()["job"]["error"].lower()
     assert manager.status()["installed"]
     assert (manager.root / "current" / "bin" / name).read_bytes() == before
+
+
+def test_missing_required_encoder_is_a_hard_failure(tmp_path, monkeypatch):
+    binary = tmp_path / "ffmpeg"
+    binary.write_text("dummy")
+    expected = "\n".join(" " + ("V....." if name.startswith("lib") else "A.....") +
+                         " " + name + " encoder" for name in
+                         ("libx264", "libvpx-vp9", "aac"))
+    monkeypatch.setattr(managed.subprocess, "run",
+                        lambda *_a, **_k: SimpleNamespace(returncode=0, stdout=expected))
+    with pytest.raises(managed.ManagedFFmpegError, match="libopus"):
+        managed._validate_encoders(binary)
+    assert managed.REQUIRED_ENCODERS == frozenset(
+        {"libx264", "libvpx-vp9", "aac", "libopus"})
+
+
+def test_encoder_validation_accepts_the_complete_codec_set(tmp_path, monkeypatch):
+    expected = "\n".join(" " + ("A....." if name in ("aac", "libopus") else "V.....") +
+                         " " + name + " encoder" for name in
+                         sorted(managed.REQUIRED_ENCODERS))
+    calls = []
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(returncode=0, stdout=expected)
+    monkeypatch.setattr(managed.subprocess, "run", run)
+    binary = tmp_path / "ffmpeg"
+    assert set(managed._validate_encoders(binary)) == managed.REQUIRED_ENCODERS
+    assert calls[0][0][1:] == ["-hide_banner", "-encoders"]
+    assert calls[0][1]["timeout"] == managed.ENCODER_TIMEOUT
+    assert calls[0][1]["stdin"] == managed.subprocess.DEVNULL
+
+
+def test_crash_recovery_restores_only_an_owned_complete_previous_install(tmp_path):
+    manager = managed.ManagedFFmpegManager(tmp_path / "ffmpeg")
+    backup = manager.root / (".previous-" + "e" * 32)
+    backup.mkdir(parents=True)
+    bin_dir = backup / "bin"
+    bin_dir.mkdir()
+    for tool in ("ffmpeg", "ffprobe"):
+        (bin_dir / ffmpeg_tools._bin_name(tool)).write_bytes(b"binary")
+    (backup / "installation.json").write_text(json.dumps({
+        "managed_by": "Morphorum", "provider": managed.PROJECT_URL,
+    }))
+    assert manager.status()["installed"]
+    assert (manager.root / "current" / "installation.json").exists()
+    assert not backup.exists()
+
+
+def test_crash_recovery_refuses_ambiguous_backup_candidates(tmp_path):
+    manager = managed.ManagedFFmpegManager(tmp_path / "ffmpeg")
+    for suffix in ("a", "b"):
+        backup = manager.root / (".previous-" + suffix * 32)
+        backup.mkdir(parents=True)
+        (backup / "installation.json").write_text(json.dumps({
+            "managed_by": "Morphorum", "provider": managed.PROJECT_URL,
+        }))
+        (backup / "bin").mkdir()
+        for binary in ("ffmpeg", "ffprobe"):
+            (backup / "bin" / ffmpeg_tools._bin_name(binary)).write_bytes(b"binary")
+    assert not manager.status()["installed"]
+    assert not (manager.root / "current").exists()
 
 
 def test_rejects_unowned_installation_on_start_and_remove(tmp_path):
