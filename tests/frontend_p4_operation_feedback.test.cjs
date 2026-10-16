@@ -52,7 +52,9 @@ test('Top-level ribbon has accessible progress and non-cancelling dismiss action
     'operation-feedback-dismiss']) {
     assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
   }
-  assert.match(html,/aria-label="Recent operation" aria-live="polite"/);
+  assert.match(html,/aria-label="Recent operation" hidden/);
+  assert.match(html,/id="operation-feedback-announcement"[^>]*aria-live="polite"/);
+  assert.match(services,/announcement\.dataset\.signature !== signature/);
   assert.match(html,/Dismiss operation notice; does not cancel the task/);
   assert.match(services,/document\.querySelector\('\.nav-button\[data-view=/);
   assert.match(services,/panel\.setAttribute\('aria-busy'/);
