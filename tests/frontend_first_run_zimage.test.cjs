@@ -116,7 +116,6 @@ test('MS6.3 insufficient space prevents download and still permits continuing',a
   await h.flush();
   assert.equal(h.find('Download Now').disabled,true);
   assert.equal(h.posted,0);
-  assert.match(visit(h.renderHost || h.buttons()[0],()=>true)[0]?.textContent||'','');
   h.find('Not Now · Continue').listeners.click();
   assert.equal(h.advanced,1);
 });
