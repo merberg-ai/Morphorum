@@ -46,6 +46,10 @@ From your installation folder:
 
 Open **http://127.0.0.1:7865** in your browser. If you selected a different Windows installation port, use that instead. Keep the terminal open while using Morphorum; press **Ctrl+C** to stop its server.
 
+A **fresh installation** automatically opens the seven-page **First-Run Setup Wizard** on its first WebUI load. It explains WebUI versus backend-only mode, checks model and optional LoRA folders on the host, offers the optional managed Z-Image-Turbo download, and lets you create a tiny **Gentle Dolly In** or **Gentle Dolly Out** sample project (512 × 512, 48 frames, 12 FPS). Nothing downloads, renders, or creates a project until you explicitly choose the action.
+
+You can skip onboarding and configure everything later. For an existing installation, reopen it from **Settings → Setup Wizard**, or launch the WebUI with `run.bat --setup-wizard` on Windows / `./run.sh --setup-wizard` on Linux. Backend-only mode does not have a browser wizard. See [First-run setup](docs/GETTING_STARTED.md#first-run-setup-wizard).
+
 ### 3. Add a model and make an image
 
 1. Open **Models** in Morphorum.
@@ -63,6 +67,7 @@ For step-by-step screenshots-free guidance, see [Your first image and animation]
 | --- | --- |
 | Image Generation | Text-to-image and supported image-to-image generation, model-aware presets, seeds, batches and progress |
 | Models & LoRAs | Managed Z-Image-Turbo installation, external SDXL/FLUX folders, model-aware LoRA discovery |
+| First-Run Setup Wizard | Seven guided installation checks, optional Z-Image download, and two short 3D starter projects |
 | New Project Wizard | Seven guided pages from naming and model selection to motion, prompts and saving |
 | Motion Lab | Keyframes, 2D/3D camera movement, six-axis camera composer, live motion recording, curves and previews |
 | Animation & Outputs | Frame rendering, progress monitoring, completed-frame previews, MP4/WebM export with FFmpeg |
