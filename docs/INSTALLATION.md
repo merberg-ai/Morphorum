@@ -14,7 +14,7 @@ This guide covers the supported Windows and Linux installers, first launch, netw
 | Disk space | At least **8 GiB free** for initial runtime checks, plus model weights, caches and outputs; Z-Image-Turbo is approximately **33 GB** |
 | Internet | Needed for source, managed runtime/dependencies, and any models you download |
 | Git | Installed automatically on supported setups, or install it yourself |
-| FFmpeg + FFprobe | Used for video export and source-video/audio conversion; Windows installer may use `winget`, Linux distribution packages. In Settings → Storage → FFmpeg Manager, select auto-detection or supply a custom executable and test it. An optional verified managed installer can download an FFmpeg/FFprobe pair into the Morphorum installation; no system-wide changes are made. |
+| FFmpeg + FFprobe | Used for video export and source-video/audio conversion; Windows installer may use `winget`, Linux distribution packages (managed Linux builds require glibc 2.28+ and kernel 4.18+). In Settings → Storage → FFmpeg Manager, select auto-detection or supply a custom executable and test it. An optional verified managed installer can download an FFmpeg/FFprobe pair into the Morphorum installation; no system-wide changes are made. |
 
 Use the default installation directory if you are not sure. Avoid installing inside a source-controlled project or an existing folder containing unrelated files.
 
