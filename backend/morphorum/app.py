@@ -127,6 +127,7 @@ from .setup_state import SetupStateError, SetupStateConflict, setup_status, upda
 from .setup_folders import (
     SetupFolderError, SetupFolderConflict, inspect_folder, save_setup_folders,
 )
+from .setup_examples import example_catalog, instantiate_example
 
 BACKEND_ONLY = os.getenv("MORPHORUM_BACKEND_ONLY", "") == "1"
 
@@ -350,6 +351,46 @@ def _require_webui_setup_action(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Setup requires a same-origin WebUI request.")
     if request.headers.get("sec-fetch-site") == "cross-site":
         raise HTTPException(status_code=403, detail="Cross-site setup requests are forbidden.")
+
+
+@app.get("/api/setup/examples")
+def api_setup_examples() -> dict[str, Any]:
+    """Read-only bundled example metadata. Never creates a project."""
+    try:
+        catalog = example_catalog()
+        return {
+            "version": catalog["version"],
+            "examples": catalog["examples"],
+            "animation": catalog["animation"],
+        }
+    except SetupStateError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/setup/example", status_code=201)
+def api_setup_example(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    """Explicit once-only project creation with durable retry reservation."""
+    _require_webui_setup_action(request)
+    try:
+        project, reservation = instantiate_example(
+            template_id=payload.get("template_id"),
+            model_id=payload.get("model_id") or "",
+            revision=payload.get("revision"),
+            forced=(os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1"
+                    or payload.get("manual") is True),
+        )
+        return {
+            "status": "created",
+            "project": project,
+            "revision": reservation["revision"],
+            "render_ready": bool(project.get("model", {}).get("model_id")),
+        }
+    except SetupStateConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SetupStateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/setup/folders/check")
