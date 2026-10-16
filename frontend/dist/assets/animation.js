@@ -3453,6 +3453,7 @@
     motionLabAudioElement?.pause();
     window.clearTimeout(state.motionPollTimer);
     state.motionPollTimer = null;
+    if (state.motionJobId) window.MorphorumPollHealth?.reset('motion:' + state.motionJobId);
     state.motionJobId = null;
     if (motionPreviewOperation) {
       window.MorphorumOperations?.finish('motion-preview', motionPreviewOperation.token, {
@@ -3575,6 +3576,7 @@
       });
       motionPreviewOperation = null;
     }
+    if (state.motionJobId) window.MorphorumPollHealth?.reset('motion:' + state.motionJobId);
     state.motionJobId = null;
     window.clearTimeout(state.motionPollTimer);
     state.motionPollTimer = null;
@@ -3643,12 +3645,15 @@
       // A project switch clears motionJobId. Never show an old response,
       // even when the HTTP request started before the switch/reload.
       if (state.motionJobId !== jobId) return;
+      window.MorphorumPollHealth?.recovered('motion:' + jobId);
       updateMotionProgress(job);
       if (job.status === 'completed' || job.status === 'failed') { finishMotionPreview(job); return; }
       state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 350);
     } catch (_) {
-      if (state.motionJobId === jobId)
+      if (state.motionJobId === jobId) {
+        window.MorphorumPollHealth?.failed('motion:' + jobId, 'Camera preview', 'animation');
         state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 1000);
+      }
     }
   }
 
@@ -4082,11 +4087,13 @@
     try {
       const job = await api('/api/animation/video/jobs/' + encodeURIComponent(jobId));
       if (state.videoJob?.id !== jobId) return;
+      window.MorphorumPollHealth?.recovered('video:' + jobId);
       state.videoJob = job;
       renderVideoExportState();
       if (['queued', 'encoding'].includes(job.status)) {
         state.videoPollTimer = window.setTimeout(() => pollVideoExport(jobId), 700);
       } else {
+        window.MorphorumPollHealth?.reset('video:' + jobId);
         await loadVideoExportHistory();
         if (job.status === 'completed') {
           toast('Video export complete', 'Download your ' + job.format.toUpperCase() + ' video.', 'success');
@@ -4096,6 +4103,7 @@
       }
     } catch (error) {
       if (state.videoJob?.id === jobId) {
+        window.MorphorumPollHealth?.failed('video:' + jobId, 'Video export', 'animation');
         state.videoPollTimer = window.setTimeout(() => pollVideoExport(jobId), 1200);
       }
     }
@@ -4142,6 +4150,8 @@
   let renderHistoryGeneration = 0;
   function resetRenderUi() {
     ++renderHistoryGeneration;
+    if (state.renderJobId) window.MorphorumPollHealth?.reset('render:' + state.renderJobId);
+    if (state.videoJob?.id) window.MorphorumPollHealth?.reset('video:' + state.videoJob.id);
     window.clearTimeout(state.renderPollTimer);
     state.renderPollTimer = null;
     state.renderJobId = null;
@@ -4381,16 +4391,21 @@
       const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
       if (renderId !== state.renderJobId ||
           (job.project_id && job.project_id !== state.project?.id)) return;
+      window.MorphorumPollHealth?.recovered('render:' + renderId);
       renderAnimationJob(job);
       if (renderIsActive(job)) {
         state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 700);
       } else {
+        window.MorphorumPollHealth?.reset('render:' + renderId);
         await loadRenderHistory();
         if (job.status === 'completed') toast('Animation render complete', job.message || '', 'success');
         else if (job.status === 'failed') toast('Animation render failed', job.error || job.message || '', 'error', 8000);
       }
     } catch (_) {
-      if (renderId === state.renderJobId) state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 1500);
+      if (renderId === state.renderJobId) {
+        window.MorphorumPollHealth?.failed('render:' + renderId, 'Animation render', 'animation');
+        state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 1500);
+      }
     }
   }
 
