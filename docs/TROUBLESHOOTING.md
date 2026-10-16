@@ -176,10 +176,29 @@ missing** appears, ordinary video exports may still work, but hybrid video
 inspection requires FFprobe from the same installation. For explicit Custom
 or Managed modes Morphorum will not silently switch to another FFmpeg.
 
-The new **Morphorum-managed** selection reserves `tools/ffmpeg/current/bin`
-inside the install directory, but the verified download/install controls are
-still pending P4.4.3. Do not select Managed unless you have installed compatible
-binaries there yourself.
+Choose **Morphorum-managed local FFmpeg**, then click **Install managed
+FFmpeg**. Morphorum downloads the static FFmpeg and FFprobe pair directly from
+the BtbN GitHub release, validates its published SHA-256 digest, checks both
+executable versions, and installs it under `tools/ffmpeg/current/bin`. The
+package is approximately 100–200 MB depending on host architecture. Downloads
+are never automatic. After installation, click **Save Settings** to activate
+Managed mode. **Cancel download**, **Update / Reinstall**, and **Remove** are
+available in the same card. These operations do not delete any video output
+or externally installed FFmpeg binaries.
+
+Managed downloads currently support Windows x64/ARM64 and Linux x64/ARM64 with
+a compatible runtime (BtbN Linux builds require recent glibc). Other hosts
+can use Auto or Custom. Downloading requires GitHub access; running already
+installed binaries does not. The static **GPL build** includes encoders used
+by Morphorum's MP4 pipeline, so review the BtbN licensing and
+[FFmpeg licensing information](https://ffmpeg.org/legal.html). Installation
+records, a license notice and upstream source links are saved with the files.
+
+If an update or removal fails because files are in use, finish active
+video exports or extractions and retry. Existing verified installations are
+preserved on package checksum or extraction failure. If a download fails,
+check network access to GitHub and try Install again; a failed attempt does
+not replace a previously functioning managed copy.
 
 Also check available disk space, that the render actually completed, and whether the chosen export format is supported by the current pipeline.
 
