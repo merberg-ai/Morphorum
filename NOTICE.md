@@ -8,4 +8,6 @@ Morphorum aims to be compatible with classic Deforum project files, schedules, p
 
 Contributors must independently implement compatible behavior from public documentation, file formats, test fixtures for which they have redistribution rights, and externally observable behavior. Do not paste or mechanically translate covered source from Deforum, sd-forge-deforum, Stable Diffusion WebUI, Forge, or other projects unless the code's license is compatible with the destination and the required notices/obligations are explicitly handled.
 
-Third-party Python/JavaScript packages, models, codecs, binaries, and optional integrations retain their own licenses. See `THIRD_PARTY.md` as the dependency set develops.
+Third-party Python/JavaScript packages, models, codecs, binaries, and optional integrations retain their own licenses.
+
+**Managed FFmpeg:** The optional GPL static FFmpeg/FFprobe executable package downloaded by the user's FFmpeg Manager action is third-party software, not covered by Morphorum's Unlicense. See [Third-party software](THIRD_PARTY.md) and [FFmpeg Manager](docs/FFMPEG_MANAGER.md) for provider, source and licensing information. See `THIRD_PARTY.md` as the dependency set develops.
