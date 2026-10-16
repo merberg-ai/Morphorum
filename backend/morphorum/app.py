@@ -330,7 +330,8 @@ def api_setup_progress(request: Request, payload: dict[str, Any]) -> dict[str, A
                                revision=payload.get("revision"),
                                forced=forced or manual,
                                template_id=payload.get('template_id'),
-                               model_id=payload.get('model_id'))
+                               model_id=payload.get('model_id'),
+                               without_example=payload.get('without_example') is True)
     except SetupStateConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SetupStateError as exc:
