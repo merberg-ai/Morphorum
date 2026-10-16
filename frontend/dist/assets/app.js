@@ -1042,6 +1042,16 @@
     if (qs('#view-console')?.classList.contains('active')) renderConsole();
   }
 
+  // Browser-side diagnostics appear in the normal Console, without sending
+  // filesystem paths, request URLs, job payloads or credentials to the server.
+  window.MorphorumClientDiagnostics = {
+    record(level, message) {
+      addConsoleEvent({id: 0, origin: 'browser', timestamp: new Date().toISOString(),
+        level: ['info', 'warning', 'error'].includes(level) ? level : 'info',
+        category: 'runtime', message: String(message).slice(0, 300)});
+    },
+  };
+
   function setConsoleConnection(ok, text) {
     const dot = qs('#console-dot');
     const label = qs('#console-status');
@@ -1053,7 +1063,8 @@
   async function connectConsole() {
     try {
       const initial = await api('/api/console?limit=500');
-      state.events = initial.events || [];
+      const browserEvents = state.events.filter(event => event.origin === 'browser');
+      state.events = [...(initial.events || []), ...browserEvents].slice(-1200);
       state.lastEventId = state.events.reduce((max, event) => Math.max(max, Number(event.id) || 0), 0);
       renderConsole();
     } catch (error) {
@@ -1154,6 +1165,11 @@
 
   async function telemetryLoop() {
     const ok = await loadTelemetry();
+    if (!ok) {
+      // Telemetry can fail independently; only mark host offline if /health
+      // also fails. A failed optional GPU probe is not a render failure.
+      await loadHealth();
+    }
     window.clearTimeout(state.telemetryTimer);
     state.telemetryTimer = window.setTimeout(telemetryLoop, ok ? 2500 : 6000);
   }
@@ -1206,6 +1222,7 @@
       if (branchFull) branchFull.textContent = branch;
       if (commitFull) commitFull.textContent = commit;
       if (pill) pill.title = `Morphorum ${displayVersion} · ${branch} @ ${commit} · Tap for details`;
+      return true;
     } catch (error) {
       dot?.classList.add('bad');
       dot?.classList.remove('ok');
@@ -1219,6 +1236,7 @@
       for (const link of [branchLink, commitLink]) {
         if (link) { link.hidden = true; link.removeAttribute('href'); }
       }
+      return false;
     }
   }
 
