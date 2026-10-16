@@ -10,6 +10,7 @@
   let step = 'welcome';
   let manual = false;
   let busy = false;
+  let exampleReady = false;
   let previousFocus = null;
 
   function showError(message) {
@@ -20,6 +21,7 @@
   }
   function dismiss() {
     const overlay = qs('overlay');
+    if (busy) return;
     if (overlay) overlay.hidden = true;
     window.MorphorumSetupZImage?.leave();
     window.MorphorumSetupExamples?.leave();
@@ -44,7 +46,7 @@
     if (step === 'welcome') {
       paragraph('Morphorum creates AI images and camera-driven animations on your computer. This setup will help you configure model folders, optional LoRAs, and a small starter project.');
       paragraph('Models are not included in a fresh installation. Downloads require your permission; opening this wizard will never download weights, generate frames or alter existing projects.');
-      paragraph('This wizard configures checkpoint and LoRA folders, and optionally downloads a managed Z-Image model. Two starter animation projects will be added in the next milestone.');
+      paragraph('Choose checkpoint folders and optional LoRAs, install Z-Image-Turbo if you wish, then open a small 3D starter animation. The two example projects take only 4 seconds each and are not rendered automatically.');
       void window.MorphorumSetupFolders?.welcome(content);
     } else if (step === 'modes') {
       heading('WebUI: the default');
@@ -57,22 +59,26 @@
     } else if (step === 'zimage') {
       window.MorphorumSetupZImage?.show(content,()=>void action('advance','examples'));
     } else if (step === 'examples') {
-      void window.MorphorumSetupExamples?.showExamples(content,snapshot);
+      exampleReady = false;
+      void window.MorphorumSetupExamples?.showExamples(content,snapshot,{
+        onReady:ready=>{
+          if(step==='examples' && !qs('overlay').hidden) {
+            exampleReady=ready;
+            qs('next').disabled=busy || !ready;
+          }
+        },
+      });
     } else if (step === 'finish') {
       void window.MorphorumSetupExamples?.showFinish(content,snapshot,{
         reserved:(revision,id)=>{snapshot.revision=revision;snapshot.example_project_id=id;},
-        complete:()=>action('complete','finish'),
+        complete:extras=>action('complete','finish',extras),
         openEditor:id=>window.MorphorumAnimation?.openSavedProjectFromSetup?.(id) ?? false,
         toast:(...args)=>window.MorphorumToast?.(...args),
         manual,
       });
-    } else {
-      heading('This page is scheduled for the next MS6 implementation pass');
-      paragraph('Your progress is saved on the Morphorum host, not in browser storage. Folder checks and optional managed Z-Image downloads are available now; starter project creation follows in MS6.4.');
-      paragraph('Close to resume here later, or Skip for now to return to the normal WebUI. Your existing settings and projects remain untouched.');
     }
     qs('back').disabled = position === 0;
-    qs('next').disabled = position >= 6;
+    qs('next').disabled = position >= 6 || step==='examples';
     qs('next').textContent = position === 1 ? 'Continue to Model Setup' : position === 2 ? 'Optional LoRA Folders' : position === 3 ? 'Continue to Z-Image' : position === 4 ? 'Continue Without Waiting' : position === 5 ? 'Review & Finish' : 'Next';
     showError('');
   }
@@ -84,7 +90,7 @@
   async function action(kind, destination, extras = {}) {
     if (busy || !snapshot) return;
     busy = true;
-    for (const name of ['next','back','skip']) qs(name).disabled = true;
+    for (const name of ['next','back','skip','close']) qs(name).disabled = true;
     try {
       const response = await fetch('/api/setup/progress', {
         method:'POST',
@@ -104,6 +110,7 @@
         return;
       }
       if (step === 'zimage') window.MorphorumSetupZImage?.leave();
+      if (step === 'examples' || step === 'finish') window.MorphorumSetupExamples?.leave();
       step = destination;
       page();
     } catch (error) {
@@ -111,10 +118,11 @@
     } finally {
       busy = false;
       // Restore the correct step-specific disabled states.
+      qs('close').disabled = false;
       if (!qs('overlay').hidden) {
         qs('skip').disabled = false;
         qs('back').disabled = STEPS.indexOf(step) === 0;
-        qs('next').disabled = STEPS.indexOf(step) >= 6;
+        qs('next').disabled = STEPS.indexOf(step) >= 6 || (step==='examples' && !exampleReady);
       }
     }
   }
@@ -173,8 +181,16 @@
       }
       // Keep focus inside the modal on Tab, including on narrow layouts.
       if (event.key !== 'Tab') return;
-      const visible = ['close','back','skip','next'].map(qs).filter(e=>!e.disabled);
+      const overlay=qs('overlay');
+      const candidates=overlay.querySelectorAll?.(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      const visible=candidates ? [...candidates].filter(e=>
+        !e.disabled && !e.hidden && !e.closest?.('[hidden]') &&
+        (typeof e.getClientRects!=='function' || e.getClientRects().length>0)
+      ) : ['close','back','skip','next'].map(qs).filter(e=>!e.disabled);
       const i=visible.indexOf(document.activeElement);
+      if(!visible.length) return;
       if(event.shiftKey && i===0) {event.preventDefault();visible.at(-1)?.focus();}
       else if(!event.shiftKey && i===visible.length-1) {event.preventDefault();visible[0]?.focus();}
     });
