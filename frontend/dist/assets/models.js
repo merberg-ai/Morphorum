@@ -286,7 +286,8 @@
       state.managedModels.filter(model => model.installed).map(model => model.id)
     );
     try {
-      const payload = await api('/api/managed-models');
+      const payload = await window.MorphorumPollHealth.request(signal =>
+        api('/api/managed-models', {signal}));
       state.managedModels = Array.isArray(payload.models) ? payload.models : [];
       window.MorphorumPollHealth?.recovered('managed-models');
       renderManagedModels();
