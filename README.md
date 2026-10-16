@@ -48,7 +48,7 @@ Open **http://127.0.0.1:7865** in your browser. If you selected a different Wind
 
 A **fresh installation** automatically opens the seven-page **First-Run Setup Wizard** on its first WebUI load. It explains WebUI versus backend-only mode, checks model and optional LoRA folders on the host, offers the optional managed Z-Image-Turbo download, and lets you create a tiny **Gentle Dolly In** or **Gentle Dolly Out** sample project (512 × 512, 48 frames, 12 FPS). Nothing downloads, renders, or creates a project until you explicitly choose the action.
 
-You can skip onboarding and configure everything later. For an existing installation, reopen it from **Settings → Setup Wizard**, or launch the WebUI with `run.bat --setup-wizard` on Windows / `./run.sh --setup-wizard` on Linux. Backend-only mode does not have a browser wizard. See [First-run setup](docs/GETTING_STARTED.md#first-run-setup-wizard).
+You can skip onboarding and configure everything later. For an existing installation, reopen it from **Settings → Setup Wizard**, or launch the WebUI with `.\run.bat --setup-wizard` on Windows / `./run.sh --setup-wizard` on Linux. Backend-only mode does not have a browser wizard. See [First-run setup](docs/GETTING_STARTED.md#first-run-setup-wizard).
 
 ### 3. Add a model and make an image
 
@@ -70,6 +70,7 @@ For step-by-step screenshots-free guidance, see [Your first image and animation]
 | First-Run Setup Wizard | Seven guided installation checks, optional Z-Image download, and two short 3D starter projects |
 | New Project Wizard | Seven guided pages from naming and model selection to motion, prompts and saving |
 | Motion Lab | Keyframes, 2D/3D camera movement, six-axis camera composer, live motion recording, curves and previews |
+| Motion Studio | Analyze project audio; edit beats, independent frequency channels and synchronized camera cues; stage, preview and apply movements |
 | Animation & Outputs | Frame rendering, progress monitoring, completed-frame previews, MP4/WebM export with FFmpeg |
 | Import Motion Settings | Compatible Deforum Motion Studio camera schedules, optional soundtrack attachment |
 | Interface | Responsive browser layout, built-in console and telemetry, themes: **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite** |
@@ -101,7 +102,8 @@ The usual launcher provides both a **web interface and generation API**, typical
 ## Documentation
 
 - **[Install & maintain](docs/INSTALLATION.md)**: Windows/Linux setup, custom locations, updates, repairs, data backups
-- **[Getting started](docs/GETTING_STARTED.md)**: first image, animation and video
+- **[Getting started](docs/GETTING_STARTED.md)**: first-run setup, first image, animation and video
+- **[Motion Studio](docs/MOTION_STUDIO.md)**: audio-driven motion, independent sound channels, recording, presets and synchronized preview
 - **[Backend-only mode](docs/BACKEND_ONLY.md)**: LAN setup, per-client credentials, connection checks, security
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)**: installer, model, CUDA, networking and export problems
 - **[Documentation index](docs/README.md)**: all maintained user and contributor guides
