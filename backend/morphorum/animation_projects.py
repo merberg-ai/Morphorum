@@ -593,6 +593,27 @@ def create_animation_project(payload: dict[str, Any] | None = None) -> dict[str,
     return project
 
 
+
+def create_animation_project_once(
+    project_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Create a pre-reserved setup example ID exactly once, for retry safety.
+
+    Other project creation still uses create_animation_project. Never
+    overwrite an existing user-edited project on a setup retry.
+    """
+    with _PROJECT_SAVE_LOCK:
+        path = _project_file(project_id)
+        if path.exists():
+            return load_animation_project(project_id)
+        ensure_runtime_dirs()
+        project = normalize_animation_project(payload, project_id=project_id)
+        _write_atomic(path, project)
+        emit_console("info", "animation", f"Created setup example {project_id}.")
+        return project
+
+
 def load_animation_project(project_id: str) -> dict[str, Any]:
     path = _project_file(project_id)
     if not path.is_file():
