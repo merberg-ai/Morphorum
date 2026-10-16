@@ -547,14 +547,14 @@
     if (install) {
       install.disabled = !info.supported || active || state.ffmpegManagerActionBusy;
       install.textContent = info.installed ? 'Update / Reinstall managed FFmpeg' :
-        'Install managed FFmpeg';
+        info.repair_needed ? 'Repair managed FFmpeg' : 'Install managed FFmpeg';
     }
     if (cancel) {
       cancel.hidden = !active;
       cancel.disabled = !active || state.ffmpegManagerActionBusy;
     }
     if (remove) {
-      remove.hidden = !info.installed;
+      remove.hidden = !info.installed && !info.repair_needed;
       remove.disabled = active || state.ffmpegManagerActionBusy;
     }
     if (progress) {
@@ -567,7 +567,9 @@
         (active && job.total_bytes
           ? ' (' + displayBytes(job.downloaded_bytes) + ' / ' +
             displayBytes(job.total_bytes) + ')' : '')
-      : info.installed ? 'Managed FFmpeg installed.' : info.message;
+      : info.installed ? 'Managed FFmpeg installed.' :
+        info.repair_needed ? 'Managed FFmpeg files are incomplete. Repair or remove the installation.' :
+          info.message;
     if (meta) meta.textContent =
       'Package: ' + (info.asset_name || 'Unsupported architecture') +
       '\nInstalled location: ' + info.managed_path +
@@ -591,6 +593,13 @@
         // Recover a completed job after browser reload without claiming to
         // have submitted it from this tab.
         state.ffmpegManagerJobId = job.id;
+        if (job.status === 'installed' && ensureFFmpegSettings().mode === 'managed') {
+          // A fast completion or browser reconnection still refreshes
+          // video availability; no fictitious operation success is emitted.
+          void checkFFmpegSettings({quiet: true});
+          window.dispatchEvent(new CustomEvent('morphorum:settings-changed',
+            {detail: state.settings}));
+        }
       } else if (state.ffmpegManagerOperation) {
         ops?.finish(key, state.ffmpegManagerOperation, {
           tone: job.status === 'installed' ? 'success' :
