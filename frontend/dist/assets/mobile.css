@@ -182,3 +182,9 @@
     grid-template-columns:minmax(0,1fr);
   }
 }
+
+/* FFmpeg Manager: stack install/maintenance controls on narrow phones. */
+@media(max-width:520px) {
+  #view-settings .ffmpeg-install-actions {display:grid;grid-template-columns:minmax(0,1fr);}
+  #view-settings .ffmpeg-install-actions button {width:100%;}
+}
