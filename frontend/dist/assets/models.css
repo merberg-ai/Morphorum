@@ -193,3 +193,64 @@
 .managed-models-card > summary .muted {font-size:.73rem;font-weight:400;}
 .managed-models-card[open] > summary {border-bottom:1px solid var(--border);}
 .managed-models-card > .card-header {margin:10px 15px;}
+
+/* P3.2: responsive inventory grids must shrink even with long filenames. */
+#view-models .managed-models-card,
+#view-models .model-browser-card,
+#view-models .model-toolbar,
+#view-models .managed-model-row,
+#view-models .model-row,
+#view-models .managed-model-info,
+#view-models .managed-progress-wrap,
+#view-models .model-name-wrap,
+#view-models .model-path-details {
+  min-width:0;max-width:100%;
+}
+#view-models .model-toolbar > input,
+#view-models .model-toolbar > select,
+#view-models .model-toolbar > button {min-width:0;max-width:100%;width:100%;}
+#view-models .managed-model-title-row strong,
+#view-models .managed-description,
+#view-models .managed-model-meta,
+#view-models .managed-progress-heading > span,
+#view-models .managed-models-card > summary,
+#view-models .model-count-note {overflow-wrap:anywhere;}
+#view-models .managed-model-path {
+  white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;
+  user-select:text;
+}
+#view-models .model-path-details summary {
+  white-space:normal;overflow-wrap:anywhere;min-width:0;
+  padding:7px 0;min-height:40px;
+}
+#view-models .model-path-details summary:focus-visible {
+  outline:2px solid var(--accent);outline-offset:3px;border-radius:5px;
+}
+#view-models .model-row:focus-within {background:var(--button-secondary-hover);}
+#view-models .model-path-details[open] .model-path {
+  white-space:pre-wrap;overflow-wrap:anywhere;
+}
+#view-models .model-row .use-model-button {
+  min-height:42px;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;
+}
+@media(max-width:900px) {
+  #view-models .managed-model-row {grid-template-columns:minmax(0,1fr) auto;}
+  #view-models .managed-model-title-row {min-width:0;}
+}
+@media(max-width:520px) {
+  #view-models .model-toolbar {grid-template-columns:minmax(0,1fr);}
+  #view-models .model-toolbar > * {grid-column:1/-1;}
+  #view-models .managed-model-row {grid-template-columns:minmax(0,1fr);}
+  #view-models .managed-model-actions,
+  #view-models .managed-progress-wrap {grid-column:1/-1;grid-row:auto;}
+  #view-models .managed-model-actions button {width:100%;min-height:44px;}
+  #view-models .model-summary-row {grid-template-columns:repeat(3,minmax(0,1fr));}
+}
+@media(max-width:380px) {
+  #view-models .model-row {grid-template-columns:minmax(0,1fr);}
+  #view-models .model-row > * {grid-column:1/-1;grid-row:auto;}
+  #view-models .model-name,
+  #view-models .model-file {white-space:normal;overflow-wrap:anywhere;}
+  #view-models .model-family-badge,
+  #view-models .model-kind-badge {justify-self:start;}
+}

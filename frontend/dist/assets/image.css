@@ -150,3 +150,43 @@
 /* Give model-specific preset labels room without squeezing numeric fields. */
 .image-resolution-preset-field {grid-column:1/-1; min-width:0;}
 .image-resolution-preset-field select {min-width:0;width:100%;}
+
+/* P3.2: keep result metadata, long seed values and lightbox controls visible. */
+#view-image .image-layout > .card,
+#view-image .image-gallery,
+#view-image .image-gallery > *,
+#view-image .result-meta,
+#view-image .result-actions,
+#view-image .image-history-controls,
+#view-image .image-result-lightbox-toolbar {min-width:0;max-width:100%;}
+#view-image .result-meta {flex-wrap:wrap;align-items:flex-start;}
+#view-image .result-seed {flex:1 1 130px;min-width:0;}
+#view-image .result-seed span {white-space:normal;overflow-wrap:anywhere;}
+#view-image .result-actions {
+  flex:0 1 auto;flex-wrap:wrap;justify-content:flex-end;
+}
+#view-image .result-actions button,
+#view-image .result-actions a {
+  min-height:42px;min-width:0;max-width:100%;
+  white-space:normal;overflow-wrap:anywhere;
+}
+#view-image .image-history-controls > * {min-width:0;max-width:100%;}
+#view-image .image-result-lightbox {box-sizing:border-box;}
+#view-image .image-result-lightbox-toolbar {flex-wrap:wrap;}
+#view-image #image-lightbox-details {min-width:0;overflow-wrap:anywhere;}
+#view-image #image-lightbox-close {min-height:42px;flex:0 0 auto;}
+#view-image #image-lightbox-download {
+  max-width:100%;white-space:normal;overflow-wrap:anywhere;min-height:42px;
+}
+@media(max-width:640px) {
+  #view-image .result-meta {display:grid;grid-template-columns:minmax(0,1fr);}
+  #view-image .result-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;}
+  #view-image .result-actions button,
+  #view-image .result-actions a {width:100%;}
+  #view-image .image-history-controls {grid-template-columns:minmax(0,1fr) auto;}
+  #view-image .image-history-controls label {grid-column:1/-1;}
+  #view-image .image-result-lightbox-toolbar {align-items:flex-start;}
+}
+@media(max-width:380px) {
+  #view-image .result-actions {grid-template-columns:minmax(0,1fr);}
+}

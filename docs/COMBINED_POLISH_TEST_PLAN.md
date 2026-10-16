@@ -91,3 +91,29 @@ Do not share credentials or private filesystem contents.
 **Gate:** P2.5, P2.6 and P3.1 remain pending physical signoff. Additional
 development passes may be committed to `dev-webui` but `main` must remain
 unchanged until the combined acceptance and separately authorized merge.
+
+## P3.2: Models, Settings, LoRA Manager, Image Results
+
+- [ ] At 360px, 720px and desktop widths, check Model Manager search,
+      both filters, Clear Filters, model family/type pills and Use/Copy Tag.
+      Expand **Show full file path** using Tab, Enter and mouse/touch.
+      Confirm long Windows/Linux paths wrap within the card.
+- [ ] Open Managed Downloads with an installed, downloading or incomplete
+      item if available. Check the status badge, progress text, full
+      destination path and Download/Use buttons never push page width.
+- [ ] In Settings, check the four group tabs are directly visible and
+      keyboard-accessible at 360px and 200% browser zoom. Model Paths input,
+      Check, Remove, Add Path and Save/Load Settings must remain usable.
+- [ ] In LoRA Manager select a LoRA with a long filename and many trigger
+      words. Check selected/focused filenames, all metadata fields, snippet
+      and Copy/Insert controls, including narrow phone orientation.
+- [ ] In Image Generation, generate two safe low-resolution images and
+      verify the results gallery, long seed text, Reuse seed, Save,
+      recent-job selector, and full-size lightbox close/download.
+- [ ] Verify no page-wide horizontal scroll at 360px, 720px, or
+      200% browser zoom, and that focus outlines remain visible.
+- [ ] Check dark/light theme contrast and mobile touch targets.
+- [ ] No data-loss, project changes or media regressions were introduced.
+
+P3.2 physical testing is deferred with P2.5/P2.6/P3.1. CI and static
+layout checks alone do not certify browser rendering at those sizes.

@@ -935,3 +935,45 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
 .morphorum-help-field.image-resolution-preset-field select {min-width:0;width:100%;}
 .morphorum-help-field > label > span:first-child {min-width:0;max-width:100%;line-height:1.4;overflow-wrap:anywhere;}
 .morphorum-help-field > label > span:first-child small {font-size:.75em;white-space:normal;}
+
+/* P3.2: shared LoRA details and Settings content avoid intrinsic-width overflow. */
+#view-loras .lora-manager-grid,
+#view-loras .lora-manager-grid > *,
+#view-loras .lora-manager-section,
+#view-loras .lora-manager-insert,
+#view-loras .lora-manager-insert-controls,
+#view-loras .lora-manager-field,
+#view-loras .lora-manager-quick-use {min-width:0;max-width:100%;}
+#view-loras .lora-manager-field > *,
+#view-loras .lora-manager-insert-controls > *,
+#view-loras .lora-manager-list > *,
+#view-loras .lora-manager-section p,
+#view-loras .lora-manager-section code,
+#view-loras .lora-manager-details .card-header,
+#view-loras .lora-manager-details .card-header * {min-width:0;overflow-wrap:anywhere;}
+#view-loras .lora-manager-list .lora-manager-item {min-width:0;text-align:left;}
+#view-loras .lora-manager-item:focus-visible small,
+#view-loras .lora-manager-item.selected small {
+  white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;
+}
+#view-loras .lora-manager-item:focus-visible {
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+#view-loras .lora-manager-insert-controls input,
+#view-loras .lora-manager-insert-controls button {max-width:100%;}
+#view-loras .lora-manager-quick-actions button {
+  min-height:42px;white-space:normal;overflow-wrap:anywhere;
+}
+#view-settings .settings-grid,
+#view-settings .settings-pane,
+#view-settings .settings-pane > *,
+#view-settings .path-section,
+#view-settings .path-list,
+#view-settings .path-row,
+#view-settings .path-input-wrap {min-width:0;max-width:100%;}
+#view-settings .settings-pane input:not([type=checkbox]),
+#view-settings .settings-pane select {min-width:0;max-width:100%;}
+#view-settings .path-message,
+#view-settings .family-card .badge,
+#view-settings .settings-pane .card-header {overflow-wrap:anywhere;}
+#view-settings .settings-pane .card-header {min-width:0;flex-wrap:wrap;}

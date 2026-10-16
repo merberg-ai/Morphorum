@@ -272,3 +272,15 @@ narrow screens each control receives its own row. The preflight issue list,
 **Fix in Editor** button and 3D motion-safety guidance also wrap rather than
 requiring a horizontal page scroll. Actual device and browser-zoom acceptance
 is postponed to the combined physical test pass.
+
+## Responsive Models, Settings, LoRAs and Image Results (P3.2)
+
+Morphorum arranges Model Manager filters in one column on very narrow
+screens, keeps model paths keyboard-expandable and selectable, and wraps
+managed download metadata. Settings groups wrap into a two-column phone
+layout; directory inputs and Check/Remove buttons stack at the smallest
+widths. LoRA Manager details and Image Generation's result actions also
+wrap rather than forcing a page-wide horizontal scrollbar. This is a
+layout-only update; scans, model downloads, generation and saved settings
+behave as before. Physical browser/zoom verification is deferred to the
+combined acceptance test.

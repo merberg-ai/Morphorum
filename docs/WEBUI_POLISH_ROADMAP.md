@@ -101,7 +101,7 @@ Contextual help icons use trusted static text, real buttons beside form labels, 
 ## P3 responsive and accessibility milestones
 
 - [x] P3.1: Keep four Render Monitor actions, preflight reports and 3D camera safety controls within small/mobile/zoomed layouts. Buttons have wrapped labels and full-size touch targets.
-- [ ] P3.2: Audit Model Manager, Settings, LoRA Manager, image results and long-text/table overflow with keyboard focus at desktop/tablet/phone sizes.
+- [x] P3.2: Fix intrinsic-width overflow in Model Manager, Settings, LoRA Manager and Image Results; add responsive button grids, accessible expanded filenames/paths, and keyboard focus styling. Device/zoom acceptance deferred.
 - [ ] P3.3: Audit remaining Motion Lab editors, modals and timelines for 360–1440 CSS px and 200% browser scaling.
 
 P3.1 is a code/style regression checkpoint only. Actual 360px phone, 720px
@@ -113,3 +113,12 @@ P2.5–P2.6 physical acceptance. Do not mark P3 complete or merge to main.
 The ready-to-use test checklist for P2.5, P2.6 and P3.1 is in
 [COMBINED_POLISH_TEST_PLAN.md](COMBINED_POLISH_TEST_PLAN.md). Physical Windows
 and phone testing is still pending; no merge to main is authorized.
+
+## P3.2 code acceptance
+
+- Model Manager search/filters shrink to one column on narrow viewports. Long model paths and managed-model destinations wrap; indexed paths remain behind keyboard-accessible Show full file path disclosure.
+- Settings tabs form two rows at phone/zoom widths; all four destinations remain directly accessible. Model path input and Check/Remove controls become separate rows at the narrowest breakpoint.
+- LoRA metadata, selected/focused long filenames, tags, and quick-action buttons fit their card. Long text is selectable instead of forcing an oversized page.
+- Image Results retain seed details, full-size preview, Save and Reuse seed actions, with stacked layouts at narrow widths.
+- CSS-only layout changes do not alter API calls, model selection, downloads, save, prompt tags or generation behavior.
+- Desktop 1440px, tablet 720px, phone 360px, light/dark, 200% zoom and keyboard navigation **remain pending physical testing** and are included in the combined checklist.

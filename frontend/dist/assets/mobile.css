@@ -142,3 +142,43 @@
   .model-setup-help-body {padding:16px;}
   .model-setup-help-actions button {flex:1 1 100%;}
 }
+
+/* P3.2: Settings tabs and directory actions at 200% zoom / narrow phones. */
+@media(max-width:640px) {
+  #view-settings .settings-internal-tabs {
+    grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;
+  }
+  #view-settings .settings-internal-tabs button {
+    min-width:0;min-height:44px;padding:9px 5px;
+    white-space:normal;overflow-wrap:anywhere;
+  }
+  #view-settings .settings-preference-grid {grid-template-columns:minmax(0,1fr);}
+  #view-settings .settings-pane .path-input {min-width:0;width:100%;}
+  #view-loras .lora-manager-grid {grid-template-columns:minmax(0,1fr);}
+  #view-loras .lora-manager-field {
+    grid-template-columns:minmax(0,1fr);
+    gap:4px;padding-bottom:10px;
+  }
+  #view-loras .lora-manager-insert-controls > * {min-width:0;}
+}
+@media(max-width:420px) {
+  #view-settings .path-row {grid-template-columns:minmax(0,1fr) auto;}
+  #view-settings .path-input-wrap {grid-column:1/-1;grid-row:1;}
+  #view-settings .path-row .validate-path {
+    display:inline-flex;grid-column:1;grid-row:2;
+    width:100%;min-width:0;justify-content:center;min-height:44px;
+  }
+  #view-settings .path-row .icon-button {
+    grid-column:2;grid-row:2;min-height:44px;min-width:44px;
+  }
+  #view-settings .path-message {grid-column:1/-1;}
+  #view-loras .lora-manager-insert-controls {
+    grid-template-columns:minmax(0,1fr);gap:8px;
+  }
+  #view-loras .lora-manager-insert-controls > * {
+    grid-column:1/-1;min-width:0;width:100%;
+  }
+  #view-loras .lora-manager-quick-actions {
+    grid-template-columns:minmax(0,1fr);
+  }
+}
