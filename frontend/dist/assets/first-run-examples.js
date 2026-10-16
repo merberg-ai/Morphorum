@@ -116,6 +116,7 @@
     const status=warning(host,'Checking project and model setup…');
     let folders='Folder settings not available';
     let zimage='Managed Z-Image status unavailable';
+    let zimageReady=false;
     let index=[];
     try {
       const [settings,managed,indexData]=await Promise.all([
@@ -131,6 +132,7 @@
           ? family.toUpperCase()+' '+kind+': '+paths.length+' configured' : null;
       }).filter(Boolean));
       folders=dirs.length?dirs.join(' · '):'No checkpoint or LoRA folders configured';
+      zimageReady=managed.installed===true && managed.status==='installed';
       zimage=managed.installed?'Z-Image verified installed':
         managed.status==='downloading'?'Z-Image downloading (not ready)':
         'Z-Image: '+(managed.status||'not installed');
@@ -153,15 +155,20 @@
       details.appendChild(line);
     }
     host.appendChild(details);
-    const hasModel=Boolean(index.find(m=>m.id===modelId));
-    status.textContent=hasModel?
-      'Ready to create an editable project with the selected model. Rendering will not start.':
-      'No usable base model selected. The example can be created, opened and edited, but is NOT render-ready. Select/download a model before generating.';
+    const indexedModel=Boolean(index.find(m=>m.id===modelId));
+    const pendingManaged=modelId==='managed:zimage-turbo' && !zimageReady;
+    const hasModel=indexedModel && !pendingManaged;
+    status.textContent=pendingManaged
+      ? 'The selected managed Z-Image package is not yet verified. Return to Example Animations and choose No model yet (editable project), or finish its download before creating.'
+      : hasModel
+        ? 'Ready to create an editable project with the selected model. Rendering will not start.'
+        : 'No usable base model selected. The example can be created, opened and edited, but is NOT render-ready. Select/download a model before generating.';
     const actions=node('div','first-run-example-actions');
     const create=node('button','primary-button','Create Example & Open Editor');
     const without=node('button','secondary-button','Finish Without Example');
     const change=node('button','secondary-button','Configure Model First');
     create.type=without.type=change.type='button';
+    if(pendingManaged) create.disabled=true;
     const error=node('p','first-run-example-error');
     error.setAttribute('role','alert');error.hidden=true;
     async function perform(fn) {
@@ -175,7 +182,7 @@
           toast?.('First-run setup',err.message,'error');}
       } finally {
         busy=false;
-        if(token===generation)create.disabled=without.disabled=change.disabled=false;
+        if(token===generation) {create.disabled=pendingManaged;without.disabled=change.disabled=false;}
       }
     }
     create.addEventListener('click',()=>void perform(async()=>{
