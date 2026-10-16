@@ -155,13 +155,31 @@ Morphorum prevents incompatible actions from running simultaneously. A busy butt
 
 ## Video export fails or FFmpeg is missing
 
-Run:
+Open **Settings → Storage → FFmpeg Manager**. Set **Auto-detect** to use
+the FFmpeg available in the host's `PATH`, optionally overridden by the
+legacy `MORPHORUM_FFMPEG` environment variable. Select **Custom executable**
+to point to the complete `ffmpeg.exe` (Windows) or `ffmpeg` (Linux)
+executable path. Choose **Test FFmpeg / FFprobe**, then **Save Settings**
+to activate a tested selection. Testing alone does not change your settings.
+
+You can also check from a terminal:
 
 ```text
 ffmpeg -version
+ffprobe -version
 ```
 
-If the command isn't found, install FFmpeg and restart your terminal or Morphorum session. Windows setup attempts a `winget` installation when needed; Linux users generally install FFmpeg through their distribution's package manager.
+If `ffmpeg` is missing, install it or provide a custom path. The Windows
+installer may offer a `winget` setup; Linux distributions generally provide
+both binaries through their package manager. If **FFmpeg ready / FFprobe
+missing** appears, ordinary video exports may still work, but hybrid video
+inspection requires FFprobe from the same installation. For explicit Custom
+or Managed modes Morphorum will not silently switch to another FFmpeg.
+
+The new **Morphorum-managed** selection reserves `tools/ffmpeg/current/bin`
+inside the install directory, but the verified download/install controls are
+still pending P4.4.3. Do not select Managed unless you have installed compatible
+binaries there yourself.
 
 Also check available disk space, that the render actually completed, and whether the chosen export format is supported by the current pipeline.
 
