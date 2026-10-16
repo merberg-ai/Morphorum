@@ -330,6 +330,16 @@
             <p class="field-help" id="animation-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
             <p class="field-help" id="animation-model-guidance" aria-live="polite" hidden></p>
             <p class="field-help" id="animation-model-index-status" role="status" aria-live="polite" hidden></p>
+            <section class="animation-model-compatibility" id="animation-model-compatibility" aria-label="Animation model compatibility" hidden>
+              <div class="animation-compatibility-heading">
+                <strong>Checkpoint compatibility</strong>
+                <span class="animation-compatibility-status" id="animation-compatibility-status" role="status" aria-live="polite">Checking settings</span>
+              </div>
+              <div class="animation-compatibility-facts" id="animation-compatibility-facts"></div>
+              <ul class="animation-compatibility-issues" id="animation-compatibility-issues" hidden></ul>
+              <p class="animation-compatibility-note" id="animation-compatibility-note" hidden></p>
+              <button class="secondary-button compact" id="animation-compatibility-action" type="button" hidden>Open Model Manager</button>
+            </section>
           </article>
 
           <article class="card glass animation-cadence-card" id="animation-cadence-card">

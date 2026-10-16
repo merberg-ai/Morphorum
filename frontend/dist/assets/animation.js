@@ -625,6 +625,7 @@
         ? 'Choose a checkpoint for the current animation project.'
         : 'Open or create an animation project before selecting a model.';
     }
+    renderAnimationModelCompatibility();
   }
 
   function setEditorEnabled(enabled) {
@@ -704,6 +705,145 @@
     return merged;
   }
 
+  // P2.3: compatibility is advisory. This function never edits project data,
+  // sampler selection, dimensions, or render state.
+  function describeAnimationModelCompatibility({
+    hasProject, modelId, model, capability = {}, sampler = '', width, height,
+    modelIndexStale = false,
+  } = {}) {
+    if (!hasProject) return { status: 'No project', tone: 'neutral', facts: [], issues: [], action: '' };
+    if (!modelId) return {
+      status: 'Select a checkpoint', tone: 'attention', facts: [], action: 'models',
+      issues: ['Choose an indexed checkpoint for this animation project. Image Generation uses a separate model selection.'],
+    };
+    if (!model || model.kind !== 'checkpoints') return {
+      status: 'Checkpoint unavailable', tone: 'attention', action: 'models',
+      facts: [['Checkpoint ID', String(modelId)]],
+      issues: ['The saved checkpoint is not indexed here. Open Models, check its folder or managed download, then scan again. Your saved project selection is preserved.'],
+    };
+
+    const family = String(model.family || '').toLowerCase();
+    const variant = String(model.variant || '').trim();
+    const name = String(capability.label || model.name || model.id || 'Checkpoint');
+    const divisor = family === 'flux' || family === 'zimage' ? 16 : 8;
+    const w = Number(width), h = Number(height);
+    const samplerOptions = Array.isArray(capability.samplers?.options)
+      ? capability.samplers.options : [];
+    const samplerNames = new Map(samplerOptions.map(item =>
+      [String(item.id || ''), String(item.label || item.id || '')]));
+    const issues = [];
+    let action = '';
+    let tone = 'ok';
+    let status = 'Indexed · compatible settings';
+    const facts = [
+      ['Family', family ? family.toUpperCase() : 'Unknown'],
+      ['Variant', variant || 'Standard'],
+      ['Sampler', samplerNames.get(String(sampler)) || (sampler ? String(sampler) : 'Not selected')],
+      ['Resolution', String(width || '?') + ' × ' + String(height || '?')],
+    ];
+    let note = modelIndexStale
+      ? 'This is the last known model index; a scan did not complete.'
+      : 'Indexed checkpoint. File integrity and GPU readiness are verified when generating.';
+
+    if (capability.supported === false) {
+      status = 'Unsupported model family';
+      tone = 'attention';
+      issues.push(capability.reason || 'This model family is not supported by the current generation backend.');
+      action = 'models';
+    } else if (capability.supported !== true) {
+      status = 'Compatibility unknown';
+      tone = 'attention';
+      issues.push('Generation capabilities are unavailable. Reopen Models and check the backend before rendering.');
+      action = 'models';
+    } else {
+      if (!samplerOptions.length) {
+        issues.push('No compatible samplers were reported for this checkpoint.');
+        action = 'models';
+      } else if (!samplerNames.has(String(sampler))) {
+        issues.push(sampler
+          ? 'Sampler "' + sampler + '" is not supported by ' + name + '. Choose a compatible sampler.'
+          : 'Choose a compatible sampler before rendering.');
+        action = 'sampler';
+      }
+      if (!Number.isInteger(w) || !Number.isInteger(h) ||
+          w < 64 || h < 64 || w > 4096 || h > 4096) {
+        issues.push('Width and height must be whole numbers between 64 and 4096 pixels.');
+        if (!action) action = 'resolution';
+      } else if (w % divisor || h % divisor) {
+        issues.push(name + ' requires width and height divisible by ' + divisor + '.');
+        if (!action) action = 'resolution';
+      } else if (w * h > 1048576) {
+        note += ' This resolution can require substantial VRAM; try a short render first.';
+      }
+      if (issues.length) {
+        tone = 'attention';
+        status = 'Review model settings';
+      }
+    }
+    return { status, tone, facts, issues, action, note };
+  }
+
+  function renderAnimationModelCompatibility() {
+    const panel = qs('#animation-model-compatibility');
+    if (!panel) return;
+    panel.hidden = !state.project;
+    if (!state.project) return;
+    const modelId = qs('#animation-model')?.value ?? state.project.model?.model_id ?? '';
+    const model = state.models.find(item => item.id === modelId && item.kind === 'checkpoints');
+    const details = describeAnimationModelCompatibility({
+      hasProject: true,
+      modelId,
+      model,
+      capability: model ? effectiveCapability(model) : {},
+      sampler: qs('#animation-sampler')?.value ?? '',
+      width: qs('#animation-width')?.value,
+      height: qs('#animation-height')?.value,
+      modelIndexStale: state.modelIndexStale,
+    });
+    const status = qs('#animation-compatibility-status');
+    if (status) {
+      status.textContent = details.status;
+      status.dataset.tone = details.tone;
+    }
+    const facts = qs('#animation-compatibility-facts');
+    if (facts) {
+      facts.replaceChildren();
+      for (const [label, value] of details.facts) {
+        const item = document.createElement('span');
+        item.className = 'animation-compatibility-fact';
+        const heading = document.createElement('strong');
+        heading.textContent = label + ': ';
+        item.append(heading, document.createTextNode(value));
+        facts.appendChild(item);
+      }
+    }
+    const issues = qs('#animation-compatibility-issues');
+    if (issues) {
+      issues.replaceChildren();
+      for (const issue of details.issues) {
+        const item = document.createElement('li');
+        item.textContent = issue;
+        issues.appendChild(item);
+      }
+      issues.hidden = details.issues.length === 0;
+    }
+    const note = qs('#animation-compatibility-note');
+    if (note) {
+      note.textContent = details.note || '';
+      note.hidden = !details.note;
+    }
+    const action = qs('#animation-compatibility-action');
+    if (action) {
+      const labels = {
+        models: 'Open Model Manager', sampler: 'Choose a Sampler',
+        resolution: 'Edit Resolution',
+      };
+      action.hidden = !details.action;
+      action.dataset.compatibilityAction = details.action;
+      action.textContent = labels[details.action] || '';
+    }
+  }
+
   function populateResolutionPresets() {
     const model=modelById(qs('#animation-model')?.value||'');
     const capability=model?effectiveCapability(model):{};
@@ -719,6 +859,7 @@
     const model=modelById(qs('#animation-model')?.value||'');
     window.MorphorumResolution.guidance(qs('#animation-resolution-help'),
       model?.family,qs('#animation-width')?.value,qs('#animation-height')?.value);
+    renderAnimationModelCompatibility();
   }
   function syncAnimationResolutionPreset() {
     window.MorphorumResolution.sync(qs('#animation-resolution-preset'),
@@ -726,7 +867,7 @@
     updateAnimationResolutionHelp();
   }
 
-  function populateSamplerSelect(preferredSampler = '') {
+  function populateSamplerSelect(preferredSampler = '', { preserveUnsupported = false } = {}) {
     const select = qs('#animation-sampler');
     if (!select) return;
 
@@ -780,7 +921,15 @@
     ].filter(Boolean);
     const valid = new Set(options.map(item => item.id));
     const selected = candidates.find(value => valid.has(value)) || fallback;
-    select.value = selected;
+    if (preserveUnsupported && preferredSampler && !valid.has(preferredSampler)) {
+      const missing = document.createElement('option');
+      missing.value = preferredSampler;
+      missing.textContent = 'Unsupported sampler · ' + preferredSampler;
+      select.appendChild(missing);
+      select.value = preferredSampler;
+    } else {
+      select.value = selected;
+    }
     select.disabled = false;
     select.title = capability.label
       ? `${capability.label} compatible samplers`
@@ -859,7 +1008,8 @@
     }
     select.value = selected;
     populateSamplerSelect(
-      preserveSelection ? previousSampler : (state.project?.generation?.sampler || '')
+      preserveSelection ? previousSampler : (state.project?.generation?.sampler || ''),
+      { preserveUnsupported: true }
     );
     populateResolutionPresets();
     renderEditorGuidance();
@@ -2037,7 +2187,7 @@
       }
 
       populateModelSelect();
-      populateSamplerSelect(project.generation?.sampler || '');
+      populateSamplerSelect(project.generation?.sampler || '', { preserveUnsupported: true });
       const repairedGuidance = repairConstantGuidanceForSelectedModel();
       renderPromptRows();
       syncAnimationModeUi();
@@ -4239,7 +4389,8 @@
     try {
       const payload = await api('/api/generation/capabilities');
       state.capabilities = payload.families || {};
-      populateSamplerSelect(state.project?.generation?.sampler || '');
+      populateSamplerSelect(qs('#animation-sampler')?.value || state.project?.generation?.sampler || '',
+        { preserveUnsupported: true });
       populateResolutionPresets();
     } catch (error) {
       state.capabilities = {};
@@ -10120,6 +10271,18 @@
       renderSourceState();
     });
 
+    qs('#animation-sampler')?.addEventListener('change', renderAnimationModelCompatibility);
+    qs('#animation-compatibility-action')?.addEventListener('click', () => {
+      const action = qs('#animation-compatibility-action')?.dataset.compatibilityAction;
+      if (action === 'models') {
+        qs('.nav-button[data-view="models"]')?.click();
+      } else if (action === 'sampler') {
+        qs('#animation-sampler')?.focus();
+      } else if (action === 'resolution') {
+        qs('#animation-width')?.focus();
+      }
+    });
+
     qs('#animation-resolution-preset')?.addEventListener('change',event => {
       if(!window.MorphorumResolution.apply(event.target,qs('#animation-width'),qs('#animation-height')))return;
       updateAnimationResolutionHelp();
@@ -10212,7 +10375,9 @@
         }),
       ]);
       await loadProjectList({ loadFirst: true });
-      populateSamplerSelect(state.project?.generation?.sampler || '');
+      populateSamplerSelect(qs('#animation-sampler')?.value || state.project?.generation?.sampler || '',
+        { preserveUnsupported: true });
+      renderAnimationModelCompatibility();
     } catch (error) {
       toast('Animation workspace initialization failed', error.message, 'error', 7000);
     }

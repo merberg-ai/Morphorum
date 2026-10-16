@@ -189,3 +189,19 @@ model disappears from the index, it is shown as missing instead of silently
 choosing another checkpoint; restore its directory and scan again, or
 explicitly choose a replacement. An unsuccessful scan keeps the last known
 checkpoint list until a later successful refresh.
+
+## Animation checkpoint compatibility
+
+In **Motion Lab → Project Editor**, the **Checkpoint compatibility** panel
+shows the indexed model's family and variant, currently selected sampler and
+render size. It compares the settings against the backend's published model
+capabilities. SDXL images must be aligned to 8 pixels; Flux and Z-Image use
+16-pixel alignment. Image sizes must be 64–4096 pixels on each side.
+
+Warnings explain when a saved checkpoint is missing, the sampler is unsupported,
+or dimensions are incompatible. **Open Model Manager** takes you to the existing
+model inventory; **Choose a Sampler** and **Edit Resolution** focus the relevant
+control. A high-resolution VRAM notice is advisory. None of these actions
+automatically modifies the project, and an indexed model is not a guarantee
+that its weights still exist or GPU memory is sufficient. Complete pre-render
+validation is planned for a later milestone.

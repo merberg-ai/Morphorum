@@ -29,7 +29,7 @@ render behavior.
 - [x] P2.1: Subscribe the Project Editor and Deforum importer to Model Manager's indexed-model update event without a forced page refresh.
 - [x] P2.1 safety: Preserve unsaved checkpoint and sampler choices, including a deliberately cleared model; keep missing checkpoint IDs and reject stale fetches.
 - [x] P2.2 initial: Clarify separate still-image and project-specific animation checkpoint selectors.
-- [ ] P2.3: Model-family/variant/resolution/sampler compatibility indicators and missing-dependency actions.
+- [x] P2.3: Read-only indexed checkpoint/family/variant/sampler/resolution compatibility summary with missing-model guidance and navigation to Model Manager; preserve unsupported saved samplers for explicit repair.
 - [ ] P2.4: Extend context help and inline units to remaining generation settings.
 - [ ] P2.5: Actionable pre-render validation, no destructive automatic repair.
 - [ ] P2.6: Explain cumulative 3D motion and warn about risky camera schedules.
@@ -72,3 +72,11 @@ Contextual help icons use trusted static text, real buttons beside form labels, 
 - Route buttons only call the existing workspace switcher. They never save, apply motion, switch projects or start rendering; existing unsaved-edit confirmations remain authoritative.
 - Leaving active Live Recording through navigation uses the existing safe stop behavior.
 - Test desktop, tablet and narrow phones; verify the shortcuts on each workspace, model-setting edits remain dirty, and jobs continue through workspace navigation.
+
+## P2.3 acceptance
+
+- Model type/family/variant come from the indexed checkpoint and backend family capabilities, not inferred filenames.
+- Compatible sampler lists and divisibility (SDXL 8px, Flux and Z-Image 16px), bounds (64–4096), and memory caution appear beside the editor checkpoint selector.
+- A missing checkpoint retains its saved ID; a saved sampler that is no longer supported is displayed, not silently replaced. Unsupported or unavailable capabilities are reported as warnings rather than an invented compatible status.
+- Model Manager shortcut, Choose Sampler and Edit Resolution focus/navigation are advisory. This pass does **not** disable render buttons, revalidate the full timeline, or automatically modify project settings; P2.5 handles pre-render validation.
+- Check both 2D/3D projects, supported/missing/unsupported models, Flux Schnell variant, blank checkpoint, large/custom dimensions, saved incompatible sampler, Model Manager scans and unsaved form state on Windows and phone.
