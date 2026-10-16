@@ -977,3 +977,49 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
 #view-settings .family-card .badge,
 #view-settings .settings-pane .card-header {overflow-wrap:anywhere;}
 #view-settings .settings-pane .card-header {min-width:0;flex-wrap:wrap;}
+
+/* P4.1 shared operation feedback: persistent state without toast repetition. */
+.workspace .operation-feedback {
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:12px;width:100%;max-width:1260px;min-width:0;box-sizing:border-box;
+  margin:0 auto 14px;padding:12px 14px;
+  border:1px solid var(--border-strong);border-radius:12px;
+  background:var(--panel);box-shadow:var(--shadow);
+}
+.workspace .operation-feedback[hidden],
+.workspace .operation-feedback-progress[hidden],
+.workspace #operation-feedback-open[hidden] {display:none!important;}
+.workspace .operation-feedback-copy {display:grid;gap:5px;flex:1 1 auto;min-width:0;}
+.workspace .operation-feedback-copy strong {font-size:.91rem;}
+.workspace .operation-feedback-copy > span {
+  color:var(--muted);font-size:.81rem;line-height:1.4;overflow-wrap:anywhere;
+}
+.workspace .operation-feedback[data-tone="error"] {border-color:color-mix(in srgb,var(--danger) 48%,var(--border));}
+.workspace .operation-feedback[data-tone="warning"] {border-color:color-mix(in srgb,var(--warn) 48%,var(--border));}
+.workspace .operation-feedback[data-tone="success"] {border-color:color-mix(in srgb,var(--ok) 34%,var(--border));}
+.workspace .operation-feedback-actions {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.workspace .operation-feedback-actions button {min-height:42px;max-width:100%;white-space:normal;}
+.workspace .operation-feedback-progress {
+  height:5px;width:100%;background:color-mix(in srgb,var(--text) 11%,transparent);
+  border-radius:99px;overflow:hidden;margin-top:5px;
+}
+.workspace .operation-feedback-progress > span {
+  display:block;height:100%;width:0;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  transition:width .18s ease;
+}
+.workspace .operation-feedback-progress.indeterminate > span {
+  width:36%;animation:operation-feedback-slide 1.8s ease-in-out infinite alternate;
+}
+@keyframes operation-feedback-slide {
+  0% {transform:translateX(-100%);}
+  100% {transform:translateX(285%);}
+}
+@media(max-width:680px) {
+  .workspace .operation-feedback {flex-wrap:wrap;padding:11px;}
+  .workspace .operation-feedback-actions {width:100%;justify-content:space-between;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .workspace .operation-feedback-progress > span {transition:none;animation:none;}
+  .workspace .operation-feedback-progress.indeterminate > span {width:100%;opacity:.65;}
+}

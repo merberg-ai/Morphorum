@@ -147,3 +147,32 @@ to main is authorized.
 P4 targets clearer operation progress, consistent asynchronous busy/disabled
 states, toast notifications and actionable error messages. P4 work is not
 started by this acceptance note; begin in `dev-webui` when authorized.
+
+## P4: progress, feedback and notifications
+
+- [x] **P4.1:** Shared, persistent and accessible operation-status ribbon
+  with running/success/warning/error states; indeterminate and determinate
+  progress, origin navigation, explicit dismiss (without cancellation),
+  and out-of-order async response guards.
+- [x] **P4.1 integrations:** Settings Reload/Save busy state and actionable
+  validation failures; Model Manager scan + post-scan index refresh and
+  background managed-model downloads with live bytes/percentage, completion
+  and repair guidance. A failed index refresh no longer reports a successful
+  scan. No changes to backend generation or download APIs.
+- [ ] **P4.2:** Extend consistent busy/status/error handling to Image
+  Generation submission/history/unload and Motion Lab preview/apply tasks;
+  preserve existing job progress/cancel controls.
+- [ ] **P4.3:** Audit toast prioritization, duplicated polling errors, console
+  diagnostics, keyboard announcements and stalled/offline operations.
+- [ ] P4 Windows/phone acceptance. Keep `main` unchanged.
+
+### P4.1 acceptance
+
+At desktop and narrow phone sizes: verify Settings Save and Reload show
+persistent progress and result; invalid paths yield warnings; failed host
+requests remain visible with actions; Model scan shows scanning/index-refresh
+states and cannot claim success after refresh fails; managed Z-Image download
+shows bytes and percentage and resumes status after browser reload (while
+catalog polling is active). Closing a notice does not cancel the operation.
+Independent concurrent operations remain tracked without stale responses.
+Test reduced-motion preferences and screen reader output.

@@ -57,6 +57,7 @@
     telemetryTimer: null,
     jobs: { image: null, animation: null },
     settingsDirty: false,
+    settingsRequestBusy: false,
     settingsTab: 'appearance',
     foregroundJobType: null,
   };
@@ -773,6 +774,7 @@
   }
 
   async function loadSettings({ announce = false } = {}) {
+    if (state.settingsRequestBusy) return;
     if (announce && state.settingsDirty) {
       const allowed = await window.MorphorumDialog.confirm({
         title:'Discard unsaved settings?',
@@ -782,7 +784,12 @@
       if (!allowed) return;
     }
     const button = qs('#load-settings');
+    state.settingsRequestBusy = true;
     setBusy(button, true);
+    if (announce) qs('#save-settings').disabled = true;
+    const operation = announce
+      ? window.MorphorumOperations?.begin('settings', 'Reloading settings',
+        'Reading configuration from the Morphorum host…', 'settings') : null;
     try {
       const payload = await api('/api/settings');
       state.settings = payload.settings || {};
@@ -802,12 +809,22 @@
       renderSettings();
       setSettingsClean();
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
-      if (announce) toast('Settings loaded', 'Configuration reloaded from the Morphorum server.', 'success');
+      if (announce) {
+        window.MorphorumOperations?.finish('settings', operation, {
+          title: 'Settings reloaded', message: 'Server configuration loaded successfully.',
+          view: 'settings' });
+        toast('Settings loaded', 'Configuration reloaded from the Morphorum server.', 'success');
+      }
     } catch (error) {
+      if (announce) window.MorphorumOperations?.finish('settings', operation, {
+        tone: 'error', title: 'Settings reload failed', message: error.message,
+        view: 'settings' });
       toast('Could not load settings', error.message, 'error', 7000);
       qs('#settings-loading').innerHTML = `<strong>Settings failed to load.</strong><span>${escapeHtml(error.message)}</span>`;
     } finally {
+      state.settingsRequestBusy = false;
       setBusy(button, false);
+      if (announce) qs('#save-settings').disabled = false;
     }
   }
 
@@ -849,8 +866,13 @@
   }
 
   async function saveSettings() {
+    if (state.settingsRequestBusy) return;
     const button = qs('#save-settings');
+    state.settingsRequestBusy = true;
     setBusy(button, true);
+    qs('#load-settings').disabled = true;
+    const operation = window.MorphorumOperations?.begin('settings', 'Saving settings',
+      'Validating and saving host configuration…', 'settings');
     try {
       const payload = await api('/api/settings', {
         method: 'PUT',
@@ -866,14 +888,26 @@
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       const warnings = (payload.validation || []).filter(item => !(item.exists && item.is_directory && item.readable));
       if (warnings.length) {
-        toast('Settings saved', `${warnings.length} configured path${warnings.length === 1 ? '' : 's'} need attention.`, 'warning', 6000);
+        const message = `${warnings.length} configured path${warnings.length === 1 ? '' : 's'} need attention. Check the path status in Settings.`;
+        window.MorphorumOperations?.finish('settings', operation, {
+          tone: 'warning', title: 'Settings saved with path warnings',
+          message, view: 'settings' });
+        toast('Settings saved', message, 'warning', 6000);
       } else {
+        window.MorphorumOperations?.finish('settings', operation, {
+          title: 'Settings saved', message: 'Model and LoRA locations saved.',
+          view: 'settings' });
         toast('Settings saved', 'Model and LoRA locations were saved successfully.', 'success');
       }
     } catch (error) {
+      window.MorphorumOperations?.finish('settings', operation, {
+        tone: 'error', title: 'Settings save failed', message: error.message,
+        view: 'settings' });
       toast('Settings save failed', error.message, 'error', 7000);
     } finally {
+      state.settingsRequestBusy = false;
       setBusy(button, false);
+      qs('#load-settings').disabled = false;
     }
   }
 

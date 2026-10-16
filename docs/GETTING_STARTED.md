@@ -297,3 +297,15 @@ Deforum Import keeps long mapping values inside its vertically scrollable
 dialog. None of these responsive changes modifies project settings.
 Physical Windows/Android acceptance through P3.3 is included in the
 combined test plan and still pending.
+
+## Operation feedback (P4.1)
+
+A persistent operation notice at the top of the WebUI shows what the host
+is doing while you save/reload Settings, scan model directories, or install
+a managed checkpoint. It provides running progress (including live download
+bytes and percentage where available), completion, path warnings and
+actionable error details. **Open Models** or **Open Settings** returns to
+the relevant page. Dismissing the notice never cancels ongoing work; model
+downloads continue in the backend. The existing image and animation render
+progress panels remain authoritative for GPU work. Progress for an
+indeterminate task does not imply a percentage or ETA.

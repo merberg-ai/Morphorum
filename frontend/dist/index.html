@@ -127,6 +127,19 @@
     </nav>
 
     <main class="workspace">
+      <section class="operation-feedback" id="operation-feedback" aria-label="Recent operation" aria-live="polite" aria-atomic="true" hidden>
+        <div class="operation-feedback-copy">
+          <strong id="operation-feedback-title">Working…</strong>
+          <span id="operation-feedback-message"></span>
+          <div class="operation-feedback-progress" id="operation-feedback-progress" role="progressbar" aria-label="Operation progress" aria-valuemin="0" aria-valuemax="100" hidden>
+            <span id="operation-feedback-fill"></span>
+          </div>
+        </div>
+        <div class="operation-feedback-actions">
+          <button id="operation-feedback-open" type="button" class="secondary-button compact" hidden>Open</button>
+          <button id="operation-feedback-dismiss" type="button" class="icon-button" aria-label="Dismiss operation notice; does not cancel the task" title="Dismiss notice (does not cancel task)">×</button>
+        </div>
+      </section>
       <section class="view active" id="view-image">
         <div class="page-heading">
           <div>

@@ -27,6 +27,110 @@
   }
   window.MorphorumClipboard = { writeText: clipboard };
 
+
+  // P4.1: a shared, non-blocking operation lifecycle. Track work by key and
+  // request token: old network responses cannot overwrite a newer operation.
+  function createOperationTracker(publish) {
+    const active = new Map();
+    let settled = null;
+    let sequence = 0;
+    let dismissedToken = null;
+    function visible() {
+      const running = [...active.values()].at(-1);
+      const result = running || settled;
+      publish(result && result.token !== dismissedToken ? { ...result } : null);
+    }
+    return {
+      begin(key, title, message = '', view = '') {
+        const token = ++sequence;
+        active.delete(key);
+        active.set(key, { key, token, title, message, view,
+          tone: 'busy', progress: null });
+        dismissedToken = null;
+        visible();
+        return token;
+      },
+      update(key, token, options = {}) {
+        const existing = active.get(key);
+        if (!existing || existing.token !== token) return false;
+        active.set(key, { ...existing, ...options,
+          tone: 'busy', key, token });
+        visible();
+        return true;
+      },
+      finish(key, token, options = {}) {
+        const existing = active.get(key);
+        if (!existing || existing.token !== token) return false;
+        active.delete(key);
+        settled = { ...existing, ...options, key, token,
+          tone: ['success','warning','error'].includes(options.tone)
+            ? options.tone : 'success', progress: null };
+        dismissedToken = null;
+        visible();
+        return true;
+      },
+      dismiss() {
+        const running = [...active.values()].at(-1);
+        if (running) dismissedToken = running.token;
+        else settled = null;
+        visible(); // Dismissing never cancels backend work.
+      },
+      snapshot() {
+        return { active: [...active.values()].map(v => ({ ...v })),
+          settled: settled && { ...settled } };
+      },
+    };
+  }
+
+  function renderOperationFeedback(entry) {
+    if (typeof document === 'undefined') return;
+    const panel = document.getElementById('operation-feedback');
+    if (!panel) return;
+    panel.hidden = !entry;
+    if (!entry) return;
+    panel.dataset.tone = entry.tone;
+    panel.setAttribute('aria-busy', String(entry.tone === 'busy'));
+    document.getElementById('operation-feedback-title').textContent =
+      String(entry.title || 'Operation status');
+    document.getElementById('operation-feedback-message').textContent =
+      String(entry.message || '');
+    const progress = document.getElementById('operation-feedback-progress');
+    const fill = document.getElementById('operation-feedback-fill');
+    const percent = Number(entry.progress);
+    const determinate = entry.progress != null && Number.isFinite(percent);
+    progress.hidden = entry.tone !== 'busy';
+    progress.classList.toggle('indeterminate', !determinate);
+    if (determinate) {
+      const bounded = Math.max(0, Math.min(100, percent));
+      fill.style.width = bounded + '%';
+      progress.setAttribute('aria-valuenow', String(Math.round(bounded)));
+    } else {
+      fill.style.width = '';
+      progress.removeAttribute('aria-valuenow');
+    }
+    const action = document.getElementById('operation-feedback-open');
+    action.hidden = !['settings','models','image','animation'].includes(entry.view);
+    if (!action.hidden) {
+      action.dataset.view = entry.view;
+      action.textContent = entry.view === 'animation'
+        ? 'Open Motion Lab' : 'Open ' + entry.view[0].toUpperCase() + entry.view.slice(1);
+    }
+  }
+
+  const operations = createOperationTracker(renderOperationFeedback);
+  window.MorphorumOperations = operations;
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('operation-feedback-dismiss')?.addEventListener('click',
+        () => operations.dismiss());
+      document.getElementById('operation-feedback-open')?.addEventListener('click', event => {
+        const view = event.currentTarget.dataset.view;
+        if (!['settings','models','image','animation'].includes(view)) return;
+        document.querySelector('.nav-button[data-view="' + view + '"]')?.click();
+      });
+    });
+  }
+
   const queue = [];
   let active = null;
   const typeDefault = type => type === 'prompt' ? null : false;
