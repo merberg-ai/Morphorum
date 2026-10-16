@@ -45,6 +45,8 @@ def test_sampler_and_guidance_reject_bad_model_settings(tmp_path, monkeypatch):
     p = project()
     p["generation"]["sampler"] = "flowmatch_euler"
     p["generation"]["guidance"] = "0:(50)"
+    # Match API behavior: merge edited schedules into canonical project tracks.
+    p = normalize_animation_project(p, existing=p, project_id=p["id"])
     report = preflight.check_animation_render_preflight(p, tmp_path / "missing.png")
     assert not report["valid"]
     assert {"generation.sampler", "generation.guidance"} <= {
