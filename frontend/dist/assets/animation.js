@@ -3641,7 +3641,8 @@
 
   async function pollMotionPreview(jobId) {
     try {
-      const job = await api('/api/animation/motion-preview/' + encodeURIComponent(jobId));
+      const job = await window.MorphorumPollHealth.request(signal =>
+        api('/api/animation/motion-preview/' + encodeURIComponent(jobId), {signal}));
       // A project switch clears motionJobId. Never show an old response,
       // even when the HTTP request started before the switch/reload.
       if (state.motionJobId !== jobId) return;
@@ -4085,7 +4086,8 @@
   async function pollVideoExport(jobId) {
     if (state.videoJob?.id !== jobId) return;
     try {
-      const job = await api('/api/animation/video/jobs/' + encodeURIComponent(jobId));
+      const job = await window.MorphorumPollHealth.request(signal =>
+        api('/api/animation/video/jobs/' + encodeURIComponent(jobId), {signal}));
       if (state.videoJob?.id !== jobId) return;
       window.MorphorumPollHealth?.recovered('video:' + jobId);
       state.videoJob = job;
@@ -4388,7 +4390,8 @@
     window.clearTimeout(state.renderPollTimer);
     if (!renderId || renderId !== state.renderJobId) return;
     try {
-      const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
+      const job = await window.MorphorumPollHealth.request(signal =>
+        api('/api/animation/renders/' + encodeURIComponent(renderId), {signal}));
       if (renderId !== state.renderJobId ||
           (job.project_id && job.project_id !== state.project?.id)) return;
       window.MorphorumPollHealth?.recovered('render:' + renderId);
