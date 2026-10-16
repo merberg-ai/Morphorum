@@ -67,6 +67,21 @@ def test_platform_catalog_is_explicit():
     assert all("-gpl-" in asset for asset in managed.ASSETS.values())
 
 
+def test_linux_runtime_requirements_prevent_invalid_managed_download(monkeypatch):
+    monkeypatch.setattr(managed.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(managed.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(managed.platform, "release", lambda: "6.12.0")
+    monkeypatch.setattr(managed.platform, "libc_ver", lambda: ("musl", "1.2"))
+    assert managed.supported_asset() is None
+    monkeypatch.setattr(managed.platform, "libc_ver", lambda: ("glibc", "2.27"))
+    assert managed.supported_asset() is None
+    monkeypatch.setattr(managed.platform, "libc_ver", lambda: ("glibc", "2.28"))
+    monkeypatch.setattr(managed.platform, "release", lambda: "4.14.0")
+    assert managed.supported_asset() is None
+    monkeypatch.setattr(managed.platform, "release", lambda: "4.18.0")
+    assert managed.supported_asset().endswith(".tar.xz")
+
+
 def test_release_requires_published_sha256_https_exact_asset(monkeypatch):
     asset = managed.supported_asset()
     example = {
