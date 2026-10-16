@@ -349,9 +349,9 @@ distribution.
 **Gate:** Browser-level JS syntax/targeted regression test and Python unit
 coverage are prepared; no real download from GitHub nor Windows/Linux
 executable smoke test or full CI result has been verified in this turn.
-P4.4.4 acceptance remains open. Do not merge `main`.
+P4.4.4's **physical** acceptance remains open. Do not merge `main`.
 
-- [ ] **P4.4.4 / Acceptance:** Regression-test video export (MP4/WebM),
+- [x] **P4.4.4 / Code and Linux-host smoke complete (Windows/managed-package physical acceptance pending):** Regression-test video export (MP4/WebM),
   hybrid-video probing/extraction, soundtrack MP3/OGG/FLAC conversion, missing
   codec handling, PATH/legacy env/custom/managed precedence, invalid paths,
   interrupted/corrupt downloads, Windows paths with spaces, Linux execute
@@ -360,6 +360,59 @@ P4.4.4 acceptance remains open. Do not merge `main`.
   remove outputs or change an executable already captured for a running job.
   Include automated tests and Windows/Linux physical acceptance; never merge
   `main` without explicit authorization.
+
+### P4.4.4 implementation and validation, 2026-10-16
+
+Code on `dev-webui`:
+
+- Managed FFmpeg 8.1 installer verifies `ffmpeg -hide_banner -encoders`
+  contains **libx264, libvpx-vp9, aac, libopus** before replacing
+  an existing installation. A successful version check alone is insufficient.
+  An unsupported/missing encoder leaves the previously installed version intact.
+- Startup status recovers an owned, complete `.previous-<job-id>` folder
+  if a process was interrupted after moving the old version aside.
+  Ambiguous backups are *not* restored automatically. An explicit Remove
+  operation leaves a persistent removal marker to prevent accidentally
+  resurrecting a stale backup. Broken-but-owned installs can be repaired
+  or removed without being marked ready.
+- Hybrid extraction captures its chosen FFmpeg executable at job acceptance
+  instead of resolving it later. Video export already captures the binary
+  before its worker thread starts. No project/render data was migrated.
+- The standalone `scripts/ffmpeg_acceptance.py` produces 8 synthetic 64×64
+  PNGs and a 1-second PCM WAV in temporary storage only. It verifies:
+  MP4/H.264 + AAC, WebM/VP9 + Opus, FFprobe streams, hybrid PNG extraction,
+  and MP3/OGG/FLAC conversion into 16 kHz mono PCM WAV.
+  **A direct, equivalent temporary-media smoke run passed all six groups
+  against Linux system FFmpeg 7.1.5 on 2026-10-16.** This does *not* prove
+  that the managed 8.1 downloads have run on Windows or Linux.
+- New fixture tests cover required codecs, interrupted-upgrade recovery,
+  deliberate removal, incomplete managed installations, hybrid binary pinning,
+  disposable PNG/WAV source generation, and read-only/explicit-action API
+  guards. Added CPU-only Windows/Linux GitHub Actions workflow at
+  `.github/workflows/ffmpeg-integration.yml` plus existing syntax workflow.
+  **Full Python pytest and GitHub Actions run results are not yet verified.**
+- No FFmpeg download was performed in this turn, and no live Windows
+  execution was available. The updater and `main` remain unchanged.
+
+#### Outstanding P4.4 physical acceptance (must not mark complete before testing)
+
+- [ ] Windows test host: update `dev-webui`, open Settings → Storage →
+  FFmpeg Manager, select Managed → Install, verify checksum/progress/FFprobe,
+  Save Settings, restart, then run
+  `.\.venv\Scripts\python.exe scripts\ffmpeg_acceptance.py --mode managed`.
+- [ ] Linux host: install Managed to the local `tools/ffmpeg/current/bin`
+  and run `./.venv/bin/python scripts/ffmpeg_acceptance.py --mode managed`.
+  BtbN Linux builds require glibc 2.28+ and Linux kernel 4.18+.
+- [ ] Exercise custom/system/legacy `MORPHORUM_FFMPEG` precedence,
+  Windows executable paths containing spaces, audio imports, video export,
+  hybrid extraction, application and browser restarts, and unsupported OS.
+- [ ] Deliberately interrupt downloads and the backend, then retry.
+  Test corrupt archive/digest fallback, package replacement while video work
+  is active, Cancel, Update/Reinstall, Remove, and out-of-disk conditions.
+  Verify old managed binaries and existing projects/media remain untouched.
+- [ ] Confirm true Windows/Linux GitHub Actions/pytest results and review
+  the BtbN GPL source/redistribution requirements for public releases.
+  No merge to `main` without explicit user approval.
 
 **Release gates:** Complete P4.3 notification/error polish independently; then
 implement and verify P4.4 on `dev-webui`. Existing P4.2 GPU/phone acceptance
