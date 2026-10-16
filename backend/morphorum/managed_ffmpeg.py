@@ -310,6 +310,10 @@ class ManagedFFmpegManager:
         Never guess if multiple backups exist and never replace user files.
         """
         current = self.root / "current"
+        # A deliberate Remove operation must never be undone by crash recovery
+        # of an old backup left locked on Windows.
+        if (self.root / ".removed-intentionally").exists():
+            return False
         if current.exists() or current.is_symlink() or not self.root.is_dir():
             return False
         backups = [
@@ -458,6 +462,7 @@ class ManagedFFmpegManager:
             self._update(job_id, status="installed", message="Managed FFmpeg and FFprobe are ready.",
                          progress=100.0, version=ff_ver, probe_version=pr_ver,
                          encoders=encoders, error=None)
+            (self.root / ".removed-intentionally").unlink(missing_ok=True)
         except _Cancelled as exc:
             self._update(job_id, status="cancelled", message=str(exc), error=None)
         except Exception as exc:
@@ -485,15 +490,23 @@ class ManagedFFmpegManager:
                 raise ManagedFFmpegError(
                     "FFmpeg files may be in use. Close active exports and retry."
                 ) from exc
+            removal_marker = self.root / ".removed-intentionally"
             try:
+                removal_marker.write_text(
+                    "Morphorum-managed FFmpeg was deliberately removed.\n",
+                    encoding="utf-8",
+                )
                 shutil.rmtree(retired)
             except OSError as exc:
-                # Restore if removal failed; never destroy unowned folders.
+                # Restore only if the file set is still complete enough to
+                # move back. A partially deleted tree must not be marked ready.
                 if not current.exists() and retired.exists():
                     try:
                         retired.rename(current)
                     except OSError:
                         pass
+                if current.exists():
+                    removal_marker.unlink(missing_ok=True)
                 raise ManagedFFmpegError("Could not remove managed FFmpeg files.") from exc
             self._job = None
             return self.status()
