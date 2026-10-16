@@ -420,7 +420,7 @@ class ManagedFFmpegManager:
                         reason = str(self._job.get("error") or "Unknown error")
                         # Avoid copying signed download URLs into the public
                         # Console buffer when a network request fails.
-                        reason = re.sub(r"https?://\\S+", "[download URL]", reason)
+                        reason = re.sub(r"https?://\S+", "[download URL]", reason)
                         detail += " Reason: " + reason[:350]
                     notice = ("error" if status == "failed" else
                               "warning" if status == "cancelled" else "info",
