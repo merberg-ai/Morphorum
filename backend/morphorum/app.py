@@ -335,8 +335,8 @@ def api_setup_progress(request: Request, payload: dict[str, Any]) -> dict[str, A
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SetupStateError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if updated["status"] == "skipped" and forced:
-        # An explicit Skip also dismisses the override for this process.
+    if updated["status"] in {"skipped", "completed"} and forced:
+        # Explicit Skip or Finish dismisses the launch-only wizard override.
         os.environ.pop("MORPHORUM_SETUP_WIZARD", None)
     return setup_status(forced=os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1",
                         backend_only=False)
