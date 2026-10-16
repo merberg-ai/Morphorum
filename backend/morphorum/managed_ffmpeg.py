@@ -59,6 +59,9 @@ class _Cancelled(ManagedFFmpegError):
 
 
 def supported_asset(system: str | None = None, machine: str | None = None) -> str | None:
+    # Explicit arguments are also used to inspect the *catalog* in tests;
+    # runtime gating only applies to the actual host.
+    runtime = system is None and machine is None
     system = (system or platform.system()).lower()
     machine = (machine or platform.machine()).lower()
     normalized = {
@@ -66,6 +69,15 @@ def supported_asset(system: str | None = None, machine: str | None = None) -> st
     }.get(machine, machine)
     if system not in {"windows", "linux"}:
         return None
+    if runtime and system == "linux":
+        # BtbN's Linux artifacts target glibc>=2.28, kernel>=4.18.
+        libc, version = platform.libc_ver()
+        match = re.match(r"^(\d+)\.(\d+)", version or "")
+        kernel = re.match(r"^(\d+)\.(\d+)", platform.release())
+        if (libc != "glibc" or not match or
+                (int(match[1]), int(match[2])) < (2, 28) or
+                not kernel or (int(kernel[1]), int(kernel[2])) < (4, 18)):
+            return None
     return ASSETS.get((system, normalized))
 
 
@@ -345,7 +357,8 @@ class ManagedFFmpegManager:
             "job": job,
             "provider": PROJECT_URL, "release": RELEASE_PAGE,
             "license": "GPL static (upstream FFmpeg and dependency licenses apply)",
-            "message": ("Managed installation is unsupported on this OS/CPU."
+            "message": ("Managed installation is unsupported on this OS/CPU or Linux runtime "
+                         "(requires glibc 2.28+ and kernel 4.18+)."
                         if not artifact else
                         "Choose Install to fetch an upstream-verified FFmpeg and FFprobe pair."),
         }
