@@ -10,6 +10,7 @@ import json
 import os
 import tempfile
 import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,12 @@ def _check(raw: Any) -> dict[str, Any]:
     example = raw.get("example_project_id")
     if example is not None and (not isinstance(example, str) or len(example) > 128):
         raise SetupStateError("Invalid setup state example project.")
+    template = raw.get("example_template_id")
+    if template is not None and template not in {"gentle-dolly-in", "gentle-dolly-out"}:
+        raise SetupStateError("Invalid selected setup example.")
+    model = raw.get("example_model_id")
+    if model is not None and (not isinstance(model, str) or len(model) > 256):
+        raise SetupStateError("Invalid selected setup example model.")
     return raw
 
 
@@ -71,7 +78,7 @@ def _write(raw: dict[str, Any]) -> None:
 def _initial(provenance: str, *, ready: bool) -> dict[str, Any]:
     return dict(schema_version=1, provenance=provenance, ready=ready,
                 status="not_started", step="welcome", revision=0,
-                example_project_id=None)
+                example_project_id=None, example_template_id=None, example_model_id=None)
 
 
 def prepare_install() -> dict[str, Any] | None:
@@ -122,6 +129,9 @@ def setup_status(*, forced: bool = False, backend_only: bool = False) -> dict[st
                     (auto or force), forced_for_launch=force,
                     status=status, step=state["step"] if state else "welcome",
                     revision=state["revision"] if state else 0,
+                    example_project_id=state.get("example_project_id") if state else None,
+                    example_template_id=state.get("example_template_id") if state else None,
+                    example_model_id=state.get("example_model_id") if state else None,
                     mode="backend-only" if backend_only else "webui",
                     ready=ready, provenance=state["provenance"] if state else "legacy")
 
@@ -129,8 +139,8 @@ def setup_status(*, forced: bool = False, backend_only: bool = False) -> dict[st
 def update_setup(*, action: str, step: str | None, revision: int,
                  forced: bool = False) -> dict[str, Any]:
     """Explicit user action, optimistic revision; no model/project side effects."""
-    if action not in {"advance", "skip"}:
-        raise SetupStateError("MS6.1 allows only advance and skip; completion arrives in MS6.4.")
+    if action not in {"advance", "skip", "complete"}:
+        raise SetupStateError("Unknown setup action.")
     if type(revision) is not int:
         raise SetupStateError("Setup revision must be an integer.")
     if action == "advance" and step not in STEPS:
@@ -149,8 +159,63 @@ def update_setup(*, action: str, step: str | None, revision: int,
             raise SetupStateError("Setup already ended. Relaunch the setup wizard explicitly.")
         if action == "skip":
             state = {**state, "status": "skipped"}
+        elif action == "complete":
+            if step != "finish" or state["step"] != "finish":
+                raise SetupStateError("Finish setup from the final review page.")
+            if state.get("example_project_id"):
+                from .animation_projects import _project_file
+                if not _project_file(state["example_project_id"]).is_file():
+                    raise SetupStateError("Selected example was not saved yet.")
+            state = {**state, "status": "completed", "step": "finish"}
         else:
             state = {**state, "status": "in_progress", "step": step}
         state["revision"] += 1
+        _write(state)
+        return state
+
+def reserve_setup_example(
+    *,
+    template_id: str,
+    model_id: str,
+    revision: int,
+    forced: bool = False,
+) -> dict[str, Any]:
+    """Reserve stable project ID before creating the project on disk.
+
+    The reserved ID survives a disconnect, process restart or failed response.
+    Retrying can never create a second project or replace an edited first copy.
+    """
+    if template_id not in {"gentle-dolly-in", "gentle-dolly-out"}:
+        raise SetupStateError("Select a supported starter example.")
+    if type(revision) is not int or not isinstance(model_id, str) or len(model_id) > 256:
+        raise SetupStateError("Invalid setup example request.")
+    with _LOCK:
+        state = _read()
+        if state is None:
+            if not forced:
+                raise SetupStateError("Start the setup wizard before creating an example.")
+            state = _initial("manual_existing", ready=True)
+        if not state["ready"] or state["revision"] != revision:
+            raise SetupStateConflict("Setup changed in another tab. Reload the wizard.")
+        if state["status"] in {"completed", "skipped"} and not forced:
+            raise SetupStateError("Setup has already finished.")
+        if state["step"] != "finish":
+            raise SetupStateError("Review your example before creating it.")
+        if state.get("example_project_id"):
+            if (state.get("example_template_id") != template_id or
+                    str(state.get("example_model_id") or "") != model_id):
+                raise SetupStateConflict(
+                    "An example was already reserved with different options. "
+                    "Reopen the saved example instead."
+                )
+            return state
+        project_id = f"setup-{template_id}-{uuid.uuid4().hex[:12]}"
+        state = {
+            **state,
+            "example_project_id": project_id,
+            "example_template_id": template_id,
+            "example_model_id": model_id,
+            "revision": state["revision"] + 1,
+        }
         _write(state)
         return state
