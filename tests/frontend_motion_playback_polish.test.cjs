@@ -28,7 +28,12 @@ test('MS5.4 stale preview poll never updates a different project or restarts tim
     updateMotionProgress:()=>actions.push('progress'),
     finishMotionPreview:()=>actions.push('finish'),
     pollMotionPreview:()=>actions.push('again'),
-    window:{setTimeout:()=>{actions.push('timer');return 1;}},
+    window:{setTimeout:()=>{actions.push('timer');return 1;},
+      MorphorumPollHealth:{
+        request:()=>pending.promise,
+        recovered:()=>actions.push('recovered'),
+        failed:()=>actions.push('failed'),
+      }},
     encodeURIComponent,
   };
   vm.runInNewContext(extract('  async function pollMotionPreview(jobId) {',
@@ -47,7 +52,12 @@ test('MS5.4 stale preview poll errors never retry after project switch',async()=
   const ctx={state,api:()=>pending.promise,
     updateMotionProgress:()=>actions.push('progress'),
     finishMotionPreview:()=>actions.push('finish'),
-    window:{setTimeout:()=>{actions.push('retry');return 2;}},
+    window:{setTimeout:()=>{actions.push('retry');return 2;},
+      MorphorumPollHealth:{
+        request:()=>pending.promise,
+        recovered:()=>actions.push('recovered'),
+        failed:()=>actions.push('failed'),
+      }},
     encodeURIComponent};
   vm.runInNewContext(extract('  async function pollMotionPreview(jobId) {',
     '  async function generateMotionPreview(',),ctx);
