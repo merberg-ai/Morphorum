@@ -40,7 +40,7 @@ If this is a **fresh installation**, Morphorum opens a separate seven-step setup
 
 Use **Back** and **Next** to review the settings. **Skip for now** ends onboarding without deleting your existing configuration. Your progress is stored on the Morphorum host, so you can resume after reopening a browser or restarting the server. The completed or skipped wizard does not appear again automatically.
 
-To reopen onboarding on an existing installation, go to **Settings → Setup Wizard**. You can also restart in WebUI mode with `\.\run.bat --setup-wizard` (Windows) or `./run.sh --setup-wizard` (Linux). Changing to backend-only requires a server restart; the browser setup wizard does not run in that mode.
+To reopen onboarding on an existing installation, go to **Settings → Setup Wizard**. You can also restart in WebUI mode with `.\run.bat --setup-wizard` (Windows) or `./run.sh --setup-wizard` (Linux). Changing to backend-only requires a server restart; the browser setup wizard does not run in that mode.
 
 If your example has no base model, first configure one in **Models**, then select it in **Project Editor** before rendering. For full setup details, see [Installation](INSTALLATION.md#first-launch-guided-setup) and [Troubleshooting](TROUBLESHOOTING.md).
 
@@ -124,11 +124,14 @@ Motion Lab divides the animation workflow into separate pages so the editing too
 | **Live Recording** | Record camera motion with keyboard/touch or a compatible gamepad. |
 | **Motion Curves & Path** | Inspect or edit animation curves and the camera trajectory. |
 | **Camera Preview** | Preview camera movement before spending time on AI rendering. |
+| **Motion Studio** | Synchronize manual cues, beat markers, frequency bands, continuous camera movement and saved soundtrack audio. |
 | **Import Motion Settings** | Inspect Deforum Motion Studio camera schedules, safely apply compatible six-axis curves, and optionally attach soundtrack audio. |
 | **Render Monitor** | Follow the render and inspect progress. |
 | **Outputs** | Review completed animations and available exports. |
 
-**Typical workflow:** edit project → compose/record motion → review curves → preview camera path → **Apply** the motion → **Render Animation** → review **Outputs**.
+**Typical workflow:** edit project → compose/record motion (or use **Motion Studio** for audio-linked cues) → review curves → preview camera path → **Apply** the motion → **Render Animation** → review **Outputs**.
+
+For music-driven movements, use [Motion Studio](MOTION_STUDIO.md) to select a saved/uploaded soundtrack, tune beat cues or independent frequency channels, and stage continuous movement before applying the camera schedules.
 
 The floating Motion Lab toolbar offers shortcuts to **Record**, **Stop**, **Curves**, **Preview**, **Apply**, and **Render Animation**. The buttons disable themselves during incompatible background actions.
 
@@ -167,6 +170,7 @@ The optional [backend-only mode](BACKEND_ONLY.md) lets a compatible native clien
 ## Need help?
 
 - [Installation and maintenance](INSTALLATION.md)
+- [Motion Studio guide](MOTION_STUDIO.md)
 - [Troubleshooting](TROUBLESHOOTING.md)
 - [Current features and limitations](CURRENT_STATUS.md)
 - [Documentation index](README.md)
