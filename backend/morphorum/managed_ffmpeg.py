@@ -16,6 +16,7 @@ import platform
 import re
 import shutil
 import stat
+import subprocess
 import tarfile
 import threading
 import urllib.error
@@ -27,6 +28,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from . import ffmpeg_tools
+from .console import emit_console
 
 RELEASE_API = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/tags/latest"
 RELEASE_PAGE = "https://github.com/BtbN/FFmpeg-Builds/releases/tag/latest"
@@ -406,9 +408,25 @@ class ManagedFFmpegManager:
             return dict(self._job)
 
     def _update(self, job_id: str, **fields) -> None:
+        notice: tuple[str, str] | None = None
         with self._lock:
             if self._job and self._job["id"] == job_id:
+                previous = self._job["status"]
                 self._job.update(fields)
+                status = self._job["status"]
+                if status != previous:
+                    detail = str(self._job.get("message") or status)
+                    if status == "failed":
+                        reason = str(self._job.get("error") or "Unknown error")
+                        # Avoid copying signed download URLs into the public
+                        # Console buffer when a network request fails.
+                        reason = re.sub(r"https?://\\S+", "[download URL]", reason)
+                        detail += " Reason: " + reason[:350]
+                    notice = ("error" if status == "failed" else
+                              "warning" if status == "cancelled" else "info",
+                              f"Managed FFmpeg [{job_id[:8]}] {status}: {detail}")
+        if notice:
+            emit_console(notice[0], "runtime", notice[1])
 
     def _run(self, job_id: str, cancel: threading.Event,
              busy_check: Callable[[], bool] | None = None) -> None:
@@ -483,7 +501,7 @@ class ManagedFFmpegManager:
             # malformed release, archive or unforeseen IO condition occurs.
             self._update(job_id, status="failed",
                          message="Managed FFmpeg installation failed.",
-                         error=str(exc)[:400])
+                         error=(type(exc).__name__ + ": " + str(exc))[:400])
         finally:
             shutil.rmtree(temp, ignore_errors=True)
             if swapped_old and current.is_dir():
