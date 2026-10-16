@@ -628,8 +628,15 @@
       const status = qs('#ffmpeg-manager-install-status');
       if (status) status.textContent =
         'Could not check managed FFmpeg installation. Check backend connectivity.';
-      window.MorphorumPollHealth?.failed('ffmpeg-managed', 'Managed FFmpeg', 'settings');
-      state.ffmpegManagedTimer = window.setTimeout(refreshManagedFFmpeg, 5000);
+      if (state.ffmpegManagerOperation) {
+        window.MorphorumPollHealth?.failed('ffmpeg-managed', 'Managed FFmpeg', 'settings');
+        state.ffmpegManagedTimer = window.setTimeout(refreshManagedFFmpeg, 5000);
+      } else {
+        // No known in-flight install: allow a manual retry on the next
+        // Settings load rather than polling an offline host forever.
+        window.MorphorumClientDiagnostics?.record('warning',
+          'Could not inspect managed FFmpeg; check the backend connection.');
+      }
     }
   }
 
