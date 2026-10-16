@@ -41,9 +41,11 @@ function harness(serverStatus){
         if(body.revision!==serverStatus.revision)
           return {ok:false,json:async()=>({detail:'stale'})};
         Object.assign(serverStatus,{revision:serverStatus.revision+1,
-          status:body.action==='skip'?'skipped':'in_progress',
+          status:body.action==='skip'?'skipped':body.action==='complete'?'completed':'in_progress',
           step:body.step||serverStatus.step,
-          show_wizard:body.action!=='skip'&&serverStatus.provenance==='fresh_installer'});
+          example_template_id:body.template_id||serverStatus.example_template_id,
+          example_model_id:body.model_id??serverStatus.example_model_id,
+          show_wizard:!['skip','complete'].includes(body.action)&&serverStatus.provenance==='fresh_installer'});
         return {ok:true,json:async()=>status()};
       }
       throw Error('Unexpected fetch: '+url);
@@ -55,6 +57,7 @@ function harness(serverStatus){
         container.appendChild({tag:'p',textContent:kind+' folder editor'});
       },beforeNext:()=>true,reset:()=>{},welcome:()=>{}},
       MorphorumSetupZImage:{show:(container)=>container.appendChild({tag:'p',textContent:'Managed Z-Image download page'}),leave:()=>{}},
+      MorphorumSetupExamples:{showExamples:container=>container.appendChild({tag:'p',textContent:'Choose Dolly In or Out'}),showFinish:container=>container.appendChild({tag:'p',textContent:'Review example'}),selection:()=>({template_id:'gentle-dolly-in',model_id:''}),leave:()=>{}},
     },
   };
   vm.runInNewContext(script,context);
@@ -95,7 +98,14 @@ test('MS6.1 fresh installation automatically shows Welcome and progresses server
   assert.match(h.nodes['first-run-description'].children[0].textContent,/Managed Z-Image/);
   await h.click('next');
   assert.equal(h.status.step,'examples');
+  assert.equal(h.nodes['first-run-next'].disabled,false);
+  assert.match(h.nodes['first-run-description'].children[0].textContent,/Dolly/);
+  await h.click('next');
+  assert.equal(h.status.step,'finish');
+  assert.equal(h.status.example_template_id,'gentle-dolly-in');
+  assert.equal(h.status.example_model_id,'');
   assert.equal(h.nodes['first-run-next'].disabled,true);
+  assert.match(h.nodes['first-run-description'].children[0].textContent,/Review/);
   assert.ok(h.calls.every(call=>!call.url.includes('/download')&&!call.url.includes('/models/scan')
     &&!call.url.includes('/animation/projects')),'Opening and progressing should have no work side effects');
 });
@@ -151,5 +161,18 @@ test('MS6.1 responsive shell, Settings affordance, and no second project wizard'
   assert.match(html,/first-run-setup\.js/);
   assert.match(html,/first-run-folders\.js/);
   assert.match(html,/first-run-zimage\.js/);
+  assert.match(html,/first-run-examples\.js/);
   assert.match(html,/project-wizard\.js/);
+});
+
+test('MS6.4 Finish Without Example persists completion and prevents auto-reopen',async()=>{
+  const h=harness({schema_version:1,eligible:true,show_wizard:true,
+    forced_for_launch:false,status:'in_progress',step:'finish',revision:12,
+    provenance:'fresh_installer',example_template_id:'gentle-dolly-in',example_model_id:''});
+  h.listeners.DOMContentLoaded();await h.flush();
+  await h.context.window.MorphorumFirstRunSetup.goto('finish');
+  // Explicit final completion remains a server-side status action.
+  const current=h.status.revision;
+  assert.equal(h.status.step,'finish');
+  assert.equal(h.status.revision,current);
 });
