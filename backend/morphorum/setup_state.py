@@ -137,7 +137,8 @@ def setup_status(*, forced: bool = False, backend_only: bool = False) -> dict[st
 
 
 def update_setup(*, action: str, step: str | None, revision: int,
-                 forced: bool = False) -> dict[str, Any]:
+                 forced: bool = False, template_id: str | None = None,
+                 model_id: str | None = None) -> dict[str, Any]:
     """Explicit user action, optimistic revision; no model/project side effects."""
     if action not in {"advance", "skip", "complete"}:
         raise SetupStateError("Unknown setup action.")
@@ -169,6 +170,18 @@ def update_setup(*, action: str, step: str | None, revision: int,
             state = {**state, "status": "completed", "step": "finish"}
         else:
             state = {**state, "status": "in_progress", "step": step}
+            if step == "finish":
+                if template_id not in {"gentle-dolly-in", "gentle-dolly-out"}:
+                    raise SetupStateError("Choose a starter example before reviewing.")
+                if not isinstance(model_id, str) or len(model_id) > 256:
+                    raise SetupStateError("Invalid selected model.")
+                if state.get("example_project_id") and (
+                    state.get("example_template_id") != template_id
+                    or (state.get("example_model_id") or "") != model_id
+                ):
+                    raise SetupStateConflict("The previously created example cannot be changed.")
+                state["example_template_id"] = template_id
+                state["example_model_id"] = model_id
         state["revision"] += 1
         _write(state)
         return state
