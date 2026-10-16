@@ -9055,7 +9055,8 @@
     }
     if (dock) dock.hidden = !MOTION_LAB_TOOL_TABS.has(name);
     if (persist) try { localStorage.setItem(ANIMATION_TAB_KEY, name); } catch (_) {}
-    syncMotionWorkflowGuide();
+    // Navigation must remain usable even if optional guidance is unavailable.
+    if (typeof syncMotionWorkflowGuide === 'function') syncMotionWorkflowGuide();
   }
 
   // Deforum settings inspection, guarded camera import and soundtrack attachment.
