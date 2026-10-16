@@ -228,6 +228,47 @@ def test_update_preserves_previous_install_when_job_starts_during_download(tmp_p
     assert (manager.root / "current" / "bin" / name).read_bytes() == before
 
 
+def test_install_failure_is_reported_to_runtime_console(tmp_path, monkeypatch):
+    """An accepted background download must report why it failed to the Console."""
+    archive = _archive_bytes()
+    monkeypatch.setattr(managed, "release_asset", lambda *_: _record(archive))
+
+    def fake_download(_record, destination, _cancel, progress):
+        destination.write_bytes(archive)
+        progress(len(archive), len(archive))
+
+    monkeypatch.setattr(managed, "_download", fake_download)
+    monkeypatch.setattr(ffmpeg_tools, "_version",
+                        lambda _path, command: (command + " version test", None))
+
+    def invalid_codecs(_binary):
+        raise managed.ManagedFFmpegError("Intentional missing encoder")
+
+    monkeypatch.setattr(managed, "_validate_encoders", invalid_codecs)
+    events = []
+    monkeypatch.setattr(managed, "emit_console",
+                        lambda level, category, message: events.append(
+                            (level, category, message)))
+    manager = managed.ManagedFFmpegManager(tmp_path / "ffmpeg")
+    manager._job = {"id": "test-log", "status": "checking"}
+    manager._run("test-log", threading.Event())
+    assert manager.status()["job"]["status"] == "failed"
+    assert not (manager.root / "current").exists()
+    assert any(category == "runtime" and "downloading" in message
+               for _level, category, message in events)
+    assert any(category == "runtime" and "verifying" in message
+               for _level, category, message in events)
+    assert any(level == "error" and "Intentional missing encoder" in message
+               for level, _category, message in events)
+
+
+def test_installer_subprocess_dependency_is_imported():
+    """Regresses the Windows P4.4.4 failure after successful download."""
+    import subprocess
+    assert managed.subprocess is subprocess
+    assert callable(managed._validate_encoders)
+
+
 def test_missing_required_encoder_is_a_hard_failure(tmp_path, monkeypatch):
     binary = tmp_path / "ffmpeg"
     binary.write_text("dummy")
