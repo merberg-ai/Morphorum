@@ -284,3 +284,16 @@ wrap rather than forcing a page-wide horizontal scrollbar. This is a
 layout-only update; scans, model downloads, generation and saved settings
 behave as before. Physical browser/zoom verification is deferred to the
 combined acceptance test.
+
+## Motion Lab timeline and controls at narrow widths (P3.3)
+
+The Visual Timeline uses a keyboard-focusable scroll region on desktop,
+with independent horizontal scrolling for many frames. At phone widths the
+focused single-track display fits the real available card width, including
+when the browser is zoomed in. Use the phone track picker, keyframe list and
+frame scrubber for precise edits. Motion Curves, 3D Camera and Inspector
+inputs, charts, dialogs and action buttons wrap to the available space.
+Deforum Import keeps long mapping values inside its vertically scrollable
+dialog. None of these responsive changes modifies project settings.
+Physical Windows/Android acceptance through P3.3 is included in the
+combined test plan and still pending.

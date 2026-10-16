@@ -102,7 +102,7 @@ Contextual help icons use trusted static text, real buttons beside form labels, 
 
 - [x] P3.1: Keep four Render Monitor actions, preflight reports and 3D camera safety controls within small/mobile/zoomed layouts. Buttons have wrapped labels and full-size touch targets.
 - [x] P3.2: Fix intrinsic-width overflow in Model Manager, Settings, LoRA Manager and Image Results; add responsive button grids, accessible expanded filenames/paths, and keyboard focus styling. Device/zoom acceptance deferred.
-- [ ] P3.3: Audit remaining Motion Lab editors, modals and timelines for 360–1440 CSS px and 200% browser scaling.
+- [x] P3.3: Contain Motion Lab timeline, curve, inspector, 3D camera, previews, and Deforum import dialog at narrow/zoomed widths; make desktop timeline keyboard-scrollable and fit focused phone plots to actual card width. Physical acceptance deferred.
 
 P3.1 is a code/style regression checkpoint only. Actual 360px phone, 720px
 tablet and enlarged-scale browser rendering is **deferred**, bundled with
@@ -122,3 +122,12 @@ and phone testing is still pending; no merge to main is authorized.
 - Image Results retain seed details, full-size preview, Save and Reuse seed actions, with stacked layouts at narrow widths.
 - CSS-only layout changes do not alter API calls, model selection, downloads, save, prompt tags or generation behavior.
 - Desktop 1440px, tablet 720px, phone 360px, light/dark, 200% zoom and keyboard navigation **remain pending physical testing** and are included in the combined checklist.
+
+## P3.3 implementation / physical signoff
+
+- Desktop timeline scale and editable frame positions are unchanged. The scroll region is keyboard focusable, and keyframe buttons retain visible focus outlines.
+- Mobile-focused timeline sizing no longer assumes a 300px minimum plot width, which previously clipped the last frames in narrower cards or at 200% zoom.
+- Motion Curve and Camera Path SVGs retain their logical coordinates, while their containers, field grids, readouts and action buttons shrink and wrap.
+- 3D preset, inspector, camera preview, and Deforum importer keep long filenames, descriptions and mapped fields within their scroll areas. Dialog Close/Cancel/Create actions remain keyboard/touch accessible.
+- Layout and accessibility changes do not save or apply motion, move keyframes, modify camera schedules, change model choices or start renders.
+- **P3 implementation is now complete, pending physical device/zoom acceptance.** P2.5–P3.3 are bundled in the combined checklist. Leave main unchanged until explicit approval.

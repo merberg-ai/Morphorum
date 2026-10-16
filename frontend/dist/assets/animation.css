@@ -3630,3 +3630,170 @@ dialog#animation-deforum-dialog {
   #view-animation .animation-render-actions {grid-template-columns:minmax(0,1fr);}
   #view-animation .animation-render-actions > button {grid-column:1/-1;}
 }
+
+/* P3.3: complex Motion Lab editors remain contained at 360–1440px and zoom. */
+#view-animation :is(
+  .animation-layout,.animation-timeline-card,.animation-inspector-card,
+  .animation-timeline-toolbar,.animation-timeline-editor,
+  .animation-timeline-scroll,.animation-motion-lab-visual-grid,
+  .animation-motion-lab-svg-wrap,.animation-motion-lab-curve-editor,
+  .animation-motion-lab-curve-fields,.animation-motion-lab-curve-actions,
+  .animation-camera-preset-bar,.animation-depth-card,.animation-depth-controls,
+  .animation-motion-preview-card,.animation-motion-frame-player,
+  .animation-motion-player-actions,.animation-motion-lab-playbar,
+  .animation-audio-analysis-workspace,.animation-audio-stereo-timeline
+) {min-width:0;max-width:100%;}
+#view-animation .animation-timeline-toolbar > *,
+#view-animation .animation-timeline-editor > *,
+#view-animation .animation-inspector-controls > *,
+#view-animation .animation-motion-lab-curve-fields > *,
+#view-animation .animation-camera-preset-bar > *,
+#view-animation .animation-motion-lab-playbar > *,
+#view-animation .animation-motion-lab-svg-wrap > * {min-width:0;max-width:100%;}
+#view-animation :is(
+  .animation-timeline-toolbar,.animation-timeline-editor,
+  .animation-inspector-controls,.animation-motion-lab-curve-fields,
+  .animation-camera-preset-bar
+) :is(input:not([type="checkbox"]),select,textarea) {
+  box-sizing:border-box;width:100%;min-width:0;max-width:100%;
+}
+#view-animation :is(
+  .animation-timeline-header-actions,.animation-timeline-editor-actions,
+  .animation-motion-lab-curve-actions,.animation-motion-lab-head-actions,
+  .animation-camera-preset-bar,.animation-motion-player-actions
+) button {
+  max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;
+}
+#view-animation .animation-timeline-scroll {
+  max-width:100%;min-width:0;scrollbar-width:thin;
+  scroll-padding-inline:12px;
+}
+#view-animation .animation-timeline-scroll:focus-visible {
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+#view-animation :is(
+  .animation-timeline-keyframe,.animation-timeline-keyframe-chip,
+  .animation-timeline-toolbar button,.animation-timeline-editor button,
+  .animation-motion-lab-key-list button,.animation-motion-lab-curve-actions button
+):focus-visible {
+  outline:2px solid var(--accent);outline-offset:3px;z-index:10;
+}
+#view-animation .animation-timeline-editor textarea,
+#view-animation .animation-curve-meta,
+#view-animation .animation-timeline-selection,
+#view-animation .animation-motion-lab-key-help,
+#view-animation .animation-motion-lab-readout,
+#view-animation .animation-motion-lab-visual-note {
+  min-width:0;overflow-wrap:anywhere;
+}
+#view-animation .animation-curve-meta {flex-wrap:wrap;}
+#view-animation .animation-curve-chart,
+#view-animation .animation-motion-lab-svg {
+  width:100%;max-width:100%;min-width:0;
+}
+#view-animation .animation-motion-lab-curve-editor {box-sizing:border-box;}
+#view-animation .animation-motion-lab-curve-actions button,
+#view-animation .animation-timeline-editor-actions button {
+  min-height:44px;
+}
+#view-animation .animation-camera-preset-bar button {min-height:44px;}
+#view-animation .animation-depth-preview-wrap,
+#view-animation .animation-source-preview-wrap,
+#view-animation .animation-motion-lab-svg-wrap {max-width:100%;min-width:0;}
+/* Dialog internals shrink independently of very long imported text/paths. */
+dialog#animation-deforum-dialog {
+  box-sizing:border-box;max-width:calc(100vw - 16px);
+  max-height:calc(100dvh - 16px);
+}
+#animation-deforum-dialog :is(
+  .animation-import-shell,.animation-import-section,
+  .animation-import-mappings,.animation-import-mapping,
+  .animation-import-fields,.animation-import-source,
+  .animation-import-summary,.animation-import-actions
+) {min-width:0;max-width:100%;}
+#animation-deforum-dialog .animation-import-mapping > *,
+#animation-deforum-dialog .animation-import-source > *,
+#animation-deforum-dialog .animation-import-actions > * {
+  min-width:0;max-width:100%;overflow-wrap:anywhere;
+}
+#animation-deforum-dialog .animation-import-actions button {
+  min-height:44px;white-space:normal;overflow-wrap:anywhere;
+}
+#animation-deforum-dialog :is(
+  .animation-import-close,.animation-import-actions button,
+  .animation-import-mapping summary
+):focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
+@media(max-width:900px) {
+  #view-animation .animation-inspector-controls {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  #view-animation .animation-inspector-controls .animation-frame-slider {
+    grid-column:1/-1;grid-row:auto;
+  }
+}
+@media(max-width:720px) {
+  #view-animation .animation-timeline-scroll {
+    /* The focused phone plot already scales to its container width. Keep
+       horizontal overflow local if browser zoom/font scaling needs it. */
+    overflow-x:auto;
+  }
+  #view-animation .animation-timeline-grid.mobile-focused {
+    min-width:0;max-width:100%;width:100%;
+  }
+  #view-animation .animation-timeline-editor-actions,
+  #view-animation .animation-motion-lab-curve-actions {
+    min-width:0;max-width:100%;
+  }
+  #view-animation .animation-motion-lab-curve-actions button {
+    flex:1 1 140px;min-height:44px;
+  }
+  #view-animation .animation-camera-preset-bar {
+    display:grid;grid-template-columns:minmax(0,1fr);
+  }
+  #view-animation .animation-camera-preset-bar :is(select,button) {width:100%;}
+  #view-animation .animation-motion-lab-playbar {
+    align-items:stretch;gap:9px;
+  }
+  #view-animation .animation-motion-lab-scrubber {flex:1 1 100%;}
+  #view-animation .animation-motion-lab-svg-wrap {overflow-wrap:anywhere;}
+  #animation-deforum-dialog .animation-import-actions {
+    gap:8px;grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:420px) {
+  #view-animation .animation-timeline-toolbar,
+  #view-animation .animation-timeline-editor,
+  #view-animation .animation-inspector-controls,
+  #view-animation .animation-motion-lab-curve-fields {
+    grid-template-columns:minmax(0,1fr);
+  }
+  #view-animation .animation-timeline-toolbar > *,
+  #view-animation .animation-timeline-editor > *,
+  #view-animation .animation-inspector-controls > *,
+  #view-animation .animation-motion-lab-curve-fields > * {
+    grid-column:1/-1;grid-row:auto;
+  }
+  #view-animation .animation-timeline-editor-actions {
+    grid-template-columns:minmax(0,1fr);
+  }
+  #view-animation .animation-timeline-editor-actions button {width:100%;}
+  #view-animation .animation-motion-lab-curve-actions {
+    display:grid;grid-template-columns:minmax(0,1fr);
+  }
+  #view-animation .animation-motion-lab-curve-actions button {width:100%;}
+  #view-animation .animation-motion-lab-playbar > button {
+    flex:1 1 120px;min-height:44px;
+  }
+  #animation-deforum-dialog .animation-import-actions {
+    grid-template-columns:minmax(0,1fr);
+  }
+  #animation-deforum-dialog .animation-import-actions > button {
+    grid-column:1/-1;width:100%;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  #view-animation :is(
+    .animation-timeline-scroll,.animation-motion-lab-svg,
+    .animation-motion-lab-curve-actions button
+  ) {scroll-behavior:auto;}
+}

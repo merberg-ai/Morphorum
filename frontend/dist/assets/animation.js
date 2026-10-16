@@ -1363,7 +1363,11 @@
 
     const maxFrames = Math.max(1, Number(state.timeline.max_frames || 1));
     const scroll = qs('#animation-timeline-scroll');
-    const availableWidth = Math.max(300, Number(scroll?.clientWidth || 360) - 4);
+    // Mobile-focused timeline uses the actual container width, including at
+    // 200% browser zoom. A 300px floor clipped its rightmost frames on phones.
+    // Retain the independent, horizontally scrollable desktop track scaling.
+    const measuredWidth = Number(scroll?.clientWidth || 360);
+    const availableWidth = Math.max(160, Math.floor(measuredWidth - 4));
     const contentWidth = mobile
       ? availableWidth
       : Math.max(640, Math.round(maxFrames * state.timelineScale));

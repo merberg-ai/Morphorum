@@ -117,3 +117,43 @@ unchanged until the combined acceptance and separately authorized merge.
 
 P3.2 physical testing is deferred with P2.5/P2.6/P3.1. CI and static
 layout checks alone do not certify browser rendering at those sizes.
+
+## P3.3: Motion Lab timeline, curves and dialogs
+
+- [ ] At 1440px and 720px CSS widths, open **Visual Timeline** with a
+      disposable animation project. Test the desktop horizontal track scroll,
+      keyboard Tab focus on the scroll region, arrow-key scrolling, scale
+      control, track picker, Playhead and Prev/Next Keyframe buttons.
+- [ ] At approximately 360px CSS width and **200% browser zoom**, open the
+      same timeline, select the first and final keyframes, use the phone track
+      picker, frame scrubber, Add Keyframe, value editor, Apply and Delete on
+      a disposable project. Verify no rightmost keyframes are clipped.
+- [ ] On mobile, confirm timeline scrolling remains inside the timeline
+      region rather than creating page-wide horizontal scroll. Verify the
+      scroll region and keyframe chips have visible keyboard focus.
+- [ ] Open **Motion Curves & Camera Path** with a draft camera layer:
+      verify axes, Blend, Interpolation, Frame and Velocity fields, keyframe
+      list, Save/Delete/Remove buttons, charts and playback scrubber all fit
+      at 360/720/1440px and at 200% zoom.
+- [ ] Test 3D Camera Schedules and Camera Composer presets on a copied
+      project: preset select, Apply button, long labels and contextual help
+      remain usable. Confirm no camera schedules change just by navigating.
+- [ ] Open **Deforum Settings Import** with an example file containing
+      unusually long filenames/mapping values. At phone and zoomed widths,
+      scroll the dialog vertically, inspect field mapping, use Close,
+      Cancel and Create without controls escaping the viewport.
+      Do not overwrite an existing project.
+- [ ] Check actual CPU Camera Preview, its timeline controls, curve readouts
+      and 3D projected-coverage indicators at all three widths.
+- [ ] Verify focus outlines, light/dark themes, enlarged UI scale and
+      reduced-motion behavior. Recheck saved projects and ongoing jobs are
+      unaffected by panel switching.
+
+### Combined P1–P3 signoff
+
+- [ ] Confirm first-run setup, Model Manager index refresh, LoRA insertion,
+      image generation, Motion Studio/audio reuse, project drafts, P2.5
+      render preflight, P2.6 camera advisories and the P3.1–P3.3 layouts
+      all behave on the Windows test installation.
+- [ ] Record PASS/FAIL findings and the tested `dev-webui` commit SHA.
+      **No main merge** until acceptance is reported and authorized.
