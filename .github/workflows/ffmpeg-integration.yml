@@ -57,4 +57,4 @@ jobs:
       - name: Run FFmpeg resolver and managed installer fixture regressions
         run: |
           python -m pip install --disable-pip-version-check 'pytest>=8,<10'
-          python -m pytest tests/test_ffmpeg_tools.py tests/test_managed_ffmpeg.py -q
+          python -m pytest tests/test_ffmpeg_tools.py tests/test_managed_ffmpeg.py tests/test_ffmpeg_acceptance.py -q
