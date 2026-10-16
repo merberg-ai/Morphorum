@@ -291,12 +291,15 @@ class ManagedFFmpegManager:
         record = candidate / "installation.json"
         try:
             info = json.loads(record.read_text(encoding="utf-8"))
-            if info.get("managed_by") != "Morphorum" or info.get("provider") != PROJECT_URL:
-                return False
-            return all((candidate / "bin" / ffmpeg_tools._bin_name(name)).is_file()
-                       for name in ("ffmpeg", "ffprobe"))
+            return info.get("managed_by") == "Morphorum" and info.get("provider") == PROJECT_URL
         except (OSError, ValueError, AttributeError):
             return False
+
+    def _ready_at(self, candidate: Path) -> bool:
+        return self._owned_at(candidate) and all(
+            (candidate / "bin" / ffmpeg_tools._bin_name(name)).is_file()
+            for name in ("ffmpeg", "ffprobe")
+        )
 
     def _owned(self) -> bool:
         return self._owned_at(self.root / "current")
@@ -314,7 +317,7 @@ class ManagedFFmpegManager:
             if re.fullmatch(r"\.previous-[a-f0-9]{32}", item.name)
             and not item.is_symlink() and item.is_dir()
         ]
-        if len(backups) != 1 or not self._owned_at(backups[0]):
+        if len(backups) != 1 or not self._ready_at(backups[0]):
             return False
         try:
             backups[0].rename(current)
@@ -332,7 +335,8 @@ class ManagedFFmpegManager:
         return {
             "supported": artifact is not None,
             "asset_name": artifact,
-            "installed": self._owned(),
+            "installed": self._ready_at(current),
+            "repair_needed": self._owned() and not self._ready_at(current),
             "managed_path": str(current / "bin"),
             "job": job,
             "provider": PROJECT_URL, "release": RELEASE_PAGE,
