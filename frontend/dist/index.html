@@ -127,7 +127,8 @@
     </nav>
 
     <main class="workspace">
-      <section class="operation-feedback" id="operation-feedback" aria-label="Recent operation" aria-live="polite" aria-atomic="true" hidden>
+      <div id="operation-feedback-announcement" class="operation-feedback-sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+      <section class="operation-feedback" id="operation-feedback" aria-label="Recent operation" hidden>
         <div class="operation-feedback-copy">
           <strong id="operation-feedback-title">Working…</strong>
           <span id="operation-feedback-message"></span>
