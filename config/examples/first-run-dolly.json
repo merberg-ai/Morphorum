@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "examples": [
+    {
+      "id": "gentle-dolly-in",
+      "name": "Gentle Dolly In",
+      "description": "A gentle four-second camera move toward the subject.",
+      "camera_z_end": 0.6
+    },
+    {
+      "id": "gentle-dolly-out",
+      "name": "Gentle Dolly Out",
+      "description": "The same gentle camera move away from the subject.",
+      "camera_z_end": -0.6
+    }
+  ],
+  "scene_prompt": "A cozy miniature cabin surrounded by wildflowers in a sunlit alpine meadow, detailed handcrafted diorama, soft cinematic light, vibrant colors, crisp textures, shallow depth of field",
+  "animation": {
+    "max_frames": 48,
+    "fps": 12,
+    "width": 512,
+    "height": 512,
+    "mode": "3d"
+  },
+  "seed": 123456,
+  "version": "ms6.4-1"
+}
