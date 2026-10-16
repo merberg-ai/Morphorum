@@ -22,6 +22,7 @@
     const overlay = qs('overlay');
     if (overlay) overlay.hidden = true;
     window.MorphorumSetupZImage?.leave();
+    window.MorphorumSetupExamples?.leave();
     previousFocus?.focus?.();
   }
   function page() {
@@ -55,14 +56,24 @@
       void window.MorphorumSetupFolders?.render(content,step);
     } else if (step === 'zimage') {
       window.MorphorumSetupZImage?.show(content,()=>void action('advance','examples'));
+    } else if (step === 'examples') {
+      void window.MorphorumSetupExamples?.showExamples(content,snapshot);
+    } else if (step === 'finish') {
+      void window.MorphorumSetupExamples?.showFinish(content,snapshot,{
+        reserved:(revision,id)=>{snapshot.revision=revision;snapshot.example_project_id=id;},
+        complete:()=>action('complete','finish'),
+        openEditor:id=>window.MorphorumAnimation?.openSavedProjectFromSetup?.(id) ?? false,
+        toast:(...args)=>window.MorphorumToast?.(...args),
+        manual,
+      });
     } else {
       heading('This page is scheduled for the next MS6 implementation pass');
       paragraph('Your progress is saved on the Morphorum host, not in browser storage. Folder checks and optional managed Z-Image downloads are available now; starter project creation follows in MS6.4.');
       paragraph('Close to resume here later, or Skip for now to return to the normal WebUI. Your existing settings and projects remain untouched.');
     }
     qs('back').disabled = position === 0;
-    qs('next').disabled = position >= 5;
-    qs('next').textContent = position === 1 ? 'Continue to Model Setup' : position === 2 ? 'Optional LoRA Folders' : position === 3 ? 'Continue to Z-Image' : position === 4 ? 'Continue Without Waiting' : 'Next';
+    qs('next').disabled = position >= 6;
+    qs('next').textContent = position === 1 ? 'Continue to Model Setup' : position === 2 ? 'Optional LoRA Folders' : position === 3 ? 'Continue to Z-Image' : position === 4 ? 'Continue Without Waiting' : position === 5 ? 'Review & Finish' : 'Next';
     showError('');
   }
   async function fetchStatus() {
@@ -70,7 +81,7 @@
     if (!response.ok) throw new Error('Cannot inspect installation setup state.');
     return response.json();
   }
-  async function action(kind, destination) {
+  async function action(kind, destination, extras = {}) {
     if (busy || !snapshot) return;
     busy = true;
     for (const name of ['next','back','skip']) qs(name).disabled = true;
@@ -81,12 +92,17 @@
         body:JSON.stringify({
           action:kind, step:destination, revision:snapshot.revision,
           manual:manual || snapshot.forced_for_launch,
+          ...extras,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(String(data.detail || 'Setup update failed.'));
       snapshot = data;
-      if (kind === 'skip') {dismiss(); return;}
+      if (kind === 'skip' || kind === 'complete') {
+        dismiss();
+        if(kind==='complete') window.MorphorumToast?.('Setup complete','Morphorum is configured. Your projects and settings are saved.','success');
+        return;
+      }
       if (step === 'zimage') window.MorphorumSetupZImage?.leave();
       step = destination;
       page();
@@ -98,7 +114,7 @@
       if (!qs('overlay').hidden) {
         qs('skip').disabled = false;
         qs('back').disabled = STEPS.indexOf(step) === 0;
-        qs('next').disabled = STEPS.indexOf(step) >= 5;
+        qs('next').disabled = STEPS.indexOf(step) >= 6;
       }
     }
   }
@@ -119,6 +135,7 @@
       snapshot = latest;
       window.MorphorumSetupFolders?.reset();
       window.MorphorumSetupZImage?.leave();
+      window.MorphorumSetupExamples?.leave();
       manual = reopen || latest.forced_for_launch;
       step = reopen && ['completed','skipped','legacy'].includes(latest.status)
         ? 'welcome' : STEPS.includes(latest.step) ? latest.step : 'welcome';
@@ -133,10 +150,11 @@
   function bind() {
     qs('next')?.addEventListener('click', () => {
       const i=STEPS.indexOf(step);
-      if (i < 5) {
+      if (i < 6) {
         try {
           if (i === 2 || i === 3) window.MorphorumSetupFolders?.beforeNext(STEPS[i]);
-          void action('advance',STEPS[i+1]);
+          const extras=i===5?window.MorphorumSetupExamples?.selection():{};
+          void action('advance',STEPS[i+1],extras);
         } catch (error) {showError(error.message);}
       }
     });
@@ -162,6 +180,8 @@
     });
     void open();
   }
-  window.MorphorumFirstRunSetup = {open};
+  window.MorphorumFirstRunSetup = {open,
+    goto:destination=>STEPS.includes(destination)?action('advance',destination):undefined,
+  };
   window.addEventListener('DOMContentLoaded',bind);
 })();
