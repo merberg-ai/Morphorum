@@ -19,9 +19,9 @@
     el.hidden = !message;
     el.textContent = message || '';
   }
-  function dismiss() {
+  function dismiss({force=false}={}) {
     const overlay = qs('overlay');
-    if (busy) return;
+    if (busy && !force) return;
     if (overlay) overlay.hidden = true;
     window.MorphorumSetupZImage?.leave();
     window.MorphorumSetupExamples?.leave();
@@ -105,7 +105,7 @@
       if (!response.ok) throw new Error(String(data.detail || 'Setup update failed.'));
       snapshot = data;
       if (kind === 'skip' || kind === 'complete') {
-        dismiss();
+        dismiss({force:true});
         if(kind==='complete') window.MorphorumToast?.('Setup complete','Morphorum is configured. Your projects and settings are saved.','success');
         return;
       }
