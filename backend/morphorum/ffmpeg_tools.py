@@ -117,7 +117,7 @@ def ffmpeg_status(settings: dict[str, Any] | None = None) -> dict[str, Any]:
     mode = selection["mode"]
     if error:
         message = {
-            "auto": "No usable FFmpeg detected. Install it on the host or select a custom executable.",
+            "auto": "FFmpeg not found or unusable on this host. Install it or select a custom executable.",
             "custom": "Custom FFmpeg is unavailable or invalid. Check the path and permissions.",
             "managed": "Managed FFmpeg is not installed yet. Install a verified local package first.",
         }[mode]
