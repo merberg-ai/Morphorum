@@ -137,7 +137,7 @@ def test_rejects_duplicate_executables(tmp_path):
                 tar.addfile(item, io.BytesIO(payload))
     source = tmp_path / "duplicate.pkg"
     source.write_bytes(data.getvalue())
-    with pytest.raises(managed.ManagedFFmpegError, match="Duplicate"):
+    with pytest.raises(managed.ManagedFFmpegError, match="[Dd]uplicate"):
         managed._extract(source, tmp_path / "dest", threading.Event())
 
 
