@@ -119,3 +119,27 @@ test('MS6.4 Finish Without Example completes without creating a project',async()
   assert.equal(h.creates,0);
   assert.equal(h.completions,1);
 });
+
+
+test('MS6.5 catalog must finish loading before example choice can advance',async()=>{
+  const h=harness();
+  assert.throws(()=>h.app.selection(),/not ready/i);
+  const progress=[];
+  await h.app.showExamples(h.host,{}, {onReady:ready=>progress.push(ready)});
+  assert.deepEqual(progress,[false,true]);
+  assert.equal(h.app.selection().template_id,'gentle-dolly-in');
+  h.app.leave();
+  assert.throws(()=>h.app.selection(),/not ready/i);
+});
+
+test('MS6.5 vanished selected model blocks example creation, not falsely treated as render-ready',async()=>{
+  const h=harness();
+  await h.showFinish({revision:7,example_template_id:'gentle-dolly-in',
+    example_model_id:'missing-checkpoint'});
+  assert.equal(h.findButton('Create Example & Open Editor').disabled,true);
+  assert.ok(all(h.host,e=>/no longer indexed/i.test(e.textContent||'')).length>0);
+  assert.equal(h.creates,0);
+  await h.findButton('Finish Without Example').listeners.click();
+  assert.equal(h.completions,1);
+  assert.equal(h.creates,0);
+});
