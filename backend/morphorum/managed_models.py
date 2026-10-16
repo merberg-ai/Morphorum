@@ -256,6 +256,32 @@ class ManagedModelManager:
             pass
         return total
 
+    @staticmethod
+    def _download_record(destination: Path, entry: dict[str, Any]) -> dict[str, Any] | None:
+        """Read bounded persisted status after a restart, never trigger a download."""
+        marker = destination / _DOWNLOAD_MARKER
+        try:
+            if not marker.is_file() or marker.stat().st_size > 8192:
+                return None
+            data = json.loads(marker.read_text(encoding="utf-8"))
+            if (not isinstance(data, dict) or data.get("model_id") != entry["id"]
+                    or data.get("repo_id") != entry["repo_id"]):
+                return None
+            return data
+        except (OSError, ValueError, UnicodeError):
+            return None
+
+    @staticmethod
+    def _free_storage(destination: Path) -> int | None:
+        """Probe destination volume without creating the destination on a GET."""
+        try:
+            nearest = destination
+            while not nearest.exists() and nearest != nearest.parent:
+                nearest = nearest.parent
+            return int(shutil.disk_usage(nearest).free)
+        except (OSError, ValueError):
+            return None
+
     def _sync_index(self, entry: dict[str, Any], destination: Path) -> None:
         index_id = str(entry["index_id"])
         if self._installed(destination):
@@ -281,19 +307,39 @@ class ManagedModelManager:
             if not installed and not thread_alive:
                 installed = self._migrate_legacy_completion(entry, destination)
 
+            state.downloaded_bytes = self._materialized_size(destination)
+            record = self._download_record(destination, entry)
             if installed and not thread_alive:
                 state.status = "installed"
                 state.error = None
-            elif not installed and not thread_alive and state.status not in {"failed", "checking"}:
-                state.status = "not_installed"
+            elif not thread_alive and state.status != "failed":
+                if record and record.get("status") == "failed":
+                    state.status = "failed"
+                    state.error = str(record.get("error") or "Previous download failed.")[:500]
+                elif record and record.get("status") in {"checking", "downloading"}:
+                    state.status = "interrupted"
+                    state.error = None
+                elif state.downloaded_bytes > 0:
+                    state.status = "partial"
+                    state.error = None
+                else:
+                    state.status = "not_installed"
+                    state.error = None
 
-            state.downloaded_bytes = self._materialized_size(destination)
-            expected = state.expected_bytes or int(entry["advertised_size_bytes"])
+            stored_expected = record.get("expected_bytes") if record else 0
+            try:
+                stored_expected = max(0, int(stored_expected or 0))
+            except (TypeError, ValueError, OverflowError):
+                stored_expected = 0
+            expected = state.expected_bytes or stored_expected or int(entry["advertised_size_bytes"])
             progress = (
-                min(100.0, (state.downloaded_bytes / expected) * 100.0)
-                if expected > 0
-                else 0.0
+                min(100.0 if installed else 99.9,
+                    (state.downloaded_bytes / expected) * 100.0)
+                if expected > 0 else 0.0
             )
+            available = self._free_storage(destination)
+            remaining = max(0, expected - state.downloaded_bytes)
+            required = remaining + 2 * 1024**3 if not installed else 0
 
             payload = {
                 **entry,
@@ -304,6 +350,15 @@ class ManagedModelManager:
                 "downloaded_bytes": state.downloaded_bytes,
                 "progress_percent": progress,
                 "error": state.error,
+                "resumable": not installed and (
+                    bool(record) or state.downloaded_bytes > 0
+                ),
+                "available_bytes": available,
+                "estimated_remaining_bytes": remaining,
+                "required_free_bytes": required,
+                "space_sufficient": (
+                    available >= required if available is not None else None
+                ),
             }
 
         if installed:
@@ -451,6 +506,19 @@ class ManagedModelManager:
             )
         except Exception as exc:
             (destination / _COMPLETE_MARKER).unlink(missing_ok=True)
+            try:
+                self._write_json_atomic(
+                    destination / _DOWNLOAD_MARKER,
+                    {
+                        "status": "failed",
+                        "model_id": model_id,
+                        "repo_id": str(entry["repo_id"]),
+                        "expected_bytes": self._states[model_id].expected_bytes,
+                        "error": str(exc)[:500],
+                    },
+                )
+            except OSError:
+                pass  # Keep the error visible in this process even if disk write fails.
             with self._lock:
                 state = self._states[model_id]
                 state.downloaded_bytes = self._materialized_size(destination)
