@@ -238,7 +238,7 @@ def _notice(staging: Path, record: dict[str, Any]) -> None:
         "Variant: GPL static (includes optional GPL-licensed encoders).\n"
         "FFmpeg is licensed under LGPL/GPL depending on enabled components.\n"
         "See upstream release for source code, license texts and dependencies.\n"
-        "This software is provided by its respective authors, not OpenAI.\n",
+        "These binaries are third-party software provided by their respective authors.\n",
         encoding="utf-8",
     )
     (staging / "installation.json").write_text(json.dumps({
