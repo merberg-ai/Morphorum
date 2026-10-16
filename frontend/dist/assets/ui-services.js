@@ -35,12 +35,13 @@
     const settledResults = new Map();
     const dismissed = new Set();
     let sequence = 0;
+    let presentationOrder = 0;
     const priority = tone => ({error: 4, warning: 3, busy: 2, success: 1})[tone] || 0;
     let current = null;
     function select() {
       const entries = [...active.values(), ...settledResults.values()]
         .filter(entry => !dismissed.has(entry.token));
-      entries.sort((a, b) => priority(b.tone) - priority(a.tone) || b.token - a.token);
+      entries.sort((a, b) => priority(b.tone) - priority(a.tone) || b.order - a.order);
       return entries[0] || null;
     }
     function visible() {
@@ -61,7 +62,8 @@
         const token = ++sequence;
         active.delete(key);
         settledResults.delete(key); // Explicit retry retires that key's old error.
-        active.set(key, {key, token, title, message, view, tone: 'busy', progress: null});
+        active.set(key, {key, token, title, message, view, tone: 'busy', progress: null,
+          order: ++presentationOrder});
         visible();
         return token;
       },
@@ -76,7 +78,7 @@
         const existing = active.get(key);
         if (!existing || existing.token !== token) return false;
         active.delete(key);
-        remember({...existing, ...options, key, token,
+        remember({...existing, ...options, key, token, order: ++presentationOrder,
           tone: ['success', 'warning', 'error'].includes(options.tone)
             ? options.tone : 'success', progress: null});
         dismissed.delete(token); // A dismissed progress notice can still report the result.
