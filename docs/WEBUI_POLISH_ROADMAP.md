@@ -24,6 +24,46 @@ separate, explicit authorization.** Next development phase: P4.
 | P6 | Startup fault isolation, refresh/reconnect, version/cache, sanitized diagnostics, regression tests, 3D warp error detail | Optional services cannot block the basic editor |
 | P7 | Portable project ZIP import/export including media, integrity manifest, optional large files and model remapping | Projects move between hosts without overwriting existing data |
 
+## Pre-P5 UX organization: Motion Studio and Project Editor
+
+**Branch:** `dev-webui` (rebased/fast-forwarded to the approved WebUI+FFmpeg release, with dev-only acceptance notes restored). Do not promote these unfinished changes to `main` without a separate owner acceptance and CI gate.
+
+### UX1 + UX2 · Motion Studio flow and navigation
+
+- [x] Replace the long mixed-card stack with five focused workflow stages:
+  **Load Audio → Analyze WAV → Detect Beats → Create Motion → Preview & Apply**.
+- [x] The Create Motion stage offers four authoring modes: **Beat Cues**,
+  **Sound Channels**, **Continuous Motion**, and **Single-Band Pulse**.
+  Continuous presets remain usable without an audio source.
+- [x] Reparent **original DOM controls**, the waveform, marker editor, cue
+  director, channel card and continuous motion card. Never clone controls,
+  reset a file selection, discard marker/cue drafts or change backend APIs
+  just to navigate.
+- [x] Move length matching to audio selection, transient/level band,
+  sensitivity and threshold to detection, and pulse axis/distance/attack/
+  release to response settings, selected by **stable input IDs** instead of
+  fragile child positions.
+- [x] Add accessible keyboard-operated stage and author-mode tabs,
+  persistent browser-only stage/mode preferences, current-stage statuses,
+  Previous/Next controls and responsive compact/mobile styling.
+- [x] Add frontend regression tests and update Motion Studio documentation.
+- [ ] **Owner Windows physical acceptance:** fresh WAV Analyze, saved-project
+  soundtrack restoration, waveform Seek/Zoom/Play, marker drag/add/save,
+  cue editing/Find Beats/save, independent channels, continuous preset without
+  audio, single-band pulses, motion stage/preview/apply, switching active
+  sections without data loss, laptop/phone/200% zoom, keyboard navigation.
+- [ ] **CI verification:** syntax/frontend and backend workflows on current
+  dev head; do not equate a source-level test with physical browser acceptance.
+
+### UX3–UX5 · next after acceptance
+
+- [ ] **UX3:** Split Project Editor into Setup, Sources & Media,
+  Timeline & Prompts, Camera & Motion, Generation Settings.
+- [ ] **UX4:** Persistent project/save status, mobile navigation, context
+  indicators, clean keyboard flow and responsive details.
+- [ ] **UX5:** Combined regression tests, updated public docs and user
+  acceptance before any release PR merge.
+
 ## P1 acceptance
 
 - [x] P1.1: Clear Project Editor empty state, Project Manager and wizard shortcuts.
