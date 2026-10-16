@@ -256,6 +256,8 @@ class ManagedFFmpegManager:
 
     def _owned(self) -> bool:
         current = self.root / "current"
+        if current.is_symlink():
+            return False
         record = current / "installation.json"
         try:
             info = json.loads(record.read_text(encoding="utf-8"))
@@ -281,12 +283,24 @@ class ManagedFFmpegManager:
                         "Choose Install to fetch an upstream-verified FFmpeg and FFprobe pair."),
         }
 
+    def _clean_abandoned_staging(self) -> None:
+        # Interrupted process exits can leave a downloaded archive behind.
+        # Only remove our exact staging name pattern, never user content.
+        if not self.root.is_dir() or self.root.is_symlink():
+            return
+        for entry in self.root.glob(".staging-*"):
+            suffix = entry.name.removeprefix(".staging-")
+            if (re.fullmatch(r"[0-9a-f]{32}", suffix)
+                    and entry.is_dir() and not entry.is_symlink()):
+                shutil.rmtree(entry, ignore_errors=True)
+
     def start(self) -> dict[str, Any]:
         if not supported_asset():
             raise ManagedFFmpegError("Managed FFmpeg is unsupported on this OS/architecture.")
         with self._lock:
             if self._job and self._job["status"] in DOWNLOAD_STATES:
                 raise ManagedFFmpegError("Managed FFmpeg installation is already running.")
+            self._clean_abandoned_staging()
             if (self.root / "current").exists() and not self._owned():
                 raise ManagedFFmpegError(
                     "Unmanaged files exist at tools/ffmpeg/current; refusing to overwrite them."
