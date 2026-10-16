@@ -4,13 +4,14 @@ This page is for contributors and maintainers. **You do not need to run automate
 
 ## GitHub Actions
 
-The repository runs three complementary checks:
+The repository runs four complementary checks:
 
 | Workflow | Purpose |
 | --- | --- |
 | Backend tests | Python `pytest` API, models, projects and render-related behavior, plus an internal self-test |
 | Syntax checks | Python compilation, browser JavaScript syntax and frontend regression tests |
 | Installer checks | PowerShell and Bash syntax and a standalone Windows bootstrap smoke check |
+| FFmpeg integration smoke (CPU-only) | Windows/Linux system-FFmpeg MP4/WebM/audio/hybrid media fixtures plus resolver/managed-download unit regressions; actual managed downloads require separate host testing |
 
 See the current results under [Actions](https://github.com/merberg-ai/Morphorum/actions). Passing CI does not replace physical GPU, browser, and remote-network testing for affected features.
 
@@ -49,6 +50,18 @@ Before promoting an installation, use a disposable directory and test at least t
 9. Recheck the new GitHub CI results after the merge.
 
 Do not use someone else's valuable model, project or output folder for destructive testing. Record the exact commit, environment, and whether checks were automated or physically tested.
+
+## Verify FFmpeg without a GPU
+
+Follow [FFmpeg Manager](FFMPEG_MANAGER.md#verify-a-managed-installation) for the host-independent media acceptance script. From your Morphorum directory:
+
+~~~powershell
+.\.venv\Scripts\python.exe scripts\ffmpeg_acceptance.py --mode managed
+~~~
+
+This uses disposable synthetic media to verify both encoders, FFprobe, PNG extraction and common audio conversions. It does not prove every generation/model combination is correct.
+
+**Release acceptance history (2026-10-16):** The owner reported that the corrected managed FFmpeg installation succeeded on Windows and all six media acceptance groups passed. Linux managed installation, forced interruption/recovery scenarios, P4.3 notification resilience, and repository-wide CI status must be tracked independently rather than silently marked passed.
 
 ## Reporting failures
 
