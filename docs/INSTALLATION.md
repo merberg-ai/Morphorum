@@ -39,7 +39,7 @@ Noninteractive folder and port selection:
 .\bootstrap.bat -InstallDir "D:\Morphorum" -Port 8080
 ~~~
 
-The published installer uses the `main` branch by default. `-Branch` is available for advanced testing, but is not needed for a normal installation.
+The published installer uses the `main` branch by default. `-Branch` is available for advanced testing, but is not needed for a normal installation. The Windows bootstrap accepts `-InstallDir`, `-Port`, and `-Branch`; use `bootstrap.bat -Help` to inspect its arguments. A standalone downloaded `bootstrap.bat` fetches the matching PowerShell bootstrap script from GitHub before proceeding.
 
 ### Windows: start the app
 
@@ -66,7 +66,7 @@ From a terminal on 64-bit Linux:
 curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash
 ~~~
 
-This installs into **`~/Morphorum`**. The bootstrap may ask for `sudo` to install Git using a supported package manager. If preferred, inspect/download the bootstrap script before executing it.
+This installs into **`~/Morphorum`** and clones the published `main` branch. The bootstrap may ask for `sudo` to install Git using a supported package manager. If preferred, inspect/download the bootstrap script before executing it. If run again against an existing installed checkout, the bootstrap invokes the guarded updater rather than treating it as a fresh installation.
 
 For a custom folder:
 
@@ -111,7 +111,7 @@ To manually show setup on the next **WebUI** launch:
 
 | Windows | Linux |
 | --- | --- |
-| `\.\run.bat --setup-wizard` | `./run.sh --setup-wizard` |
+| `.\run.bat --setup-wizard` | `./run.sh --setup-wizard` |
 
 Use the command only after stopping an already-running server. The option is incompatible with `--backend-only`, which deliberately has no browser interface. Model directories entered in the wizard refer to the machine running Morphorum, not necessarily the browser device on a LAN.
 
@@ -120,7 +120,7 @@ Use the command only after stopping an already-running server. The option is inc
 1. Open **Models**.
 2. Download managed **Z-Image-Turbo** (approximately 33 GB), then choose **Use Model**, **or** specify your existing SDXL/FLUX folders in **Settings**, scan and select an available checkpoint.
 3. Use **Image Generation** to make one modest-resolution test image.
-4. For animation, choose **Motion Lab → New Project Wizard**.
+4. For animation, choose the first-run Dolly In/Out example or **Motion Lab → New Project Wizard**.
 
 A new installation with no saved projects may include the **Default** example animation: 120 frames at 24 FPS. It does not automatically have a model assigned, and a full 1024 × 1024 animation is not the best first GPU test.
 
