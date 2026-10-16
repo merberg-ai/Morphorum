@@ -148,7 +148,7 @@ The slim **Motion Lab next steps** guide shows your current workspace, active pr
 4. Follow the job under **Render Monitor**. Supported jobs can be cancelled or resumed as indicated by the interface.
 5. Open **Outputs** after completion to preview the animation and export it as **MP4** or **WebM** where supported.
 
-**FFmpeg is required** for video encoding. If video export is unavailable, run `ffmpeg -version` in a terminal and see [Troubleshooting](TROUBLESHOOTING.md#video-export-fails-or-ffmpeg-is-missing).
+**FFmpeg is required** for video encoding. Open **Settings → Storage → FFmpeg Manager** to auto-detect it, set a custom executable path or test the currently selected binary and matching FFprobe. Save Settings to activate a tested choice. A fully managed one-click download is planned but not yet included. If export is unavailable, see [Troubleshooting](TROUBLESHOOTING.md#video-export-fails-or-ffmpeg-is-missing).
 
 For **Deforum Motion Settings Import**, explicitly attach the selected soundtrack before starting a new render to include it in MP4/WebM exports at the original render FPS. Source paths from exported settings are only references; see the [complete import guide](DEFORUM_MOTION_SETTINGS_IMPORT.md).
 
