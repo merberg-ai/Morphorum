@@ -94,7 +94,7 @@ def test_status_does_not_expose_partial_package_as_installed(tmp_path, monkeypat
     status = manager.status("zimage-turbo")
 
     assert status["installed"] is False
-    assert status["status"] == "not_installed"
+    assert status["status"] == "partial"  # MS6.3: incomplete package is visible but never installed
 
 
 def test_zimage_requires_all_official_diffusers_weight_shards(tmp_path) -> None:
