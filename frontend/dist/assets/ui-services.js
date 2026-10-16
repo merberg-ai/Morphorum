@@ -89,6 +89,12 @@
         if (current) {
           dismissed.add(current.token);
           if (current.tone !== 'busy') settledResults.delete(current.key);
+          else {
+            // Do not resurface an unrelated, already-finished success when
+            // the user explicitly dismisses the current progress notice.
+            for (const [key, entry] of settledResults)
+              if (entry.tone === 'success') settledResults.delete(key);
+          }
         }
         visible(); // Only the notice is dismissed, never the backend work.
       },
