@@ -70,3 +70,25 @@
  .first-run-zimage-actions {display:grid;grid-template-columns:1fr;}
  .first-run-zimage-actions button {width:100%;}
 }
+
+
+/* MS6.4: responsive starter project gallery, editor handoff, review. */
+.first-run-example-cards{min-width:0}
+.first-run-example-choice-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.first-run-example-card{display:flex;flex-direction:column;gap:10px;min-width:0;padding:17px;text-align:left;align-items:flex-start;border:1px solid var(--border,rgba(160,160,160,.35));border-radius:12px;background:rgba(128,128,128,.075);color:inherit;cursor:pointer;white-space:normal}
+.first-run-example-card[aria-pressed="true"]{outline:2px solid var(--accent,#8c9dff);outline-offset:-3px;background:rgba(140,157,255,.11)}
+.first-run-example-card strong{font-size:1rem}
+.first-run-example-card span{font-size:.91rem;line-height:1.45}
+.first-run-example-card small{opacity:.77;line-height:1.55}
+.first-run-example-model-label{display:grid;gap:6px;max-width:100%;font-weight:600;margin:14px 0}
+.first-run-example-model{max-width:100%;min-width:0;width:100%;min-height:40px;border-radius:8px}
+.first-run-example-warning{margin:11px 0;padding:10px 12px;border-left:3px solid var(--accent,#8c9dff);border-radius:4px;background:rgba(128,128,128,.09);overflow-wrap:anywhere}
+.first-run-example-summary{display:grid;gap:10px}
+.first-run-example-summary>div{display:grid;grid-template-columns:minmax(100px,30%) minmax(0,1fr);gap:12px;overflow-wrap:anywhere}
+.first-run-example-summary dt{opacity:.72}
+.first-run-example-summary dd{margin:0;font-weight:500}
+.first-run-example-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+.first-run-example-actions button{min-height:40px;white-space:normal}
+.first-run-example-error{color:var(--text);border:1px solid rgba(244,120,120,.55);padding:10px;border-radius:8px;overflow-wrap:anywhere}
+.first-run-example-error[hidden]{display:none}
+@media(max-width:600px){.first-run-example-choice-group{grid-template-columns:minmax(0,1fr)}.first-run-example-actions{display:grid;grid-template-columns:1fr}.first-run-example-actions button{width:100%}.first-run-example-summary>div{grid-template-columns:1fr;gap:2px}}
