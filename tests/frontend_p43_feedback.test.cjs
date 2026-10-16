@@ -45,7 +45,7 @@ test('P4.3 prioritizes terminal errors over progress and success, while retries 
   assert.equal(published.at(-1).tone,'busy');
   ops.finish('render',render,{title:'Render complete'});
   assert.equal(published.at(-1).title,'Render complete');
-  assert.equal(ops.snapshot().results.length,3);
+  assert.equal(ops.snapshot().results.length,2); // Dismissed progress clears stale successes.
 });
 
 test('P4.3 keeps simultaneous errors independently dismissible, capped and ordered',()=>{
