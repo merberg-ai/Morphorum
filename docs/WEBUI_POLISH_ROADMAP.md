@@ -286,7 +286,7 @@ No implementation or physical verification is implied by this planning entry.
 
 ### P4.4 implementation sequence
 
-- [ ] **P4.4.1 / Resolver and validation:** Introduce a single backend-owned
+- [x] **P4.4.1 / Resolver and validation (implemented; physical tests pending):** Introduce a single backend-owned
   FFmpeg/FFprobe resolver for `animation_video`, `animation_hybrid_source`,
   `animation_hybrid_extract` and `project_soundtrack_motion`. Preserve
   compatibility with `MORPHORUM_FFMPEG` and existing PATH behavior. Define
@@ -295,11 +295,24 @@ No implementation or physical verification is implied by this planning entry.
   silently run a different binary when selected binaries are missing. Probe
   `-version` with bounded timeout and no shell; require the matching FFprobe
   beside the executable for video source features and report capability gaps.
-- [ ] **P4.4.2 / Settings:** Add a responsive FFmpeg Manager under Settings
+- [x] **P4.4.2 / Settings (implemented; physical tests pending):** Add a responsive FFmpeg Manager under Settings
   showing source mode, editable custom path, effective paths, version,
   architecture, detection/validation outcome, actionable errors and a
   user-triggered Test/Refresh operation. Persist settings using existing
   atomic settings mechanics; never rewrite system PATH or install globally.
+**P4.4 checkpoint · 2026-10-16:** Backend FFmpeg/FFprobe selection and
+Settings controls are committed on `dev-webui`. Auto-detect honors legacy
+`MORPHORUM_FFMPEG` before PATH; Custom/Managed mode never silently falls
+back to a different binary. The Settings → Storage → FFmpeg Manager panel
+supports source choice, custom path, read-only version tests and persisted
+selection. Export/probe/extraction/audio users share one resolver, and Video
+Export refreshes after settings reload/save. A missing `ffprobe` leaves FFmpeg
+export usable but video import unavailable. No package downloader is implemented.
+Managed mode points only to the reserved `tools/ffmpeg/current/bin` layout
+and is intentionally unavailable until a separately verified package has been
+installed by P4.4.3. Windows/Linux live acceptance and repository CI are
+not yet verified. Do not merge into `main`.
+
 - [ ] **P4.4.3 / Managed install:** Support vetted downloadable FFmpeg +
   FFprobe bundles for supported Windows and Linux architectures, with a
   versioned local destination under `ROOT/tools/ffmpeg/` (outside Git),
