@@ -72,8 +72,17 @@ For step-by-step screenshots-free guidance, see [Your first image and animation]
 | Motion Lab | Keyframes, 2D/3D camera movement, six-axis camera composer, live motion recording, curves and previews |
 | Motion Studio | Analyze project audio; edit beats, independent frequency channels and synchronized camera cues; stage, preview and apply movements |
 | Animation & Outputs | Frame rendering, progress monitoring, completed-frame previews, MP4/WebM export with FFmpeg |
+| FFmpeg Manager | Auto-detect host FFmpeg/FFprobe, choose a custom executable, or opt in to a verified local managed download, update and removal |
 | Import Motion Settings | Compatible Deforum Motion Studio camera schedules, optional soundtrack attachment |
 | Interface | Responsive browser layout, built-in console and telemetry, themes: **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite** |
+
+### Video encoding: FFmpeg Manager
+
+Morphorum needs **FFmpeg** for MP4/WebM export and **FFprobe** for source-video inspection. Open **Settings → Storage → FFmpeg Manager** and choose **Auto-detect**, **Custom executable**, or **Morphorum-managed local FFmpeg**.
+
+For a hassle-free setup, choose **Managed → Install managed FFmpeg**, then **Test FFmpeg / FFprobe** and **Save Settings**. The optional download is verified with its upstream SHA-256 and installed only inside your Morphorum folder under `tools/ffmpeg/current/bin`; it does not change the system PATH or install anything globally. Downloads are opt-in. Managed FFmpeg is third-party **GPL software**, separate from Morphorum's Unlicense.
+
+[FFmpeg Manager setup, upgrades, removal, compatibility and licensing](docs/FFMPEG_MANAGER.md) · [CPU-only encoding smoke test](docs/FFMPEG_MANAGER.md#verify-a-managed-installation)
 
 A new installation may include a **Default** example project (120 frames at 24 FPS), created only when the project library is empty. For a first render, reduce the frame count and choose an appropriate model and image size.
 
@@ -104,6 +113,7 @@ The usual launcher provides both a **web interface and generation API**, typical
 - **[Install & maintain](docs/INSTALLATION.md)**: Windows/Linux setup, custom locations, updates, repairs, data backups
 - **[Getting started](docs/GETTING_STARTED.md)**: first-run setup, first image, animation and video
 - **[Motion Studio](docs/MOTION_STUDIO.md)**: audio-driven motion, independent sound channels, recording, presets and synchronized preview
+- **[FFmpeg Manager](docs/FFMPEG_MANAGER.md)**: select, verify, install, update or remove local video/audio utilities
 - **[Backend-only mode](docs/BACKEND_ONLY.md)**: LAN setup, per-client credentials, connection checks, security
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)**: installer, model, CUDA, networking and export problems
 - **[Documentation index](docs/README.md)**: all maintained user and contributor guides
