@@ -52,3 +52,21 @@
   .first-run-folder-input {grid-column:1/-1;}
   .first-run-folder-actions button {width:100%;}
 }
+
+
+/* MS6.3 managed download step, independent of the global Models page. */
+.first-run-zimage-meta {display:grid;gap:12px;min-width:0;padding:14px;border:1px solid var(--border);border-radius:12px;}
+.first-run-zimage-meta h3 {margin:0;}
+.first-run-zimage-path {overflow-wrap:anywhere;font-size:.88rem;opacity:.85;margin:0;}
+.first-run-zimage-state {margin:0;font-weight:600;}
+.first-run-zimage-progress {display:grid;gap:6px;}
+.first-run-zimage-progress-track {height:13px;border-radius:999px;background:rgba(128,128,128,.2);overflow:hidden;border:1px solid var(--border);}
+.first-run-zimage-progress-fill {display:block;width:0;height:100%;border-radius:999px;background:var(--accent,#8c9dff);transition:width .3s ease;}
+.first-run-zimage-actions {display:flex;gap:9px;align-items:center;flex-wrap:wrap;}
+.first-run-zimage-actions button {min-height:40px;max-width:100%;white-space:normal;}
+.first-run-zimage-error {color:var(--text);border:1px solid rgba(244,120,120,.55);padding:11px;border-radius:8px;overflow-wrap:anywhere;margin:0;}
+.first-run-zimage-error[hidden] {display:none;}
+@media (max-width:550px) {
+ .first-run-zimage-actions {display:grid;grid-template-columns:1fr;}
+ .first-run-zimage-actions button {width:100%;}
+}
