@@ -85,22 +85,41 @@
     button.disabled = busy;
   }
 
+  const recentToasts = new Map();
   function toast(title, message = '', type = 'info', timeout = 4200) {
     const stack = qs('#toast-stack');
     if (!stack) return;
-
+    const level = {info: 0, success: 1, warning: 2, error: 3};
+    const severity = level[type] ?? 0;
+    const signature = JSON.stringify([type, String(title), String(message)]);
+    const now = Date.now();
+    // Background reconnection failures must not generate a wall of identical toasts.
+    if (now - (recentToasts.get(signature) || 0) < 30000) return;
+    recentToasts.set(signature, now);
+    if (recentToasts.size > 80) recentToasts.delete(recentToasts.keys().next().value);
+    const displayed = [...stack.querySelectorAll('.toast')];
+    if (displayed.length >= 4) {
+      const evict = displayed.reduce((a, b) =>
+        (level[b.dataset.type] ?? 0) < (level[a.dataset.type] ?? 0) ? b : a);
+      if ((level[evict.dataset.type] ?? 0) > severity) return;
+      evict.remove();
+    }
     const item = document.createElement('div');
-    item.className = `toast ${type}`;
+    item.className = 'toast ' + type;
+    item.dataset.type = type;
+    item.setAttribute('role', type === 'error' ? 'alert' : 'status');
     item.innerHTML = `
       <div class="toast-bar"></div>
       <div><div class="toast-title"></div><div class="toast-message"></div></div>
-      <button class="toast-close" aria-label="Dismiss">×</button>`;
+      <button class="toast-close" aria-label="Dismiss notification">×</button>`;
     qs('.toast-title', item).textContent = title;
     qs('.toast-message', item).textContent = message;
     const close = () => item.remove();
     qs('.toast-close', item).addEventListener('click', close);
     stack.appendChild(item);
-    if (timeout > 0) window.setTimeout(close, timeout);
+    const visibleMs = type === 'error' ? Math.max(10000, timeout) :
+      type === 'warning' ? Math.max(7000, timeout) : timeout;
+    if (visibleMs > 0) window.setTimeout(close, visibleMs);
     return item;
   }
 
