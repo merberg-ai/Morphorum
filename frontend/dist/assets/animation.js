@@ -3454,6 +3454,14 @@
     window.clearTimeout(state.motionPollTimer);
     state.motionPollTimer = null;
     state.motionJobId = null;
+    if (motionPreviewOperation) {
+      window.MorphorumOperations?.finish('motion-preview', motionPreviewOperation.token, {
+        tone: 'warning', title: 'Camera preview no longer tracked',
+        message: 'The active preview was reset. Any accepted CPU job may continue on the host.',
+        view: 'animation',
+      });
+      motionPreviewOperation = null;
+    }
     const panel = qs('#animation-motion-progress');
     if (panel) panel.hidden = true;
     const result = qs('#animation-motion-result');
@@ -9308,7 +9316,9 @@
     motionLabBusy = true;
     motionLabBusyAction = apply ? 'apply' : curvesOnly ? 'curves' : 'preview';
     renderMotionLabDraft();
-    const operation = window.MorphorumOperations?.begin('motion-lab-workflow',
+    // Dragged curves can recompile many times per second. Preserve their
+    // inline diagnostics without flooding the shared operation ribbon.
+    const operation = curvesOnly ? null : window.MorphorumOperations?.begin('motion-lab-workflow',
       apply ? 'Applying Motion Lab layers' : 'Preparing Motion Lab preview',
       apply ? 'Reviewing and applying camera layers to your project…' :
         'Compiling draft camera layers without changing the saved animation…',
@@ -9317,6 +9327,7 @@
     const completeOperation = (options) => {
       if (operationFinished) return;
       operationFinished = true;
+      if (curvesOnly) return;
       window.MorphorumOperations?.finish('motion-lab-workflow', operation, {
         view: 'animation', ...options,
       });

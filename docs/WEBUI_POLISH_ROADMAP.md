@@ -202,3 +202,12 @@ Test reduced-motion preferences and screen reader output.
   project settings beyond the user's explicitly authorized actions.
 - Windows GPU/CPU and Android UI testing of P4.2 still required. `main`
   remains unchanged.
+
+### P4.2 follow-up: nonintrusive feedback
+
+Automatic curve editing may trigger dozens of transient server-side preview
+recompiles. These keep their existing inline Motion Curves diagnostics but do
+not publish a separate persistent banner for every draft change. Clearing
+or switching previews also closes its operation notice as "no longer
+tracked," without claiming that an already queued CPU backend job was
+cancelled. Both behaviors need physical confirmation with P4.2.

@@ -111,3 +111,17 @@ test('Preflight blocks invalid settings and never calls the queue endpoint',asyn
   assert.equal(events.length,1);
   assert.equal(events[0][2].tone,'error');
 });
+
+test('Auto-updated motion curves avoid repeated banners and project switches retire stale previews',()=>{
+  const start=animation.indexOf('  async function motionLabPreviewOrApply(');
+  const end=animation.indexOf('  // Motion Lab is first-class;',start);
+  const section=animation.slice(start,end);
+  assert.match(section,/const operation = curvesOnly \? null : window\.MorphorumOperations\?\.begin\('motion-lab-workflow'/);
+  assert.match(section,/if \(curvesOnly\) return;/);
+  const clearStart=animation.indexOf('  function clearMotionPreviewResult() {');
+  const clearEnd=animation.indexOf('  async function uploadSourceImage(',clearStart);
+  const clear=animation.slice(clearStart,clearEnd);
+  assert.match(clear,/title: 'Camera preview no longer tracked'/);
+  assert.match(clear,/motionPreviewOperation = null/);
+  assert.match(clear,/state\.motionJobId = null/);
+});
