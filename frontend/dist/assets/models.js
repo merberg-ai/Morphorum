@@ -13,6 +13,7 @@
     managedModels: [],
     managedPollTimer: null,
     downloadOperations: new Map(),
+    downloadPendingChecks: new Map(),
     scanning: false,
   };
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -213,7 +214,10 @@
   function scheduleManagedPoll() {
     window.clearTimeout(state.managedPollTimer);
     state.managedPollTimer = null;
-    const active = state.managedModels.some(model => ['checking', 'downloading'].includes(model.status));
+    // The download request can be accepted before status changes from idle
+    // to checking. Continue polling pending requests until they resolve.
+    const active = state.downloadOperations.size > 0 ||
+      state.managedModels.some(model => ['checking', 'downloading'].includes(model.status));
     if (active) {
       state.managedPollTimer = window.setTimeout(() => loadManagedModels(), 900);
     }
@@ -234,6 +238,7 @@
       }
       if (!token) continue;
       const percent = Math.max(0, Math.min(100, Number(model.progress_percent) || 0));
+      if (running) state.downloadPendingChecks.delete(model.id);
       if (running) {
         const bytes = formatBytes(model.downloaded_bytes) + ' / ' +
           formatBytes(model.expected_bytes || model.advertised_size_bytes);
@@ -248,6 +253,7 @@
           message: (model.name || model.id) + ' is ready. Select Use Model in Models.',
           view: 'models' });
         state.downloadOperations.delete(model.id);
+        state.downloadPendingChecks.delete(model.id);
       } else if (['failed','interrupted','partial'].includes(model.status)) {
         ops.finish(key, token, {
           tone: model.status === 'failed' ? 'error' : 'warning',
@@ -256,6 +262,21 @@
             '. Review the package in Models and use Resume / Repair if needed.',
           view: 'models' });
         state.downloadOperations.delete(model.id);
+        state.downloadPendingChecks.delete(model.id);
+      } else if (state.downloadPendingChecks.has(model.id)) {
+        // Bounded wait for catalog to acknowledge an accepted POST. An idle
+        // model forever is not evidence of a running background download.
+        const checks = (state.downloadPendingChecks.get(model.id) || 0) + 1;
+        if (checks >= 15) {
+          ops.finish(key, token, {
+            tone: 'error', title: 'Model download did not start',
+            message: 'The host accepted the request but did not report download activity. Check Models and retry or review the Console.',
+            view: 'models' });
+          state.downloadOperations.delete(model.id);
+          state.downloadPendingChecks.delete(model.id);
+        } else {
+          state.downloadPendingChecks.set(model.id, checks);
+        }
       }
     }
   }
@@ -296,6 +317,7 @@
           view: 'models' });
       }
       state.downloadOperations.clear();
+      state.downloadPendingChecks.clear();
       toast('Managed model catalog unavailable', error.message, 'error', 6500);
     }
   }
@@ -312,6 +334,7 @@
         method: 'POST',
         body: '{}',
       });
+      state.downloadPendingChecks.set(modelId, 0);
       window.MorphorumOperations?.update('download:' + modelId, token, {
         title: 'Preparing ' + (model?.name || modelId),
         message: 'Downloading in the background. Model Manager shows live bytes and percentage.',
@@ -329,6 +352,7 @@
         message: error.message + '. Check storage/network access and retry in Models.',
         view: 'models' });
       state.downloadOperations.delete(modelId);
+      state.downloadPendingChecks.delete(modelId);
       toast('Could not start model download', error.message, 'error', 8000);
     }
   }

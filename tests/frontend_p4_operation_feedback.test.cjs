@@ -72,3 +72,11 @@ test('Settings and Models use shared lifecycles and check index refresh before s
   assert.match(models,/state\.downloadOperations\.delete\(model\.id\)/);
   assert.match(models,/progress: model\.status === 'downloading' \? percent : null/);
 });
+
+test('Managed download polling survives accepted-POST idle lag but terminates a stalled request',()=>{
+  assert.match(models,/state\.downloadOperations\.size > 0 \|\|/);
+  assert.match(models,/state\.downloadPendingChecks\.set\(modelId, 0\)/);
+  assert.match(models,/if \(checks >= 15\)/);
+  assert.match(models,/title: 'Model download did not start'/);
+  assert.match(models,/state\.downloadPendingChecks\.clear\(\)/);
+});
