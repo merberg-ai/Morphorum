@@ -219,6 +219,11 @@ try {
     }
 
     Write-MorphorumSection 'USER SETTINGS + MEDIA TOOLS'
+    if (-not $Repair -and -not $Update) {
+        # Capture genuinely fresh provenance BEFORE copying config or seeding Default.
+        & $VenvPython -m morphorum setup-state prepare
+        if ($LASTEXITCODE -ne 0) { throw 'Could not prepare first-run setup state.' }
+    }
     $userConfig = Join-Path $Root 'data\config.yaml'
     if (-not (Test-Path $userConfig)) {
         Copy-Item (Join-Path $Root 'config\default.yaml') $userConfig
@@ -256,6 +261,12 @@ try {
     if ($SavePort) {
         Set-Content -LiteralPath $PortFile -Value ([string]$ServerPort) -Encoding ASCII
         Okay 'Server port preference saved for future launches.'
+    }
+
+    if (-not $Repair -and -not $Update) {
+        # Mark ready after checks AND saved port successfully completed.
+        & $VenvPython -m morphorum setup-state ready
+        if ($LASTEXITCODE -ne 0) { throw 'Could not finalize first-run setup state.' }
     }
 
     Write-MorphorumSection 'MORPHORUM IS READY'

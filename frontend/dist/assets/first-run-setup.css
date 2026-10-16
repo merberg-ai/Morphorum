@@ -1,0 +1,94 @@
+/* MS6.2: installer onboarding overlay, independent from New Project Wizard. */
+.first-run-overlay[hidden] {display:none !important;}
+.first-run-overlay {
+  position:fixed;inset:0;z-index:1200;
+  display:grid;place-items:center;
+  padding:clamp(10px,3vw,30px);
+  background:rgba(4,7,12,.84);
+  backdrop-filter:blur(8px);
+  overflow-y:auto;
+}
+.first-run-dialog {
+  display:flex;flex-direction:column;gap:14px;
+  width:min(100%,680px);max-height:calc(100dvh - 26px);
+  padding:clamp(14px,3vw,28px);overflow-y:auto;
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:18px;
+  box-shadow:0 16px 70px rgba(0,0,0,.42);
+}
+.first-run-header {display:flex;align-items:flex-start;justify-content:space-between;gap:16px;min-width:0;}
+.first-run-header h2 {font-size:clamp(1.35rem,3vw,1.95rem);margin:4px 0 6px;line-height:1.2;}
+.first-run-header p {margin:0;}
+.first-run-content {display:grid;gap:12px;line-height:1.55;min-height:125px;overflow-wrap:anywhere;}
+.first-run-content p {margin:0;}
+.first-run-content h3 {font-size:1.05rem;margin:6px 0 0;}
+.first-run-buttons {display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;border-top:1px solid var(--border);padding-top:14px;}
+.first-run-buttons button,.first-run-header button {min-height:40px;white-space:normal;}
+.first-run-error {padding:9px;border:1px solid rgba(244,120,120,.45);border-radius:9px;}
+.first-run-error[hidden] {display:none;}
+@media (max-width:550px) {
+  .first-run-overlay {padding:8px;align-items:start;}
+  .first-run-dialog {width:100%;min-width:0;max-height:calc(100dvh - 16px);margin:auto 0;}
+  .first-run-buttons {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .first-run-buttons button {min-width:0;width:100%;}
+  .first-run-buttons #first-run-next {grid-column:1/-1;}
+}
+
+
+/* MS6.2 host-folder controls: compact on phone and full-width on desktop. */
+.first-run-dialog {width:min(100%,790px);}
+.first-run-folder-group {display:grid;gap:9px;padding:13px;border:1px solid var(--border);border-radius:12px;min-width:0;}
+.first-run-folder-group h3 {margin:0;}
+.first-run-folder-rows {display:grid;gap:8px;min-width:0;}
+.first-run-folder-row {display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px;align-items:center;min-width:0;}
+.first-run-folder-input {min-width:0;width:100%;max-width:100%;font:inherit;color:var(--text);background:rgba(10,15,25,.6);border:1px solid var(--border);border-radius:8px;padding:10px;}
+.first-run-folder-row button {min-height:38px;}
+.first-run-folder-report {grid-column:1/-1;font-size:.9rem;line-height:1.5;overflow-wrap:anywhere;white-space:normal;color:var(--muted);}
+.first-run-folder-actions {display:flex;justify-content:flex-start;}
+.first-run-note {line-height:1.55;overflow-wrap:anywhere;}
+@media (max-width:550px) {
+  .first-run-folder-row {grid-template-columns:minmax(0,1fr) auto auto;}
+  .first-run-folder-input {grid-column:1/-1;}
+  .first-run-folder-actions button {width:100%;}
+}
+
+
+/* MS6.3 managed download step, independent of the global Models page. */
+.first-run-zimage-meta {display:grid;gap:12px;min-width:0;padding:14px;border:1px solid var(--border);border-radius:12px;}
+.first-run-zimage-meta h3 {margin:0;}
+.first-run-zimage-path {overflow-wrap:anywhere;font-size:.88rem;opacity:.85;margin:0;}
+.first-run-zimage-state {margin:0;font-weight:600;}
+.first-run-zimage-progress {display:grid;gap:6px;}
+.first-run-zimage-progress-track {height:13px;border-radius:999px;background:rgba(128,128,128,.2);overflow:hidden;border:1px solid var(--border);}
+.first-run-zimage-progress-fill {display:block;width:0;height:100%;border-radius:999px;background:var(--accent,#8c9dff);transition:width .3s ease;}
+.first-run-zimage-actions {display:flex;gap:9px;align-items:center;flex-wrap:wrap;}
+.first-run-zimage-actions button {min-height:40px;max-width:100%;white-space:normal;}
+.first-run-zimage-error {color:var(--text);border:1px solid rgba(244,120,120,.55);padding:11px;border-radius:8px;overflow-wrap:anywhere;margin:0;}
+.first-run-zimage-error[hidden] {display:none;}
+@media (max-width:550px) {
+ .first-run-zimage-actions {display:grid;grid-template-columns:1fr;}
+ .first-run-zimage-actions button {width:100%;}
+}
+
+
+/* MS6.4: responsive starter project gallery, editor handoff, review. */
+.first-run-example-cards{min-width:0}
+.first-run-example-choice-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.first-run-example-card{display:flex;flex-direction:column;gap:10px;min-width:0;padding:17px;text-align:left;align-items:flex-start;border:1px solid var(--border,rgba(160,160,160,.35));border-radius:12px;background:rgba(128,128,128,.075);color:inherit;cursor:pointer;white-space:normal}
+.first-run-example-card[aria-pressed="true"]{outline:2px solid var(--accent,#8c9dff);outline-offset:-3px;background:rgba(140,157,255,.11)}
+.first-run-example-card strong{font-size:1rem}
+.first-run-example-card span{font-size:.91rem;line-height:1.45}
+.first-run-example-card small{opacity:.77;line-height:1.55}
+.first-run-example-model-label{display:grid;gap:6px;max-width:100%;font-weight:600;margin:14px 0}
+.first-run-example-model{max-width:100%;min-width:0;width:100%;min-height:40px;border-radius:8px}
+.first-run-example-warning{margin:11px 0;padding:10px 12px;border-left:3px solid var(--accent,#8c9dff);border-radius:4px;background:rgba(128,128,128,.09);overflow-wrap:anywhere}
+.first-run-example-summary{display:grid;gap:10px}
+.first-run-example-summary>div{display:grid;grid-template-columns:minmax(100px,30%) minmax(0,1fr);gap:12px;overflow-wrap:anywhere}
+.first-run-example-summary dt{opacity:.72}
+.first-run-example-summary dd{margin:0;font-weight:500}
+.first-run-example-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+.first-run-example-actions button{min-height:40px;white-space:normal}
+.first-run-example-error{color:var(--text);border:1px solid rgba(244,120,120,.55);padding:10px;border-radius:8px;overflow-wrap:anywhere}
+.first-run-example-error[hidden]{display:none}
+@media(max-width:600px){.first-run-example-choice-group{grid-template-columns:minmax(0,1fr)}.first-run-example-actions{display:grid;grid-template-columns:1fr}.first-run-example-actions button{width:100%}.first-run-example-summary>div{grid-template-columns:1fr;gap:2px}}

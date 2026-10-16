@@ -10,9 +10,9 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 | Models | SDXL, FLUX and Z-Image, including managed Z-Image-Turbo; external checkpoint folders |
 | Image generation | Text-to-image, supported image-to-image, seed/batch controls and LoRAs |
 | Animations | Saved projects, prompts/keyframes, 2D and depth-aware 3D motion, camera presets, curve editing, preview |
-| Motion Lab | Six-axis composer, keyboard/touch motion recording, supported gamepad controls |
-| Onboarding | Seven-step New Project Wizard and no-model setup assistance |
-| Audio / video | Optional soundtrack attachment, FFmpeg MP4/WebM exports, audio with supported renders |
+| Motion Lab | Six-axis composer, keyboard/touch motion recording, supported gamepad controls; curve preview, ranged recording/refinement and saved-motion comparison |
+| Onboarding | Seven-step First-Run Setup Wizard with diagnostics, model/LoRA folders, optional Z-Image and 512 × 512 sample projects; separate seven-step New Project Wizard |
+| Audio / video | Motion Studio manual beat cues, soundtrack reuse, independent frequency channels, spectrum selection and continuous camera presets; optional audio attachment, FFmpeg MP4/WebM exports |
 | Import | Compatible Deforum Motion Studio camera schedules into existing 3D projects |
 | Remote operation | Authenticated API-only server, versioned client capabilities, project assets, telemetry, previews and job recovery |
 
@@ -28,6 +28,6 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 
 ## Next steps
 
-Read [Getting started](GETTING_STARTED.md) for a small first render, [Installation](INSTALLATION.md) for setup requirements, and [Troubleshooting](TROUBLESHOOTING.md) if anything fails.
+Read [Getting started](GETTING_STARTED.md) for a small first render, [Motion Studio](MOTION_STUDIO.md) for synchronized audio motion, [Installation](INSTALLATION.md) for setup requirements, and [Troubleshooting](TROUBLESHOOTING.md) if anything fails.
 
 Report reproducible issues at [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues). Please share your OS, GPU, Morphorum version, and error message, **never authentication tokens or private files**.

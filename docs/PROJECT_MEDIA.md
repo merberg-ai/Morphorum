@@ -72,44 +72,4 @@ no media, source only, attached soundtrack, saved Motion Lab WAV, all three,
 several WAVs, and missing/corrupt assets. Verify that switching projects
 does not show the previous project's audio or image.
 
-Development remains on `dev-webui`. Accepted checkpoints may be promoted into `main` through a reviewed pull request.
-
-## W2 checkpoint — 2026-10-15
-
-Project media restoration is implemented on `dev-webui` as one integration
-batch. The project editor now has persistent media playback and offset controls,
-verified inventory diagnostics and restored Motion Lab WAV analysis, including
-saved audio-layer editing parameters. The server uses per-asset inventory
-recovery and a checksum-verified WAV reanalysis endpoint.
-
-Source-level validation: 5 new Node project-media tests + 10 existing
-`frontend_dev_ui` tests pass in an in-memory test harness; JavaScript syntax
-parses, and five additional integration checks pass. Four new Python tests
-were added for valid and damaged assets, but the **full Python test suite and
-GitHub Actions results have not been verified** from this remote session.
-At initial checkpoint, physical Windows + Android/browser acceptance was pending.
-
-The W2 implementation checkpoint is the rollback point for this batch.
-
-## W2 final source checkpoint (post-compatibility review)
-
-The original `GET /api/animation/projects/<id>/assets` contract is retained
-for existing API/Studio consumers. The browser instead uses the separate
-`/media-inventory` route to show valid files together with recovery warnings.
-The test suite was aligned to the split API. Soundtrack duration updates on
-browser `loadedmetadata` and playback errors are displayed non-destructively.
-
-Final remote source validation: **15/15** targeted frontend tests passed in a
-JavaScript source-test harness, with **6/6** additional contract assertions.
-Relevant JavaScript parsed successfully. This is not a full GitHub Actions,
-Python backend, Windows or Android acceptance run. Those remain for physical
-verification as recorded at the time of the source checkpoint.
-
-## W2 release acceptance (2026-10-15)
-
-The project owner confirmed the restored project image and audio behavior
-**works as expected** on the test installation. W2 is accepted for promotion
-to `main`, together with the previously accepted W1 responsive layouts.
-This is physical user acceptance, not a claim that every media-failure
-scenario was exercised or that the full backend suite has passed. The
-release checkpoint is the commit recording this acceptance on `dev-webui`.
+For full test-suite instructions, see [Testing and validation](TESTING.md). For end-user media recovery and backup guidance, see [Troubleshooting](TROUBLESHOOTING.md) and [Installation](INSTALLATION.md).

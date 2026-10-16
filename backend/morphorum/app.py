@@ -70,6 +70,11 @@ from .animation_render import (
     animation_render_manager,
 )
 from .motion_lab import MotionLabError, PRESETS as MOTION_LAB_PRESETS, compile_motion_lab
+from .motion_studio_presets import (
+    CustomPresetError, CustomPresetConflict, CustomPresetMissing,
+    list_custom_presets, create_custom_preset, update_custom_preset,
+    delete_custom_preset,
+)
 from .audio_motion import AudioMotionError
 from .audio_motion_upload import MAX_AUDIO_BYTES, analyze_managed_wav
 from .animation_hybrid_extract import hybrid_extraction_manager
@@ -117,6 +122,12 @@ from .system_info import (
     live_telemetry,
     windows_gpu_process_memory,
 )
+
+from .setup_state import SetupStateError, SetupStateConflict, setup_status, update_setup
+from .setup_folders import (
+    SetupFolderError, SetupFolderConflict, inspect_folder, save_setup_folders,
+)
+from .setup_examples import example_catalog, instantiate_example
 
 BACKEND_ONLY = os.getenv("MORPHORUM_BACKEND_ONLY", "") == "1"
 
@@ -287,6 +298,128 @@ def system_gpu_memory() -> dict[str, Any]:
 @app.get("/api/install")
 def installed() -> dict:
     return install_manifest()
+
+
+@app.get("/api/setup/status")
+def api_setup_status() -> dict[str, Any]:
+    return setup_status(
+        forced=os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1",
+        backend_only=BACKEND_ONLY,
+    )
+
+
+@app.post("/api/setup/progress")
+def api_setup_progress(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=409, detail="First-run setup requires WebUI mode.")
+    # Explicit user-interaction header prevents cross-origin HTML form posts;
+    # browsers cannot send it cross-site without a CORS preflight.
+    if request.headers.get("x-morphorum-setup") != "1":
+        raise HTTPException(status_code=403, detail="Setup action header required.")
+    origin = request.headers.get("origin")
+    expected = str(request.base_url).rstrip("/")
+    if origin and origin.rstrip("/") != expected:
+        raise HTTPException(status_code=403, detail="Setup requires a same-origin WebUI request.")
+    if request.headers.get("sec-fetch-site") == "cross-site":
+        raise HTTPException(status_code=403, detail="Cross-site setup requests are forbidden.")
+    forced = os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1"
+    manual = payload.get("manual") is True
+    try:
+        updated = update_setup(action=payload.get("action"),
+                               step=payload.get("step"),
+                               revision=payload.get("revision"),
+                               forced=forced or manual,
+                               template_id=payload.get('template_id'),
+                               model_id=payload.get('model_id'),
+                               without_example=payload.get('without_example') is True)
+    except SetupStateConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SetupStateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated["status"] in {"skipped", "completed"} and forced:
+        # Explicit Skip or Finish dismisses the launch-only wizard override.
+        os.environ.pop("MORPHORUM_SETUP_WIZARD", None)
+    return setup_status(forced=os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1",
+                        backend_only=False)
+
+
+def _require_webui_setup_action(request: Request) -> None:
+    """Explicit same-origin browser-only configuration step."""
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=409, detail="Setup folder configuration requires WebUI mode.")
+    if request.headers.get("x-morphorum-setup") != "1":
+        raise HTTPException(status_code=403, detail="Setup action header required.")
+    origin = request.headers.get("origin")
+    if origin and origin.rstrip("/") != str(request.base_url).rstrip("/"):
+        raise HTTPException(status_code=403, detail="Setup requires a same-origin WebUI request.")
+    if request.headers.get("sec-fetch-site") == "cross-site":
+        raise HTTPException(status_code=403, detail="Cross-site setup requests are forbidden.")
+
+
+@app.get("/api/setup/examples")
+def api_setup_examples() -> dict[str, Any]:
+    """Read-only bundled example metadata. Never creates a project."""
+    try:
+        catalog = example_catalog()
+        return {
+            "version": catalog["version"],
+            "examples": catalog["examples"],
+            "animation": catalog["animation"],
+        }
+    except SetupStateError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/setup/example", status_code=201)
+def api_setup_example(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    """Explicit once-only project creation with durable retry reservation."""
+    _require_webui_setup_action(request)
+    try:
+        project, reservation = instantiate_example(
+            template_id=payload.get("template_id"),
+            model_id=payload.get("model_id") or "",
+            revision=payload.get("revision"),
+            forced=(os.getenv("MORPHORUM_SETUP_WIZARD", "") == "1"
+                    or payload.get("manual") is True),
+        )
+        return {
+            "status": "created",
+            "project": project,
+            "revision": reservation["revision"],
+            "render_ready": bool(project.get("model", {}).get("model_id")),
+        }
+    except SetupStateConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SetupStateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/setup/folders/check")
+def api_setup_folder_check(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    _require_webui_setup_action(request)
+    try:
+        return inspect_folder(
+            family=payload.get("family"), kind=payload.get("kind"),
+            path=payload.get("path"),
+        )
+    except SetupFolderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/setup/folders/save")
+def api_setup_folder_save(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    _require_webui_setup_action(request)
+    try:
+        return save_setup_folders(
+            kind=payload.get("kind"), paths=payload.get("paths"),
+            expected=payload.get("expected"),
+        )
+    except SetupFolderConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SetupFolderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/settings")
@@ -540,6 +673,119 @@ def api_trash_animation_project(project_id: str) -> dict[str, Any]:
 @app.get("/api/animation/motion-lab/presets")
 def api_motion_lab_presets() -> dict[str, Any]:
     return {"presets": list(MOTION_LAB_PRESETS)}
+
+
+def _motion_studio_preset_error(exc: CustomPresetError) -> HTTPException:
+    if isinstance(exc, CustomPresetConflict):
+        code = 409
+    elif isinstance(exc, CustomPresetMissing):
+        code = 404
+    else:
+        code = 400
+    return HTTPException(status_code=code, detail=str(exc))
+
+
+@app.get("/api/animation/motion-studio/custom-presets")
+def api_motion_studio_custom_presets() -> dict[str, Any]:
+    try:
+        return {"presets": list_custom_presets()}
+    except CustomPresetError as exc:
+        raise _motion_studio_preset_error(exc) from exc
+
+
+@app.post("/api/animation/motion-studio/custom-presets", status_code=201)
+def api_create_motion_studio_custom_preset(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return {"preset": create_custom_preset(payload)}
+    except CustomPresetError as exc:
+        raise _motion_studio_preset_error(exc) from exc
+
+
+@app.put("/api/animation/motion-studio/custom-presets/{preset_id}")
+def api_update_motion_studio_custom_preset(
+    preset_id: str, payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return {"preset": update_custom_preset(preset_id, payload)}
+    except CustomPresetError as exc:
+        raise _motion_studio_preset_error(exc) from exc
+
+
+@app.delete("/api/animation/motion-studio/custom-presets/{preset_id}")
+def api_delete_motion_studio_custom_preset(preset_id: str) -> dict[str, str]:
+    try:
+        delete_custom_preset(preset_id)
+        return {"status": "removed"}
+    except CustomPresetError as exc:
+        raise _motion_studio_preset_error(exc) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio-cues/{source_sha256}")
+def api_get_audio_cues(project_id: str, source_sha256: str) -> dict[str, Any]:
+    from .audio_motion_cues import load_motion_cues
+    try:
+        load_animation_project(project_id)
+        return {"cues": load_motion_cues(project_id, source_sha256)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}/motion-lab/audio-cues")
+def api_save_audio_cues(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .audio_motion_cues import save_motion_cues
+    try:
+        load_animation_project(project_id)
+        return {"status": "saved", "cues": save_motion_cues(project_id, payload)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio-markers/{source_sha256}")
+def api_get_audio_markers(project_id: str, source_sha256: str) -> dict[str, Any]:
+    from .audio_marker_overrides import read_marker_overrides
+    try:
+        load_animation_project(project_id)
+        return {"markers": read_marker_overrides(project_id, source_sha256)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}/motion-lab/audio-markers")
+def api_save_audio_markers(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .audio_marker_overrides import write_marker_overrides
+    try:
+        load_animation_project(project_id)
+        return {"status": "saved", "markers": write_marker_overrides(project_id, payload)}
+    except (AnimationProjectError, AudioMotionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-lab/use-soundtrack")
+def api_use_project_soundtrack_for_motion(project_id: str) -> dict[str, Any]:
+    """Analyze an attached soundtrack as a managed Motion Lab WAV.
+
+    Converts compressed audio with the host FFmpeg when needed. Does not
+    change the soundtrack, source project, FPS, frame count or camera tracks.
+    """
+    from .project_soundtrack_motion import analyze_project_soundtrack
+    try:
+        project = load_animation_project(project_id)
+        animation = project["animation"]
+        result = analyze_project_soundtrack(
+            project_id, fps=float(animation["fps"]),
+            frames=int(animation["max_frames"]),
+        )
+        return {
+            "status": "analyzed", **result,
+            "asset": motion_wav_descriptor(
+                project_id, result["analysis"]["source_sha256"]),
+        }
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (AudioMotionError, OSError, ValueError, OverflowError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/animation/projects/{project_id}/motion-lab/audio-analyze")
@@ -934,6 +1180,44 @@ def api_download_attached_soundtrack(project_id: str):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/projects/{project_id}/motion-lab/audio/{sha256}/spectrum")
+def api_motion_lab_frequency_spectrum(project_id: str, sha256: str) -> dict[str, Any]:
+    """Read a checksum-verified saved WAV for bounded log-scale spectrum display."""
+    from .audio_channel_bands import analyze_frequency_spectrum
+    try:
+        load_animation_project(project_id)
+        data = motion_wav_path(project_id, sha256).read_bytes()
+        return {"source_sha256": sha256, "analysis": analyze_frequency_spectrum(data)}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (AudioMotionError, OSError, ValueError, TypeError, OverflowError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/motion-lab/audio/{sha256}/bands")
+def api_motion_lab_frequency_channels(project_id: str, sha256: str,
+                                      payload: dict[str, Any]) -> dict[str, Any]:
+    """Analyze custom channel ranges without modifying project camera tracks."""
+    from .audio_channel_bands import analyze_frequency_bands
+    try:
+        project = load_animation_project(project_id)
+        data = motion_wav_path(project_id, sha256).read_bytes()
+        animation = project["animation"]
+        response = analyze_frequency_bands(
+            data, fps=float(animation["fps"]), frames=int(animation["max_frames"]),
+            ranges=payload.get("ranges"),
+        )
+        return {"source_sha256": sha256, "analysis": response}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProjectAssetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (AudioMotionError, OSError, ValueError, TypeError, OverflowError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/api/animation/projects/{project_id}/motion-lab/audio/{sha256}/analysis")
 def api_restore_motion_lab_audio_analysis(project_id: str, sha256: str) -> dict[str, Any]:
     """Reanalyze a verified project-owned WAV for the currently saved FPS/frames.
@@ -1288,6 +1572,19 @@ def api_resume_animation_render(project_id: str, render_id: str) -> dict[str, An
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AnimationRenderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/renders/{project_id}/{render_id}/review-metadata")
+def api_animation_render_review_metadata(
+    project_id: str, render_id: str,
+) -> dict[str, Any]:
+    try:
+        load_animation_project(project_id)
+        return animation_render_manager.review_metadata(project_id, render_id)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AnimationRenderError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/animation/renders/{project_id}/{render_id}/frames/{frame}")

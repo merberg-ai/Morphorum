@@ -8,12 +8,12 @@ const js=fs.readFileSync(path.join(root,'assets/animation.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'assets/animation.css'),'utf8');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 
-test('DMI2 replaces Audio Motion navigation while retaining its hidden controls',()=>{
+test('Motion Settings import and Motion Studio have distinct visible workspaces',()=>{
   assert.match(html,/data-motion-nav="motion-import"/);
-  assert.doesNotMatch(html,/data-motion-nav="audio"/);
-  assert.match(js,/panels\.audio = hiddenAudioPanel/);
+  assert.match(js,/const VISIBLE_ANIMATION_TABS = \[[^\n]*'motion-import', 'audio'/);
+  assert.match(js,/panels\.audio\.prepend\(audioIntro\)/);
   assert.match(js,/setupDeforumMotionImport\(panels\['motion-import'\]\)/);
-  assert.match(js,/if \(name === 'audio'\) continue/);
+  assert.doesNotMatch(js,/if \(name === 'audio'\) continue/);
 });
 test('DMI2 preview uses read-only project-scoped endpoint',()=>{
   assert.match(js,/\/motion-import\/preview/);

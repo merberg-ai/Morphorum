@@ -194,7 +194,7 @@
 
   // ML2.3 punch-in edits a copy, preserving all frames outside the interval
   // and all axes not armed in the new take.
-  function splicePunchIn(target, take) {
+  function splicePunchIn(target, take, { featherFrames = 0 } = {}) {
     if (!target || target.type !== 'recording' || !take) throw new Error('Select a recorded target take.');
     const fps = Number(target.fps);
     if (!Number.isFinite(fps) || fps !== Number(take.fps)) throw new Error('Recording FPS mismatch.');
@@ -204,6 +204,9 @@
         !Array.isArray(take.samples) ||
         take.samples.length !== take.endFrame - take.startFrame) {
       throw new Error('Punch-in must fully cover the selected range inside the take.');
+    }
+    if (!Number.isInteger(featherFrames) || featherFrames < 0 || featherFrames > 12) {
+      throw new Error('Punch-in feather frames must be an integer from 0 to 12.');
     }
     const armed = take.armedAxes;
     if (!Array.isArray(armed) || !armed.length || armed.some(axis =>
@@ -218,10 +221,19 @@
           incoming.length !== 6 || incoming.some(v => !Number.isFinite(v))) {
         throw new Error('Invalid six-axis punch-in samples.');
       }
+      const index = frame - take.startFrame;
+      const length = take.endFrame - take.startFrame;
+      // Crossfade only INSIDE the replacement window. Frame/axis data
+      // outside the punch range stays byte-for-byte identical.
+      const ramp = featherFrames
+        ? Math.min(1, (index + 1) / (featherFrames + 1),
+            (length - index) / (featherFrames + 1))
+        : 1;
+      const weight = ramp * ramp * (3 - 2 * ramp); // smoothstep, no overshoot
       for (const axis of armed) {
         const i = AXES.indexOf(axis);
         if (i < 0) throw new Error('Invalid punch-in axis.');
-        row[i] = frame === 0 ? 0 : incoming[i];
+        row[i] = frame === 0 ? 0 : row[i] + (incoming[i] - row[i]) * weight;
       }
     }
     copy.source = target.source === (take.sources?.[0] || 'unknown') ?

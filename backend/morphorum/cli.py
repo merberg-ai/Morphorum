@@ -19,11 +19,16 @@ from .client_credentials import (
 from .paths import ensure_runtime_dirs
 from .animation_projects import seed_example_animation_project
 from .system_info import doctor_report, write_install_manifest
+from .setup_state import SetupStateError, prepare_install, mark_install_ready
 
 
 def command_serve(args: argparse.Namespace) -> int:
     ensure_runtime_dirs()
     backend_only = bool(getattr(args, "backend_only", False))
+    force_setup = bool(getattr(args, "setup_wizard", False))
+    if backend_only and force_setup:
+        print("--setup-wizard requires WebUI mode; remove --backend-only.", file=sys.stderr)
+        return 2
     lan = bool(getattr(args, "lan", False))
     requested_host = getattr(args, "host", None)
     if lan and requested_host and requested_host != "0.0.0.0":
@@ -41,6 +46,7 @@ def command_serve(args: argparse.Namespace) -> int:
             print(f"Backend authentication initialization failed: {exc}", file=sys.stderr)
             return 2
         os.environ["MORPHORUM_BACKEND_ONLY"] = "1"
+        os.environ.pop("MORPHORUM_SETUP_WIZARD", None)
         print(f"Morphorum backend-only API: {host}:{port} (authentication required)")
         if os.getenv("MORPHORUM_BACKEND_TOKEN", "").strip():
             print("Authentication: MORPHORUM_BACKEND_TOKEN environment variable.")
@@ -52,6 +58,10 @@ def command_serve(args: argparse.Namespace) -> int:
         host = requested_host or ("0.0.0.0" if lan else os.getenv("MORPHORUM_HOST_OVERRIDE", "127.0.0.1"))
         port = args.port or int(os.getenv("MORPHORUM_PORT_OVERRIDE", "7865"))
         os.environ.pop("MORPHORUM_BACKEND_ONLY", None)
+        if force_setup:
+            os.environ["MORPHORUM_SETUP_WIZARD"] = "1"
+        else:
+            os.environ.pop("MORPHORUM_SETUP_WIZARD", None)
 
     env_access_log = str(os.getenv("MORPHORUM_ACCESS_LOG", "")).strip().lower()
     access_log = bool(args.access_log) or env_access_log in {"1", "true", "yes", "on"}
@@ -62,6 +72,17 @@ def command_serve(args: argparse.Namespace) -> int:
         reload=False,
         access_log=access_log,
     )
+    return 0
+
+
+def command_setup_state(args: argparse.Namespace) -> int:
+    """Installer-only setup provenance handshake, no projects/settings writes."""
+    try:
+        state = prepare_install() if args.setup_action == "prepare" else mark_install_ready()
+    except (OSError, ValueError, SetupStateError) as exc:
+        print(f"Setup state was not modified: {exc}", file=sys.stderr)
+        return 1
+    print("Setup state: " + (state["status"] if state else "legacy install preserved"))
     return 0
 
 
@@ -300,6 +321,8 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int)
     serve.add_argument("--backend-only", action="store_true",
                        help="Serve API endpoints only; bearer token required.")
+    serve.add_argument("--setup-wizard", action="store_true",
+                       help="Reopen first-run WebUI setup for this launch only.")
     serve.add_argument("--lan", action="store_true",
                        help="Explicitly bind to 0.0.0.0 (LAN; authenticate clients).")
     serve.add_argument(
@@ -308,6 +331,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable Uvicorn per-request access logging in the terminal.",
     )
     serve.set_defaults(func=command_serve)
+
+    setup = sub.add_parser("setup-state", help="Installer handshake for first-run setup provenance.")
+    setup.add_argument("setup_action", choices=("prepare", "ready"))
+    setup.set_defaults(func=command_setup_state)
 
     doctor = sub.add_parser("doctor", help="Run installation and runtime diagnostics.")
     doctor.add_argument("--json", action="store_true")

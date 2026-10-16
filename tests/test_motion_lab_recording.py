@@ -206,3 +206,52 @@ def test_recording_api_rejects_project_fps_change(tmp_path, monkeypatch):
         )
         assert response.status_code == 400
         assert "does not match project FPS" in response.json()["detail"]
+
+
+def test_ms44_custom_axis_limits_are_frame_safe_and_persisted(tmp_path, monkeypatch):
+    """Native project limits clip only corresponding final increments."""
+    monkeypatch.setattr(projects, "PROJECTS_DIR", tmp_path / "projects")
+    with TestClient(app) as client:
+        created = client.post("/api/animation/projects", json={"name": "MS4.4 Limits"})
+        assert created.status_code == 201
+        current = created.json()["project"]
+        current["animation"].update(mode="3d", max_frames=48, fps=12)
+        lab = current.setdefault("motion_lab", {})
+        lab["limits"] = {
+            "translation_x": .012, "translation_y": .12, "translation_z": .12,
+            "rotation_x": 2, "rotation_y": .15, "rotation_z": 2,
+        }
+        project_id = current["id"]
+        saved = client.put(f"/api/animation/projects/{project_id}", json=current)
+        assert saved.status_code == 200, saved.text
+        endpoint = f"/api/animation/projects/{project_id}/motion-lab"
+        before = client.get(f"/api/animation/projects/{project_id}").json()["project"]
+        assert before["motion_lab"]["limits"]["translation_x"] == pytest.approx(.012)
+
+        preview = client.post(endpoint + "/preview", json={"layers": [take()]})
+        assert preview.status_code == 200, preview.text
+        diagnostics = preview.json()["diagnostics"]
+        assert diagnostics["series"]["translation_x"][6] == pytest.approx(.012)
+        assert diagnostics["series"]["rotation_y"][6] == pytest.approx(.15)
+        assert diagnostics["limited"]["translation_x"] > 0
+        assert diagnostics["limited"]["rotation_y"] > 0
+        assert client.get(f"/api/animation/projects/{project_id}").json()["project"] == before
+
+        applied = client.post(endpoint + "/apply", json={"layers": [take()]})
+        assert applied.status_code == 200, applied.text
+        project_after = client.get(f"/api/animation/projects/{project_id}").json()["project"]
+        assert project_after["motion_lab"]["limits"]["translation_x"] == pytest.approx(.012)
+        assert project_after["motion_lab"]["limits"]["rotation_y"] == pytest.approx(.15)
+        assert project_after["motion_lab"]["layers"][0]["samples"][2][0] == pytest.approx(.03)
+        assert resolved(project_after, 6, "translation_x") == pytest.approx(.012)
+
+        replay = client.post(endpoint + "/apply", json={"layers": [take()]})
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["project"]["camera_3d"] == project_after["camera_3d"]
+
+
+def test_ms44_invalid_project_limits_rejected():
+    current = project()
+    current["motion_lab"]["limits"]["rotation_z"] = -0.1
+    with pytest.raises(MotionLabError, match="rotation_z limit"):
+        compile_motion_lab(current, layers=[take()])

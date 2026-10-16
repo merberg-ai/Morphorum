@@ -78,6 +78,8 @@
     if (model.status === 'downloading') return 'Downloading';
     if (model.status === 'installed') return 'Installed';
     if (model.status === 'failed') return 'Download failed';
+    if (model.status === 'interrupted') return 'Interrupted · resumable';
+    if (model.status === 'partial') return 'Incomplete package';
     return 'Not installed';
   }
 
@@ -181,7 +183,8 @@
       spinner.className = 'spinner';
       const label = document.createElement('span');
       label.className = 'button-label';
-      label.textContent = model.status === 'failed' ? 'Retry Download' : 'Download';
+      label.textContent = model.status === 'failed' ? 'Retry Download' :
+        ['interrupted','partial'].includes(model.status) ? 'Resume / Repair' : 'Download';
       download.append(spinner, label);
       download.addEventListener('click', () => startManagedDownload(model.id));
       actions.appendChild(download);
@@ -429,6 +432,17 @@
     toast('Model selected', `${model.name} is selected for image generation.`, 'success');
   }
 
+  async function selectExisting(modelId) {
+    await loadModels();
+    const model = state.models.find(item => item.id === modelId && item.kind === 'checkpoints');
+    const select = qs('#image-model-select');
+    if (!model || !select) return false;
+    select.value = modelId;
+    updateImageBadge();
+    notifyImageSelection(select);
+    return true; // Selection only: never load weights or navigate away from setup.
+  }
+
   async function loadModels({ announce = false } = {}) {
     const list = qs('#model-list');
     try {
@@ -506,6 +520,7 @@
     reload: loadModels,
     scan: scanModels,
     reloadManaged: loadManagedModels,
+    selectExisting,
   };
   window.addEventListener('morphorum:settings-changed', () => loadManagedModels());
   window.addEventListener('DOMContentLoaded', start);

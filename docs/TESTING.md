@@ -44,7 +44,9 @@ Before promoting an installation, use a disposable directory and test at least t
 4. Confirm results, telemetry, and FFmpeg video export where available.
 5. For backend changes, confirm both normal and backend-only launches, authenticated LAN access and client connectivity.
 6. Confirm update/repair commands preserve user projects and settings.
-7. Recheck the new GitHub CI results after the merge.
+7. For **fresh first-run setup**, verify automatic launch only after the installer-provenance handshake. Existing installations should not be re-onboarded; backend-only must have no wizard. Check folder validation and persistence, optional managed Z-Image (confirm/cancel, partial/resume), two 512 × 512 project presets, and completion/Skip/re-entry.
+8. Exercise **Create Example & Open Editor** and **Finish Without Example** separately. Verify no downloads, creations or GPU renders on page loads, no duplicate project after retry, no unsaved-editor data loss, mobile sizing and keyboard navigation.
+9. Recheck the new GitHub CI results after the merge.
 
 Do not use someone else's valuable model, project or output folder for destructive testing. Record the exact commit, environment, and whether checks were automated or physically tested.
 

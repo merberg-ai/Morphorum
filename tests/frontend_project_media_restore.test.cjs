@@ -33,6 +33,17 @@ function makeContext(project, api) {
   const program = `
     let motionLabAudioAnalysis = null, motionLabAudioProjectId = null;
     let motionLabAudioElement = null, motionLabAudioUrl = null;
+    async function motionStudioHydrateEdits() { return true; }
+    function motionStudioRestoreChannels() {}
+    let motionStudioChannelState = { projectId: '', sha: '', channels: [], dirty: false };
+    function motionStudioRenderChannels() {}
+    let motionStudioSpectrumToken = 0;
+    let motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
+    let motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
+    let motionStudioSelectedChannel = '';
+    function motionStudioConnectAudioTransport() {}
+    function motionLabStereoWaveform() {}
+    function motionDirectorPanel() {}
     ${source.slice(begin, end)}
     this.restoreProjectMedia = restoreProjectMedia;
     this.mediaState = () => projectMedia;

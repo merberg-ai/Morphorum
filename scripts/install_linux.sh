@@ -123,6 +123,13 @@ if (( NVIDIA_EXPECTED == 1 )); then
   ok "CUDA smoke test: $CUDA_SMOKE"
 fi
 
+# First-run provenance is recorded BEFORE the default settings/project exist.
+# Updates and repairs may never force onboarding for existing users.
+if [[ "$MODE" == "install" ]]; then
+  step "Preparing first-run setup provenance..."
+  "$VENV_PYTHON" -m morphorum setup-state prepare
+fi
+
 if [[ ! -f "$ROOT/data/config.yaml" ]]; then
   cp "$ROOT/config/default.yaml" "$ROOT/data/config.yaml"
   ok "Created user configuration: data/config.yaml"
@@ -153,6 +160,11 @@ if (( SKIP_SELF_TEST == 0 )); then
   step "Running Morphorum self-test..."
   "$VENV_PYTHON" -m morphorum self-test
   ok "Morphorum self-test passed."
+fi
+
+if [[ "$MODE" == "install" ]]; then
+  step "Finalizing first-run setup provenance..."
+  "$VENV_PYTHON" -m morphorum setup-state ready
 fi
 
 printf '\n'

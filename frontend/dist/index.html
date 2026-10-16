@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Roboto+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/app.css?v=__MORPHORUM_ASSET_VERSION__">
+  <link rel="stylesheet" href="/assets/first-run-setup.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/mobile.css?v=__MORPHORUM_ASSET_VERSION__" media="(max-width: 640px)">
   <link rel="stylesheet" href="/assets/models.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/image.css?v=__MORPHORUM_ASSET_VERSION__">
@@ -110,6 +111,7 @@
         <button type="button" data-motion-nav="curves">Motion Curves &amp; Path</button>
         <button type="button" data-motion-nav="preview">Camera Preview</button>
         <button type="button" data-motion-nav="motion-import">Import Motion Settings</button>
+        <button type="button" data-motion-nav="audio">Motion Studio</button>
         <button type="button" data-motion-nav="monitor">Render Monitor</button>
         <button type="button" data-motion-nav="outputs">Outputs</button>
       </div>
@@ -649,9 +651,25 @@
               <label><span>Deadzone</span><input id="animation-motion-lab-record-deadzone" type="number" min="0" max="0.5" step="0.01" value="0.08"></label>
               <label><span>Response / return</span><input id="animation-motion-lab-record-response" type="number" min="0.05" max="1" step="0.05" value="0.55"></label>
               <label><span>Release tail <small class="muted">frames</small></span><input id="animation-motion-lab-record-tail" type="number" min="0" max="12" step="1" value="3"></label>
+              <label><span>Punch-in edge feather <small class="muted">frames</small></span><input id="animation-motion-lab-punch-feather" type="number" min="0" max="12" step="1" value="3"></label>
+              <label><span>Gamepad layout</span><select id="animation-motion-lab-gamepad-profile"><option value="standard">Standard (left translate, right look)</option><option value="swapped">Swap sticks (left look, right translate)</option></select></label>
               <label class="animation-motion-record-gamepad"><input id="animation-motion-lab-record-gamepad" type="checkbox"> Use browser gamepad when available</label>
             </div>
 
+            <details class="animation-motion-record-limits">
+              <summary>Camera safety limits (per-axis)</summary>
+              <p class="muted">Limits cap the final composed native camera increment on each frame, including presets, audio and recorded takes. Translation is scene units/frame; rotation is degrees/frame. Limit changes are unsaved project settings until you save or Apply.</p>
+              <div class="animation-motion-axis-limit-grid">
+                <label>Move X <small>units/frame</small><input type="number" data-motion-record-limit="translation_x" min="0.00001" max="30" step="0.005" value="0.12"></label>
+                <label>Move Y <small>units/frame</small><input type="number" data-motion-record-limit="translation_y" min="0.00001" max="30" step="0.005" value="0.12"></label>
+                <label>Move Z <small>units/frame</small><input type="number" data-motion-record-limit="translation_z" min="0.00001" max="30" step="0.005" value="0.12"></label>
+                <label>Pitch <small>deg/frame</small><input type="number" data-motion-record-limit="rotation_x" min="0.00001" max="30" step="0.05" value="2"></label>
+                <label>Yaw <small>deg/frame</small><input type="number" data-motion-record-limit="rotation_y" min="0.00001" max="30" step="0.05" value="2"></label>
+                <label>Roll <small>deg/frame</small><input type="number" data-motion-record-limit="rotation_z" min="0.00001" max="30" step="0.05" value="2"></label>
+              </div>
+              <p class="muted" id="animation-motion-record-limits-status" role="status">Default limits loaded for this project.</p>
+            </details>
+            <p class="muted" id="animation-motion-record-unit-help">Sensitivity is native movement per frame, not speed per second. FPS affects the corresponding movement per second.</p>
             <fieldset class="animation-motion-axis-arms">
               <legend>Armed axes</legend>
               <label><input type="checkbox" data-motion-record-axis="translation_x" checked> Strafe X</label>
@@ -718,6 +736,12 @@
             </div><span class="animation-motion-lab-stage" id="animation-motion-lab-audio-status">No audio analyzed</span></div>
             <div class="animation-motion-audio-controls">
               <label><span>PCM WAV file (up to 20 MiB / 3 minutes)</span><input id="animation-motion-lab-audio-file" type="file" accept=".wav,audio/wav,audio/x-wav"></label>
+              <div class="animation-motion-saved-soundtrack">
+                <button type="button" class="secondary-button compact"
+                  id="animation-motion-lab-use-soundtrack" disabled>Use Saved Project Soundtrack</button>
+                <span id="animation-motion-lab-soundtrack-info" class="muted"
+                  role="status" aria-live="polite">No attached project soundtrack. Attach audio through Import Motion Settings or choose a WAV above.</span>
+              </div>
               <div class="animation-motion-audio-length"><label><input id="animation-motion-lab-audio-match-length" type="checkbox"> Match project length to analyzed audio <details class="motion-audio-help"><summary aria-label="Explain audio length matching">ⓘ</summary><p>After analysis, offer to change the project's frame count to cover the entire WAV at its existing FPS. It never changes FPS automatically. Existing Motion Lab layers must be cleared or handled separately first. Review and confirm before saving.</p></details></label><span id="animation-motion-lab-audio-length-status" class="muted">Current project FPS is preserved.</span></div>
               <label><span>Frequency target <details class="motion-audio-help"><summary aria-label="Explain frequency target">ⓘ</summary><p>Full mix reacts to everything. Kick targets deep drum thumps (35–140 Hz), Bass emphasizes low instruments (40–250 Hz), Snare targets mid frequencies (150–2400 Hz), and Highs follows cymbals and sharp treble (2.5–10 kHz). These filters cannot fully isolate instruments.</p></details></span><select id="animation-motion-lab-audio-band"><option value="fullband">Full mix (RMS)</option><option value="kick" selected>Kick / heavy drums</option><option value="bass">Bass line</option><option value="snare">Snare / mids</option><option value="highs">Hi-hats / highs</option></select></label>
               <label><span>Detection mode <details class="motion-audio-help"><summary aria-label="Explain detection mode">ⓘ</summary><p>Transient triggers on a sudden increase in band energy, better for sharp drum hits. Level triggers when continuous loudness rises above the threshold.</p></details></span><select id="animation-motion-lab-audio-detection"><option value="transient" selected>Transient / drum hit</option><option value="level">Level crossing</option></select></label>
@@ -851,7 +875,30 @@
                 <span class="muted" id="animation-motion-gif-sync-status" role="status">Analyze WAV to enable synchronized preview audio.</span>
               </div>
               <div id="animation-motion-frame-player" class="animation-motion-frame-player" hidden>
-                <img id="animation-motion-frame-image" alt="Frame-controlled camera preview">
+                <div class="motion-review-split" id="animation-motion-review-split">
+                  <div class="motion-review-split-image">
+                    <span class="field-label">CPU camera preview · sampled geometry</span>
+                    <img id="animation-motion-frame-image" alt="Frame-controlled camera preview">
+                  </div>
+                  <div class="motion-review-split-image" id="animation-motion-compare-render-wrap" hidden>
+                    <span class="field-label">Saved render · exact PNG frame</span>
+                    <img id="animation-motion-compare-render-image" alt="Corresponding completed animation render frame">
+                    <p class="muted" id="animation-motion-compare-frame-label"></p>
+                  </div>
+                </div>
+                <section class="motion-review-render-chooser" aria-label="Compare completed render">
+                  <label>Compare saved render
+                    <select id="animation-motion-compare-select">
+                      <option value="">No render selected</option>
+                    </select>
+                  </label>
+                  <button type="button" id="animation-motion-compare-load" class="secondary-button compact">Compare Render</button>
+                  <button type="button" id="animation-motion-compare-refresh" class="secondary-button compact">Refresh Renders</button>
+                  <button type="button" id="animation-motion-compare-clear" class="secondary-button compact">Hide Comparison</button>
+                  <p class="muted" id="animation-motion-compare-status" role="status" aria-live="polite">
+                    Generate a CPU camera preview to compare against a completed render.
+                  </p>
+                </section>
                 <div class="animation-motion-player-actions">
                   <button id="animation-motion-frame-play" type="button" class="secondary-button compact">▶ Play</button>
                   <button id="animation-motion-frame-reset" type="button" class="secondary-button compact">↺ Start</button>
@@ -859,6 +906,36 @@
                   <span id="animation-motion-frame-time" class="muted">0.00s</span>
                 </div>
                 <input id="animation-motion-frame-scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Seek camera preview project frame">
+                <section class="motion-review-window" aria-label="Synchronized motion review">
+                  <h3>A/B Motion Review</h3>
+                  <p class="muted">Review exact project frames, including a recorded take's range. Changes here never edit the original take or saved animation.</p>
+                  <div class="motion-review-controls">
+                    <label class="motion-review-loop-toggle"><input id="animation-motion-review-enabled" type="checkbox"> Limit playback to A/B</label>
+                    <label>Frame A <input id="animation-motion-review-a" type="number" min="0" max="0" step="1" value="0"></label>
+                    <label>Frame B (inclusive) <input id="animation-motion-review-b" type="number" min="0" max="0" step="1" value="0"></label>
+                  </div>
+                  <div class="motion-review-actions">
+                    <button id="animation-motion-review-mark-a" type="button" class="secondary-button compact">Set A = current frame</button>
+                    <button id="animation-motion-review-mark-b" type="button" class="secondary-button compact">Set B = current frame</button>
+                    <label>Review recorded take <select id="animation-motion-review-take"><option value="">Choose staged take</option></select></label>
+                    <button id="animation-motion-review-use-take" type="button" class="secondary-button compact">Use Take Range</button>
+                    <button id="animation-motion-review-curves" type="button" class="secondary-button compact">Open Frame in Curves</button>
+                  </div>
+                  <p id="animation-motion-review-status" class="muted" role="status" aria-live="polite">Generate a camera motion preview to begin reviewing frames.</p>
+                  <p id="animation-motion-review-values" class="muted" role="status">Update Motion Curves to compare six-axis values at the current frame.</p>
+                  <section class="motion-review-refine" aria-label="Ranged motion corrections">
+                    <h4>Refine this A/B range</h4>
+                    <p class="muted">Prepare a targeted correction without automatically changing the animation. Use the same frame range for new continuous motion or a guarded punch-in on an existing recorded take.</p>
+                    <div class="motion-review-refine-actions">
+                      <button id="animation-motion-refine-continuous" type="button" class="secondary-button compact">Prepare Continuous Correction</button>
+                      <button id="animation-motion-refine-punch" type="button" class="secondary-button compact">Prepare Recording Punch-in</button>
+                      <button id="animation-motion-refine-before" type="button" class="secondary-button compact">Capture Before Curves</button>
+                      <button id="animation-motion-refine-diff" type="button" class="secondary-button compact">Compare Draft Curves</button>
+                    </div>
+                    <p class="muted" id="animation-motion-refine-status" role="status" aria-live="polite">Set and enable an A/B range, then prepare a correction. Capture the current curves before staging to measure the difference later.</p>
+                    <div class="motion-review-refine-results" id="animation-motion-refine-results" hidden></div>
+                  </section>
+                </section>
                 <p class="muted" id="animation-motion-frame-note">Frames are drawn from up to 72 CPU preview samples. Playback follows the project frame clock.</p>
               </div>
               <img id="animation-motion-preview-image" alt="Motion-only animation GIF fallback" hidden>
@@ -1261,6 +1338,7 @@
           <div><p class="eyebrow">PREFERENCES & LIBRARIES</p><h1>Settings</h1><p class="muted">External libraries stay where you keep them; managed models use Morphorum-controlled storage.</p></div>
           <div class="button-row">
             <span class="settings-dirty-badge" id="settings-dirty-state" aria-live="polite">All changes saved</span>
+            <button class="secondary-button compact" id="reopen-first-run-setup" type="button">Setup Wizard</button>
             <button class="secondary-button busy-button" id="load-settings"><span class="spinner"></span><span class="button-label">Reload</span></button>
             <button class="primary-button busy-button" id="save-settings"><span class="spinner"></span><span class="button-label">Save Settings</span></button>
           </div>
@@ -1325,6 +1403,27 @@
     </main>
   </div>
 
+  <div id="first-run-overlay" class="first-run-overlay" hidden>
+    <section class="first-run-dialog card glass" role="dialog" aria-modal="true"
+      aria-labelledby="first-run-title" aria-describedby="first-run-description">
+      <header class="first-run-header">
+        <div><p class="eyebrow">FIRST-RUN SETUP</p>
+          <h2 id="first-run-title">Welcome to Morphorum</h2>
+          <p id="first-run-progress" class="muted" aria-live="polite">Step 1 of 7</p>
+        </div>
+        <button class="secondary-button compact" id="first-run-close" type="button"
+          aria-label="Close setup and resume later">Close</button>
+      </header>
+      <div id="first-run-description" class="first-run-content" aria-live="polite"></div>
+      <p id="first-run-error" class="muted first-run-error" role="alert" hidden></p>
+      <footer class="first-run-buttons">
+        <button class="secondary-button compact" id="first-run-back" type="button">Back</button>
+        <button class="secondary-button compact" id="first-run-skip" type="button">Skip for now</button>
+        <button class="primary-button compact" id="first-run-next" type="button">Next</button>
+      </footer>
+    </section>
+  </div>
+
   <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
   <script src="/assets/ui-services.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/resolution.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
@@ -1336,6 +1435,10 @@
   <script src="/assets/motion-lab-recording.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-frame-player.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/project-wizard.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/first-run-folders.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/first-run-zimage.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/first-run-examples.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/first-run-setup.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>

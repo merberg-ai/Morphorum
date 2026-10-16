@@ -68,7 +68,7 @@ test('ML2 frame clock fills dropped callbacks without duplicating frames', () =>
   assert.equal(take.samples.length, 4);
   assert.equal(take.startFrame, 4);
   assert.equal(take.endFrame, 8);
-  assert.deepEqual(take.sources, ['keyboard']);
+  assert.deepEqual(Array.from(take.sources), ['keyboard']);
 });
 
 test('ML2 frame zero is forced stationary even with held input', () => {
@@ -96,7 +96,7 @@ test('ML2 response smoothing and stop tail return motion to zero deterministical
   const take = h.recorder.stop('manual');
   assert.equal(take.samples.length, 5);
   assert.equal(take.samples.at(-1)[0], 0);
-  assert.deepEqual(take.sources, ['touch']);
+  assert.deepEqual(Array.from(take.sources), ['touch']);
 });
 
 test('ML2 auto-stop respects project frame bounds exactly once', () => {
@@ -121,8 +121,8 @@ test('ML2 recording card is wired into Motion Lab with mobile-safe controls', ()
     'animation-motion-lab-stick-rotate',
     'animation-motion-lab-record-gamepad',
   ]) assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
-  assert.match(animation, /const recording = qs\('#animation-motion-lab-recording'\)/);
-  assert.match(animation, /panels\.motion\.appendChild\(recording\)/);
+  assert.match(animation, /\['recording', '#animation-motion-lab-recording'\]/);
+  assert.match(animation, /if \(card\) panels\[name\]\.appendChild\(card\)/);
   assert.match(animation, /new window\.MorphorumMotionLabFrameRecorder/);
   assert.match(animation, /visibilitychange/);
   assert.match(animation, /pointercancel/);
@@ -155,7 +155,7 @@ test('ML2 quick actions stay available during scrolling and use the canonical co
     'animation-motion-lab-apply']) {
     assert.ok(animation.includes("['" + id + "',"), 'dock missing ' + id);
   }
-  assert.match(animation, /button\.disabled = active \|\| !original \|\| original\.disabled/);
+  assert.match(animation, /button\.disabled = \(!isStop && \(active \|\| locked\)\) \|\| !original \|\| original\.disabled/);
   assert.match(animation, /original\.click\(\)/);
   assert.match(css, /\.animation-motion-lab-quick-actions\s*\{[^}]*position:sticky;bottom:8px/s);
   assert.match(css, /@media\(max-width:640px\)[\s\S]*animation-motion-lab-quick-actions/s);
@@ -200,7 +200,7 @@ test('ML2.3 punch-in requires explicit mode target end boundary and guards incom
     assert.ok(html.includes('id="'+id+'"'));
   assert.match(animation,/function motionLabPunchUi\(\)/);
   assert.match(animation,/take\.endFrame !== context\.endFrame/);
-  assert.match(animation,/window\.MorphorumMotionLabSplicePunchIn\(existing, take\)/);
+  assert.match(animation,/window\.MorphorumMotionLabSplicePunchIn\(existing, take,/);
   assert.match(animation,/snapshot:JSON\.stringify\(target\)/);
   assert.match(animation,/maxFrames: remainingFrames/);
 });
@@ -214,7 +214,7 @@ test('ML3.1 WAV analysis has a live pre-layer envelope and threshold preview', (
   assert.match(animation, /motionLabAudioPreview\(\);/);
   assert.match(animation, /thresholdField\.value = Math\.min\(\.1, peak \* \.55\)\.toFixed\(3\)/);
   assert.match(animation, /i \+ pulseLength <= values\.length/);
-  assert.match(animation, /for \(const id of \['threshold','attack','release','distance'\]\)/);
+  assert.match(animation, /for \(const id of \['threshold','attack','release','distance','band','detection','sensitivity'\]\)/);
   assert.match(css, /#animation-motion-lab-audio-plot \{/);
   assert.match(css, /@media\(max-width:540px\) \{#animation-motion-lab-audio-plot/);
 });
@@ -268,4 +268,57 @@ test('ML3 duration matching reconciles invisible saved layers without deleting c
   const sync = html.indexOf('id="animation-motion-lab-audio-sync"');
   const editor = html.indexOf('id="animation-motion-lab-curve-editor"');
   assert.ok(curve >= 0 && sync > curve && editor > sync);
+});
+
+test('MS4.4 feathered punch-in blends only chosen axes within exact frame bounds',()=>{
+  const context={window:{},performance:{now:()=>0},requestAnimationFrame:()=>1,cancelAnimationFrame:()=>{}};
+  vm.runInNewContext(source,context);
+  const splice=context.window.MorphorumMotionLabSplicePunchIn;
+  const original={id:'old',type:'recording',fps:24,source:'keyboard',
+    start_frame:0,end_frame:12,axes:['translation_x','rotation_z'],
+    samples:Array.from({length:12},()=>[.01,0,0,0,0,.1])};
+  const punch={fps:24,startFrame:3,endFrame:9,armedAxes:['translation_x'],
+    sources:['touch'],samples:Array.from({length:6},()=>[.09,0,0,0,0,0])};
+  const blended=splice(original,punch,{featherFrames:2});
+  assert.equal(blended.id,'old');
+  assert.equal(blended.source,'mixed');
+  assert.deepEqual(JSON.parse(JSON.stringify(blended.samples.slice(0,3))),original.samples.slice(0,3));
+  assert.deepEqual(JSON.parse(JSON.stringify(blended.samples.slice(9))),original.samples.slice(9));
+  assert.deepEqual(original.samples[3],[.01,0,0,0,0,.1]);
+  for(let i=0;i<12;i++){
+    assert.equal(blended.samples[i][5],.1,'Roll is unarmed; do not touch it');
+    assert.ok(blended.samples[i][0]>=.01 && blended.samples[i][0]<=.09,'No overshoot');
+  }
+  assert.ok(blended.samples[3][0]>.01 && blended.samples[3][0]<.09);
+  assert.ok(blended.samples[5][0] > blended.samples[3][0]);
+  assert.ok(blended.samples[8][0] < blended.samples[5][0]);
+  // No larger jump at either splice edge than direct replacement causes.
+  const direct=splice(original,punch,{featherFrames:0});
+  assert.ok(Math.abs(blended.samples[3][0]-blended.samples[2][0]) <
+    Math.abs(direct.samples[3][0]-direct.samples[2][0]));
+  assert.ok(Math.abs(blended.samples[9][0]-blended.samples[8][0]) <
+    Math.abs(direct.samples[9][0]-direct.samples[8][0]));
+  assert.throws(()=>splice(original,punch,{featherFrames:-1}),/feather/);
+  assert.throws(()=>splice(original,punch,{featherFrames:13}),/feather/);
+  assert.throws(()=>splice(original,punch,{featherFrames:1.5}),/feather/);
+});
+
+test('MS4.4 exposes one gamepad layout switch and project-owned native axis limits',()=>{
+  for(const id of ['animation-motion-lab-gamepad-profile','animation-motion-lab-punch-feather',
+    'animation-motion-record-unit-help','animation-motion-record-limits-status']){
+    assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
+  }
+  for(const axis of ['translation_x','translation_y','translation_z',
+    'rotation_x','rotation_y','rotation_z']) {
+    assert.equal((html.match(new RegExp('data-motion-record-limit="'+axis+'"','g'))||[]).length,1,axis);
+  }
+  assert.match(animation,/const swapped = qs\('#animation-motion-lab-gamepad-profile'\)/);
+  assert.match(animation,/const moveStick = swapped \? 2 : 0;/);
+  assert.match(animation,/const lookStick = swapped \? 0 : 2;/);
+  assert.match(animation,/function motionLabChangeRecordingLimit\(input\)/);
+  assert.match(animation,/markDirty\(\{validate:false\}\)/);
+  assert.match(animation,/motionLabSyncRecordingLimits\(\);/);
+  assert.match(animation,/featherFrames:context\.featherFrames/);
+  assert.match(css,/\.animation-motion-axis-limit-grid\s*\{/);
+  assert.match(css,/@media\(max-width:390px\)[\s\S]*animation-motion-axis-limit-grid/);
 });

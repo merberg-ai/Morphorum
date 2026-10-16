@@ -1881,6 +1881,8 @@
   function fillForm() {
     const project = state.project;
     syncMotionLabDraft();
+    // Reload limits even when the user refreshes the same project ID.
+    motionLabSyncRecordingLimits();
     state.loading = true;
     try {
       renderProjectSelect();
@@ -2348,6 +2350,8 @@
   // open starts with a verified inventory and rehydrates its media players.
   let projectMediaGeneration = 0;
   let projectAudioRestoreGeneration = 0;
+  let motionLabSoundtrackBusy = false;
+  let motionLabSoundtrackStatus = '';
   let projectMedia = {
     projectId: '', loading: false, assets: [], warnings: [],
     soundtrack: null, selectedWav: '',
@@ -2414,6 +2418,18 @@
       }
     }
     if (offsetSave) offsetSave.disabled = !soundtrack || !projectMedia.soundtrack;
+    const savedUse = qs('#animation-motion-lab-use-soundtrack');
+    const savedStatus = qs('#animation-motion-lab-soundtrack-info');
+    if (savedUse) savedUse.disabled = !soundtrack || !current || loading ||
+      motionLabSoundtrackBusy || Boolean(motionLabBusy) || animationMode() !== '3d';
+    if (savedStatus) savedStatus.textContent = motionLabSoundtrackBusy
+      ? 'Preparing the saved soundtrack on the Morphorum host…'
+      : motionLabSoundtrackStatus && current
+        ? motionLabSoundtrackStatus
+        : soundtrack ? 'Available: ' + (projectMedia.soundtrack?.filename || soundtrack.filename) +
+          ' · ' + (projectMedia.soundtrack?.format || 'audio').toUpperCase() +
+          '. Use without uploading again. Compressed formats need host FFmpeg.'
+        : 'No project soundtrack attached. Choose a WAV or attach audio in Import Motion Settings.';
 
     if (wavRow) wavRow.hidden = wavs.length === 0;
     if (wavSelect) {
@@ -2475,10 +2491,15 @@
       }
       motionLabAudioAnalysis = analysis;
       motionLabAudioProjectId = id;
+      motionStudioRestoreChannels(id, analysis);
       motionLabAudioUrl = asset.url;
       motionLabAudioElement = new Audio(asset.url);
       motionLabAudioElement.preload = 'auto';
       motionLabAudioElement.load();
+      if (!(await motionStudioHydrateEdits(id, analysis, () =>
+        token === projectAudioRestoreGeneration && state.project?.id === id &&
+        projectMedia.selectedWav === sha256))) return;
+      motionStudioConnectAudioTransport();
       // Reload the most recently saved layer's editing choices alongside its
       // analysis. Keep the currently saved camera tracks untouched.
       const savedLayer = (state.project.motion_lab?.layers || []).slice().reverse()
@@ -2499,6 +2520,8 @@
         ' frames, ' + Number(analysis.duration_seconds).toFixed(2) + ' seconds).';
       const badge = qs('#animation-motion-lab-audio-status');
       if (badge) badge.textContent = 'Saved WAV ready';
+      motionLabStereoWaveform();
+      motionDirectorPanel();
       motionLabAudioPreview();
       motionLabAudioUi();
     } catch (error) {
@@ -2511,14 +2534,26 @@
     if (token === projectAudioRestoreGeneration) renderProjectMedia();
   }
 
-  async function restoreProjectMedia({ resetAudio = false } = {}) {
+  async function restoreProjectMedia({ resetAudio = false, preferredWav = '' } = {}) {
     const id = state.project?.id;
     const token = ++projectMediaGeneration;
     if (resetAudio) {
+      motionLabSoundtrackStatus = '';
       ++projectAudioRestoreGeneration;
       motionLabReleaseAudio();
       motionLabAudioAnalysis = null;
       motionLabAudioProjectId = null;
+      motionLabEditedEvents = null;
+      motionLabSelectedEvent = null;
+      motionDirectorCues = [];
+      motionDirectorSelected = null;
+      motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
+      ++motionStudioSpectrumToken;
+      motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
+      motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
+      motionStudioSelectedChannel = '';
+      motionStudioRenderChannels();
+      motionLabStereoWaveform();
       motionLabAudioPreview();
       motionLabAudioUi();
     }
@@ -2557,7 +2592,7 @@
         layer.type === 'audio' && wavs.some(wav => wav.sha256 === layer.sha256));
       const currentAnalysisSha = motionLabAudioProjectId === id
         ? motionLabAudioAnalysis?.source_sha256 : '';
-      const chosen = [currentAnalysisSha, previous, lastAudioLayer?.sha256, wavs[0]?.sha256]
+      const chosen = [preferredWav, currentAnalysisSha, previous, lastAudioLayer?.sha256, wavs[0]?.sha256]
         .find(sha => sha && wavs.some(wav => wav.sha256 === sha)) || '';
       projectMedia = { projectId: id, loading: false, assets, warnings,
         soundtrack, selectedWav: chosen };
@@ -2637,6 +2672,432 @@
   }
 
   let motionFramePlayer = null;
+
+  // MS5.1: project-frame review metadata is kept outside saved motion layers.
+  let motionReviewRange={start:0,end:0};
+  const motionReviewEl=key=>qs('#animation-motion-review-'+key);
+  function motionReviewStatus(message) {
+    const node=motionReviewEl('status');
+    if(node)node.textContent=message;
+  }
+  function motionReviewMatch() {
+    const player=motionFramePlayer;
+    if(!player?.jobId)return 'Generate a camera motion preview first.';
+    const frames=Number(qs('#animation-max-frames')?.value||
+      state.project?.animation?.max_frames);
+    const fps=Number(qs('#animation-fps')?.value||state.project?.animation?.fps);
+    if(!Number.isInteger(frames)||frames<1||!Number.isFinite(fps)||fps<=0||fps>240)
+      return 'Invalid Editor frame count or FPS. Correct the settings before reviewing.';
+    if(frames!==player.count||Math.abs(fps-player.fps)>1e-6)
+      return 'Timing mismatch: preview '+player.count+' frames @ '+player.fps+
+        ' FPS, Editor '+frames+' frames @ '+fps+' FPS. Regenerate camera preview.';
+    return '';
+  }
+  function motionReviewRefreshTakes() {
+    const select=motionReviewEl('take');
+    if(!select)return;
+    const old=select.value;
+    select.replaceChildren();
+    const empty=document.createElement('option');
+    empty.value='';empty.textContent='Choose staged take';select.appendChild(empty);
+    for(const layer of motionLabDraftLayers) {
+      if(layer.type!=='recording')continue;
+      const option=document.createElement('option');
+      option.value=layer.id;
+      option.textContent=(layer.name||'Recorded take')+' ('+
+        layer.start_frame+'–'+(layer.end_frame-1)+')';
+      select.appendChild(option);
+    }
+    if(motionLabDraftLayers.some(x=>x.type==='recording'&&x.id===old))select.value=old;
+  }
+  function motionReviewFrame({frame,fps,frames,previewSampleFrame}) {
+    const mismatch=motionReviewMatch(),value=motionReviewEl('values');
+    if(mismatch){
+      motionReviewStatus(mismatch);
+      motionCompareClear(mismatch);
+      if(value)value.textContent='Comparison unavailable until project and preview timing match.';
+      return;
+    }
+    motionReviewStatus('Project frame '+frame+' ('+(frame/fps).toFixed(3)+
+      's) · CPU preview sample from frame '+previewSampleFrame);
+    motionCompareFrame(frame);
+    const visual=motionLabVisual;
+    if(!value)return;
+    if(!visual?.series||visual.stale||visual.count!==frames||
+        Math.abs(visual.fps-fps)>1e-6){
+      value.textContent='Curves unavailable, stale or mismatched. Update Curves to compare six-axis values.';
+      return;
+    }
+    value.textContent=['translation_x','translation_y','translation_z',
+      'rotation_x','rotation_y','rotation_z'].map((axis,i)=>
+      ['X','Y','Z','Pitch','Yaw','Roll'][i]+' '+
+      Number(visual.series[axis][frame]).toFixed(i<3?4:3))
+      .join(' · ')+' · native units/frame';
+  }
+
+  // MS5.2: comparison is display-only; validated historical PNGs are shown
+  // beside the existing CPU preview, never inserted into project/layer data.
+  let motionCompareMetadata=null;
+  let motionCompareRequest=0;
+  const motionCompareEl=key=>qs('#animation-motion-compare-'+key);
+  function motionCompareStatus(message){
+    const node=motionCompareEl('status');
+    if(node)node.textContent=message;
+  }
+  function motionCompareClear(message='Choose a completed render to compare.'){
+    ++motionCompareRequest;
+    motionCompareMetadata=null;
+    const wrap=motionCompareEl('render-wrap');
+    if(wrap)wrap.hidden=true;
+    const img=motionCompareEl('render-image');
+    if(img)img.removeAttribute('src');
+    const frameLabel=motionCompareEl('frame-label');
+    if(frameLabel)frameLabel.textContent='';
+    motionCompareStatus(message);
+  }
+  function motionCompareFrame(frame) {
+    const meta=motionCompareMetadata;
+    if(!meta)return;
+    const player=motionFramePlayer;
+    const problem=motionReviewMatch();
+    if(!player?.jobId || problem || meta.project_id!==state.project?.id ||
+       meta.frames!==player.count || Math.abs(meta.fps-player.fps)>1e-6){
+      motionCompareClear(problem||'Preview or project timing changed. Reload the comparison.');
+      return;
+    }
+    const img=motionCompareEl('render-image');
+    const url='/api/animation/renders/'+encodeURIComponent(meta.project_id)+
+      '/'+encodeURIComponent(meta.render_id)+'/frames/'+frame;
+    if(img && img.getAttribute('src')!==url)img.src=url;
+    const frameLabel=motionCompareEl('frame-label');
+    if(frameLabel)frameLabel.textContent='Exact render frame '+frame+
+      ' of '+(meta.frames-1)+' · '+(frame/meta.fps).toFixed(3)+'s';
+  }
+  async function motionCompareRefresh() {
+    const select=motionCompareEl('select');
+    if(!select)return;
+    const projectId=state.project?.id;
+    const token=++motionCompareRequest;
+    motionCompareMetadata=null;
+    if(motionCompareEl('render-wrap'))motionCompareEl('render-wrap').hidden=true;
+    select.replaceChildren();
+    const blank=document.createElement('option');
+    blank.value='';blank.textContent='Choose a saved render';
+    select.appendChild(blank);
+    if(!projectId || !motionFramePlayer?.jobId){
+      motionCompareStatus('Generate a CPU preview for this project first.');
+      return;
+    }
+    motionCompareStatus('Loading this project’s saved renders…');
+    try {
+      const data=await api('/api/animation/projects/'+encodeURIComponent(projectId)+'/renders');
+      if(token!==motionCompareRequest || projectId!==state.project?.id ||
+         !motionFramePlayer?.jobId)return;
+      for(const render of (Array.isArray(data.renders)?data.renders:[])){
+        if(!render?.id || render.project_id!==projectId)continue;
+        const option=document.createElement('option');
+        option.value=render.id;
+        option.textContent=render.id+' · '+(render.status||'unknown')+
+          ' · '+(render.total_frames||'?')+' frames';
+        select.appendChild(option);
+      }
+      motionCompareStatus(select.options.length>1
+        ?'Choose a completed render, then Compare Render. This never changes project files.'
+        :'No saved renders found for this project.');
+    }catch(error){
+      if(token===motionCompareRequest)motionCompareStatus('Cannot list saved renders: '+error.message);
+    }
+  }
+  async function motionCompareLoad(){
+    const id=motionCompareEl('select')?.value;
+    const projectId=state.project?.id;
+    const player=motionFramePlayer;
+    const previewId=player?.jobId;
+    const problem=motionReviewMatch();
+    if(!id || !projectId || !previewId || problem){
+      motionCompareClear(problem||'Select a render and generate a CPU preview first.');
+      return;
+    }
+    const token=++motionCompareRequest;
+    motionCompareMetadata=null;
+    if(motionCompareEl('render-wrap'))motionCompareEl('render-wrap').hidden=true;
+    motionCompareStatus('Checking render manifest and PNG frame coverage…');
+    try{
+      const meta=await api('/api/animation/renders/'+encodeURIComponent(projectId)+
+        '/'+encodeURIComponent(id)+'/review-metadata');
+      if(token!==motionCompareRequest || state.project?.id!==projectId ||
+         motionFramePlayer?.jobId!==previewId)return;
+      if(!meta.ready){
+        motionCompareStatus('Render not available for comparison: '+
+          (Array.isArray(meta.issues)?meta.issues.join(' '):'incomplete metadata.'));
+        return;
+      }
+      if(meta.project_id!==projectId || meta.render_id!==id ||
+         meta.frames!==player.count || Math.abs(meta.fps-player.fps)>1e-6 ||
+         motionReviewMatch()){
+        motionCompareStatus('Render timing mismatch: render '+meta.frames+' frames @ '+
+          meta.fps+' FPS; CPU preview '+player.count+' frames @ '+player.fps+
+          ' FPS. Choose a compatible render and regenerate preview if needed.');
+        return;
+      }
+      motionCompareMetadata={project_id:projectId,render_id:id,
+        frames:meta.frames,fps:meta.fps};
+      const wrap=motionCompareEl('render-wrap');
+      if(wrap)wrap.hidden=false;
+      motionCompareStatus('Comparing completed render '+id+
+        ' with CPU preview. Both images follow the same project-frame clock.');
+      motionCompareFrame(player.frame);
+    }catch(error){
+      if(token===motionCompareRequest)motionCompareStatus('Cannot load render metadata: '+error.message);
+    }
+  }
+  function motionCompareBind(){
+    motionCompareEl('refresh')?.addEventListener('click',()=>void motionCompareRefresh());
+    motionCompareEl('load')?.addEventListener('click',()=>void motionCompareLoad());
+    motionCompareEl('clear')?.addEventListener('click',()=>motionCompareClear());
+    motionCompareEl('render-image')?.addEventListener('error',()=>{
+      if(motionCompareMetadata)motionCompareClear('Stored PNG frame is unavailable. Render comparison was stopped.');
+    });
+  }
+
+
+  // MS5.3: reuse existing native motion editor and punch-in controls.
+  // Preparing never stages or applies a layer. The preview transport remains
+  // display-only even if it is comparing an older completed render.
+  let motionRefineBaseline=null;
+  const motionRefineEl=key=>qs('#animation-motion-refine-'+key);
+  const MOTION_REFINE_AXES=['translation_x','translation_y','translation_z',
+    'rotation_x','rotation_y','rotation_z'];
+  function motionRefineStatus(message) {
+    if(motionRefineEl('status'))motionRefineEl('status').textContent=message;
+  }
+  function motionRefineClear(message='Capture Before Curves before staging a new correction.') {
+    motionRefineBaseline=null;
+    if(motionRefineEl('results')){
+      motionRefineEl('results').hidden=true;
+      motionRefineEl('results').textContent='';
+    }
+    if(message)motionRefineStatus(message);
+  }
+  function motionRefineRange() {
+    const project=state.project,player=motionFramePlayer;
+    if(!project || animationMode()!=='3d' || !player?.jobId ||
+       motionLabBusy || motionLabRecorder?.active || motionReviewMatch() ||
+       !motionReviewEl('enabled')?.checked)return null;
+    const a=motionReviewEl('a'),b=motionReviewEl('b');
+    if(!a?.value.trim() || !b?.value.trim())return null;
+    const start=Number(a.value),end=Number(b.value);
+    if(!Number.isInteger(start)||!Number.isInteger(end)||
+       start<0 || end>=player.count || start>end)return null;
+    return {projectId:project.id,start,end,frames:player.count,fps:player.fps};
+  }
+  function motionRefineRequireRange() {
+    const range=motionRefineRange();
+    if(!range)motionRefineStatus('Choose a 3D project, generate a matching CPU preview, enable A/B, and select valid frames. Stop recording or other Motion Lab operations first.');
+    return range;
+  }
+  function motionRefineContinuous() {
+    const range=motionRefineRequireRange();
+    if(!range)return;
+    const form=motionStudioArrangementFields();
+    if(!form)return motionRefineStatus('Continuous Motion editor is unavailable.');
+    motionFramePlayer.pause();
+    // Explicitly force New Movement: do not overwrite a previously selected
+    // staged preset just because the editor still remembers its selection.
+    motionStudioArrangementSelection='';
+    motionStudioArrangementLoaded='';
+    motionStudioArrangementResetFields();
+    form.start.value=String(range.start);
+    form.end.value=String(range.end+1); // editor range uses exclusive end
+    motionStudioArrangementSyncRange('start');
+    showAnimationTab('audio');
+    motionRefineStatus('Frames '+range.start+'–'+range.end+
+      ' transferred to a NEW Continuous Camera Motion region. Select axes, preset and Add/Replace, then click + Stage Movement. No layer has been changed yet.');
+    motionLabNotify('Ranged continuous correction prepared. Stage Movement only when ready; Undo remains available.');
+  }
+  function motionRefinePunch() {
+    const range=motionRefineRequireRange();
+    if(!range)return;
+    const selected=motionReviewEl('take')?.value;
+    const index=motionLabDraftLayers.findIndex(layer=>layer.type==='recording'&&layer.id===selected);
+    const take=motionLabDraftLayers[index];
+    if(!take)return motionRefineStatus('Select a staged recorded take in A/B Motion Review before preparing a punch-in.');
+    if(Number(take.fps)!==range.fps || range.start<take.start_frame ||
+       range.end>=take.end_frame || !Array.isArray(take.axes) || !take.axes.length ||
+       !take.axes.every(axis=>MOTION_REFINE_AXES.includes(axis))){
+      return motionRefineStatus('The A/B interval must fit entirely inside the selected take at the same FPS, with valid recorded axes. Nothing was changed.');
+    }
+    motionFramePlayer.pause();
+    const mode=qs('#animation-motion-lab-record-mode');
+    const target=qs('#animation-motion-lab-punch-target');
+    const start=qs('#animation-motion-lab-record-start');
+    const end=qs('#animation-motion-lab-punch-end');
+    if(!mode||!target||!start||!end)
+      return motionRefineStatus('Recording punch-in controls are unavailable.');
+    mode.value='punch';
+    motionLabPunchUi(); // regenerate index mapping from current draft order
+    if(!Array.from(target.options).some(item=>item.value===String(index)))
+      return motionRefineStatus('Selected take no longer exists in the draft. Refresh your selection.');
+    target.value=String(index);
+    start.value=String(range.start);
+    end.value=String(range.end+1); // punch-in is exclusive-end
+    // Match arming to the target take; punch validation rejects other axes.
+    qsa('[data-motion-record-axis]').forEach(control=>{
+      control.checked=take.axes.includes(control.dataset.motionRecordAxis);
+    });
+    motionLabRecordingUi();
+    showAnimationTab('recording');
+    motionRefineStatus('Punch-in prepared for frames '+range.start+'–'+range.end+
+      '. Review armed axes and feather, then press Record to capture the entire interval. The take remains unchanged until recording finishes.');
+    motionLabNotify('Punch-in prepared in Recording. An incomplete capture is discarded; successful punch-in supports Undo.');
+  }
+  function motionRefineSnapshot(range,visual) {
+    return {
+      projectId:range.projectId,frames:range.frames,fps:range.fps,
+      start:range.start,end:range.end,
+      series:Object.fromEntries(MOTION_REFINE_AXES.map(axis=>
+        [axis,visual.series[axis].slice()])),
+    };
+  }
+  function motionRefineFresh(range) {
+    const visual=motionLabVisual;
+    return Boolean(visual?.series && !visual.stale &&
+      visual.count===range.frames && Math.abs(visual.fps-range.fps)<1e-6 &&
+      MOTION_REFINE_AXES.every(axis=>Array.isArray(visual.series[axis]) &&
+        visual.series[axis].length===range.frames));
+  }
+  async function motionRefineBefore() {
+    const range=motionRefineRequireRange();
+    if(!range)return;
+    if(!motionLabDraftLayers.length)
+      return motionRefineStatus('Add an initial draft layer, then capture its curve baseline.');
+    motionRefineClear('Capturing baseline from the current Motion Lab draft…');
+    motionLabVisual?.invalidate(); // a failed compilation must not look fresh
+    await motionLabPreviewOrApply(false,{curvesOnly:true});
+    if(state.project?.id!==range.projectId || !motionRefineFresh(range)){
+      motionRefineStatus('Could not capture fresh curves. Check the Motion Lab diagnostics and try again.');
+      return;
+    }
+    motionRefineBaseline=motionRefineSnapshot(range,motionLabVisual);
+    motionRefineStatus('Before snapshot captured for frames '+range.start+'–'+range.end+
+      '. Now stage a new continuous correction or finish a punch-in, then Compare Draft Curves before Apply.');
+  }
+  async function motionRefineDiff() {
+    const range=motionRefineRequireRange(),before=motionRefineBaseline;
+    if(!range)return;
+    if(!before || before.projectId!==range.projectId ||
+       before.frames!==range.frames || Math.abs(before.fps-range.fps)>1e-6 ||
+       before.start!==range.start || before.end!==range.end){
+      motionRefineStatus('Capture Before Curves for this exact A/B interval before comparing.');
+      return;
+    }
+    motionRefineStatus('Compiling revised draft curves (no animation Apply)…');
+    motionLabVisual?.invalidate();
+    await motionLabPreviewOrApply(false,{curvesOnly:true});
+    if(state.project?.id!==range.projectId || !motionRefineFresh(range)){
+      motionRefineStatus('Updated draft curves were not available. No changes have been applied.');
+      return;
+    }
+    const after=motionLabVisual.series;
+    const details=[];
+    let changesOutside=0,changedAxes=0;
+    for(const axis of MOTION_REFINE_AXES) {
+      let inCount=0,peak=0,outer=0;
+      for(let frame=0;frame<range.frames;frame++){
+        const delta=Math.abs(after[axis][frame]-before.series[axis][frame]);
+        if(!Number.isFinite(delta)){
+          motionRefineStatus('Comparison contains invalid motion values. Nothing was applied.');
+          return;
+        }
+        if(delta>1e-7){
+          if(frame>=range.start && frame<=range.end){
+            inCount++;peak=Math.max(peak,delta);
+          }else outer++;
+        }
+      }
+      if(inCount)changedAxes++;
+      changesOutside+=outer;
+      if(inCount||outer)details.push(axis.replaceAll('_',' ')+
+        ': '+inCount+' frame(s) inside, peak |Δ| '+peak.toFixed(5)+
+        (outer?', '+outer+' outside':''));
+    }
+    const summary=details.length ? details.join(' · ') :
+      'No changes detected from the captured baseline.';
+    const out=motionRefineEl('results');
+    if(out){out.hidden=false;out.textContent=summary;}
+    motionRefineStatus('Draft comparison: '+changedAxes+' axis/axes changed within A/B; '+
+      changesOutside+' outside-frame axis changes.'+
+      (changesOutside?' Review spillover before Apply.':' Only the selected frame range differs.')+
+      ' No saved animation or render was modified.');
+  }
+  function motionRefineBind() {
+    motionRefineEl('continuous')?.addEventListener('click',motionRefineContinuous);
+    motionRefineEl('punch')?.addEventListener('click',motionRefinePunch);
+    motionRefineEl('before')?.addEventListener('click',()=>void motionRefineBefore());
+    motionRefineEl('diff')?.addEventListener('click',()=>void motionRefineDiff());
+  }
+
+  function motionReviewSet(start,end,enabled=true) {
+    if(!motionFramePlayer?.jobId||motionReviewMatch()||
+        !motionFramePlayer.setReviewRange(start,end,enabled)) {
+      motionReviewStatus('Invalid range or timing. Choose A ≤ B within this preview.');
+      return false;
+    }
+    motionReviewRange={start,end};
+    return true;
+  }
+  function motionReviewEditRange() {
+    if(!motionFramePlayer?.jobId)return;
+    const a=motionReviewEl('a'),b=motionReviewEl('b');
+    const start=Number(a?.value),end=Number(b?.value);
+    if(!a?.value.trim()||!b?.value.trim()||
+        !motionReviewSet(start,end,motionReviewEl('enabled')?.checked)){
+      if(a)a.value=String(motionReviewRange.start);
+      if(b)b.value=String(motionReviewRange.end);
+    }
+  }
+  function motionReviewTakeRange() {
+    const id=motionReviewEl('take')?.value;
+    const layer=motionLabDraftLayers.find(x=>x.type==='recording'&&x.id===id);
+    if(!layer){motionReviewStatus('Select a recorded draft take first.');return;}
+    if(!motionFramePlayer?.jobId||Number(layer.fps)!==motionFramePlayer.fps||
+       layer.start_frame<0||layer.end_frame>motionFramePlayer.count||
+       layer.end_frame<=layer.start_frame){
+      motionReviewStatus('Recorded take and preview frames/FPS do not match.');
+      return;
+    }
+    motionReviewSet(layer.start_frame,layer.end_frame-1,true);
+  }
+  function motionReviewOpenCurves() {
+    const problem=motionReviewMatch();
+    if(problem){motionReviewStatus(problem);return;}
+    const frame=motionFramePlayer.frame;
+    motionFramePlayer.pause();
+    showAnimationTab('curves');
+    if(!motionLabVisual?.series||motionLabVisual.stale||
+       motionLabVisual.count!==motionFramePlayer.count||
+       Math.abs(motionLabVisual.fps-motionFramePlayer.fps)>1e-6) {
+      motionLabNotify('Update Curves to review frame '+frame+' at matching FPS.');
+      return;
+    }
+    motionLabVisual.setFrame(frame);
+  }
+  function motionReviewBind() {
+    for(const key of ['a','b','enabled'])
+      motionReviewEl(key)?.addEventListener('change',motionReviewEditRange);
+    motionReviewEl('mark-a')?.addEventListener('click',()=>{
+      if(!motionFramePlayer?.jobId)return;
+      const frame=motionFramePlayer.frame;
+      motionReviewSet(frame,Math.max(frame,motionReviewRange.end),true);
+    });
+    motionReviewEl('mark-b')?.addEventListener('click',()=>{
+      if(!motionFramePlayer?.jobId)return;
+      const frame=motionFramePlayer.frame;
+      motionReviewSet(Math.min(frame,motionReviewRange.start),frame,true);
+    });
+    motionReviewEl('use-take')?.addEventListener('click',motionReviewTakeRange);
+    motionReviewEl('curves')?.addEventListener('click',motionReviewOpenCurves);
+  }
   function ensureMotionFramePlayer() {
     if (motionFramePlayer || !window.MorphorumMotionFramePlayer) return motionFramePlayer;
     const root = qs('#animation-motion-frame-player');
@@ -2649,8 +3110,29 @@
       loop: qs('#animation-motion-frame-loop'),
       scrub: qs('#animation-motion-frame-scrub'),
       time: qs('#animation-motion-frame-time'),
+      rangeEnabled:motionReviewEl('enabled'),
+      rangeStart:motionReviewEl('a'),
+      rangeEnd:motionReviewEl('b'),
+      onFrame:motionReviewFrame,
+      onLoad:({frames})=>{
+        motionReviewRange={start:0,end:frames-1};
+        motionReviewRefreshTakes();
+        motionCompareClear('CPU preview loaded. Select a saved render for side-by-side review.');
+        void motionCompareRefresh();
+        const mismatch=motionReviewMatch();
+        if(mismatch)motionReviewStatus(mismatch);
+      },
       getAudio: () => motionLabAudioProjectId === state.project?.id ? motionLabAudioElement : null,
       shouldSync: () => Boolean(qs('#animation-motion-lab-audio-sync')?.checked),
+      canPlay: () => {
+        const issue = motionReviewMatch();
+        if(issue) {
+          motionReviewStatus(issue);
+          motionFramePlayer?.pause();
+          return false;
+        }
+        return true;
+      },
       status: message => motionGifSyncStatus(message),
     });
     return motionFramePlayer;
@@ -2710,6 +3192,12 @@
   }
   function clearMotionPreviewResult() {
     motionFramePlayer?.clear();
+    motionCompareClear('Generate a CPU camera preview to compare with a completed render.');
+    motionRefineClear('Generate a fresh CPU preview and enable A/B to prepare corrections.');
+    motionReviewRange={start:0,end:0};
+    motionReviewStatus('Generate a camera preview to begin reviewing frames.');
+    const values=motionReviewEl('values');
+    if(values)values.textContent='Update Motion Curves to compare six-axis values.';
     motionGifSyncRun++;
     motionGifPreviewUrl = null;
     motionGifPreviewFps = null;
@@ -2823,12 +3311,21 @@
       if (result) result.hidden = false;
       motionGifPreviewUrl = job.url;
       motionGifPreviewFps = Number(job.result?.fps || state.project?.animation?.fps || 12);
+      let loadedFrames = false;
       if (job.result?.frame_player_samples && ensureMotionFramePlayer()) {
-        motionFramePlayer.load(job);
-        if (image) image.hidden = true;
-      } else if (image) {
-        image.hidden = false;
-        image.src = job.url + '?v=' + Date.now();
+        try {
+          motionFramePlayer.load(job);
+          loadedFrames = true;
+        } catch (error) {
+          motionFramePlayer.clear();
+          motionReviewStatus('Frame player unavailable: ' + error.message +
+            '. GIF fallback has approximate timing and cannot be A/B scrubbed.');
+          toast('Frame preview metadata invalid', error.message, 'warning', 6500);
+        }
+      }
+      if (image) {
+        image.hidden = loadedFrames;
+        if (!loadedFrames) image.src = job.url + '?v=' + Date.now();
       }
       if (motionFramePlayer?.jobId === job.id) {
         motionGifSyncStatus('Frame player ready: seek, pause, loop and optional WAV sync.');
@@ -2863,11 +3360,15 @@
   async function pollMotionPreview(jobId) {
     try {
       const job = await api('/api/animation/motion-preview/' + encodeURIComponent(jobId));
+      // A project switch clears motionJobId. Never show an old response,
+      // even when the HTTP request started before the switch/reload.
+      if (state.motionJobId !== jobId) return;
       updateMotionProgress(job);
       if (job.status === 'completed' || job.status === 'failed') { finishMotionPreview(job); return; }
       state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 350);
     } catch (_) {
-      state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 1000);
+      if (state.motionJobId === jobId)
+        state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 1000);
     }
   }
 
@@ -2875,6 +3376,7 @@
     if (!state.project || state.motionJobId || motionPreviewStarting ||
         animationRenderStarting || renderIsActive()) return;
     motionPreviewStarting = true;
+    const requestedProjectId = state.project.id;
     motionLabSyncQuickActions();
     const button = qs('#animation-generate-motion-preview');
     if (button) {
@@ -2902,12 +3404,14 @@
           },
         }),
       });
+      if (state.project?.id !== requestedProjectId) return;
       state.motionJobId = job.id;
       updateMotionProgress(job);
       motionLabSyncQuickActions();
       renderSourceState();
       pollMotionPreview(job.id);
     } catch (error) {
+      if (state.project?.id !== requestedProjectId) return;
       state.motionJobId = null;
       if (button) {
         button.classList.remove('busy');
@@ -3338,7 +3842,9 @@
     }
   }
 
+  let renderHistoryGeneration = 0;
   function resetRenderUi() {
+    ++renderHistoryGeneration;
     window.clearTimeout(state.renderPollTimer);
     state.renderPollTimer = null;
     state.renderJobId = null;
@@ -3535,9 +4041,13 @@
 
   async function loadRenderHistory() {
     if (!state.project?.id) { resetRenderUi(); return; }
+    const projectId = state.project.id;
+    const token = ++renderHistoryGeneration;
     try {
-      const payload = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) + '/renders');
-      const renders = Array.isArray(payload.renders) ? payload.renders : [];
+      const payload = await api('/api/animation/projects/' + encodeURIComponent(projectId) + '/renders');
+      if (token !== renderHistoryGeneration || state.project?.id !== projectId) return;
+      const renders = Array.isArray(payload.renders) ? payload.renders :
+        [];
       populateRenderHistory(renders);
       if (!state.renderJobId && renders.length) {
         renderAnimationJob(renders[0]);
@@ -3547,14 +4057,18 @@
         await loadVideoExportHistory();
       }
     } catch (error) {
-      toast('Could not load animation render history', error.message, 'warning', 6000);
+      if (token === renderHistoryGeneration && state.project?.id === projectId)
+        toast('Could not load animation render history', error.message, 'warning', 6000);
     }
   }
 
   async function showRender(renderId) {
     if (!renderId) { renderAnimationJob(null); return; }
+    const projectId = state.project?.id;
     try {
       const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
+      if (state.project?.id !== projectId ||
+          (job.project_id && job.project_id !== projectId)) return;
       renderAnimationJob(job);
       await loadVideoExportHistory();
       if (renderIsActive(job)) pollAnimationRender(job.id);
@@ -3568,7 +4082,8 @@
     if (!renderId || renderId !== state.renderJobId) return;
     try {
       const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
-      if (renderId !== state.renderJobId) return;
+      if (renderId !== state.renderJobId ||
+          (job.project_id && job.project_id !== state.project?.id)) return;
       renderAnimationJob(job);
       if (renderIsActive(job)) {
         state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 700);
@@ -4670,10 +5185,13 @@
     const axis = index => Number.isFinite(Number(pad.axes?.[index])) ? Number(pad.axes[index]) : 0;
     const button = index => Number.isFinite(Number(pad.buttons?.[index]?.value))
       ? Number(pad.buttons[index].value) : 0;
-    values.translation_x += axis(0);
-    values.translation_y += -axis(1);
-    values.rotation_y += axis(2);
-    values.rotation_x += -axis(3);
+    const swapped = qs('#animation-motion-lab-gamepad-profile')?.value === 'swapped';
+    const moveStick = swapped ? 2 : 0;
+    const lookStick = swapped ? 0 : 2;
+    values.translation_x += axis(moveStick);
+    values.translation_y += -axis(moveStick + 1);
+    values.rotation_y += axis(lookStick);
+    values.rotation_x += -axis(lookStick + 1);
     values.translation_z += button(7) - button(6);
     values.rotation_z += button(5) - button(4);
     if ([...pad.axes || [], button(4),button(5),button(6),button(7)]
@@ -4881,6 +5399,165 @@
   let motionLabAudioProjectId = null;
   let motionLabAudioElement = null;
   let motionLabAudioUrl = null;
+  let motionLabEditedEvents = null;
+  let motionLabSelectedEvent = null;
+  let motionLabMarkersDirty = false;
+  let motionLabMarkerUndo = [];
+  let motionLabMarkerRedo = [];
+  function motionLabMarkerSnapshot() {
+    if (!motionLabEditedEvents) return;
+    motionLabMarkerUndo.push(motionLabEditedEvents.map(e=>({...e})));
+    if (motionLabMarkerUndo.length > 60) motionLabMarkerUndo.shift();
+    motionLabMarkerRedo = [];
+  }
+  function motionLabMarkerHistory(redo) {
+    const source = redo ? motionLabMarkerRedo : motionLabMarkerUndo;
+    if (!source.length || !motionLabEditedEvents) return;
+    const destination = redo ? motionLabMarkerUndo : motionLabMarkerRedo;
+    destination.push(motionLabEditedEvents.map(e=>({...e})));
+    motionLabEditedEvents = source.pop();
+    motionLabMarkersDirty = true;
+    motionLabStereoWaveform();
+  }
+
+  async function motionLabSaveMarkers() {
+    if (!motionLabAudioAnalysis || !motionLabEditedEvents || !state.project ||
+        motionLabAudioProjectId !== state.project.id) return;
+    const button = qs('[data-event-persist]');
+    if (button) button.disabled = true;
+    try {
+      const saved = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) +
+        '/motion-lab/audio-markers', {method:'PUT',body:JSON.stringify({
+          source_sha256:motionLabAudioAnalysis.source_sha256,
+          duration_seconds:motionLabAudioAnalysis.duration_seconds,
+          events:motionLabEditedEvents,
+        })});
+      if (!saved?.markers) throw new Error('Marker save was not confirmed.');
+      motionLabMarkersDirty = false;
+      motionLabEventEditor();
+      motionLabNotify('Drum marker edits saved for this WAV.');
+    } catch(error) {
+      motionLabNotify('Could not save markers: ' + (error?.message || error));
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function motionLabEventEditor() {
+    const panel = qs('#animation-audio-event-editor');
+    if (!panel || !motionLabAudioAnalysis) return;
+    const events = motionLabEditedEvents || [];
+    const selected = events.find(e => e.id === motionLabSelectedEvent);
+    const output = panel.querySelector('[data-event-count]');
+    if (output) output.textContent = events.filter(e => e.enabled).length +
+      ' active / ' + events.length + ' markers · ' +
+      (motionLabMarkersDirty ? 'Unsaved edits' : 'Saved or unmodified');
+    const time = panel.querySelector('[data-event-time]');
+    const kind = panel.querySelector('[data-event-kind]');
+    const enabled = panel.querySelector('[data-event-enabled]');
+    if (time) { time.disabled = !selected; time.value = selected ? String(selected.time_seconds) : ''; }
+    if (kind) { kind.disabled = !selected; kind.value = selected?.kind || 'kick'; }
+    if (enabled) { enabled.disabled = !selected; enabled.checked = selected?.enabled !== false; }
+    const undo = panel.querySelector('[data-event-undo]');
+    const redo = panel.querySelector('[data-event-redo]');
+    if (undo) undo.disabled = !motionLabMarkerUndo.length;
+    if (redo) redo.disabled = !motionLabMarkerRedo.length;
+    const remove = panel.querySelector('[data-event-remove]');
+    if (remove) remove.disabled = !selected;
+    const summary = panel.querySelector('[data-event-selected]');
+    if (summary) summary.textContent = selected ?
+      'Selected ' + selected.kind + ' at ' + selected.time_seconds.toFixed(3) + ' s' :
+      'Select a marker on the waveform to edit it';
+  }
+  function motionLabEventChange(action) {
+    if (!motionLabAudioAnalysis || !motionLabEditedEvents) return;
+    const panel = qs('#animation-audio-event-editor');
+    const selected = motionLabEditedEvents.find(e => e.id === motionLabSelectedEvent);
+    if (action === 'add' || action === 'remove' || action === 'reset' || action === 'clear-detected' ||
+        (action === 'update' && selected)) motionLabMarkerSnapshot();
+    if (action === 'add') {
+      const duration = motionLabAudioAnalysis.duration_seconds;
+      const time = Math.max(0, Math.min(duration - .000001,
+        Number(motionLabAudioElement?.currentTime) || 0));
+      const id = 'manual-' + String(Date.now()) + '-' + motionLabEditedEvents.length;
+      motionLabEditedEvents.push({id, kind:'kick', time_seconds:time,
+        strength:1, source:'manual',enabled:true});
+      motionLabSelectedEvent = id;
+    } else if (action === 'clear-detected') {
+      // Preserve user-created manual markers and all camera motion cues.
+      motionLabEditedEvents = motionLabEditedEvents.filter(e => e.source === 'manual' ||
+        String(e.id).startsWith('manual-'));
+      motionLabSelectedEvent = null;
+    } else if (action === 'reset') {
+      motionLabEditedEvents = (motionLabAudioAnalysis.events?.events || []).map(
+        e => ({...e, enabled:true}));
+      motionLabSelectedEvent = null;
+    } else if (selected && action === 'remove') {
+      motionLabEditedEvents = motionLabEditedEvents.filter(e => e.id !== selected.id);
+      motionLabSelectedEvent = null;
+    } else if (selected && action === 'update') {
+      const time = Number(panel?.querySelector('[data-event-time]')?.value);
+      if (!Number.isFinite(time) || time < 0 || time >= motionLabAudioAnalysis.duration_seconds) {
+        motionLabNotify('Marker time must be within the audio duration.');
+        return;
+      }
+      selected.time_seconds = Math.round(time * 1000000) / 1000000;
+      selected.kind = panel.querySelector('[data-event-kind]').value;
+      selected.enabled = Boolean(panel.querySelector('[data-event-enabled]').checked);
+    }
+    motionLabEditedEvents.sort((a,b)=>a.time_seconds-b.time_seconds);
+    motionLabMarkersDirty = true;
+    motionLabStereoWaveform();
+  }
+  function motionLabWavePlayhead() {
+    const section = qs('#animation-audio-stereo-timeline');
+    const line = section?.querySelector('[data-wave-playhead]');
+    const readout = section?.querySelector('[data-wave-time]');
+    const button = section?.querySelector('[data-wave-play]');
+    const audio = motionLabAudioElement;
+    const duration = Number(motionLabAudioAnalysis?.duration_seconds) || 0;
+    const current = Math.max(0, Math.min(duration, Number(audio?.currentTime) || 0));
+    if (readout) readout.textContent = current.toFixed(2) + ' / ' + duration.toFixed(2) + ' s';
+    if (button) button.textContent = audio && !audio.paused ? 'Pause audio' : 'Play audio';
+    if (!line || !duration) return;
+    const begin = Number(section.dataset.waveStart || 0);
+    const end = Number(section.dataset.waveEnd || duration);
+    const follow = section.querySelector('[data-wave-follow]')?.checked;
+    const span = end - begin;
+    // Page forward before the playhead reaches the right edge. Updating the
+    // Start slider redraws the waveform, then this function uses new bounds.
+    if (follow && audio && !audio.paused && span > 0 && span < duration &&
+        (current > begin + span * .75 || current < begin)) {
+      const desired = Math.max(0, Math.min(duration - span, current - span * .25));
+      const startSlider = section.querySelector('[data-wave-start]');
+      const zoom = Number(section.querySelector('[data-wave-zoom]')?.value || 1);
+      const available = Math.max(0, 1 - 1 / zoom);
+      if (startSlider && available > 0) {
+        startSlider.value = String(Math.round(desired / duration / available * 1000));
+        motionLabStereoWaveform();
+        return;
+      }
+    }
+    const shown = current >= begin && current <= end;
+    line.setAttribute('visibility', shown ? 'visible' : 'hidden');
+    if (shown) {
+      const x = (current - begin) / Math.max(1e-9, end - begin) * 800;
+      line.setAttribute('x1', x.toFixed(3));
+      line.setAttribute('x2', x.toFixed(3));
+    }
+  }
+  function motionLabWaveToggle() {
+    const audio = motionLabAudioElement;
+    if (!audio) return;
+    if (!audio.paused) { audio.pause(); return; }
+    if (audio.ended || (Number.isFinite(audio.duration) && audio.currentTime >= audio.duration)) {
+      audio.currentTime = 0;
+    }
+    const started = audio.play();
+    started?.catch(error => motionLabAudioSyncStatus(
+      'Audio playback blocked: ' + (error?.message || error)));
+  }
+
   function motionLabReleaseAudio() {
     motionLabAudioElement?.pause();
     if (motionLabAudioElement) motionLabAudioElement.removeAttribute('src');
@@ -4944,6 +5621,1945 @@
     const peak = Math.max(0, ...rises);
     return rises.map(v => peak > 1e-12 ? Math.max(0, Math.min(1, v / peak - sensitivity * .5)) : 0);
   }
+  // DA4.2: manual choreography is independent of beat detection.
+  let motionDirectorCues = [];
+  let motionDirectorSelected = null;
+  let motionDirectorDirty = false;
+  const MOTION_DIRECTOR_PRESETS = [
+    ['push_zoom_in','Push Zoom In'],['roll_right_left','Roll Right → Left'],
+    ['push_return','Push & Return'],['roll_left_right','Roll Left → Right'],
+    ['dolly_out','Dolly Out'],['shake','Shake'],['ripple','Ripple'],
+    ['reveal_drift','Reveal Drift'],['fly_through','Fly-through'],
+  ];
+  let motionDirectorBulkUndo = null;
+  let motionDirectorPreviewMatches = false;
+  function motionDirectorFindCandidates() {
+    const panel = qs('#animation-audio-motion-director');
+    const analysis = motionLabAudioAnalysis;
+    if (!panel || !analysis) return [];
+    const kind = panel.querySelector('[data-beat-kind]')?.value || 'kick';
+    const minStrength = Number(panel.querySelector('[data-beat-strength]')?.value ?? .35);
+    const minGap = Number(panel.querySelector('[data-beat-gap]')?.value ?? .1);
+    const start = Number(panel.querySelector('[data-beat-start]')?.value ?? 0);
+    const end = Number(panel.querySelector('[data-beat-end]')?.value ?? analysis.duration_seconds);
+    const every = Number(panel.querySelector('[data-beat-every]')?.value ?? 1);
+    if (![minStrength,minGap,start,end,every].every(Number.isFinite) ||
+        minStrength<0 || minStrength>1 || minGap<0 || minGap>2 ||
+        start<0 || end<=start || end>analysis.duration_seconds + .001 ||
+        !Number.isInteger(every) || every<1 || every>16) return [];
+    let last = -Infinity;
+    const candidates = [];
+    for (const event of motionLabEditedEvents || []) {
+      if (event.enabled === false || event.kind !== kind ||
+          Number(event.strength ?? 1)<minStrength ||
+          event.time_seconds<start || event.time_seconds>=end ||
+          event.time_seconds-last<minGap) continue;
+      last = event.time_seconds;
+      candidates.push(event);
+    }
+    return candidates.filter((_,i)=>i%every===0);
+  }
+  function motionDirectorFindStatus() {
+    const panel=qs('#animation-audio-motion-director');
+    if (!panel) return;
+    const status=panel.querySelector('[data-beat-summary]');
+    const candidates=motionDirectorFindCandidates();
+    if (status) status.textContent=candidates.length+' eligible detected or manually corrected hit(s). Review before assigning.';
+    const undo=panel.querySelector('[data-beat-undo]');
+    if (undo) undo.disabled=!motionDirectorBulkUndo;
+  }
+  function motionDirectorAssignBeats() {
+    const panel=qs('#animation-audio-motion-director');
+    if (!panel || !motionLabAudioAnalysis) return;
+    const events=motionDirectorFindCandidates();
+    if (!events.length) {motionLabNotify('No matching hits in this range.');return;}
+    const preset=panel.querySelector('[data-beat-preset]').value;
+    const alternate=panel.querySelector('[data-beat-alternate]').checked;
+    const intensity=.5, duration=.6;
+    const existing=new Set(motionDirectorCues.filter(c=>c.source_event_id)
+      .map(c=>c.source_event_id+'|'+c.preset));
+    const additions=[];
+    for (const event of events) {
+      const chosen=alternate ? (additions.length%2 ? 'roll_left_right' : 'roll_right_left') : preset;
+      if (existing.has(event.id+'|'+chosen)) continue;
+      const id='beatcue-'+Date.now().toString(36)+'-'+(motionDirectorCues.length+additions.length);
+      additions.push({id,preset:chosen,time_seconds:event.time_seconds,
+        duration_seconds:duration,intensity,easing:'ease_in_out',enabled:true,
+        source_event_id:event.id});
+      existing.add(event.id+'|'+chosen);
+    }
+    if (!additions.length) {motionLabNotify('Those hits already have matching cues.');return;}
+    if (motionDirectorCues.length+additions.length>3000) {
+      motionLabNotify('Cue limit is 3000. Narrow the beat range.');return;
+    }
+    motionDirectorBulkUndo=motionDirectorCues.map(c=>({...c}));
+    motionDirectorCues.push(...additions);
+    motionDirectorDirty=true;
+    motionDirectorPanel();motionLabStereoWaveform();
+    motionLabNotify('Added '+additions.length+' camera cues. Save cues to keep them.');
+  }
+  function motionDirectorPanel() {
+    let panel = qs('#animation-audio-motion-director');
+    const waveform = qs('#animation-audio-stereo-timeline');
+    if (!waveform || !motionLabAudioAnalysis) return;
+    if (panel) panel.hidden = false;
+    if (!panel) {
+      panel = document.createElement('section');
+      panel.id = 'animation-audio-motion-director';
+      panel.className = 'animation-audio-motion-director';
+      panel.innerHTML = '<div class="animation-audio-director-head"><strong>Camera motion cues</strong>' +
+        '<span class="muted">Place a camera move at any point, even without detected beats.</span></div>' +
+        '<div class="animation-audio-director-actions"><button type="button" data-cue-add>Add cue at playhead</button>' +
+        '<button type="button" data-cue-save>Save cues</button>' +
+        '<button type="button" data-cue-preview>Preview camera cues</button>' +
+        '<button type="button" data-cue-apply>Apply camera cues</button>' +
+        '<span data-cue-status class="muted"></span></div>' +
+        '<div class="animation-audio-director-fields">' +
+        '<label>Movement<select data-cue-preset></select></label>' +
+        '<label>Start (seconds)<input data-cue-time type="number" min="0" step=".001"></label>' +
+        '<label>Duration (seconds)<input data-cue-duration type="number" min=".01" max="30" step=".05"></label>' +
+        '<label>Intensity (0–1)<input data-cue-intensity type="number" min="0" max="1" step=".05"></label>' +
+        '<label>Easing<select data-cue-easing><option value="ease_in_out">Ease in/out</option>' +
+        '<option value="linear">Linear</option><option value="smoothstep">Smoothstep</option>' +
+        '<option value="ease_in">Ease in</option><option value="ease_out">Ease out</option></select></label>' +
+        '<label class="animation-audio-director-enabled"><input data-cue-enabled type="checkbox"> Enabled</label></div>' +
+        '<div class="animation-audio-director-actions"><button type="button" data-cue-update>Update selected</button>' +
+        '<button type="button" data-cue-delete>Delete selected</button></div>' +
+        '<div data-cue-list class="animation-audio-director-list"></div>' +
+        '<details class="animation-audio-find-beats"><summary>Find Beats · Optional batch cues</summary>' +
+        '<div class="animation-audio-beat-grid">' +
+        '<label>Find<select data-beat-kind><option value="kick">Kick</option><option value="snare">Snare</option><option value="highs">Highs</option></select></label>' +
+        '<label>Minimum strength<input data-beat-strength type="number" min="0" max="1" step=".05" value=".35"></label>' +
+        '<label>Min gap (s)<input data-beat-gap type="number" min="0" max="2" step=".025" value=".1"></label>' +
+        '<label>From (s)<input data-beat-start type="number" min="0" step=".1" value="0"></label>' +
+        '<label>To (s)<input data-beat-end type="number" min="0" step=".1"></label>' +
+        '<label>Every Nth hit<input data-beat-every type="number" min="1" max="16" step="1" value="1"></label>' +
+        '<label>Motion preset<select data-beat-preset></select></label>' +
+        '<label class="animation-audio-beat-check"><input data-beat-alternate type="checkbox"> Alternate right/left rolls</label></div>' +
+        '<div class="animation-audio-director-actions"><button type="button" data-beat-preview>Preview matches</button>' +
+        '<button type="button" data-beat-assign>Assign cues to matches</button>' +
+        '<button type="button" data-beat-undo disabled>Undo batch</button></div>' +
+        '<p data-beat-summary class="muted">Review candidate hits before assigning.</p></details>' +
+        '<p class="muted">Cues save with this WAV. Save cues, then Preview camera cues or Apply camera cues. Existing Motion Lab layers remain additive.</p>';
+      waveform.after(panel);
+      const options = panel.querySelector('[data-cue-preset]');
+      for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
+        const option = document.createElement('option');
+        option.value = key; option.textContent = label; options.appendChild(option);
+      }
+      const beatOptions=panel.querySelector('[data-beat-preset]');
+      for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
+        const option=document.createElement('option');option.value=key;
+        option.textContent=label;beatOptions.appendChild(option);
+      }
+      panel.querySelector('[data-beat-preview]').addEventListener('click',()=>{
+        motionDirectorPreviewMatches=true;motionDirectorFindStatus();motionLabStereoWaveform();
+      });
+      panel.querySelector('[data-beat-assign]').addEventListener('click',motionDirectorAssignBeats);
+      panel.querySelector('[data-beat-undo]').addEventListener('click',()=>{
+        if (!motionDirectorBulkUndo) return;
+        motionDirectorCues=motionDirectorBulkUndo;motionDirectorBulkUndo=null;
+        motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
+      });
+      panel.querySelector('[data-cue-add]').addEventListener('click', () => {
+        const time = Math.max(0,Math.min(motionLabAudioAnalysis.duration_seconds-.000001,
+          Number(motionLabAudioElement?.currentTime)||0));
+        const id = 'cue-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,9);
+        const cue = {id,preset:'push_zoom_in',time_seconds:time,duration_seconds:.6,
+          intensity:.5,easing:'ease_in_out',enabled:true,source_event_id:null};
+        motionDirectorCues.push(cue);motionDirectorSelected=id;motionDirectorDirty=true;
+        motionDirectorPanel();motionLabStereoWaveform();
+      });
+      panel.querySelector('[data-cue-update]').addEventListener('click', () => {
+        const cue = motionDirectorCues.find(c => c.id === motionDirectorSelected);
+        if (!cue) return;
+        const time = Number(panel.querySelector('[data-cue-time]').value);
+        const duration = Number(panel.querySelector('[data-cue-duration]').value);
+        const intensity = Number(panel.querySelector('[data-cue-intensity]').value);
+        if (![time,duration,intensity].every(Number.isFinite) || time<0 ||
+            time>=motionLabAudioAnalysis.duration_seconds || duration<.01 ||
+            duration>30 || intensity<0 || intensity>1) {
+          motionLabNotify('Cue timing or intensity is outside allowed limits.');return;
+        }
+        Object.assign(cue,{preset:panel.querySelector('[data-cue-preset]').value,
+          time_seconds:time,duration_seconds:duration,intensity,
+          easing:panel.querySelector('[data-cue-easing]').value,
+          enabled:panel.querySelector('[data-cue-enabled]').checked});
+        motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
+      });
+      panel.querySelector('[data-cue-delete]').addEventListener('click', () => {
+        motionDirectorCues=motionDirectorCues.filter(c=>c.id!==motionDirectorSelected);
+        motionDirectorSelected=null;motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
+      });
+      const stageCues = (apply) => {
+        const project=state.project;
+        if (!project || motionLabAudioProjectId !== project.id || motionLabBusy) {
+          motionLabNotify('Open and analyze the project WAV first.');return;
+        }
+        if (motionDirectorDirty) {
+          motionLabNotify('Save camera cues first, then preview or apply them.');return;
+        }
+        if (!motionDirectorCues.some(c=>c.enabled && c.intensity>0)) {
+          motionLabNotify('Add an enabled camera cue first.');return;
+        }
+        const frames=Number(project.animation?.max_frames);
+        if (!Number.isInteger(frames) || frames<1 || frames>3000) return;
+        const cueDocument={
+          source_sha256:motionLabAudioAnalysis.source_sha256,
+          duration_seconds:motionLabAudioAnalysis.duration_seconds,
+          cues:motionDirectorCues.map(c=>({...c})),
+        };
+        const id='director-'+cueDocument.source_sha256.slice(0,24);
+        const replacement={
+          id,type:'audio_cues',enabled:true,blend:'add',
+          start_frame:0,end_frame:frames,sha256:cueDocument.source_sha256,
+          name:'Audio Motion Director',cue_document:cueDocument,
+        };
+        const existing=motionLabDraftLayers.findIndex(l=>l.id===id);
+        if (existing<0 && motionLabDraftLayers.length>=24) {
+          motionLabNotify('Motion Lab supports a maximum of 24 layers.');return;
+        }
+        if (existing>=0) motionLabDraftLayers[existing]=replacement;
+        else motionLabDraftLayers.push(replacement);
+        commitMotionLabDraft();
+        void motionLabPreviewOrApply(apply,{curvesOnly:false});
+      };
+      panel.querySelector('[data-cue-preview]').addEventListener('click',()=>stageCues(false));
+      panel.querySelector('[data-cue-apply]').addEventListener('click',async()=>{
+        const approved=await window.MorphorumDialog.confirm({
+          title:'Apply Audio Motion Director cues?',
+          message:'Replace this source\'s existing Director layer with the saved cues and apply native six-axis camera schedules to this project? Other Motion Lab layers remain in the draft.',
+          confirmText:'Apply Camera Cues',cancelText:'Cancel',variant:'default',
+        });
+        if (approved) stageCues(true);
+      });
+      panel.querySelector('[data-cue-save]').addEventListener('click', async () => {
+        const projectId=state.project?.id;
+        if (!projectId || motionLabAudioProjectId!==projectId) return;
+        const save=panel.querySelector('[data-cue-save]');save.disabled=true;
+        try {
+          const response=await api('/api/animation/projects/'+encodeURIComponent(projectId)+
+            '/motion-lab/audio-cues',{method:'PUT',body:JSON.stringify({
+              source_sha256:motionLabAudioAnalysis.source_sha256,
+              duration_seconds:motionLabAudioAnalysis.duration_seconds,cues:motionDirectorCues,
+            })});
+          if (!response?.cues) throw new Error('Cue save not confirmed.');
+          motionDirectorCues=response.cues.cues;motionDirectorDirty=false;
+          motionLabNotify('Camera cues saved with this WAV.');
+        } catch(error) {motionLabNotify('Cue save failed: '+(error?.message||error));}
+        finally {save.disabled=false;motionDirectorPanel();}
+      });
+      panel.querySelector('[data-cue-list]').addEventListener('click', event => {
+        const button=event.target.closest('[data-cue-id]');
+        if (!button) return;
+        motionDirectorSelected=button.dataset.cueId;
+        const cue=motionDirectorCues.find(c=>c.id===motionDirectorSelected);
+        if (cue && motionLabAudioElement) motionLabAudioElement.currentTime=cue.time_seconds;
+        motionDirectorPanel();
+      });
+    }
+    const beatEnd=panel.querySelector('[data-beat-end]');
+    if (beatEnd && !beatEnd.value) beatEnd.value=motionLabAudioAnalysis.duration_seconds.toFixed(3);
+    motionDirectorFindStatus();
+    const selected=motionDirectorCues.find(c=>c.id===motionDirectorSelected);
+    for (const [attr,key] of [['data-cue-preset','preset'],['data-cue-time','time_seconds'],
+        ['data-cue-duration','duration_seconds'],['data-cue-intensity','intensity'],
+        ['data-cue-easing','easing']]) {
+      const input=panel.querySelector('['+attr+']');
+      input.disabled=!selected;
+      input.value=selected?String(selected[key]):'';
+    }
+    const enabled=panel.querySelector('[data-cue-enabled]');
+    enabled.disabled=!selected;enabled.checked=Boolean(selected?.enabled);
+    for (const attr of ['data-cue-update','data-cue-delete'])
+      panel.querySelector('['+attr+']').disabled=!selected;
+    const status=panel.querySelector('[data-cue-status]');
+    status.textContent=motionDirectorCues.length+' cues'+(motionDirectorDirty?' · Unsaved':' · Saved');
+    for (const kind of ['data-cue-preview','data-cue-apply'])
+      panel.querySelector('['+kind+']').disabled=motionDirectorDirty || !motionDirectorCues.length || motionLabBusy;
+    const list=panel.querySelector('[data-cue-list]');list.replaceChildren();
+    for (const cue of [...motionDirectorCues].sort((a,b)=>a.time_seconds-b.time_seconds)) {
+      const button=document.createElement('button');button.type='button';
+      button.className='animation-audio-cue-item'+(cue.id===motionDirectorSelected?' active':'');
+      button.dataset.cueId=cue.id;
+      button.textContent=cue.time_seconds.toFixed(3)+'s · '+
+        (MOTION_DIRECTOR_PRESETS.find(p=>p[0]===cue.preset)?.[1]||cue.preset)+
+        (cue.enabled?'':' (disabled)');
+      list.appendChild(button);
+    }
+  }
+  function motionLabStereoWaveform() {
+    const preview = qs('#animation-motion-lab-audio-preview');
+    const analysis = motionLabAudioAnalysis;
+    if (!preview) return;
+    let section = qs('#animation-audio-stereo-timeline');
+    if (!analysis?.waveform?.channels?.length) {
+      if (section) section.hidden = true;
+      const editor = qs('#animation-audio-event-editor');
+      if (editor) editor.hidden = true;
+      const director = qs('#animation-audio-motion-director');
+      if (director) director.hidden = true;
+      return;
+    }
+    if (section) section.hidden = false;
+    const editor = qs('#animation-audio-event-editor');
+    if (editor) editor.hidden = false;
+    if (!section) {
+      section = document.createElement('section');
+      section.id = 'animation-audio-stereo-timeline';
+      section.className = 'animation-audio-stereo-timeline';
+      section.innerHTML = '<div class="animation-audio-wave-controls"><strong>Audio reference · Events</strong>' +
+        '<label class="animation-audio-wave-mode">Display <select data-wave-mode>' +
+        '<option value="envelope">Envelope + markers</option>' +
+        '<option value="stereo">Stereo waveform</option>' +
+        '<option value="both">Envelope + stereo</option></select></label>' +
+        '<label>Zoom <input type="range" min="1" max="12" value="1" step="1" data-wave-zoom></label>' +
+        '<label>Pan <input type="range" min="0" max="1000" value="0" step="1" data-wave-start></label>' +
+        '<label class="animation-audio-wave-follow"><input type="checkbox" data-wave-follow checked> Follow playhead</label></div>' +
+        '<div class="animation-audio-wave-transport"><button type="button" data-wave-play>Play audio</button>' +
+        '<output data-wave-time>0.00 / 0.00 s</output><span>Click or tap the waveform to seek</span></div>' +
+        '<svg data-wave-svg viewBox="0 0 800 180" role="img" tabindex="0" aria-label="Audio waveform with editable kick and snare events"></svg>' +
+        '<div class="animation-audio-ruler"><span data-wave-left-time>0.00s</span><span data-wave-right-time>0.00s</span></div>' +
+        '<p class="muted" data-wave-description></p>';
+      const workspace = qs('#animation-audio-analysis-workspace');
+      const diagnostics = workspace?.querySelector('.animation-audio-legacy-envelope');
+      if (workspace && diagnostics) diagnostics.before(section);
+      else preview.before(section);
+      const editor = document.createElement('div');
+      editor.id = 'animation-audio-event-editor';
+      editor.className = 'animation-audio-event-editor';
+      editor.innerHTML = '<div class="animation-audio-event-heading"><strong>Event detection & marker editing</strong>' +
+        '<span class="muted">Drag a marker to move · double-click empty waveform to add · Shift-click marker to remove</span></div>' +
+        '<p data-event-selected>Select a marker on the waveform to edit it</p>' +
+        '<div class="animation-audio-event-fields">' +
+        '<label>Time (seconds)<input type="number" min="0" step="0.001" data-event-time disabled></label>' +
+        '<label>Type<select data-event-kind disabled><option value="kick">Kick</option>' +
+        '<option value="snare">Snare</option><option value="highs">Highs</option></select></label>' +
+        '<label class="animation-audio-event-checkbox"><input type="checkbox" data-event-enabled disabled> Enabled</label></div>' +
+        '<div class="animation-audio-event-actions"><button type="button" data-event-save>Update marker</button>' +
+        '<button type="button" data-event-add>Add at playhead</button>' +
+        '<button type="button" data-event-remove disabled>Remove marker</button>' +
+        '<button type="button" data-event-undo disabled>Undo</button>' +
+        '<button type="button" data-event-redo disabled>Redo</button>' +
+        '<button type="button" data-event-reset>Reset detections</button>' +
+        '<button type="button" data-event-clear-detected>Clear all detected markers</button>' +
+        '<button type="button" data-event-persist>Save marker edits</button></div>' +
+        '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera motion until a later phase.</p>';
+      section.after(editor);
+      editor.querySelector('[data-event-persist]')?.addEventListener('click', () => void motionLabSaveMarkers());
+      editor.querySelector('[data-event-undo]')?.addEventListener('click', () => motionLabMarkerHistory(false));
+      editor.querySelector('[data-event-redo]')?.addEventListener('click', () => motionLabMarkerHistory(true));
+      for (const [attr, action] of [['data-event-save','update'],['data-event-add','add'],
+        ['data-event-remove','remove'],['data-event-reset','reset'],
+        ['data-event-clear-detected','clear-detected']]) {
+        editor.querySelector('['+attr+']')?.addEventListener('click', () => motionLabEventChange(action));
+      }
+      const displayMode = section.querySelector('[data-wave-mode]');
+      if (displayMode) displayMode.value = 'stereo';
+      section.querySelector('[data-wave-mode]')?.addEventListener('change', motionLabStereoWaveform);
+      section.querySelector('[data-wave-zoom]')?.addEventListener('input', motionLabStereoWaveform);
+      section.querySelector('[data-wave-start]')?.addEventListener('input', () => {
+        const follow = section.querySelector('[data-wave-follow]');
+        if (follow) follow.checked = false; // manual navigation takes priority
+        motionLabStereoWaveform();
+      });
+      section.querySelector('[data-wave-follow]')?.addEventListener('change', () => {
+        motionLabStereoWaveform();
+      });
+      section.querySelector('[data-wave-play]')?.addEventListener('click', motionLabWaveToggle);
+      const seekTo = ratio => {
+        const audio = motionLabAudioElement;
+        if (!audio || !motionLabAudioAnalysis) return;
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        audio.currentTime = Math.max(0, Math.min(
+          Number.isFinite(audio.duration) ? audio.duration : end,
+          begin + Math.max(0, Math.min(1, ratio)) * (end - begin)));
+        motionLabWavePlayhead();
+      };
+      let dragMarker = null;
+      const waveform = section.querySelector('[data-wave-svg]');
+      waveform?.addEventListener('dblclick', event => {
+        const time = positionToTime(event);
+        if (time === null || !motionLabEditedEvents) return;
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        const rect = waveform.getBoundingClientRect();
+        const closest = motionLabEditedEvents.some(e =>
+          Math.abs(e.time_seconds-time) < (end-begin)*10/Math.max(1,rect.width));
+        if (closest) return;
+        motionLabMarkerSnapshot();
+        const id = 'manual-' + String(Date.now()) + '-' + motionLabEditedEvents.length;
+        motionLabEditedEvents.push({id,kind:'kick',time_seconds:Math.max(0,Math.min(
+          motionLabAudioAnalysis.duration_seconds-.000001,Math.round(time*1000)/1000)),
+          enabled:true,strength:1,source:'manual'});
+        motionLabSelectedEvent = id;
+        motionLabMarkersDirty = true;
+        motionLabStereoWaveform();
+      });
+      const positionToTime = event => {
+        const rect = waveform.getBoundingClientRect();
+        if (!rect.width) return null;
+        const ratio = Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        return begin + ratio * (end - begin);
+      };
+      waveform?.addEventListener('pointerdown', event => {
+        const cueHit=event.target.closest?.('[data-timeline-cue]');
+        if (cueHit) {
+          motionDirectorSelected=cueHit.getAttribute('data-timeline-cue');
+          motionDirectorPanel();
+          return;
+        }
+        if (event.button !== 0 || !motionLabEditedEvents?.length) return;
+        const target = positionToTime(event);
+        if (target === null) return;
+        const rect = waveform.getBoundingClientRect();
+        const tolerance = (Number(section.dataset.waveEnd)-Number(section.dataset.waveStart))
+          * 12 / rect.width;
+        const candidates = motionLabEditedEvents.filter(e => Math.abs(e.time_seconds-target) <= tolerance);
+        candidates.sort((a,b)=>Math.abs(a.time_seconds-target)-Math.abs(b.time_seconds-target));
+        if (!candidates.length) return;
+        const selected = candidates[0];
+        motionLabSelectedEvent = selected.id;
+        dragMarker = {id:selected.id,startX:event.clientX,moved:false};
+        waveform.setPointerCapture?.(event.pointerId);
+        motionLabEventEditor();
+      });
+      waveform?.addEventListener('pointermove', event => {
+        if (!dragMarker || !motionLabEditedEvents) return;
+        if (Math.abs(event.clientX-dragMarker.startX) <= 4 && !dragMarker.moved) return;
+        if (!dragMarker.moved) { motionLabMarkerSnapshot(); dragMarker.moved = true; }
+        const target = positionToTime(event);
+        const selected = motionLabEditedEvents.find(e=>e.id===dragMarker.id);
+        if (target !== null && selected) {
+          selected.time_seconds = Math.max(0,Math.min(
+            motionLabAudioAnalysis.duration_seconds-.000001,Math.round(target*1000)/1000));
+          motionLabMarkersDirty = true;
+          // Redraw after pointer release to retain capture during drag.
+          const x = (selected.time_seconds-Number(section.dataset.waveStart)) /
+            Math.max(1e-9,Number(section.dataset.waveEnd)-Number(section.dataset.waveStart))*800;
+          const marker = waveform.querySelector('[data-drag-preview]');
+          if (marker) {marker.setAttribute('x1',x);marker.setAttribute('x2',x);}
+          motionLabEventEditor();
+        }
+      });
+      const finishDrag = event => {
+        if (!dragMarker) return;
+        const moved = dragMarker.moved;
+        dragMarker = null;
+        if (waveform.hasPointerCapture?.(event.pointerId)) waveform.releasePointerCapture(event.pointerId);
+        if (moved) {section.dataset.waveSuppressClick='1'; motionLabStereoWaveform();}
+      };
+      waveform?.addEventListener('pointerup',finishDrag);
+      waveform?.addEventListener('pointercancel',finishDrag);
+      section.querySelector('[data-wave-svg]')?.addEventListener('click', event => {
+        const cueHit=event.target.closest?.('[data-timeline-cue]');
+        if (cueHit) {
+          motionDirectorSelected=cueHit.getAttribute('data-timeline-cue');
+          motionDirectorPanel(); return;
+        }
+        if (section.dataset.waveSuppressClick === '1') {
+          delete section.dataset.waveSuppressClick;
+          return;
+        }
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (bounds.width <= 0) return;
+        const ratio = Math.max(0, Math.min(1,(event.clientX - bounds.left) / bounds.width));
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        const target = begin + ratio * (end - begin);
+        const tolerance = (end - begin) * 12 / bounds.width;
+        let closest = null;
+        for (const candidate of motionLabEditedEvents || []) {
+          const distance = Math.abs(candidate.time_seconds - target);
+          if (distance <= tolerance && (!closest || distance < closest.distance)) {
+            closest = {id:candidate.id,distance};
+          }
+        }
+        if (closest) {
+          motionLabSelectedEvent = closest.id;
+          if (event.shiftKey) { motionLabEventChange('remove'); return; }
+          motionLabStereoWaveform();
+        } else {
+          motionLabSelectedEvent = null;
+          motionLabEventEditor();
+          seekTo(ratio);
+        }
+      });
+      section.querySelector('[data-wave-svg]')?.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase()==='z' ||
+            event.key.toLowerCase()==='y')) {
+          event.preventDefault();
+          motionLabMarkerHistory(event.key.toLowerCase()==='y' || event.shiftKey);
+          return;
+        }
+        const selected = motionLabEditedEvents?.find(e=>e.id===motionLabSelectedEvent);
+        if (selected && (event.key==='Delete' || event.key==='Backspace')) {
+          event.preventDefault(); motionLabEventChange('remove'); return;
+        }
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        if (selected) {
+          motionLabMarkerSnapshot();
+          const step = event.shiftKey ? 1/Math.max(1,Number(motionLabAudioAnalysis?.fps)||12) : .01;
+          selected.time_seconds = Math.max(0,Math.min(
+            motionLabAudioAnalysis.duration_seconds-.000001,
+            Math.round((selected.time_seconds+(event.key==='ArrowRight'?step:-step))*1000000)/1000000));
+          motionLabMarkersDirty = true;
+          motionLabStereoWaveform();
+          return;
+        }
+        const current = Number(motionLabAudioElement?.currentTime) || 0;
+        const begin = Number(section.dataset.waveStart || 0);
+        const end = Number(section.dataset.waveEnd || 0);
+        seekTo((current - begin + (event.key === 'ArrowRight' ? .1 : -.1)) /
+          Math.max(1e-9, end - begin));
+      });
+    }
+    section.hidden = false;
+    const channels = analysis.waveform.channels;
+    const total = analysis.waveform.bins;
+    const zoom = Number(section.querySelector('[data-wave-zoom]')?.value || 1);
+    const startControl = section.querySelector('[data-wave-start]');
+    const maxStart = Math.max(0, 1 - 1 / zoom);
+    const from = Math.round(Number(startControl?.value || 0) / 1000 * maxStart * total);
+    const to = Math.min(total, from + Math.max(1, Math.ceil(total / zoom)));
+    const svg = section.querySelector('[data-wave-svg]');
+    const ns = 'http://www.w3.org/2000/svg';
+    svg.replaceChildren();
+    const make = (tag, attributes) => {
+      const el = document.createElementNS(ns, tag);
+      for (const [k, v] of Object.entries(attributes)) el.setAttribute(k, String(v));
+      svg.appendChild(el);
+      return el;
+    };
+    const count = channels.length;
+    const mode = section.querySelector('[data-wave-mode]')?.value || 'envelope';
+    const height = count === 2 ? 64 : 120;
+    if (mode !== 'envelope') channels.forEach((channel, index) => {
+      const center = count === 2 ? 45 + index * 81 : 88;
+      make('line', {x1:0,y1:center,x2:800,y2:center,stroke:'currentColor','stroke-opacity':'.16'});
+      const d = [];
+      for (let i = from; i < to; i++) {
+        const x = (i - from) * 800 / Math.max(1,to-from);
+        const pair = channel[i] || [0,0];
+        d.push('M' + x.toFixed(2) + ' ' + (center - pair[1] * height/2).toFixed(2) +
+          ' V' + (center - pair[0] * height/2).toFixed(2));
+      }
+      make('path', {d:d.join(' '),fill:'none',stroke:index?'#b49df3':'#73d5ed',
+        'stroke-width':Math.max(.8,Math.min(2,800/(to-from))),'vector-effect':'non-scaling-stroke'});
+      make('text', {x:5,y:center-25,fill:'currentColor','font-size':11}).textContent =
+        count === 2 ? (index ? 'R' : 'L') : 'Mono';
+    });
+    if (mode !== 'stereo') {
+      const values = motionLabAudioSignal();
+      const fps = Number(analysis.fps) || 12;
+      const startTime = from / total * analysis.duration_seconds;
+      const endTime = to / total * analysis.duration_seconds;
+      const peak = Math.max(.05,...values);
+      const points = [];
+      for (let i = 0; i < values.length; i++) {
+        const time = (i + .5) / fps;
+        if (time < startTime || time > endTime) continue;
+        const x = (time - startTime) * 800 / Math.max(1e-9,endTime-startTime);
+        const y = 164 - Math.max(0,values[i]) / peak * 140;
+        points.push((points.length?'L':'M') + x.toFixed(2) + ' ' + y.toFixed(2));
+      }
+      if (points.length) make('path', {d:points.join(' '),fill:'none',
+        stroke:'#73d5ed','stroke-width':2.4,'vector-effect':'non-scaling-stroke'});
+      const gate = Math.max(0,Math.min(1,Number(qs('#animation-motion-lab-audio-threshold')?.value)||0));
+      const y = 164 - gate / peak * 140;
+      make('line',{x1:0,x2:800,y1:y,y2:y,stroke:'#ff857c',
+        'stroke-width':1.5,'stroke-dasharray':'7 5'});
+    }
+    const tStart = from / total * analysis.duration_seconds;
+    const tEnd = to / total * analysis.duration_seconds;
+    section.dataset.waveStart = String(tStart);
+    section.dataset.waveEnd = String(tEnd);
+    const left = section.querySelector('[data-wave-left-time]');
+    const right = section.querySelector('[data-wave-right-time]');
+    if (left) left.textContent = tStart.toFixed(2) + 's · frame ' + Math.round(tStart*analysis.fps);
+    if (right) right.textContent = tEnd.toFixed(2) + 's · frame ' + Math.round(tEnd*analysis.fps);
+    const events = motionLabEditedEvents || analysis.events?.events || [];
+    const candidateIds = motionDirectorPreviewMatches ?
+      new Set(motionDirectorFindCandidates().map(e=>e.id)) : new Set();
+    let visible = 0;
+    for (const event of events) {
+      if (event.time_seconds < tStart || event.time_seconds > tEnd) continue;
+      const x = (event.time_seconds - tStart) * 800 / Math.max(1e-9,tEnd-tStart);
+      make('line', {x1:x,y1:4,x2:x,y2:176,stroke:event.kind === 'kick'?'#ffba66':
+        event.kind === 'snare'?'#f28fba':'#a0a0a0',
+        'stroke-width':event.id===motionLabSelectedEvent?3:1.5,
+        'stroke-opacity':event.enabled===false?'.2':'.85'});
+      if (candidateIds.has(event.id)) {
+        make('circle',{cx:x,cy:8,r:4,fill:'#6bebaf','pointer-events':'none'});
+      }
+      visible++;
+    }
+    // Explicit cue lane is separate from detected transient markers.
+    const cueColors = {push_zoom_in:'#75d9b5',roll_right_left:'#c99cf2',
+      roll_left_right:'#c99cf2',push_return:'#73d5ed',dolly_out:'#73d5ed',
+      shake:'#ffb76b',ripple:'#ff96bd',reveal_drift:'#a8d4f5',
+      fly_through:'#75d9b5'};
+    for (const cue of motionDirectorCues) {
+      if (cue.time_seconds < tStart || cue.time_seconds > tEnd) continue;
+      const x=(cue.time_seconds-tStart)*800/Math.max(1e-9,tEnd-tStart);
+      const band=make('rect',{x:Math.max(0,x-5),y:153,width:11,height:22,rx:2,
+        fill:cueColors[cue.preset]||'#fff','fill-opacity':cue.enabled?'.96':'.35',
+        'data-timeline-cue':cue.id,role:'button',
+        'aria-label':'Motion cue '+cue.preset+' at '+cue.time_seconds.toFixed(3)+' seconds',
+        stroke:cue.id===motionDirectorSelected?'#fff':'none','stroke-width':2});
+      const tip=document.createElementNS(ns,'title');
+      tip.textContent=cue.preset.replaceAll('_',' ')+' · '+cue.time_seconds.toFixed(3)+'s';
+      band.appendChild(tip);
+    }
+    make('line', {x1:0,x2:0,y1:0,y2:180,stroke:'#ffed81','stroke-width':3,
+      'vector-effect':'non-scaling-stroke','pointer-events':'none',
+      visibility:'hidden','data-drag-preview':''});
+    make('line', {x1:0,x2:0,y1:0,y2:180,stroke:'#fff','stroke-width':2,
+      'vector-effect':'non-scaling-stroke','pointer-events':'none',
+      visibility:'hidden','data-wave-playhead':''});
+    motionLabWavePlayhead();
+    motionLabEventEditor();
+    const desc = section.querySelector('[data-wave-description]');
+    if (desc) desc.textContent = (mode === 'envelope'?'Frame-aligned energy envelope':
+      mode === 'both'?'Envelope over separate L/R channels':
+      count === 2?'Separate L/R channels':'Mono channel') +
+      ' · ' + tStart.toFixed(2) + '–' + tEnd.toFixed(2) + ' s · ' + visible +
+      ' attack candidates in view (orange kick, pink snare, gray highs). ' +
+      'Markers represent spectral candidates, not isolated instruments.';
+  }
+  // MS4.1: continuous motion arrangement uses canonical native preset layers
+  // and the existing Motion Lab draft history/preview/apply infrastructure.
+  const MOTION_STUDIO_CONTINUOUS_PRESETS = [
+    ['gentle-drift', 'Gentle Drift'], ['wave', 'Wave'],
+    ['spiral', 'Spiral'], ['figure-eight', 'Figure Eight'],
+    ['rocking', 'Rocking'], ['push-in', 'Push In'], ['pull-out', 'Pull Out'],
+    ['still', 'Still / Clear Selected Axes'],
+  ];
+  const MOTION_STUDIO_PRESET_AXES = {
+    'gentle-drift':['translation_x','translation_y','rotation_y'],
+    'wave':['translation_x','translation_y','rotation_y'],
+    'spiral':['translation_x','translation_y','translation_z','rotation_z'],
+    'figure-eight':['translation_x','translation_y'],
+    'rocking':['rotation_x','rotation_z'],
+    'push-in':['translation_z'],'pull-out':['translation_z'],
+    'still':['translation_x','translation_y','translation_z',
+      'rotation_x','rotation_y','rotation_z'],
+  };
+  const MOTION_STUDIO_AXIS_NAMES = {
+    translation_x:'Move X',translation_y:'Move Y',translation_z:'Move Z',
+    rotation_x:'Pitch',rotation_y:'Yaw',rotation_z:'Roll',
+  };
+  let motionStudioArrangementProjectId = '';
+  let motionStudioArrangementSelection = '';
+  let motionStudioArrangementLoaded = '';
+  let motionStudioArrangementSerial = 0;
+  const MS43_URL = '/api/animation/motion-studio/custom-presets';
+  let ms43Presets = [];
+  let ms43Busy = false;
+
+  function motionStudioArrangementFrameCount() {
+    return Math.max(1, Number(state.project?.animation?.max_frames) || 120);
+  }
+  function motionStudioArrangementFps() {
+    return Math.max(1, Number(state.project?.animation?.fps) || 24);
+  }
+  function motionStudioArrangementActiveLayer() {
+    return motionLabDraftLayers.find(layer =>
+      layer.type !== 'audio' && layer.type !== 'audio_cues' &&
+      layer.type !== 'audio_channels' && layer.type !== 'recording' &&
+      layer.type !== 'keyframes' &&
+      layer.id === motionStudioArrangementSelection &&
+      MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === layer.preset)) || null;
+  }
+  function motionStudioArrangementFields() {
+    const panel = qs('#animation-motion-studio-arrangement');
+    return panel ? {
+      panel,
+      preset:panel.querySelector('[data-ms4-preset]'),
+      strength:panel.querySelector('[data-ms4-strength]'),
+      cycle:panel.querySelector('[data-ms4-cycle]'),
+      fade:panel.querySelector('[data-ms4-fade]'),
+      start:panel.querySelector('[data-ms4-start]'),
+      end:panel.querySelector('[data-ms4-end]'),
+      startSlide:panel.querySelector('[data-ms4-start-slide]'),
+      endSlide:panel.querySelector('[data-ms4-end-slide]'),
+      blend:panel.querySelector('[data-ms4-blend]'),
+      axes:panel.querySelector('[data-ms4-axes]'),
+    } : null;
+  }
+  function motionStudioArrangementResetFields() {
+    const fields = motionStudioArrangementFields();
+    if (!fields) return;
+    const count = motionStudioArrangementFrameCount();
+    fields.preset.value = 'wave';
+    fields.blend.value = 'add';
+    motionStudioArrangementRebuildAxes();
+    fields.strength.value = '.65';
+    fields.cycle.value = '2';
+    fields.fade.value = '.1';
+    fields.start.value = '0';
+    fields.end.value = String(count);
+    motionStudioArrangementSyncRange('start');
+  }
+  function motionStudioArrangementRebuildAxes(selectedAxes = null) {
+    const fields = motionStudioArrangementFields();
+    if (!fields?.axes) return;
+    const available = MOTION_STUDIO_PRESET_AXES[fields.preset.value] || [];
+    // Only auto-reset on a new preset; editing blend keeps checked axes.
+    const old = selectedAxes || Array.from(fields.axes.querySelectorAll('input:checked'))
+      .map(item=>item.value);
+    fields.axes.replaceChildren();
+    for (const axis of available) {
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = axis;
+      input.checked = selectedAxes === null
+        ? (old.length ? old.includes(axis) : true)
+        : selectedAxes.includes(axis);
+      input.dataset.ms4Axis = axis;
+      label.append(input,document.createTextNode(MOTION_STUDIO_AXIS_NAMES[axis]));
+      fields.axes.appendChild(label);
+    }
+    if (fields.preset.value === 'still' && fields.blend.value === 'add')
+      fields.blend.value = 'replace';
+    motionStudioArrangementShowBlendHelp();
+  }
+  function motionStudioArrangementShowBlendHelp() {
+    const fields = motionStudioArrangementFields();
+    if (!fields) return;
+    const help = fields.panel.querySelector('[data-ms4-blend-help]');
+    if (help) help.textContent = fields.blend.value === 'replace'
+      ? 'Replace resets only the checked camera axes during the selected frame range. Other axes and frames keep their existing motion. Later layers still apply in layer order.'
+      : 'Add layers movement onto the checked axes without discarding earlier motion. Change the order in Camera Motion Composer.';
+  }
+  function motionStudioArrangementAxisSelection() {
+    const fields = motionStudioArrangementFields();
+    return Array.from(fields?.axes?.querySelectorAll('input:checked') || [])
+      .map(input => input.value);
+  }
+  function motionStudioArrangementSyncRange(edited = '') {
+    const fields = motionStudioArrangementFields();
+    if (!fields) return;
+    const count = motionStudioArrangementFrameCount();
+    let start = Number(fields.start.value);
+    let end = Number(fields.end.value);
+    if (!Number.isFinite(start)) start = 0;
+    if (!Number.isFinite(end)) end = count;
+    start = Math.max(0, Math.min(count - 1, Math.round(start)));
+    end = Math.max(1, Math.min(count, Math.round(end)));
+    if (start >= end) {
+      if (edited === 'start') end = Math.min(count, start + 1);
+      else start = Math.max(0, end - 1);
+    }
+    fields.start.value = String(start);
+    fields.end.value = String(end);
+    fields.startSlide.min = '0';
+    fields.startSlide.max = String(count - 1);
+    fields.endSlide.min = '1';
+    fields.endSlide.max = String(count);
+    fields.startSlide.value = String(start);
+    fields.endSlide.value = String(end);
+    const readout = fields.panel.querySelector('[data-ms4-range-label]');
+    if (readout) {
+      const fps = motionStudioArrangementFps();
+      readout.textContent = 'Frames ' + start + '–' + (end - 1) +
+        ' · ' + (start/fps).toFixed(2) + '–' + (end/fps).toFixed(2) +
+        ' seconds · ' + (end-start) + ' frames';
+    }
+    motionStudioArrangementRenderTimeline();
+  }
+  function motionStudioArrangementSelect(id) {
+    const layer = motionLabDraftLayers.find(item => item.id === id &&
+      (item.type === 'preset' || !item.type) &&
+      MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === item.preset));
+    motionStudioArrangementSelection = layer?.id || '';
+    motionStudioArrangementLoaded = '';
+    motionStudioRenderArrangement();
+  }
+  function motionStudioArrangementRemove(id) {
+    if (!state.project || animationMode() !== '3d' || motionLabBusy) return;
+    const index = motionLabDraftLayers.findIndex(item =>
+      item.id === id && (item.type === 'preset' || !item.type) &&
+      MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === item.preset));
+    if (index < 0) return;
+    const [removed] = motionLabDraftLayers.splice(index, 1);
+    if (motionStudioArrangementSelection === id) {
+      motionStudioArrangementSelection = '';
+      motionStudioArrangementLoaded = '';
+      motionStudioArrangementResetFields();
+    }
+    commitMotionLabDraft();
+    motionLabNotify('Removed ' + removed.preset.replaceAll('-', ' ') +
+      ' from the motion draft. Apply to Animation to save the removal.');
+    toast('Movement removed',
+      'Removed from the draft. Undo is available in Camera Motion Composer.', 'success');
+  }
+  function motionStudioArrangementSeek(frame) {
+    const audio = motionLabAudioElement;
+    if (!audio || motionLabAudioProjectId !== state.project?.id) return;
+    const seconds = Math.max(0, Math.min(
+      (motionStudioArrangementFrameCount()-1) / motionStudioArrangementFps(),
+      Number(frame) / motionStudioArrangementFps()));
+    if (Number.isFinite(seconds)) audio.currentTime = seconds;
+    motionStudioArrangementPlayhead();
+  }
+  function motionStudioArrangementPlayhead() {
+    const panel = qs('#animation-motion-studio-arrangement');
+    if (!panel) return;
+    const available = Boolean(motionLabAudioElement &&
+      motionLabAudioProjectId === state.project?.id);
+    const count = motionStudioArrangementFrameCount();
+    const position = available
+      ? Math.max(0, Math.min(count-1, Number(motionLabAudioElement.currentTime || 0) *
+        motionStudioArrangementFps())) : 0;
+    const playhead = panel.querySelector('[data-ms4-playhead]');
+    if (playhead) {
+      playhead.style.left = (100 * position/count).toFixed(3) + '%';
+      playhead.hidden = !available;
+    }
+    const seek = panel.querySelector('[data-ms4-seek]');
+    if (seek) {
+      if (document.activeElement !== seek) seek.value = String(Math.round(position));
+      seek.disabled = !available;
+    }
+    const status = panel.querySelector('[data-ms4-playback-status]');
+    if (status) status.textContent = available
+      ? (position/motionStudioArrangementFps()).toFixed(2) + 's / ' +
+        (count/motionStudioArrangementFps()).toFixed(2) + 's'
+      : 'Load a WAV or attached soundtrack for synchronized seeking.';
+  }
+  function motionStudioArrangementRenderTimeline() {
+    const panel = qs('#animation-motion-studio-arrangement');
+    const lanes = panel?.querySelector('[data-ms4-lanes]');
+    if (!lanes) return;
+    lanes.replaceChildren();
+    const count = motionStudioArrangementFrameCount();
+    const fps = motionStudioArrangementFps();
+    const ruler = panel.querySelector('[data-ms4-ruler]');
+    if (ruler) ruler.textContent = '0.00s    ·    ' +
+      (count/2/fps).toFixed(2) + 's    ·    ' + (count/fps).toFixed(2) +
+      's (project end, ' + count + ' frames @ ' + fps + ' FPS)';
+    const seek = panel.querySelector('[data-ms4-seek]');
+    if (seek) seek.max = String(count - 1);
+    const layers = motionLabDraftLayers.filter(l => l.type === 'preset' ||
+      (!l.type && MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === l.preset)));
+    const addLane = (label, start, end, selected, id, enabled, editable = true) => {
+      const row = document.createElement('div');
+      row.className = 'motion-studio-arrangement-lane';
+      const title = document.createElement('span');
+      title.className = 'motion-studio-arrangement-label';
+      title.textContent = label;
+      const track = document.createElement('div');
+      track.className = 'motion-studio-arrangement-track';
+      const bar = document.createElement('button');
+      bar.type = 'button';
+      bar.className = 'motion-studio-arrangement-bar';
+      if (selected) bar.classList.add('selected');
+      if (!enabled) bar.classList.add('disabled');
+      bar.style.left = (100 * Math.max(0, Math.min(count,start)) / count).toFixed(3) + '%';
+      bar.style.width = (100 * Math.max(1, Math.min(count,end)-start) / count).toFixed(3) + '%';
+      bar.textContent = start + '–' + (end-1);
+      bar.title = label + ': frame ' + start + ' through ' + (end-1) +
+        '. Select to edit.';
+      bar.setAttribute('aria-label',bar.title);
+      if (editable) bar.addEventListener('click', () => motionStudioArrangementSelect(id));
+      else {
+        bar.disabled = true;
+        bar.title += ' This layer uses Replace; edit in Camera Motion Composer.';
+      }
+      track.appendChild(bar);
+      row.append(title,track);
+      if (editable) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'secondary-button compact motion-studio-arrangement-remove';
+        remove.textContent = 'Remove';
+        remove.title = 'Remove this staged movement from the draft (Undo available)';
+        remove.setAttribute('aria-label', 'Remove ' + label +
+          ', frames ' + start + ' through ' + (end-1));
+        remove.disabled = !state.project || animationMode() !== '3d' || motionLabBusy;
+        remove.addEventListener('click', () => motionStudioArrangementRemove(id));
+        row.appendChild(remove);
+      }
+      lanes.appendChild(row);
+    };
+    for (const layer of layers) {
+      const editable = MOTION_STUDIO_CONTINUOUS_PRESETS.some(([key]) => key === layer.preset);
+      addLane((layer.preset || 'preset').replaceAll('-',' ') +
+        (layer.enabled === false ? ' (disabled)' : '') +
+        ' · ' + (layer.blend || 'add') +
+        (!editable ? ' (Camera Composer)' : ''),
+        Number(layer.start_frame),Number(layer.end_frame),
+        layer.id === motionStudioArrangementSelection,
+        layer.id,layer.enabled !== false,editable);
+    }
+    // The input range is a form draft, not a real layer. Never show a phantom
+    // "Unstaged selection" lane that cannot be selected or removed.
+    const caption = panel.querySelector('[data-ms4-lane-status]');
+    if (caption) caption.textContent = layers.length
+      ? layers.length + ' staged continuous movement(s) in the Motion Lab draft. ' +
+        'Select a bar to edit or Remove it. Other layer types are preserved.'
+      : 'No staged movements. Choose a preset and click + Stage Movement to add one.';
+    motionStudioArrangementPlayhead();
+  }
+  function motionStudioRenderArrangement() {
+    const fields = motionStudioArrangementFields();
+    if (!fields) return;
+    const {panel} = fields;
+    const projectId = state.project?.id || '';
+    if (motionStudioArrangementProjectId !== projectId) {
+      motionStudioArrangementProjectId = projectId;
+      motionStudioArrangementSelection = '';
+      motionStudioArrangementLoaded = '';
+      motionStudioArrangementResetFields();
+    }
+    const active = motionStudioArrangementActiveLayer();
+    if (!active && motionStudioArrangementSelection) {
+      motionStudioArrangementSelection = '';
+      motionStudioArrangementLoaded = '';
+    }
+    if (active && active.id !== motionStudioArrangementLoaded) {
+      fields.preset.value = active.preset;
+      fields.blend.value = active.blend || 'add';
+      motionStudioArrangementRebuildAxes(
+        Array.isArray(active.axes) ? active.axes : MOTION_STUDIO_PRESET_AXES[active.preset]);
+      fields.strength.value = String(active.strength);
+      fields.cycle.value = String(active.cycle_seconds);
+      fields.fade.value = String(active.fade_seconds);
+      fields.start.value = String(active.start_frame);
+      fields.end.value = String(active.end_frame);
+      motionStudioArrangementLoaded = active.id;
+    }
+    const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
+    for (const key of ['stage','preview','apply','new']) {
+      const button = panel.querySelector('[data-ms4-'+key+']');
+      if (button) button.disabled = !ready ||
+        (key !== 'new' && !active && motionLabDraftLayers.length >= 24);
+    }
+    for (const input of panel.querySelectorAll('input,select')) {
+      if (input.hasAttribute('data-ms4-seek')) continue;
+      input.disabled = !ready;
+    }
+    const action = panel.querySelector('[data-ms4-stage]');
+    if (action) action.textContent = active ? 'Update Selected Layer' : '+ Stage Movement';
+    const badge = panel.querySelector('[data-ms4-status]');
+    if (badge) badge.textContent = !projectId ? 'Open a project' :
+      !ready ? 'Choose a 3D project to edit continuous motion' :
+      active ? 'Editing ' + active.preset.replaceAll('-',' ') +
+        ' · changes are only a draft until applied' :
+      'Compose a new continuous motion region';
+    motionStudioArrangementSyncRange();
+    ms43Controls();
+  }
+
+  // Reusable named presets live in Morphorum's data directory, not the project.
+  const ms43El = key => qs('#animation-motion-studio-arrangement')
+    ?.querySelector('[data-ms43-' + key + ']');
+  const ms43Selected = () => ms43Presets.find(p => p.id === ms43El('library')?.value);
+  function ms43Status(message) {
+    if (ms43El('status')) ms43El('status').textContent = message;
+  }
+  function ms43Controls() {
+    const ready = !!state.project && animationMode() === '3d' && !motionLabBusy && !ms43Busy;
+    for (const key of ['load','update','delete','save']) {
+      const control = ms43El(key);
+      if (control) control.disabled = !ready || (key !== 'save' && !ms43Selected());
+    }
+    if (ms43El('refresh')) ms43El('refresh').disabled = ms43Busy;
+    if (ms43El('library')) ms43El('library').disabled = ms43Busy;
+    if (ms43El('name')) ms43El('name').disabled = !ready;
+  }
+  function ms43RenderLibrary(selected = '') {
+    const control = ms43El('library');
+    if (!control) return;
+    const old = selected || control.value;
+    control.replaceChildren();
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Choose saved preset';
+    control.appendChild(blank);
+    for (const item of ms43Presets) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.name + ' · ' + item.preset.replaceAll('-',' ');
+      control.appendChild(option);
+    }
+    control.value = ms43Presets.some(item => item.id === old) ? old : '';
+    ms43Controls();
+  }
+  async function ms43Refresh(selected = '') {
+    if (ms43Busy) return;
+    ms43Busy = true;
+    ms43Controls();
+    ms43Status('Loading saved presets…');
+    try {
+      const data = await api(MS43_URL);
+      ms43Presets = Array.isArray(data.presets) ? data.presets : [];
+      ms43RenderLibrary(selected);
+      ms43Status(ms43Presets.length + ' saved custom presets on this Morphorum installation.');
+    } catch (error) {
+      ms43Status('Could not load preset library: ' + error.message);
+      toast('Preset library unavailable', error.message, 'error');
+    } finally {
+      ms43Busy = false;
+      ms43Controls();
+    }
+  }
+  function ms43Select() {
+    if (ms43Selected()) ms43El('name').value = ms43Selected().name;
+    ms43Controls();
+  }
+  function ms43Load() {
+    const p = ms43Selected(), f = motionStudioArrangementFields();
+    if (!p || !f || ms43Busy || !state.project || animationMode() !== '3d' || motionLabBusy) return;
+    const count = motionStudioArrangementFrameCount();
+    const start = Math.max(0, Math.min(count-1, Math.round(p.start_ratio*count)));
+    const end = Math.max(start+1, Math.min(count, Math.round(p.end_ratio*count)));
+    motionStudioArrangementSelection = '';
+    motionStudioArrangementLoaded = '';
+    f.preset.value = p.preset;
+    f.blend.value = p.blend;
+    motionStudioArrangementRebuildAxes(p.axes);
+    f.strength.value = String(p.strength);
+    f.cycle.value = String(p.cycle_seconds);
+    f.fade.value = String(p.fade_seconds);
+    f.start.value = String(start);
+    f.end.value = String(end);
+    motionStudioRenderArrangement();
+    ms43Status('Loaded "' + p.name + '" into editor. Stage Movement to add it to this project.');
+    toast('Custom preset loaded', p.name + ' is ready to stage.', 'success');
+  }
+  function ms43Payload() {
+    const f = motionStudioArrangementFields();
+    if (!f) return null;
+    motionStudioArrangementSyncRange();
+    const count = motionStudioArrangementFrameCount();
+    return {name:ms43El('name')?.value.trim() || '',
+      preset:f.preset.value, blend:f.blend.value,
+      axes:motionStudioArrangementAxisSelection(),
+      strength:Number(f.strength.value), cycle_seconds:Number(f.cycle.value),
+      fade_seconds:Number(f.fade.value),
+      start_ratio:Number(f.start.value)/count,
+      end_ratio:Number(f.end.value)/count};
+  }
+  async function ms43Save(update = false) {
+    if (ms43Busy || !state.project || animationMode() !== '3d' || motionLabBusy) return;
+    const original = update ? ms43Selected() : null;
+    if (update && !original) return;
+    const payload = ms43Payload();
+    if (!payload?.name || payload.name.length > 64) {
+      toast('Preset name required', 'Enter a name of up to 64 characters.', 'warning');
+      return;
+    }
+    ms43Busy = true;
+    ms43Controls();
+    ms43Status(update ? 'Updating saved preset…' : 'Saving new preset…');
+    try {
+      const result = await api(MS43_URL +
+        (update ? '/' + encodeURIComponent(original.id) : ''), {
+        method:update?'PUT':'POST', body:JSON.stringify(payload),
+      });
+      const list = await api(MS43_URL);
+      ms43Presets = Array.isArray(list.presets) ? list.presets : [];
+      ms43RenderLibrary(result.preset.id);
+      ms43Status('Saved "'+result.preset.name+'". Project layers were not changed.');
+      toast('Custom preset saved', result.preset.name + ' is reusable across projects.', 'success');
+    } catch (error) {
+      ms43Status('Could not save: ' + error.message);
+      toast('Custom preset not saved', error.message, 'error');
+    } finally {
+      ms43Busy = false;
+      ms43Controls();
+    }
+  }
+  async function ms43Delete() {
+    const p = ms43Selected();
+    if (!p || ms43Busy || !state.project || animationMode() !== '3d' || motionLabBusy) return;
+    if (!(await window.MorphorumDialog.confirm({
+      title:'Delete saved custom preset?',
+      message:'Remove "'+p.name+'" from the shared library? Existing project motion layers remain unchanged.',
+      variant:'danger',confirmText:'Delete Preset',cancelText:'Keep Preset',
+    }))) return;
+    ms43Busy = true;
+    ms43Controls();
+    try {
+      await api(MS43_URL+'/'+encodeURIComponent(p.id), {method:'DELETE'});
+      ms43Presets = ms43Presets.filter(item => item.id !== p.id);
+      ms43El('library').value = '';
+      ms43El('name').value = '';
+      ms43RenderLibrary();
+      ms43Status('Deleted "'+p.name+'". Existing project motion was not changed.');
+      toast('Custom preset deleted',p.name+' removed from shared library.','success');
+    } catch (error) {
+      ms43Status('Could not delete: '+error.message);
+      toast('Could not delete saved preset',error.message,'error');
+    } finally {
+      ms43Busy = false;
+      ms43Controls();
+    }
+  }
+
+  async function motionStudioArrange(action = 'stage') {
+    const form = motionStudioArrangementFields();
+    if (!form || !state.project || animationMode() !== '3d' || motionLabBusy) return;
+    const count = motionStudioArrangementFrameCount();
+    motionStudioArrangementSyncRange();
+    const data = {
+      preset:form.preset.value,
+      blend:form.blend.value,
+      axes:motionStudioArrangementAxisSelection(),
+      strength:Number(form.strength.value),
+      cycle_seconds:Number(form.cycle.value),
+      fade_seconds:Number(form.fade.value),
+      start_frame:Number(form.start.value),
+      end_frame:Number(form.end.value),
+    };
+    if (!MOTION_STUDIO_CONTINUOUS_PRESETS.some(([id]) => id === data.preset) ||
+        !['add','replace'].includes(data.blend) ||
+        (data.preset === 'still' && data.blend !== 'replace') ||
+        !Array.isArray(data.axes) || !data.axes.length ||
+        data.axes.some(axis => !MOTION_STUDIO_PRESET_AXES[data.preset].includes(axis)) ||
+        !Number.isFinite(data.strength) || data.strength < 0 || data.strength > 1 ||
+        !Number.isFinite(data.cycle_seconds) || data.cycle_seconds < .2 ||
+        data.cycle_seconds > 600 || !Number.isFinite(data.fade_seconds) ||
+        data.fade_seconds < 0 || data.fade_seconds > 120 ||
+        !Number.isInteger(data.start_frame) || !Number.isInteger(data.end_frame) ||
+        data.start_frame < 0 || data.end_frame > count ||
+        data.end_frame <= data.start_frame) {
+      motionLabNotify('Check movement strength, cycle, fade and frame range.');
+      toast('Invalid motion region','Choose at least one valid axis; Still requires Replace. Check timing and strength.','warning');
+      return;
+    }
+    const existing = motionStudioArrangementActiveLayer();
+    if (!existing && motionLabDraftLayers.length >= 24) {
+      motionLabNotify('Motion Lab supports up to 24 layers. Remove a layer first.');
+      return;
+    }
+    const id = existing?.id || 'motion-studio-cont-' +
+      (++motionStudioArrangementSerial) + '-' + Date.now().toString(36);
+    const layer = {id,type:'preset',enabled:existing?.enabled !== false,...data};
+    const index = existing ? motionLabDraftLayers.findIndex(x=>x.id===existing.id) : -1;
+    if (index >= 0) motionLabDraftLayers[index] = layer;
+    else motionLabDraftLayers.push(layer);
+    motionStudioArrangementSelection = id;
+    motionStudioArrangementLoaded = id;
+    commitMotionLabDraft();
+    if (action === 'preview') await motionLabPreviewOrApply(false,{curvesOnly:true});
+    else if (action === 'apply') await motionLabPreviewOrApply(true);
+  }
+  function motionStudioCreateArrangementCard(panel) {
+    const card = document.createElement('article');
+    card.className = 'card glass motion-studio-arrangement';
+    card.id = 'animation-motion-studio-arrangement';
+    card.innerHTML = `
+      <div class="card-header"><div>
+        <h2>Continuous Camera Motion</h2>
+        <p class="muted">Choreograph sustained movement alongside the soundtrack.
+          Regions are native Motion Lab layers, not another render engine.</p>
+      </div></div>
+      <div class="motion-studio-arrangement-playback">
+        <span data-ms4-playback-status>Load a WAV for synchronized seeking.</span>
+        <label>Audio playhead / seek
+          <input type="range" data-ms4-seek min="0" max="120" step="1"
+            value="0" aria-label="Seek project audio by frame"></label>
+      </div>
+      <div class="motion-studio-arrangement-timeline">
+        <div class="motion-studio-arrangement-ruler" data-ms4-ruler></div>
+        <div class="motion-studio-arrangement-playhead" data-ms4-playhead hidden></div>
+        <div data-ms4-lanes class="motion-studio-arrangement-lanes"></div>
+        <p class="muted" data-ms4-lane-status>Project motion layers appear here.</p>
+      </div>
+      <div class="motion-studio-arrangement-fields">
+        <label>Continuous preset<select data-ms4-preset></select></label>
+        <label>Blend method<select data-ms4-blend>
+          <option value="add">Add motion</option>
+          <option value="replace">Replace selected axes in range</option>
+        </select></label>
+        <label>Strength (0–1)<input type="number" data-ms4-strength
+          min="0" max="1" step=".05" value=".65"></label>
+        <label>Cycle (seconds)<input type="number" data-ms4-cycle
+          min=".2" max="600" step=".1" value="2"></label>
+        <label>Fade (seconds)<input type="number" data-ms4-fade
+          min="0" max="120" step=".05" value=".1"></label>
+        <label>Start frame<input type="number" data-ms4-start
+          min="0" step="1" value="0"></label>
+        <label>End frame (exclusive)<input type="number" data-ms4-end
+          min="1" step="1" value="120"></label>
+      </div>
+      <fieldset class="motion-studio-arrangement-axis-mask">
+        <legend>Camera axes affected by this region</legend>
+        <div data-ms4-axes class="motion-studio-arrangement-axes"></div>
+        <p class="muted" data-ms4-blend-help>
+          Add motion only on checked camera axes.</p>
+      </fieldset>
+      <div class="motion-studio-arrangement-range">
+        <label>Start<input type="range" data-ms4-start-slide min="0"
+          max="119" step="1" value="0"></label>
+        <label>End<input type="range" data-ms4-end-slide min="1"
+          max="120" step="1" value="120"></label>
+        <span data-ms4-range-label class="muted">Frames 0–119</span>
+      </div>
+      <section class="motion-studio-custom-presets" aria-label="Saved custom camera motion presets">
+        <div>
+          <h3>My Motion Presets</h3>
+          <p class="muted">Saved separately from projects on this Morphorum installation.
+            Load to the editor, then Stage Movement. Frame ranges scale with project length.</p>
+        </div>
+        <div class="motion-studio-custom-fields">
+          <label>Saved preset<select data-ms43-library>
+            <option value="">Choose saved preset</option></select></label>
+          <label>Name<input type="text" data-ms43-name maxlength="64"
+            placeholder="e.g. Slow cinematic orbit"></label>
+        </div>
+        <div class="motion-studio-custom-actions">
+          <button type="button" class="secondary-button compact" data-ms43-load>Load to Editor</button>
+          <button type="button" class="secondary-button compact" data-ms43-save>Save as New</button>
+          <button type="button" class="secondary-button compact" data-ms43-update>Update Saved</button>
+          <button type="button" class="secondary-button compact" data-ms43-delete>Delete Saved</button>
+          <button type="button" class="secondary-button compact" data-ms43-refresh>Refresh Library</button>
+        </div>
+        <p class="muted" data-ms43-status role="status" aria-live="polite">
+          Loading shared preset library…</p>
+      </section>
+      <div class="motion-studio-arrangement-actions">
+        <button type="button" class="secondary-button compact" data-ms4-new>New Movement</button>
+        <button type="button" class="secondary-button compact" data-ms4-stage>+ Stage Movement</button>
+        <button type="button" class="secondary-button compact" data-ms4-preview>Preview Curves</button>
+        <button type="button" class="primary-button compact" data-ms4-apply>Apply to Animation</button>
+      </div>
+      <p class="muted" data-ms4-status role="status" aria-live="polite">Open a 3D project.</p>
+      <details class="motion-field-help"><summary>Timing, units and safety</summary>
+        <p>All segments are frame aligned. Start is inclusive, end is exclusive;
+        cycle and fade use seconds at the current project FPS. Movement is
+        in Morphorum's native scene units per frame (translation) and degrees
+        per frame (rotation). Add combines motion; Replace affects only the
+        selected axes during the region. Existing manual cues, audio and other
+        axes remain as separate layers. Layer order determines the final mix.
+        Preview does not save schedules; Apply uses existing safeguards.</p>
+      </details>`;
+    for (const [key,label] of MOTION_STUDIO_CONTINUOUS_PRESETS) {
+      const item=document.createElement('option');
+      item.value=key;
+      item.textContent=label;
+      card.querySelector('[data-ms4-preset]').appendChild(item);
+    }
+    panel.appendChild(card);
+    const s = key=>card.querySelector('[data-ms4-'+key+']');
+    s('preset').addEventListener('change',()=>{
+      motionStudioArrangementRebuildAxes(MOTION_STUDIO_PRESET_AXES[s('preset').value] || []);
+    });
+    s('blend').addEventListener('change',motionStudioArrangementShowBlendHelp);
+    const sync = key=>()=>{
+      motionStudioArrangementSyncRange(key);
+    };
+    s('start').addEventListener('input',sync('start'));
+    s('end').addEventListener('input',sync('end'));
+    s('start-slide').addEventListener('input',()=>{
+      s('start').value=s('start-slide').value; sync('start')();
+    });
+    s('end-slide').addEventListener('input',()=>{
+      s('end').value=s('end-slide').value; sync('end')();
+    });
+    s('seek').addEventListener('input',event=>motionStudioArrangementSeek(event.target.value));
+    s('new').addEventListener('click',()=>{
+      motionStudioArrangementSelection='';
+      motionStudioArrangementLoaded='';
+      motionStudioArrangementResetFields();
+      motionStudioRenderArrangement();
+    });
+    for (const action of ['stage','preview','apply']) {
+      s(action).addEventListener('click',()=>void motionStudioArrange(action));
+    }
+    const custom = key => card.querySelector('[data-ms43-' + key + ']');
+    custom('library').addEventListener('change', ms43Select);
+    custom('load').addEventListener('click', ms43Load);
+    custom('save').addEventListener('click', () => void ms43Save(false));
+    custom('update').addEventListener('click', () => void ms43Save(true));
+    custom('delete').addEventListener('click', () => void ms43Delete());
+    custom('refresh').addEventListener('click', () => void ms43Refresh());
+    motionStudioRenderArrangement();
+    void ms43Refresh();
+  }
+
+  // MS3: Audio-frequency channels share ONE Motion Lab layer per WAV. Draft
+  // settings never write project camera schedules until explicit Apply.
+  const MOTION_STUDIO_AXES = [
+    ['translation_x', 'Travel X'], ['translation_y', 'Travel Y'],
+    ['translation_z', 'Travel Z'], ['rotation_x', 'Pitch'],
+    ['rotation_y', 'Yaw'], ['rotation_z', 'Roll'],
+  ];
+  let motionStudioChannelState = { projectId: '', sha: '', channels: [], dirty: false };
+  let motionStudioChannelSerial = 0;
+  const motionStudioBandCache = new Map();
+
+  // MS3b spectrum is derived from a verified project WAV, never from browser
+  // file paths. All edits below are local until Stage/Preview/Apply.
+  let motionStudioSpectrum = {
+    projectId: '', sha: '', points: [], maxHz: 20000, loading: false, error: '',
+  };
+  let motionStudioSelectedChannel = '';
+  let motionStudioDraggingEdge = '';
+  let motionStudioSpectrumToken = 0;
+  const motionStudioSpectrumCache = new Map();
+  let motionStudioBandPreview = { projectId: '', sha: '', fps: 0, frames: 0,
+    ranges: '', bands: null };
+
+  const motionStudioSpectrumX = (hz, max) =>
+    34 + 666 * Math.log(Math.max(20, Math.min(max, hz)) / 20) /
+      Math.log(max / 20);
+  function motionStudioSpectrumFrequency(clientX, svg, max) {
+    const bounds = svg.getBoundingClientRect();
+    const px = (clientX - bounds.left) * 720 / Math.max(1, bounds.width);
+    const ratio = Math.max(0, Math.min(1, (px - 34) / 666));
+    return 20 * (max / 20) ** ratio;
+  }
+
+  function motionStudioSelectedBand() {
+    const channels = motionStudioChannelState.channels;
+    return channels.find(channel => channel.id === motionStudioSelectedChannel) ||
+      channels[0] || null;
+  }
+
+  function motionStudioBandRanges(channels) {
+    return channels.map(({id, low_hz, high_hz}) => ({id, low_hz, high_hz}));
+  }
+
+  function motionStudioShowBandPreview() {
+    const panel = qs('#animation-motion-studio-channels');
+    const svg = panel?.querySelector('[data-ms3-envelope-svg]');
+    const label = panel?.querySelector('[data-ms3-envelope-status]');
+    if (!svg || !label) return;
+    const selected = motionStudioSelectedBand();
+    const preview = motionStudioBandPreview;
+    const analysis = motionLabAudioAnalysis;
+    const valid = selected && analysis && state.project?.id === preview.projectId &&
+      preview.sha === analysis.source_sha256 &&
+      Number(state.project.animation.fps) === preview.fps &&
+      Number(state.project.animation.max_frames) === preview.frames;
+    const analyzed = valid && preview.bands && preview.ranges ===
+      JSON.stringify(motionStudioBandRanges(motionStudioChannelState.channels));
+    const envelope = analyzed && preview.bands[selected.id];
+    svg.replaceChildren();
+    if (!envelope?.length) {
+      label.textContent = 'Analyze the current channel ranges to preview their normalized energy.';
+      return;
+    }
+    const NS = 'http://www.w3.org/2000/svg';
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1','24'); line.setAttribute('x2','710');
+    line.setAttribute('y1','144'); line.setAttribute('y2','144');
+    line.setAttribute('stroke','currentColor'); line.setAttribute('opacity','.3');
+    svg.appendChild(line);
+    const graph = document.createElementNS(NS, 'path');
+    const stride = Math.max(1, Math.ceil(envelope.length / 340));
+    const path = [];
+    for (let i=0;i<envelope.length;i+=stride) {
+      const energy = Math.max(0, Math.min(1, Number(envelope[i]) || 0));
+      const x = 24 + 686*i / Math.max(1,envelope.length - 1);
+      path.push((path.length ? 'L' : 'M') + x.toFixed(2) + ',' +
+        (144 - 120*energy).toFixed(2));
+    }
+    graph.setAttribute('d',path.join(' '));
+    graph.setAttribute('fill','none'); graph.setAttribute('stroke','var(--accent)');
+    graph.setAttribute('stroke-width','2');
+    graph.setAttribute('stroke-linejoin','round');
+    svg.appendChild(graph);
+    const gate = document.createElementNS(NS,'line');
+    const y = 144 - 120 * Math.max(0, Math.min(1, Number(selected.threshold) || 0));
+    for (const [key,val] of Object.entries({
+      x1:24, x2:710, y1:y, y2:y,
+      stroke:'var(--warn)', 'stroke-dasharray':'5 5', opacity:.85,
+    })) gate.setAttribute(key,String(val));
+    svg.appendChild(gate);
+    label.textContent = selected.name + ' · ' + selected.low_hz + '–' +
+      selected.high_hz + ' Hz · ' + envelope.length + ' project frames · ' +
+      'dashed line = threshold (energy only, not camera velocity)';
+  }
+
+  function motionStudioDrawSpectrum() {
+    const panel = qs('#animation-motion-studio-channels');
+    const svg = panel?.querySelector('[data-ms3-spectrum-svg]');
+    const caption = panel?.querySelector('[data-ms3-spectrum-caption]');
+    const selected = motionStudioSelectedBand();
+    const picker = panel?.querySelector('[data-ms3-select]');
+    if (!svg || !caption || !picker) return;
+    picker.replaceChildren();
+    for (const channel of motionStudioChannelState.channels) {
+      const option = document.createElement('option');
+      option.value = channel.id;
+      option.textContent = channel.name + ' (' + channel.low_hz + '–' + channel.high_hz + ' Hz)';
+      picker.appendChild(option);
+    }
+    if (selected) {
+      motionStudioSelectedChannel = selected.id;
+      picker.value = selected.id;
+    }
+    picker.disabled = !selected;
+    svg.replaceChildren();
+    const state = motionStudioSpectrum;
+    const current = state.projectId === motionLabAudioProjectId &&
+      state.sha === motionLabAudioAnalysis?.source_sha256 &&
+      state.projectId === motionStudioChannelState.projectId;
+    const points = current ? state.points : [];
+    const max = Math.max(21, state.maxHz || 20000);
+    svg.setAttribute('aria-label', selected ?
+      'Spectrum for ' + selected.name + ', ' + selected.low_hz + ' to ' +
+      selected.high_hz + ' Hz. Drag a band edge or press arrow keys to edit.'
+      : 'Frequency spectrum: no sound channel selected');
+    const NS = 'http://www.w3.org/2000/svg';
+    const el = (type, attributes) => {
+      const node = document.createElementNS(NS,type);
+      for (const [key,value] of Object.entries(attributes)) node.setAttribute(key,String(value));
+      svg.appendChild(node);
+      return node;
+    };
+    el('line',{x1:34,y1:150,x2:700,y2:150,stroke:'currentColor',opacity:.4});
+    for (const hz of [20,50,100,250,500,1000,2500,5000,10000,20000]) {
+      if (hz > max) continue;
+      const x = motionStudioSpectrumX(hz,max);
+      el('line',{x1:x,y1:18,x2:x,y2:150,stroke:'currentColor',opacity:.10});
+      const text = el('text',{x,y:165,'text-anchor':'middle',fill:'currentColor',
+        'font-size':'12',opacity:.75});
+      text.textContent = hz >= 1000 ? (hz/1000) + 'k' : String(hz);
+    }
+    if (points.length) {
+      const outline = points.map((point,i)=>
+        (i?'L':'M') + motionStudioSpectrumX(point.hz,max).toFixed(2) +
+        ',' + (150-126*Math.max(0,Math.min(1,point.level))).toFixed(2)).join(' ');
+      el('path',{d:outline,fill:'none',stroke:'var(--accent)','stroke-width':2,
+        'stroke-linejoin':'round'});
+    }
+    if (selected) {
+      const low = motionStudioSpectrumX(selected.low_hz,max);
+      const high = motionStudioSpectrumX(selected.high_hz,max);
+      el('rect',{x:low,y:18,width:Math.max(0,high-low),height:132,
+        fill:'var(--accent)',opacity:.15});
+      for (const x of [low,high]) {
+        el('line',{x1:x,y1:18,x2:x,y2:150,stroke:'var(--accent)',
+          'stroke-width':3});
+        el('circle',{cx:x,cy:22,r:6,fill:'var(--accent)'});
+      }
+    }
+    caption.textContent = !current ? 'Open a project WAV to inspect its frequency profile.' :
+      state.loading ? 'Analyzing saved WAV spectrum…' :
+      state.error ? 'Spectrum unavailable: ' + state.error :
+      !points.length ? 'Spectrum unavailable.' :
+      'Time-averaged FFT of the saved WAV, ' + (max/1000).toFixed(1) +
+      ' kHz upper range. Select a channel, then drag either band edge or use the keyboard arrows.';
+    motionStudioShowBandPreview();
+  }
+
+  function motionStudioEditBandEdge(hz, edge) {
+    const selected = motionStudioSelectedBand();
+    if (!selected || motionLabAudioProjectId !== state.project?.id ||
+        motionStudioSpectrum.loading) return;
+    const upper = Math.min(20000, Math.floor(motionStudioSpectrum.maxHz || 20000));
+    if (upper <= 40) return;
+    const snapped = Math.max(20, Math.min(upper, Math.round(hz)));
+    if (edge === 'low') selected.low_hz = Math.min(snapped, selected.high_hz - 10);
+    else selected.high_hz = Math.max(snapped, selected.low_hz + 10);
+    selected.low_hz = Math.max(20, Math.min(selected.low_hz, upper - 10));
+    selected.high_hz = Math.min(upper, Math.max(selected.high_hz, selected.low_hz + 10));
+    motionStudioChannelState.dirty = true;
+    // Change the two numerical controls without discarding keyboard focus.
+    const row = Array.from(qs('#animation-motion-studio-channels')?.querySelectorAll(
+      '[data-ms3-channel]') || []).find(node=>node.dataset.ms3Channel === selected.id);
+    if (row) {
+      for (const field of ['low_hz','high_hz']) {
+        const input = row.querySelector('[data-ms3-field="' + field + '"]');
+        if (input) input.value = String(selected[field]);
+      }
+    }
+    motionStudioDrawSpectrum();
+    motionStudioUpdateChannelButtons();
+  }
+
+  async function motionStudioFetchSpectrum(projectId, sha, refresh = false) {
+    const token = ++motionStudioSpectrumToken;
+    const cacheKey = projectId + '|' + sha;
+    const cached = !refresh && motionStudioSpectrumCache.get(cacheKey);
+    motionStudioSpectrum = { projectId, sha, points: [], maxHz: 20000,
+      loading: !cached, error: '' };
+    if (cached) {
+      motionStudioSpectrum = {...motionStudioSpectrum,
+        points:cached.spectrum,maxHz:cached.frequency_max_hz,loading:false};
+      motionStudioDrawSpectrum();
+      return;
+    }
+    motionStudioDrawSpectrum();
+    try {
+      const result = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/audio/' + encodeURIComponent(sha) + '/spectrum');
+      if (token !== motionStudioSpectrumToken || state.project?.id !== projectId ||
+          motionLabAudioAnalysis?.source_sha256 !== sha) return;
+      const data = result.analysis;
+      if (!Array.isArray(data?.spectrum) || data.spectrum.length > 128 ||
+          data.spectrum.length < 32 || !data.spectrum.every(item =>
+            Number.isFinite(item.hz) && Number.isFinite(item.level) &&
+            item.hz >= 20 && item.level >= 0 && item.level <= 1)) {
+        throw new Error('Host returned invalid spectrum data.');
+      }
+      motionStudioSpectrumCache.set(cacheKey,data);
+      if (motionStudioSpectrumCache.size > 10) motionStudioSpectrumCache.delete(
+        motionStudioSpectrumCache.keys().next().value);
+      motionStudioSpectrum = {projectId,sha,points:data.spectrum,
+        maxHz:data.frequency_max_hz,loading:false,error:''};
+    } catch (error) {
+      if (token !== motionStudioSpectrumToken || state.project?.id !== projectId) return;
+      motionStudioSpectrum.loading = false;
+      motionStudioSpectrum.error = error.message;
+    }
+    motionStudioDrawSpectrum();
+  }
+
+  async function motionStudioInspectChannels() {
+    const projectId = state.project?.id;
+    const analysis = motionLabAudioAnalysis;
+    if (!projectId || !analysis || motionLabAudioProjectId !== projectId) return;
+    const sha = analysis.source_sha256;
+    const frames = Number(state.project.animation.max_frames);
+    const fps = Number(state.project.animation.fps);
+    const ranges = motionStudioBandRanges(motionStudioChannelState.channels);
+    if (!ranges.length || ranges.length > 8) return;
+    const key = JSON.stringify([projectId,sha,fps,frames,ranges]);
+    const btn = qs('#animation-motion-studio-channels')?.querySelector('[data-ms3-inspect]');
+    if (btn) btn.disabled = true;
+    try {
+      let bands = motionStudioBandCache.get(key);
+      if (!bands) {
+        const response = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
+          '/motion-lab/audio/' + encodeURIComponent(sha) + '/bands', {
+          method:'POST',body:JSON.stringify({ranges}),
+        });
+        bands = response.analysis?.bands;
+        if (!bands) throw new Error('Missing saved WAV frequency analysis.');
+        motionStudioBandCache.set(key,bands);
+        if (motionStudioBandCache.size > 12) motionStudioBandCache.delete(
+          motionStudioBandCache.keys().next().value);
+      }
+      if (state.project?.id !== projectId || motionLabAudioAnalysis?.source_sha256 !== sha ||
+          Number(state.project.animation.fps) !== fps ||
+          Number(state.project.animation.max_frames) !== frames) return;
+      motionStudioBandPreview = { projectId,sha, fps, frames,
+        ranges:JSON.stringify(ranges),bands };
+      motionStudioShowBandPreview();
+    } catch (error) {
+      if (state.project?.id === projectId) {
+        motionLabNotify('Frequency preview: ' + error.message);
+      }
+    } finally {
+      if (state.project?.id === projectId) motionStudioUpdateChannelButtons();
+    }
+  }
+
+  function motionStudioChannelDefaults(analysis) {
+    const end = Number(analysis.values.length);
+    return [
+      { id:'bass', name:'Bass', enabled:true, low_hz:35, high_hz:150,
+        axis:'translation_z', mode:'hits', threshold:.25, sensitivity:.35,
+        strength:.4, attack_frames:2, release_frames:6, cooldown_frames:3,
+        offset_frames:0, start_frame:0, end_frame:end },
+      { id:'snare', name:'Snare', enabled:true, low_hz:180, high_hz:2400,
+        axis:'rotation_x', mode:'hits', threshold:.3, sensitivity:.35,
+        strength:.35, attack_frames:2, release_frames:5, cooldown_frames:4,
+        offset_frames:0, start_frame:0, end_frame:end },
+      { id:'crash', name:'Crash', enabled:true, low_hz:2500, high_hz:3500,
+        axis:'rotation_z', mode:'ripple', threshold:.3, sensitivity:.35,
+        strength:.25, attack_frames:2, release_frames:12, cooldown_frames:6,
+        offset_frames:0, start_frame:0, end_frame:end },
+    ];
+  }
+
+  function motionStudioRestoreChannels(projectId, analysis) {
+    const sha = analysis?.source_sha256;
+    if (!projectId || !sha || state.project?.id !== projectId) return;
+    const saved = (state.project.motion_lab?.layers || []).find(layer =>
+      layer.type === 'audio_channels' && layer.sha256 === sha);
+    const channels = saved?.channel_document?.channels?.length
+      ? saved.channel_document.channels.map(channel => {
+          const { envelope, ...settings } = channel;
+          return { ...settings };
+        }) : motionStudioChannelDefaults(analysis);
+    motionStudioChannelState = {
+      projectId, sha, channels, dirty: false,
+    };
+    if (!channels.some(channel => channel.id === motionStudioSelectedChannel)) {
+      motionStudioSelectedChannel = channels[0]?.id || '';
+    }
+    motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
+    motionStudioRenderChannels();
+    void motionStudioFetchSpectrum(projectId, sha);
+  }
+
+  function motionStudioUpdateChannelButtons() {
+    const panel = qs('#animation-motion-studio-channels');
+    if (!panel) return;
+    const analysis = motionLabAudioAnalysis;
+    const current = Boolean(state.project?.id && analysis &&
+      motionLabAudioProjectId === state.project.id &&
+      motionStudioChannelState.projectId === state.project.id &&
+      motionStudioChannelState.sha === analysis.source_sha256);
+    const ready = current && animationMode() === '3d' && !motionLabBusy;
+    for (const key of ['stage','preview','apply']) {
+      const button = panel.querySelector('[data-ms3-' + key + ']');
+      if (button) button.disabled = !ready || !motionStudioChannelState.channels.length;
+    }
+    const add = panel.querySelector('[data-ms3-add]');
+    if (add) add.disabled = !ready || motionStudioChannelState.channels.length >= 8;
+    const inspect = panel.querySelector('[data-ms3-inspect]');
+    if (inspect) inspect.disabled = !ready || !motionStudioChannelState.channels.length;
+    const refresh = panel.querySelector('[data-ms3-refresh-spectrum]');
+    if (refresh) refresh.disabled = !ready || motionStudioSpectrum.loading;
+    const status = panel.querySelector('[data-ms3-status]');
+    if (status) status.textContent = !state.project ? 'Open a project to configure channels.' :
+      !current ? 'Analyze or restore a saved WAV to enable independent channels.' :
+      motionStudioChannelState.channels.length + ' channel(s)' +
+        (motionStudioChannelState.dirty ? ' · Changes not staged' :
+          ' · Stage to preview, Apply to save camera motion');
+  }
+
+  function motionStudioRenderChannels() {
+    const panel = qs('#animation-motion-studio-channels');
+    if (!panel) return;
+    const list = panel.querySelector('[data-ms3-list]');
+    if (!list) return;
+    list.replaceChildren();
+    for (const channel of motionStudioChannelState.channels) {
+      const row = document.createElement('section');
+      row.className = 'motion-studio-channel';
+      row.dataset.ms3Channel = channel.id;
+      row.innerHTML = `
+        <div class="motion-studio-channel-heading">
+          <label><input type="checkbox" data-ms3-field="enabled"> Enabled</label>
+          <strong data-ms3-label></strong>
+          <button type="button" class="secondary-button compact" data-ms3-remove>Remove</button>
+        </div>
+        <div class="motion-studio-channel-fields">
+          <label>Name<input data-ms3-field="name" type="text" maxlength="64"></label>
+          <label>Low (Hz)<input data-ms3-field="low_hz" type="number" min="20" max="20000" step="1"></label>
+          <label>High (Hz)<input data-ms3-field="high_hz" type="number" min="30" max="20000" step="1"></label>
+          <label>Camera axis<select data-ms3-field="axis"></select></label>
+          <label>Response<select data-ms3-field="mode">
+            <option value="hits">Beat Hits</option>
+            <option value="intensity">Continuous Intensity</option>
+            <option value="ripple">Ripple / oscillation</option>
+          </select></label>
+          <label>Strength (0–1)<input data-ms3-field="strength" type="number" min="0" max="1" step=".05"></label>
+          <label>Threshold (0–1)<input data-ms3-field="threshold" type="number" min="0" max="1" step=".05"></label>
+          <label>Sensitivity (0–1)<input data-ms3-field="sensitivity" type="number" min="0" max="1" step=".05"></label>
+          <label>Attack (frames)<input data-ms3-field="attack_frames" type="number" min="1" max="120" step="1"></label>
+          <label>Release (frames)<input data-ms3-field="release_frames" type="number" min="1" max="120" step="1"></label>
+          <label>Cooldown (frames)<input data-ms3-field="cooldown_frames" type="number" min="0" max="120" step="1"></label>
+          <label>Offset (frames)<input data-ms3-field="offset_frames" type="number" min="-3000" max="3000" step="1"></label>
+          <label>Start frame<input data-ms3-field="start_frame" type="number" min="0" max="2999" step="1"></label>
+          <label>End frame (exclusive)<input data-ms3-field="end_frame" type="number" min="1" max="3000" step="1"></label>
+        </div>`;
+      const select = row.querySelector('[data-ms3-field="axis"]');
+      for (const [axis, label] of MOTION_STUDIO_AXES) {
+        const option = document.createElement('option');
+        option.value = axis;
+        option.textContent = label;
+        select.appendChild(option);
+      }
+      for (const field of row.querySelectorAll('[data-ms3-field]')) {
+        const name = field.dataset.ms3Field;
+        if (field.type === 'checkbox') field.checked = channel[name] !== false;
+        else field.value = String(channel[name] ?? '');
+      }
+      row.querySelector('[data-ms3-label]').textContent = channel.name;
+      row.querySelector('[data-ms3-remove]').addEventListener('click', () => {
+        motionStudioChannelState.channels = motionStudioChannelState.channels.filter(
+          item => item.id !== channel.id);
+        motionStudioChannelState.dirty = true;
+        motionStudioRenderChannels();
+      });
+      for (const input of row.querySelectorAll('[data-ms3-field]')) {
+        input.addEventListener('change', () => {
+          const name = input.dataset.ms3Field;
+          const index = motionStudioChannelState.channels.findIndex(
+            item => item.id === channel.id);
+          if (index < 0) return;
+          const value = input.type === 'checkbox' ? input.checked :
+            input.type === 'number' ? Number(input.value) : input.value;
+          motionStudioChannelState.channels[index][name] = value;
+          if (name === 'name') row.querySelector('[data-ms3-label]').textContent = value;
+          motionStudioChannelState.dirty = true;
+          motionStudioDrawSpectrum();
+          motionStudioUpdateChannelButtons();
+        });
+      }
+      list.appendChild(row);
+    }
+    motionStudioDrawSpectrum();
+    motionStudioUpdateChannelButtons();
+  }
+
+  function motionStudioCreateChannelCard(panel) {
+    const card = document.createElement('article');
+    card.className = 'card glass animation-motion-studio-channels';
+    card.id = 'animation-motion-studio-channels';
+    card.innerHTML = `
+      <div class="card-header"><div>
+        <h2>Independent Sound Channels</h2>
+        <p class="muted">Bass, Snare, Crash or custom frequency bands control
+        independent camera axes. Spectral filters are approximate, not isolated
+        drum stems. Manual camera cues remain separate.</p>
+      </div></div>
+      <p class="muted">Each response is non-drifting and frame-aligned.
+      Use a saved project WAV. Settings are staged in a single editable
+      Motion Lab layer and saved only on Apply.</p>
+      <section class="motion-studio-spectrum-panel">
+        <div class="motion-studio-spectrum-heading">
+          <strong>Frequency spectrum</strong>
+          <label>Channel<select data-ms3-select aria-label="Sound channel to inspect"></select></label>
+          <label>Keyboard edge<select data-ms3-edge aria-label="Frequency band edge">
+            <option value="low">Low frequency</option>
+            <option value="high">High frequency</option>
+          </select></label>
+          <button type="button" class="secondary-button compact"
+            data-ms3-refresh-spectrum>Refresh FFT</button>
+        </div>
+        <svg data-ms3-spectrum-svg viewBox="0 0 720 176" tabindex="0"
+          role="img" aria-label="Saved WAV frequency spectrum"></svg>
+        <p data-ms3-spectrum-caption class="muted" aria-live="polite">
+          Load a saved WAV to inspect its frequency profile.</p>
+      </section>
+      <section class="motion-studio-response-panel">
+        <div class="motion-studio-spectrum-heading">
+          <strong>Channel energy preview</strong>
+          <button type="button" class="secondary-button compact"
+            data-ms3-inspect>Analyze channel responses</button>
+        </div>
+        <svg data-ms3-envelope-svg viewBox="0 0 720 160" role="img"
+          aria-label="Selected channel normalized energy by project frame"></svg>
+        <p data-ms3-envelope-status class="muted">
+          Analyze the selected channel to see its response before staging motion.</p>
+      </section>
+      <div data-ms3-list class="motion-studio-channel-list"></div>
+      <div class="motion-studio-channel-actions">
+        <button type="button" class="secondary-button compact" data-ms3-add>Add custom channel</button>
+        <button type="button" class="secondary-button compact" data-ms3-stage>Stage channels</button>
+        <button type="button" class="secondary-button compact" data-ms3-preview>Preview curves</button>
+        <button type="button" class="primary-button compact" data-ms3-apply>Apply to project</button>
+      </div>
+      <p class="muted" role="status" aria-live="polite" data-ms3-status>
+        Analyze a WAV to configure audio channels.</p>`;
+    panel.appendChild(card);
+    const spectrum = card.querySelector('[data-ms3-spectrum-svg]');
+    const edgePicker = card.querySelector('[data-ms3-edge]');
+    const selectedPicker = card.querySelector('[data-ms3-select]');
+    selectedPicker.addEventListener('change', event => {
+      motionStudioSelectedChannel = event.target.value;
+      motionStudioDrawSpectrum();
+    });
+    spectrum.addEventListener('pointerdown', event => {
+      const band = motionStudioSelectedBand();
+      if (!band || !motionStudioSpectrum.points.length ||
+          motionStudioSpectrum.projectId !== state.project?.id) return;
+      const upper = motionStudioSpectrum.maxHz;
+      const hz = motionStudioSpectrumFrequency(event.clientX,spectrum,upper);
+      const nearest = Math.abs(Math.log(Math.max(20,band.low_hz) / hz)) <
+        Math.abs(Math.log(Math.max(20,band.high_hz) / hz)) ? 'low' : 'high';
+      motionStudioDraggingEdge = nearest;
+      edgePicker.value = nearest;
+      if (spectrum.setPointerCapture) spectrum.setPointerCapture(event.pointerId);
+      motionStudioEditBandEdge(hz,nearest);
+      event.preventDefault();
+    });
+    spectrum.addEventListener('pointermove', event => {
+      if (!motionStudioDraggingEdge || !motionStudioSpectrum.points.length) return;
+      const hz = motionStudioSpectrumFrequency(event.clientX,spectrum,
+        motionStudioSpectrum.maxHz);
+      motionStudioEditBandEdge(hz,motionStudioDraggingEdge);
+    });
+    for (const eventName of ['pointerup','pointercancel','lostpointercapture']) {
+      spectrum.addEventListener(eventName, () => { motionStudioDraggingEdge = ''; });
+    }
+    spectrum.addEventListener('keydown', event => {
+      if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+      const band = motionStudioSelectedBand();
+      if (!band) return;
+      const edge = edgePicker.value === 'high' ? 'high' : 'low';
+      const direction = event.key === 'ArrowRight' || event.key === 'ArrowUp' ? 1 : -1;
+      const next = Number(band[edge + '_hz']) * 2 ** (direction / 12);
+      motionStudioEditBandEdge(next,edge);
+      event.preventDefault();
+    });
+    card.querySelector('[data-ms3-refresh-spectrum]').addEventListener('click', () => {
+      const projectId = state.project?.id, sha = motionLabAudioAnalysis?.source_sha256;
+      if (projectId && sha && motionLabAudioProjectId === projectId)
+        void motionStudioFetchSpectrum(projectId,sha,true);
+    });
+    card.querySelector('[data-ms3-inspect]').addEventListener('click',
+      () => void motionStudioInspectChannels());
+    card.querySelector('[data-ms3-add]').addEventListener('click', () => {
+      if (motionStudioChannelState.channels.length >= 8) return;
+      const analysis = motionLabAudioAnalysis;
+      if (!analysis || motionLabAudioProjectId !== state.project?.id) return;
+      let ident;
+      do { ident = 'custom-' + (++motionStudioChannelSerial); }
+      while (motionStudioChannelState.channels.some(channel => channel.id === ident));
+      motionStudioChannelState.channels.push({
+        ...motionStudioChannelDefaults(analysis)[0], id: ident, name: 'Custom channel',
+        low_hz: 450, high_hz: 1200, mode: 'intensity', axis: 'translation_y',
+      });
+      motionStudioChannelState.dirty = true;
+      motionStudioRenderChannels();
+    });
+    card.querySelector('[data-ms3-stage]').addEventListener('click',
+      () => void motionStudioStageChannels());
+    card.querySelector('[data-ms3-preview]').addEventListener('click',
+      () => void motionStudioStageChannels('preview'));
+    card.querySelector('[data-ms3-apply]').addEventListener('click',
+      () => void motionStudioStageChannels('apply'));
+    motionStudioRenderChannels();
+  }
+
+  async function motionStudioStageChannels(action = 'stage') {
+    const analysis = motionLabAudioAnalysis;
+    const projectId = state.project?.id;
+    if (!analysis || !projectId || motionLabAudioProjectId !== projectId ||
+        motionStudioChannelState.sha !== analysis.source_sha256 ||
+        animationMode() !== '3d' || motionLabBusy) return;
+    const sha = analysis.source_sha256;
+    const controls = motionStudioChannelState.channels.map(item => ({ ...item }));
+    const fps = Number(state.project.animation.fps);
+    const frames = Number(state.project.animation.max_frames);
+    if (!controls.length || controls.length > 8) return;
+    const ranges = controls.map(channel => ({
+      id: channel.id, low_hz: channel.low_hz, high_hz: channel.high_hz,
+    }));
+    // Bypass remote FFT work for an unchanged set of frequency ranges.
+    const cacheKey = JSON.stringify([projectId, sha, fps, frames, ranges]);
+    const controlsPanel = qs('#animation-motion-studio-channels');
+    const message = controlsPanel?.querySelector('[data-ms3-status]');
+    for (const button of controlsPanel?.querySelectorAll('button') || []) {
+      button.disabled = true;
+    }
+    if (message) message.textContent = 'Analyzing independent frequency bands…';
+    try {
+      let bands = motionStudioBandCache.get(cacheKey);
+      if (!bands) {
+        const response = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
+          '/motion-lab/audio/' + encodeURIComponent(sha) + '/bands', {
+          method: 'POST', body: JSON.stringify({ ranges }),
+        });
+        bands = response.analysis?.bands;
+        if (!bands) throw new Error('Missing channel analysis from the host.');
+        motionStudioBandCache.set(cacheKey, bands);
+        if (motionStudioBandCache.size > 12) motionStudioBandCache.delete(
+          motionStudioBandCache.keys().next().value);
+      }
+      if (state.project?.id !== projectId ||
+          motionLabAudioAnalysis?.source_sha256 !== sha ||
+          Number(state.project.animation.fps) !== fps ||
+          Number(state.project.animation.max_frames) !== frames) return;
+      const channels = controls.map(channel => ({
+        ...channel, envelope: bands[channel.id]?.slice(),
+      }));
+      if (channels.some(channel => !Array.isArray(channel.envelope) ||
+          channel.envelope.length !== frames)) {
+        throw new Error('Frequency response length does not match project frames.');
+      }
+      motionStudioBandPreview = {projectId,sha,fps,frames,
+        ranges:JSON.stringify(ranges),bands};
+      motionStudioShowBandPreview();
+      const layer = {
+        id: 'audio-channels-' + sha.slice(0, 16), type: 'audio_channels',
+        name: 'Independent sound channels', enabled: true, blend: 'add',
+        sha256: sha, start_frame: 0, end_frame: frames,
+        channel_document: {schema_version: 1, source_sha256: sha,
+          fps, max_frames: frames, channels},
+      };
+      const previous = motionLabDraftLayers.findIndex(item =>
+        item.type === 'audio_channels' && item.sha256 === sha);
+      if (previous < 0 && motionLabDraftLayers.length >= 24) {
+        throw new Error('Motion Lab supports at most 24 layers. Remove one before staging.');
+      }
+      if (previous >= 0) motionLabDraftLayers[previous] = layer;
+      else motionLabDraftLayers.push(layer);
+      motionLabEditingIndex = -1;
+      motionStudioChannelState.dirty = false;
+      commitMotionLabDraft();
+      if (action === 'preview') await motionLabPreviewOrApply(false, {curvesOnly:true});
+      else if (action === 'apply') await motionLabPreviewOrApply(true);
+      motionStudioRenderChannels();
+      if (message && state.project?.id === projectId)
+        message.textContent = channels.length + ' sound channels ' +
+          (action === 'apply' ? 'applied to this project.' :
+           action === 'preview' ? 'previewed in Motion Curves.' :
+           'staged in Motion Lab. Preview or Apply to save.');
+    } catch (error) {
+      motionLabNotify('Sound channels: ' + error.message);
+      toast('Sound channel analysis failed', error.message, 'error');
+    } finally {
+      if (state.project?.id === projectId) motionStudioUpdateChannelButtons();
+    }
+  }
+
+  // Restore source-bound manual cues and editable markers for both uploaded
+  // and reopened WAVs. Stale project requests never overwrite the open editor.
+  async function motionStudioHydrateEdits(projectId, analysis, stillCurrent) {
+    const sha = analysis?.source_sha256;
+    if (!projectId || !sha) return false;
+    const calls = await Promise.allSettled([
+      api('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/audio-markers/' + encodeURIComponent(sha)),
+      api('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/audio-cues/' + encodeURIComponent(sha)),
+    ]);
+    if (!stillCurrent() || state.project?.id !== projectId) return false;
+    const original = (analysis.events?.events || []).map(e => ({ ...e, enabled: true }));
+    motionLabEditedEvents = original;
+    motionLabSelectedEvent = null;
+    motionLabMarkersDirty = false;
+    motionLabMarkerUndo = [];
+    motionLabMarkerRedo = [];
+    motionDirectorCues = [];
+    motionDirectorSelected = null;
+    motionDirectorDirty = false;
+    motionDirectorBulkUndo = null;
+    motionDirectorPreviewMatches = false;
+    const markers = calls[0].status === 'fulfilled' ? calls[0].value?.markers : null;
+    if (markers && Math.abs(Number(markers.duration_seconds) -
+                           Number(analysis.duration_seconds)) <= .001) {
+      const baseline = new Map(original.map(e => [e.id, e]));
+      motionLabEditedEvents = markers.events.map(e => ({
+        ...baseline.get(e.id), ...e,
+        strength: baseline.get(e.id)?.strength ?? e.strength ?? 1,
+        source: baseline.get(e.id)?.source ?? (e.id.startsWith('manual-') ? 'manual' : 'saved'),
+      }));
+    } else if (markers) {
+      motionLabNotify('Saved audio markers have a mismatched duration; detector markers are shown.');
+    } else if (calls[0].status === 'rejected') {
+      motionLabNotify('Could not restore saved marker edits: ' + calls[0].reason?.message);
+    }
+    const doc = calls[1].status === 'fulfilled' ? calls[1].value?.cues : null;
+    if (doc && Math.abs(Number(doc.duration_seconds) -
+                        Number(analysis.duration_seconds)) <= .001) {
+      motionDirectorCues = doc.cues.map(cue => ({ ...cue }));
+    } else if (doc) {
+      motionLabNotify('Saved camera cues have a mismatched audio duration.');
+    } else if (calls[1].status === 'rejected') {
+      motionLabNotify('Could not restore saved camera cues: ' + calls[1].reason?.message);
+    }
+    return true;
+  }
+
+  function motionStudioConnectAudioTransport() {
+    if (!motionLabAudioElement) return;
+    for (const type of ['timeupdate', 'play', 'pause', 'seeked', 'ended']) {
+      motionLabAudioElement.addEventListener(type, motionLabWavePlayhead);
+      motionLabAudioElement.addEventListener(type, motionStudioArrangementPlayhead);
+    }
+    motionLabWavePlayhead();
+  }
+
   function motionLabAudioPreview() {
     const preview = qs('#animation-motion-lab-audio-preview');
     const plot = qs('#animation-motion-lab-audio-plot');
@@ -5021,10 +7637,60 @@
     const analyze = qs('#animation-motion-lab-analyze-audio');
     const add = qs('#animation-motion-lab-add-audio');
     if (analyze) analyze.disabled = !ready;
+    const attached = qs('#animation-motion-lab-use-soundtrack');
+    if (attached) attached.disabled = !ready || motionLabSoundtrackBusy ||
+      !projectMediaAssets('soundtrack').length;
     if (add) add.disabled = !ready || motionLabDraftLayers.length >= 24 ||
       !motionLabAudioAnalysis || motionLabAudioProjectId !== state.project?.id ||
       Number(motionLabAudioAnalysis.fps) !== Number(state.project?.animation?.fps);
+    motionStudioUpdateChannelButtons();
   }
+  async function motionLabUseProjectSoundtrack() {
+    const projectId = state.project?.id;
+    const soundtrack = projectMediaAssets('soundtrack')[0];
+    if (!projectId || !soundtrack || animationMode() !== '3d' ||
+        motionLabSoundtrackBusy || motionLabBusy) return;
+    // Prevent an in-flight selection from replacing another project or WAV.
+    const token = projectAudioRestoreGeneration;
+    motionLabSoundtrackBusy = true;
+    motionLabSoundtrackStatus = '';
+    renderProjectMedia();
+    try {
+      const response = await api('/api/animation/projects/' + encodeURIComponent(projectId) +
+        '/motion-lab/use-soundtrack', {method:'POST'});
+      if (state.project?.id !== projectId || token !== projectAudioRestoreGeneration) return;
+      const sha = response.asset?.sha256;
+      if (!/^[a-f0-9]{64}$/.test(String(sha || '')) ||
+          response.analysis?.source_sha256 !== sha) {
+        throw new Error('The host did not return a valid saved Motion Lab WAV.');
+      }
+      // The recovered WAV is now a project asset. Reuse the W2 loader, which
+      // restores waveform, manual cues, markers, spectrum and sound channels.
+      await restoreProjectMedia({preferredWav:sha});
+      if (state.project?.id !== projectId) return;
+      if (motionLabAudioProjectId !== projectId ||
+          motionLabAudioAnalysis?.source_sha256 !== sha) {
+        throw new Error('The analyzed soundtrack could not be restored into Motion Studio.');
+      }
+      const filename = response.soundtrack?.filename || soundtrack.filename;
+      motionLabSoundtrackStatus = 'Loaded project soundtrack: ' + filename +
+        (response.converted_to_pcm ? ' (converted to PCM WAV on host).' :
+          ' (original PCM WAV).') +
+        ' Export soundtrack and saved synchronization offset are unchanged.';
+      const info = qs('#animation-motion-lab-audio-info');
+      if (info) info.textContent = motionLabSoundtrackStatus;
+      toast('Project soundtrack loaded', filename + ' is ready in Motion Studio.', 'success');
+    } catch (error) {
+      if (state.project?.id !== projectId) return;
+      motionLabSoundtrackStatus = 'Could not use saved soundtrack: ' +
+        (error?.message || String(error));
+      toast('Project soundtrack unavailable', error?.message || String(error), 'error');
+    } finally {
+      motionLabSoundtrackBusy = false;
+      if (state.project?.id === projectId) renderProjectMedia();
+    }
+  }
+
   async function motionLabAnalyzeAudio() {
     const file = qs('#animation-motion-lab-audio-file')?.files?.[0];
     const projectId = state.project?.id;
@@ -5038,7 +7704,15 @@
       return;
     }
     // A manual selection wins over any in-flight automatic project restore.
-    ++projectAudioRestoreGeneration;
+    const uploadToken = ++projectAudioRestoreGeneration;
+    motionLabEditedEvents = null;
+    motionDirectorCues = [];
+    motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
+    ++motionStudioSpectrumToken;
+    motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
+    motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
+    motionStudioSelectedChannel = '';
+    motionStudioRenderChannels();
     motionLabAudioAnalysis = null;
     motionLabAudioProjectId = null;
     motionLabReleaseAudio();
@@ -5151,12 +7825,16 @@
           Number(analysis.fps) !== Number(state.project.animation.fps)) {
         throw new Error('Audio frame alignment changed; analyze again.');
       }
+      if (!(await motionStudioHydrateEdits(projectId, analysis, () =>
+        projectAudioRestoreGeneration === uploadToken))) return;
       motionLabAudioAnalysis = analysis;
       motionLabAudioProjectId = projectId;
+      motionStudioRestoreChannels(projectId, analysis);
       motionLabAudioUrl = URL.createObjectURL(file);
       motionLabAudioElement = new Audio(motionLabAudioUrl);
       motionLabAudioElement.preload = 'auto';
       motionLabAudioElement.load();
+      motionStudioConnectAudioTransport();
       motionLabAudioSyncStatus('Ready to play with Motion Curves playback.');
       const peak = Math.max(0, ...motionLabAudioSignal());
       const thresholdField = qs('#animation-motion-lab-audio-threshold');
@@ -5165,6 +7843,8 @@
         // analysis scale without seeing the envelope.
         thresholdField.value = Math.min(.1, peak * .55).toFixed(3);
       }
+      motionLabStereoWaveform();
+      motionDirectorPanel();
       motionLabAudioPreview();
       if (status) status.textContent = 'Analyzed ' + file.name + ': ' +
         analysis.values.length + ' frames · ' + analysis.duration_seconds.toFixed(2) +
@@ -5214,6 +7894,41 @@
     motionLabNotify('Audio motion draft layer added. Preview Curves before Apply.');
     void motionLabPreviewOrApply(false,{curvesOnly:true});
   }
+  const MOTION_RECORD_DEFAULT_LIMITS = {
+    translation_x:.12, translation_y:.12, translation_z:.12,
+    rotation_x:2, rotation_y:2, rotation_z:2,
+  };
+  function motionLabSyncRecordingLimits() {
+    const limits = state.project?.motion_lab?.limits || {};
+    qsa('[data-motion-record-limit]').forEach(input => {
+      const axis = input.dataset.motionRecordLimit;
+      input.value = String(limits[axis] ?? MOTION_RECORD_DEFAULT_LIMITS[axis]);
+    });
+    const status = qs('#animation-motion-record-limits-status');
+    if (status) status.textContent = 'Limits loaded from project (translation: units/frame, rotation: degrees/frame).';
+  }
+  function motionLabChangeRecordingLimit(input) {
+    if (!state.project || motionLabBusy || motionLabRecorder?.active) return;
+    const axis = input.dataset.motionRecordLimit;
+    if (!(axis in MOTION_RECORD_DEFAULT_LIMITS)) return;
+    const value = Number(input.value);
+    if (!input.value.trim() || !Number.isFinite(value) ||
+        value < .00001 || value > 30) {
+      input.value = String(state.project.motion_lab?.limits?.[axis] ??
+        MOTION_RECORD_DEFAULT_LIMITS[axis]);
+      toast('Invalid safety limit','Choose a value between 0.00001 and 30.','warning');
+      return;
+    }
+    const lab = state.project.motion_lab || {};
+    state.project.motion_lab = {
+      ...lab, limits: {
+        ...MOTION_RECORD_DEFAULT_LIMITS, ...(lab.limits || {}), [axis]:value,
+      },
+    };
+    const status = qs('#animation-motion-record-limits-status');
+    if (status) status.textContent = 'Project safety limits changed. Save or Apply to persist them.';
+    markDirty({validate:false});
+  }
   function motionLabRecordingUi() {
     const ready = Boolean(state.project && animationMode() === '3d' && !motionLabBusy);
     const active = Boolean(motionLabRecorder?.active);
@@ -5235,12 +7950,20 @@
           control.disabled = !ready || active;
           return;
         }
-        if (control.matches('[data-motion-record-axis], [data-motion-record-invert]') ||
+        if (control.matches('[data-motion-record-axis], [data-motion-record-invert], [data-motion-record-limit]') ||
             control.closest('.animation-motion-recording-controls')) {
           control.disabled = !ready || active;
         }
       });
     motionLabPunchUi();
+    const units = qs('#animation-motion-record-unit-help');
+    const fps = Number(state.project?.animation?.fps || 24);
+    const move = Number(qs('#animation-motion-lab-record-translation')?.value || .025);
+    const angle = Number(qs('#animation-motion-lab-record-rotation')?.value || .5);
+    if (units) units.textContent = 'Sensitivity is per frame. At ' + fps +
+      ' FPS, full input is up to ' + (move * fps).toFixed(3) +
+      ' scene units/second or ' + (angle * fps).toFixed(2) +
+      ' degrees/second before smoothing and safety limits.';
     if (!state.project) motionLabRecordStatus('Select a project');
     else if (animationMode() !== '3d') motionLabRecordStatus('3D Motion required');
     else if (!active) motionLabRecordStatus('Ready');
@@ -5294,7 +8017,8 @@
           throw new Error('Target take changed during recording. No edits were applied.');
         }
         motionLabDraftLayers[context.index] =
-          window.MorphorumMotionLabSplicePunchIn(existing, take);
+          window.MorphorumMotionLabSplicePunchIn(existing, take,
+            {featherFrames:context.featherFrames});
       } catch (error) {
         motionLabRecorder = null;
         motionLabNotify('Punch-in canceled: ' + (error?.message || String(error)));
@@ -5353,6 +8077,7 @@
     const deadzone = Number(qs('#animation-motion-lab-record-deadzone')?.value);
     const response = Number(qs('#animation-motion-lab-record-response')?.value);
     const tailFrames = Number(qs('#animation-motion-lab-record-tail')?.value);
+    const featherFrames = Number(qs('#animation-motion-lab-punch-feather')?.value);
     let punch = null;
     if (isPunch) {
       const raw = qs('#animation-motion-lab-punch-target')?.value;
@@ -5366,7 +8091,8 @@
         motionLabNotify('Punch-in requires a recorded target, matching FPS, an interval inside it and axes armed on that take.');
         return;
       }
-      punch = {index, id:target.id, snapshot:JSON.stringify(target), endFrame};
+      punch = {index, id:target.id, snapshot:JSON.stringify(target), endFrame,
+        featherFrames};
     }
 
     if (!Number.isInteger(startFrame) || startFrame < 0 || startFrame >= count ||
@@ -5374,7 +8100,8 @@
         !Number.isFinite(rotationScale) || rotationScale <= 0 ||
         !Number.isFinite(deadzone) || deadzone < 0 || deadzone > .5 ||
         !Number.isFinite(response) || response < .05 || response > 1 ||
-        !Number.isInteger(tailFrames) || tailFrames < 0 || tailFrames > 12) {
+        !Number.isInteger(tailFrames) || tailFrames < 0 || tailFrames > 12 ||
+        !Number.isInteger(featherFrames) || featherFrames < 0 || featherFrames > 12) {
       motionLabNotify('Check recording start, sensitivity, deadzone, response and release-tail settings.');
       return;
     }
@@ -5523,15 +8250,18 @@
     motionLabHistory = [motionLabDraftLayers.map(layer => ({ ...layer }))];
     motionLabHistoryIndex = 0;
     motionLabVisual?.clear();
+    motionLabSyncRecordingLimits();
     renderMotionLabDraft();
   }
   function renderMotionLabDraft() {
+    motionReviewRefreshTakes();
     const project = state.project;
     const is3d = animationMode() === '3d';
     const ready = Boolean(project && is3d && !motionLabBusy);
     const count = Number(project?.animation?.max_frames || 120);
     motionLabRecordingUi();
     motionLabAudioUi();
+    motionStudioRenderArrangement();
     const stage = qs('#animation-motion-lab-compose-status');
     if (stage) stage.textContent = !project ? 'Select a project' :
       !is3d ? '2D project (switch to 3D here)' : motionLabDraftLayers.length +
@@ -5576,6 +8306,14 @@
         ? (index + 1) + '. Audio ' + layer.axis.replaceAll('_',' ') +
           ' · ' + layer.start_frame + '–' + (layer.end_frame - 1) +
           ' · threshold ' + layer.threshold
+        : layer.type === 'audio_channels'
+        ? (index + 1) + '. Sound channels · ' +
+          (layer.channel_document?.channels?.length || 0) + ' channel(s) · additive · ' +
+          layer.start_frame + '–' + (layer.end_frame - 1)
+        : layer.type === 'audio_cues'
+        ? (index + 1) + '. Audio Motion Director · ' +
+          (layer.cue_document?.cues?.length || 0) + ' cue(s) · additive · ' +
+          layer.start_frame + '–' + (layer.end_frame - 1)
         : layer.type === 'keyframes'
         ? (index + 1) + '. Custom ' + layer.axis.replaceAll('_', ' ') +
           ' · ' + layer.blend + ' · ' + layer.interpolation +
@@ -5593,6 +8331,18 @@
       edit.textContent = 'Edit';
       edit.disabled = !ready;
       edit.addEventListener('click', () => {
+        if (layer.type === 'audio_channels') {
+          motionLabEditingIndex = -1;
+          showAnimationTab('audio');
+          motionLabNotify('Edit this sound channel layer in Motion Studio, then Preview or Apply.');
+          return;
+        }
+        if (layer.type === 'audio_cues') {
+          motionLabEditingIndex = -1;
+          showAnimationTab('audio');
+          motionLabNotify('Edit this Director layer in Motion Studio, then Save and Preview.');
+          return;
+        }
         if (layer.type === 'keyframes') {
           motionLabEditingIndex = -1;
           const axisField = qs('#animation-motion-lab-key-axis');
@@ -6095,12 +8845,11 @@
   // Audio Motion is a dedicated Motion Lab workspace using the same draft
   // camera layers, project, and render controls.
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs'];
+  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'];
   const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
   let animationTab = 'motion';
   let projectWizard = null;
   function showAnimationTab(name, { persist = true } = {}) {
-    if (name === 'audio') name = 'motion-import';
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'motion';
     if (name !== 'curves') motionLabVisual?.pause();
     if (name !== 'preview') motionFramePlayer?.pause();
@@ -6552,10 +9301,9 @@
       motion: 'Overview', wizard: 'New Project Wizard', projects: 'Project Manager', editor: 'Project Editor',
       composer: 'Camera Composer', recording: 'Live Recording',
       curves: 'Motion Curves', preview: 'Camera Preview',
-      'motion-import': 'Import Motion Settings', audio: 'Audio Motion', monitor: 'Render Monitor', outputs: 'Outputs',
+      'motion-import': 'Import Motion Settings', audio: 'Motion Studio', monitor: 'Render Monitor', outputs: 'Outputs',
     };
     for (const [name, label] of Object.entries(names)) {
-      if (name === 'audio') continue;
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.animationTab = name;
@@ -6587,7 +9335,7 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'monitor', 'outputs']) {
+    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -6615,13 +9363,7 @@
     }
     const motionIntro = qs('#animation-motion-lab-intro');
     if (motionIntro) panels.motion.appendChild(motionIntro);
-    // Preserve legacy Audio Motion DOM and controls without exposing its tab.
-    const hiddenAudioPanel = document.createElement('section');
-    hiddenAudioPanel.hidden = true;
-    hiddenAudioPanel.id = 'animation-panel-audio';
-    hiddenAudioPanel.dataset.animationPanel = 'audio';
-    panels['motion-import'].after(hiddenAudioPanel);
-    panels.audio = hiddenAudioPanel;
+    // Motion Studio is a first-class workspace; reuse the existing Audio Motion DOM.
     const cards = [
       ['composer', '#animation-motion-lab-composer'],
       ['recording', '#animation-motion-lab-recording'],
@@ -6645,6 +9387,7 @@
       ['curves', 'Motion Curves & Camera Path', 'Edit frame-aligned keyframes using the full-width plots.'],
       ['preview', 'Camera Motion Preview', 'Inspect 2D or 3D camera motion before rendering.'],
       ['motion-import', 'Import Motion Settings', 'Preview Deforum Motion Studio schedules and align soundtrack audio.'],
+      ['audio', 'Motion Studio', 'Compose manual camera cues against music, edit beats and preview or apply motion to this project.'],
       ['monitor', 'Render Monitor', 'Watch progress, frame previews, and job diagnostics.'],
       ['projects', 'Project Manager', 'Search, review, rename, and safely archive your animation projects.'],
       ['editor', 'Project Editor', 'Configure projects, prompts, resolution, and timelines.'],
@@ -6730,8 +9473,8 @@
     audioIntro.innerHTML = `
       <div class="animation-audio-workspace-heading">
         <div>
-          <p class="eyebrow">MOTION LAB / AUDIO MOTION</p>
-          <h2>Make your camera move to the music</h2>
+          <p class="eyebrow">MOTION LAB / MOTION STUDIO</p>
+          <h2>Motion Studio: compose to your soundtrack</h2>
           <p class="muted">Analyze a WAV, select the beats you want, and add
           camera movement to your Motion Lab layers. Audio motion is part of
           the same project, not a separate animation or render.</p>
@@ -6755,16 +9498,86 @@
       </div>
     `;
     panels.audio.prepend(audioIntro);
+    motionStudioCreateArrangementCard(panels.audio);
+    motionStudioCreateChannelCard(panels.audio);
+    // DA3 layout: wide analysis displays are independent of the compact
+    // configuration card. Reparenting preserves existing element IDs,
+    // event listeners, SVG rendering and draft-marker state.
+    const analysisWorkspace = document.createElement('article');
+    analysisWorkspace.id = 'animation-audio-analysis-workspace';
+    analysisWorkspace.className = 'card glass animation-audio-analysis-workspace';
+    const analysisHeading = document.createElement('div');
+    analysisHeading.className = 'animation-audio-analysis-heading';
+    analysisHeading.innerHTML = '<h2>Audio analysis & drum timeline</h2>' +
+      '<p class="muted">Full-width envelope, stereo waveform, playback and marker editing.</p>';
+    analysisWorkspace.appendChild(analysisHeading);
+    const audioPreview = qs('#animation-motion-lab-audio-preview');
+    if (audioPreview) {
+      const legacyDetails = document.createElement('details');
+      legacyDetails.className = 'animation-audio-legacy-envelope';
+      legacyDetails.innerHTML = '<summary>Additional envelope diagnostics</summary>';
+      legacyDetails.appendChild(audioPreview);
+      analysisWorkspace.appendChild(legacyDetails);
+    }
+    panels.audio.appendChild(analysisWorkspace);
+    // Parseq-inspired workflow: source first, full-width waveform next,
+    // detection and motion response below. Keep original live controls.
+    const audioSourceDock = document.createElement('section');
+    audioSourceDock.className = 'card glass animation-audio-source-dock';
+    audioSourceDock.id = 'animation-audio-source-dock';
+    audioSourceDock.innerHTML = '<div class="card-header"><div>' +
+      '<h2>Audio Source</h2>' +
+      '<p class="muted">Use the soundtrack already attached to this project, ' +
+      'or select a WAV from your device. Start here before arranging motion.</p>' +
+      '</div></div>';
+    // Keep the actual file input, saved-soundtrack button and event handlers:
+    // move the existing controls without cloning any element or creating new IDs.
+    // This card stays immediately below the Motion Studio introduction.
+    audioIntro.after(audioSourceDock);
+    // DA3.3a: keep editable timeline and inspector together; separate configuration
+    // into source, detection and camera-response groups without cloning controls.
+    const audioCard = qs('#animation-motion-lab-audio');
+    const controls = audioCard?.querySelector('.animation-motion-audio-controls');
+    if (controls) {
+      const fields = Array.from(controls.children);
+      const sections = [
+        ['Choose audio', fields.slice(0,2), true],
+        ['Beat detection', [fields[2],fields[3],fields[4],fields[6]], false],
+        ['Camera response', [fields[5],fields[7],fields[8],fields[9]], false],
+      ];
+      for (const [label, elements, opened] of sections) {
+        const details = document.createElement('details');
+        details.className = 'animation-audio-config-group';
+        details.open = opened;
+        const summary = document.createElement('summary');
+        summary.textContent = label;
+        const grid = document.createElement('div');
+        grid.className = 'animation-audio-config-grid';
+        for (const field of elements) if (field) grid.appendChild(field);
+        details.append(summary,grid);
+        controls.appendChild(details);
+        if (label === 'Choose audio') {
+          details.open = true;
+          audioSourceDock.appendChild(details);
+        }
+      }
+    }
+    // Position source actions beside the file controls; camera/detection
+    // tuning remains after the waveform rather than pushing it offscreen.
+    const audioActions = audioCard?.querySelector('.animation-motion-recording-actions');
+    if (audioActions) audioSourceDock.appendChild(audioActions);
+    if (audioCard) panels.audio.appendChild(audioCard);
     const audioPlaceholder = document.createElement('div');
     audioPlaceholder.className = 'animation-audio-preview-placeholder';
     audioPlaceholder.innerHTML = '<strong>Beat analysis preview</strong><p>Choose a WAV file and select Analyze WAV. Your detected beats and audio levels will appear here before you add any motion.</p>';
-    qs('#animation-motion-lab-audio-preview')?.before(audioPlaceholder);
+    analysisWorkspace.querySelector('#animation-motion-lab-audio-preview')?.before(audioPlaceholder);
     qs('#animation-audio-back-motion')?.addEventListener('click', () => showAnimationTab('motion'));
     qs('#animation-audio-review-motion')?.addEventListener('click', () => showAnimationTab('curves'));
     qs('#animation-audio-apply')?.addEventListener('click', () => {
       const apply = qs('#animation-motion-lab-apply');
       if (apply && !apply.disabled) apply.click();
     });
+
 
     setupDeforumMotionImport(panels['motion-import']);
     motionLabSetupQuickActions(panels.motion);
@@ -6791,6 +9604,9 @@
   }
 
   function bind() {
+    motionReviewBind();
+    motionCompareBind();
+    motionRefineBind();
     bindHybrid();
     qs('#animation-collapse-all')?.addEventListener('click', () => setAllAnimationCards(true));
     qs('#animation-expand-all')?.addEventListener('click', () => setAllAnimationCards(false));
@@ -6923,6 +9739,8 @@
     qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
     qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
     qs('#animation-motion-lab-analyze-audio')?.addEventListener('click', () => void motionLabAnalyzeAudio());
+    qs('#animation-motion-lab-use-soundtrack')?.addEventListener('click',
+      () => void motionLabUseProjectSoundtrack());
     qs('#animation-motion-lab-add-audio')?.addEventListener('click', motionLabAddAudio);
     qs('#animation-motion-lab-audio-sync')?.addEventListener('change', event => {
       if (!event.target.checked) motionLabAudioElement?.pause();
@@ -6989,6 +9807,13 @@
       showRender(event.target.value);
     });
 
+    qsa('[data-motion-record-limit]').forEach(input => {
+      input.addEventListener('change', () => motionLabChangeRecordingLimit(input));
+    });
+    for (const id of ['animation-motion-lab-record-translation',
+      'animation-motion-lab-record-rotation']) {
+      qs('#' + id)?.addEventListener('change', motionLabRecordingUi);
+    }
     window.addEventListener('keydown', event => {
       if (!motionLabRecorder?.active || !MOTION_RECORD_KEYMAP[event.code]) return;
       if (event.repeat) return;
@@ -7130,6 +9955,26 @@
       toast('Animation workspace initialization failed', error.message, 'error', 7000);
     }
   }
+
+  // First-run onboarding reuses the real editor rather than introducing a
+  // second project workspace. Return false if the user declines a safe switch.
+  async function openSavedProjectFromSetup(projectId) {
+    if (motionLabRecorder?.active || renderIsActive() || state.motionJobId ||
+        motionPreviewStarting || animationRenderStarting) {
+      toast('Finish the current job first',
+        'Wait for recording, preview or rendering before switching projects.', 'warning');
+      return false;
+    }
+    await loadProjectList();
+    const opened = await loadProject(projectId, { confirmDirty: true });
+    if (!opened) return false;
+    qs('.nav-button[data-view="animation"]')?.click();
+    showAnimationTab('editor');
+    return state.project?.id === projectId;
+  }
+  window.MorphorumAnimation = {
+    openSavedProjectFromSetup,
+  };
 
   window.addEventListener('DOMContentLoaded', start);
 })();

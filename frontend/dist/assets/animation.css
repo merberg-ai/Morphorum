@@ -2678,3 +2678,764 @@ dialog#animation-deforum-dialog {
   .animation-media-offset-row { flex-direction: column; align-items: stretch; }
   .animation-media-offset-row button { width: 100%; }
 }
+
+
+/* MS1/MS2: transported responsive waveform, cue inspector and beat controls. */
+/* DA2: bounded, responsive stereo waveform controls. Keep global form rules out. */
+#animation-panel-audio .animation-audio-stereo-timeline {
+  display:grid;gap:12px;min-width:0;width:100%;
+  margin:14px 0;padding:16px;border:1px solid var(--border);
+  border-radius:12px;background:var(--panel);
+}
+#animation-panel-audio .animation-audio-stereo-timeline[hidden] {display:none;}
+#animation-panel-audio .animation-audio-wave-controls {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px 18px;align-items:end;min-width:0;
+}
+#animation-panel-audio .animation-audio-wave-controls > strong {
+  grid-column:1/-1;display:block;line-height:1.35;
+}
+#animation-panel-audio .animation-audio-wave-controls label {
+  display:flex;flex-direction:column;gap:7px;min-width:0;
+  font-size:.82rem;color:var(--muted);margin:0;
+}
+#animation-panel-audio .animation-audio-wave-controls input[type="range"] {
+  display:block;width:100%;max-width:100%;min-width:0;
+  box-sizing:border-box;margin:0;flex:none;
+}
+#animation-panel-audio .animation-audio-stereo-timeline [data-wave-svg] {
+  display:block;width:100%;height:auto;max-width:100%;
+  overflow:hidden;border-radius:7px;background:var(--panel-strong);
+}
+#animation-panel-audio .animation-audio-stereo-timeline [data-wave-description] {
+  margin:0;font-size:.78rem;line-height:1.5;overflow-wrap:anywhere;
+}
+@media(max-width:620px) {
+  #animation-panel-audio .animation-audio-stereo-timeline {padding:12px;}
+  #animation-panel-audio .animation-audio-wave-controls {grid-template-columns:minmax(0,1fr);}
+}
+
+
+/* DA2 waveform transport and keyboard/touch seek affordances */
+#animation-panel-audio .animation-audio-wave-transport {
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0;
+}
+#animation-panel-audio .animation-audio-wave-transport button {
+  width:auto;flex:0 0 auto;min-height:36px;padding:6px 14px;
+}
+#animation-panel-audio .animation-audio-wave-transport output {
+  font-variant-numeric:tabular-nums;color:var(--text);font-size:.84rem;
+}
+#animation-panel-audio .animation-audio-wave-transport span {
+  font-size:.78rem;color:var(--muted);
+}
+#animation-panel-audio .animation-audio-stereo-timeline [data-wave-svg] {
+  cursor:crosshair;touch-action:manipulation;
+}
+#animation-panel-audio .animation-audio-stereo-timeline [data-wave-svg]:focus-visible {
+  outline:2px solid var(--accent);outline-offset:3px;
+}
+
+
+#animation-panel-audio .animation-audio-wave-controls .animation-audio-wave-follow {
+  display:flex;flex-direction:row;align-items:center;gap:8px;
+  grid-column:1/-1;width:max-content;max-width:100%;
+  cursor:pointer;color:var(--text);
+}
+#animation-panel-audio .animation-audio-wave-follow input[type="checkbox"] {
+  width:16px;height:16px;min-width:16px;flex:none;margin:0;
+}
+
+
+/* DA3 draft marker editor: scoped controls, desktop/mobile sizes. */
+#animation-panel-audio .animation-audio-event-editor {
+  display:grid;gap:10px;min-width:0;padding:15px;margin:10px 0 18px;
+  border:1px solid var(--border);border-radius:12px;background:var(--panel);
+}
+#animation-panel-audio .animation-audio-event-editor > p {margin:0;line-height:1.45;}
+#animation-panel-audio .animation-audio-event-fields {
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+  gap:12px;align-items:end;
+}
+#animation-panel-audio .animation-audio-event-fields label {
+  display:flex;flex-direction:column;gap:6px;min-width:0;font-size:.83rem;
+}
+#animation-panel-audio .animation-audio-event-fields input[type="number"],
+#animation-panel-audio .animation-audio-event-fields select {
+  width:100%;max-width:100%;min-width:0;box-sizing:border-box;min-height:38px;
+}
+#animation-panel-audio .animation-audio-event-fields .animation-audio-event-checkbox {
+  flex-direction:row;align-items:center;padding-bottom:9px;
+}
+#animation-panel-audio .animation-audio-event-checkbox input[type="checkbox"] {
+  width:16px;height:16px;min-width:16px;margin:0;
+}
+#animation-panel-audio .animation-audio-event-actions {
+  display:flex;flex-wrap:wrap;gap:8px;
+}
+#animation-panel-audio .animation-audio-event-actions button {
+  width:auto;flex:0 1 auto;min-height:38px;
+}
+@media(max-width:620px) {
+  #animation-panel-audio .animation-audio-event-fields {
+    grid-template-columns:minmax(0,1fr);
+  }
+  #animation-panel-audio .animation-audio-event-actions button {
+    flex:1 1 120px;
+  }
+}
+
+
+/* DA3 usability: stacked, full-width audio review, not a squeezed config card. */
+#animation-panel-audio {
+  display:flex;flex-direction:column;align-items:stretch;gap:16px;
+  width:100%;max-width:1400px;box-sizing:border-box;
+}
+#animation-panel-audio > .animation-motion-lab-audio,
+#animation-panel-audio > .animation-audio-analysis-workspace,
+#animation-panel-audio > .animation-audio-workspace-intro {
+  width:100%;max-width:none;min-width:0;box-sizing:border-box;margin:0;
+}
+#animation-panel-audio .animation-audio-analysis-workspace {
+  display:flex;flex-direction:column;gap:15px;padding:20px;
+}
+#animation-panel-audio .animation-audio-analysis-heading h2 {
+  margin:0 0 5px;font-size:1.1rem;
+}
+#animation-panel-audio .animation-audio-analysis-heading p {margin:0;}
+#animation-panel-audio .animation-audio-analysis-workspace .animation-motion-audio-preview,
+#animation-panel-audio .animation-audio-analysis-workspace .animation-audio-stereo-timeline,
+#animation-panel-audio .animation-audio-analysis-workspace .animation-audio-event-editor {
+  width:100%;min-width:0;max-width:none;box-sizing:border-box;margin:0;
+}
+#animation-panel-audio .animation-audio-analysis-workspace #animation-motion-lab-audio-plot {
+  height:260px;width:100%;min-width:0;
+}
+#animation-panel-audio .animation-audio-analysis-workspace [data-wave-svg] {
+  width:100%;height:auto;min-width:0;
+}
+#animation-panel-audio .animation-audio-event-fields {
+  grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) auto;
+}
+@media(max-width:720px) {
+  #animation-panel-audio .animation-audio-analysis-workspace {padding:12px;gap:12px;}
+  #animation-panel-audio .animation-audio-analysis-workspace #animation-motion-lab-audio-plot {height:180px;}
+  #animation-panel-audio .animation-audio-event-fields {grid-template-columns:minmax(0,1fr);}
+}
+
+
+/* DA3.3: Audio source, detector, response; wide integrated editor. */
+#animation-panel-audio .animation-motion-audio-controls {display:block;}
+#animation-panel-audio .animation-audio-config-group {
+  margin:9px 0;border:1px solid var(--border);border-radius:10px;
+  padding:0 12px;min-width:0;
+}
+#animation-panel-audio .animation-audio-config-group > summary {
+  cursor:pointer;padding:13px 3px;font-weight:600;
+}
+#animation-panel-audio .animation-audio-config-grid {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;padding:5px 0 16px;
+}
+#animation-panel-audio .animation-audio-config-grid > * {min-width:0;}
+#animation-panel-audio .animation-audio-analysis-workspace .animation-motion-audio-preview {
+  order:3;
+}
+#animation-panel-audio .animation-audio-analysis-workspace .animation-audio-stereo-timeline {order:1;}
+#animation-panel-audio .animation-audio-analysis-workspace .animation-audio-event-editor {order:2;}
+#animation-panel-audio .animation-audio-wave-mode {
+  display:flex;flex-wrap:wrap;gap:7px;align-items:center;font-size:.82rem;
+}
+#animation-panel-audio .animation-audio-wave-mode select {width:auto;min-width:125px;}
+#animation-panel-audio .animation-audio-event-actions button {min-height:42px;}
+@media(max-width:620px) {
+  #animation-panel-audio .animation-audio-config-grid {grid-template-columns:minmax(0,1fr);}
+}
+
+
+#animation-panel-audio .animation-audio-wave-controls .animation-audio-wave-mode {
+  grid-column:1/-1;display:flex;flex-direction:row;align-items:center;
+  gap:10px;max-width:100%;
+}
+#animation-panel-audio .animation-audio-wave-mode select {
+  width:auto;min-width:175px;max-width:100%;
+}
+#animation-panel-audio .animation-audio-legacy-envelope {order:3;min-width:0;}
+#animation-panel-audio .animation-audio-legacy-envelope summary {
+  cursor:pointer;padding:11px 4px;color:var(--muted);font-size:.86rem;
+}
+#animation-panel-audio .animation-audio-legacy-envelope .animation-motion-audio-preview {
+  margin:0 0 10px;
+}
+
+
+/* Parseq-inspired Audio Motion layout: large waveform, compact tool strips. */
+#animation-panel-audio {max-width:1600px;gap:12px;}
+#animation-panel-audio .animation-audio-workspace-intro {padding:12px 18px;}
+#animation-panel-audio .animation-audio-analysis-workspace {
+  padding:14px;gap:8px;background:var(--panel);
+}
+#animation-panel-audio .animation-audio-analysis-heading {display:none;}
+#animation-panel-audio .animation-audio-source-dock {
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;
+  padding:4px 3px 10px;
+}
+#animation-panel-audio .animation-audio-source-dock > strong {white-space:nowrap;}
+#animation-panel-audio .animation-audio-source-dock .animation-audio-config-group {
+  flex:1 1 350px;margin:0;min-width:250px;border:0;padding:0;
+}
+#animation-panel-audio .animation-audio-source-dock .animation-audio-config-group > summary {display:none;}
+#animation-panel-audio .animation-audio-source-dock .animation-audio-config-grid {
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:0;
+}
+#animation-panel-audio .animation-audio-source-dock .animation-audio-config-grid > * {flex:1 1 190px;}
+#animation-panel-audio .animation-audio-stereo-timeline {
+  border:0;padding:8px 2px;margin:0;gap:7px;background:transparent;
+}
+#animation-panel-audio .animation-audio-wave-controls {
+  display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap;
+}
+#animation-panel-audio .animation-audio-wave-controls > strong {
+  flex:1 1 200px;grid-column:auto;
+}
+#animation-panel-audio .animation-audio-wave-controls label:not(.animation-audio-wave-follow) {
+  flex:0 1 175px;min-width:115px;
+}
+#animation-panel-audio .animation-audio-wave-controls .animation-audio-wave-mode {
+  flex:0 1 225px;min-width:160px;grid-column:auto;
+}
+#animation-panel-audio .animation-audio-wave-controls .animation-audio-wave-follow {
+  flex:0 0 auto;grid-column:auto;
+}
+#animation-panel-audio .animation-audio-wave-transport {padding:2px 0;}
+#animation-panel-audio .animation-audio-stereo-timeline [data-wave-svg] {
+  border:1px solid var(--border);border-radius:5px;min-height:160px;
+}
+#animation-panel-audio .animation-audio-ruler {
+  display:flex;justify-content:space-between;gap:10px;font-size:.76rem;
+  color:var(--muted);font-variant-numeric:tabular-nums;
+}
+#animation-panel-audio .animation-audio-event-editor {
+  padding:12px;border-top:1px solid var(--border);border-left:0;
+  border-right:0;border-bottom:0;border-radius:0;background:transparent;
+}
+#animation-panel-audio .animation-audio-event-heading {
+  display:flex;gap:12px;justify-content:space-between;align-items:baseline;
+  flex-wrap:wrap;font-size:.84rem;
+}
+#animation-panel-audio .animation-audio-event-heading .muted {font-size:.76rem;}
+#animation-panel-audio .animation-audio-event-fields {
+  grid-template-columns:minmax(110px,170px) minmax(120px,190px) auto;
+  justify-content:start;
+}
+#animation-panel-audio .animation-audio-event-actions {gap:7px;}
+#animation-panel-audio .animation-audio-event-actions button {min-height:35px;padding:6px 10px;}
+#animation-panel-audio .animation-motion-lab-audio {padding:12px 16px;}
+#animation-panel-audio .animation-motion-lab-audio > .card-header {margin-bottom:0;}
+#animation-panel-audio .animation-audio-legacy-envelope summary {font-size:.78rem;}
+@media(max-width:700px) {
+  #animation-panel-audio .animation-audio-wave-controls {align-items:stretch;}
+  #animation-panel-audio .animation-audio-wave-controls > strong {flex:1 1 100%;}
+  #animation-panel-audio .animation-audio-wave-controls label:not(.animation-audio-wave-follow) {flex:1 1 42%;}
+  #animation-panel-audio .animation-audio-wave-controls .animation-audio-wave-mode {flex:1 1 100%;}
+  #animation-panel-audio .animation-audio-event-fields {grid-template-columns:minmax(0,1fr);}
+  #animation-panel-audio .animation-audio-source-dock .animation-audio-config-group {min-width:0;}
+}
+
+
+/* DA4.2 cue-first Motion Director, keeps choreography next to the audio ruler. */
+#animation-panel-audio .animation-audio-motion-director {
+  display:grid;gap:12px;border:1px solid var(--border);border-radius:10px;
+  padding:14px;min-width:0;background:var(--panel-strong);
+}
+#animation-panel-audio .animation-audio-director-head {
+  display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;
+}
+#animation-panel-audio .animation-audio-director-actions {
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+}
+#animation-panel-audio .animation-audio-director-actions button {
+  width:auto;flex:0 1 auto;min-height:38px;padding:7px 12px;
+}
+#animation-panel-audio .animation-audio-director-fields {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;align-items:end;
+}
+#animation-panel-audio .animation-audio-director-fields label {
+  display:flex;flex-direction:column;gap:5px;min-width:0;font-size:.79rem;
+}
+#animation-panel-audio .animation-audio-director-fields input,
+#animation-panel-audio .animation-audio-director-fields select {
+  box-sizing:border-box;width:100%;min-width:0;min-height:38px;
+}
+#animation-panel-audio .animation-audio-director-fields .animation-audio-director-enabled {
+  flex-direction:row;align-items:center;gap:8px;padding-bottom:8px;
+}
+#animation-panel-audio .animation-audio-director-enabled input[type=checkbox] {
+  width:16px;height:16px;min-width:16px;
+}
+#animation-panel-audio .animation-audio-director-list {
+  display:flex;gap:7px;flex-wrap:wrap;max-height:160px;overflow:auto;
+}
+#animation-panel-audio .animation-audio-cue-item {
+  width:auto;flex:0 1 auto;padding:7px 10px;min-height:34px;
+}
+#animation-panel-audio .animation-audio-cue-item.active {
+  border-color:var(--accent);outline:1px solid var(--accent);
+}
+#animation-panel-audio .animation-audio-motion-director p {margin:0;font-size:.78rem;}
+@media(max-width:620px) {
+  #animation-panel-audio .animation-audio-motion-director {padding:11px;}
+  #animation-panel-audio .animation-audio-director-fields {grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+
+
+/* DA4.4 optional automatic hit discovery, kept below manual cue authoring. */
+#animation-panel-audio .animation-audio-find-beats {
+  border-top:1px solid var(--border);padding-top:10px;min-width:0;
+}
+#animation-panel-audio .animation-audio-find-beats > summary {
+  cursor:pointer;font-weight:600;padding:8px 0;
+}
+#animation-panel-audio .animation-audio-beat-grid {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));
+  gap:10px;padding:10px 0;
+}
+#animation-panel-audio .animation-audio-beat-grid label {
+  display:flex;flex-direction:column;gap:5px;min-width:0;font-size:.8rem;
+}
+#animation-panel-audio .animation-audio-beat-grid input,
+#animation-panel-audio .animation-audio-beat-grid select {
+  width:100%;box-sizing:border-box;min-width:0;min-height:36px;
+}
+#animation-panel-audio .animation-audio-beat-grid .animation-audio-beat-check {
+  display:flex;flex-direction:row;align-items:center;gap:9px;
+}
+#animation-panel-audio .animation-audio-beat-check input[type=checkbox] {
+  width:16px;height:16px;min-width:16px;
+}
+@media(max-width:620px) {
+  #animation-panel-audio .animation-audio-beat-grid {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+/* MS3: project-owned independent sound-channel composer. */
+#animation-motion-studio-channels { min-width:0; display:grid; gap:13px; }
+#animation-motion-studio-channels .card-header { min-width:0; }
+.motion-studio-channel-list { display:grid; gap:12px; min-width:0; }
+.motion-studio-channel {
+  min-width:0; border:1px solid var(--border); border-radius:12px;
+  padding:13px; background:color-mix(in srgb,var(--panel) 92%,transparent);
+  display:grid;gap:12px;
+}
+.motion-studio-channel-heading {
+  display:flex; align-items:center; flex-wrap:wrap; gap:12px; min-width:0;
+}
+.motion-studio-channel-heading strong { flex:1 1 110px; min-width:0; overflow-wrap:anywhere; }
+.motion-studio-channel-heading label { display:inline-flex; flex-direction:row; align-items:center; gap:8px; }
+.motion-studio-channel-fields {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));
+  gap:11px; min-width:0;
+}
+.motion-studio-channel-fields label { min-width:0; display:grid; gap:5px; }
+.motion-studio-channel-fields input,
+.motion-studio-channel-fields select { min-width:0; width:100%; box-sizing:border-box; }
+.motion-studio-channel-actions {
+  display:flex; flex-wrap:wrap; gap:9px; align-items:center;
+}
+.motion-studio-channel-actions button, .motion-studio-channel-heading button {
+  min-height:42px;
+}
+#animation-motion-studio-channels [data-ms3-status] {
+  white-space:normal; overflow-wrap:anywhere;
+}
+@media(max-width:640px) {
+  .motion-studio-channel { padding:11px; }
+  .motion-studio-channel-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .motion-studio-channel-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .motion-studio-channel-actions button { width:100%; min-width:0; min-height:44px; }
+}
+@media(max-width:390px) {
+  .motion-studio-channel-fields { grid-template-columns:1fr; }
+  .motion-studio-channel-actions { grid-template-columns:1fr; }
+}
+
+/* MS3b: accessible log-frequency and per-channel time-domain inspection. */
+.motion-studio-spectrum-panel, .motion-studio-response-panel {
+  min-width:0;
+  padding:12px;
+  display:grid;
+  gap:10px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--panel) 92%,transparent);
+}
+.motion-studio-spectrum-heading {
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:end;
+  min-width:0;
+}
+.motion-studio-spectrum-heading strong { flex:1 1 170px; }
+.motion-studio-spectrum-heading label {
+  flex:1 1 140px;
+  min-width:0;
+  display:grid;
+  gap:4px;
+}
+.motion-studio-spectrum-heading select { width:100%;min-width:0; }
+.motion-studio-spectrum-heading button { min-height:42px; }
+[data-ms3-spectrum-svg], [data-ms3-envelope-svg] {
+  width:100%;
+  height:auto;
+  display:block;
+  min-width:0;
+  border-radius:8px;
+  background:color-mix(in srgb,var(--panel) 88%,transparent);
+  color:var(--text);
+}
+[data-ms3-spectrum-svg] {
+  cursor:ew-resize;
+  touch-action:none;
+  user-select:none;
+}
+[data-ms3-spectrum-svg]:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
+[data-ms3-spectrum-caption], [data-ms3-envelope-status] {
+  overflow-wrap:anywhere;
+  font-size:.78rem;
+  line-height:1.45;
+}
+@media(max-width:640px) {
+  .motion-studio-spectrum-panel, .motion-studio-response-panel {padding:10px;}
+  .motion-studio-spectrum-heading label {flex:1 1 140px;}
+  .motion-studio-spectrum-heading button {flex:1 1 100%;min-height:44px;}
+}
+
+/* W2/MS3: reuse a verified attached project soundtrack with one host-side action. */
+.animation-motion-saved-soundtrack {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px;
+  min-width:0;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:10px;
+}
+.animation-motion-saved-soundtrack button { flex:0 1 auto; min-height:44px; }
+.animation-motion-saved-soundtrack [role="status"] {
+  flex:1 1 230px;
+  min-width:0;
+  overflow-wrap:anywhere;
+  line-height:1.45;
+}
+@media(max-width:640px) {
+  .animation-motion-saved-soundtrack { align-items:stretch; }
+  .animation-motion-saved-soundtrack button { width:100%; }
+}
+
+/* MS4.1: continuous-motion arrangement inside Motion Studio. */
+.motion-studio-arrangement { display:grid; gap:14px; min-width:0; }
+.motion-studio-arrangement-playback,
+.motion-studio-arrangement-timeline,
+.motion-studio-arrangement-range {
+  display:grid; gap:9px; min-width:0;
+  padding:12px; border:1px solid var(--border); border-radius:12px;
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+}
+.motion-studio-arrangement-playback label,
+.motion-studio-arrangement-range label {
+  min-width:0; display:grid; gap:6px;
+}
+.motion-studio-arrangement input[type="range"] {
+  width:100%; min-width:0; touch-action:pan-y;
+}
+.motion-studio-arrangement-timeline {
+  position:relative; overflow:hidden;
+}
+.motion-studio-arrangement-ruler {
+  font-size:.8rem; color:var(--text-muted,var(--text));
+  overflow-wrap:anywhere;
+}
+.motion-studio-arrangement-lanes { display:grid; gap:8px; min-width:0; }
+.motion-studio-arrangement-lane {
+  display:grid; grid-template-columns:minmax(90px,170px) minmax(0,1fr) auto;
+  align-items:center; gap:10px; min-width:0;
+}
+.motion-studio-arrangement-label {
+  font-size:.81rem; overflow-wrap:anywhere; line-height:1.35;
+  text-transform:capitalize;
+}
+.motion-studio-arrangement-track {
+  position:relative; border-radius:8px; min-width:0;
+  height:40px; background:color-mix(in srgb,var(--accent) 7%,transparent);
+  border:1px solid var(--border); overflow:hidden;
+}
+.motion-studio-arrangement-bar {
+  position:absolute;top:4px;bottom:4px;
+  min-height:30px; width:auto; max-width:100%; min-width:0;
+  border:1px solid var(--accent); border-radius:6px;
+  color:var(--text); background:color-mix(in srgb,var(--accent) 34%,var(--panel));
+  padding:3px 6px; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; font-size:.75rem; cursor:pointer;
+}
+.motion-studio-arrangement-bar.selected {
+  outline:2px solid var(--accent); outline-offset:-2px;
+}
+.motion-studio-arrangement-bar.disabled { opacity:.4; }
+.motion-studio-arrangement-remove {
+  justify-self:end; align-self:center; min-height:36px;
+  padding:6px 10px; font-size:.78rem;
+}
+.motion-studio-arrangement-remove:hover { border-color:var(--warn,var(--accent)); }
+.motion-studio-arrangement-playhead {
+  position:absolute;top:20px;bottom:10px;
+  width:2px;background:var(--warn,var(--accent)); pointer-events:none;
+  z-index:2; opacity:.7;
+}
+.motion-studio-arrangement-playhead[hidden] {display:none;}
+.motion-studio-arrangement-fields {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr));
+  gap:11px; min-width:0;
+}
+.motion-studio-arrangement-fields label {
+  min-width:0;display:grid;gap:5px;
+}
+.motion-studio-arrangement-fields input,
+.motion-studio-arrangement-fields select {
+  width:100%;min-width:0;box-sizing:border-box;
+}
+.motion-studio-arrangement-range {grid-template-columns:1fr 1fr;}
+.motion-studio-arrangement-range span {grid-column:1/-1;}
+.motion-studio-arrangement-actions {display:flex;flex-wrap:wrap;gap:10px;}
+.motion-studio-arrangement-actions button {min-height:44px;}
+@media (max-width:640px) {
+  .motion-studio-arrangement-lane {grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;}
+  .motion-studio-arrangement-label {grid-column:1;grid-row:1;}
+  .motion-studio-arrangement-track {grid-column:1/-1;grid-row:2;}
+  .motion-studio-arrangement-remove {grid-column:2;grid-row:1;}
+  .motion-studio-arrangement-range {grid-template-columns:1fr;}
+  .motion-studio-arrangement-actions {
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .motion-studio-arrangement-actions button {min-width:0;width:100%;}
+}
+@media (max-width:390px) {
+  .motion-studio-arrangement-fields,
+  .motion-studio-arrangement-actions {grid-template-columns:1fr;}
+}
+
+/* MS4.2: axis-limited Add/Replace with accessible, compact axis selection. */
+.motion-studio-arrangement-axis-mask {
+  min-width:0; border:1px solid var(--border); border-radius:10px;
+  padding:12px; display:grid;gap:9px;
+}
+.motion-studio-arrangement-axis-mask legend {
+  font-weight:650; padding:0 5px; font-size:.88rem;
+}
+.motion-studio-arrangement-axes {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
+  min-width:0;
+}
+.motion-studio-arrangement-axes label {
+  display:flex; gap:8px;align-items:center; min-width:0;
+  padding:8px 10px; border:1px solid var(--border);border-radius:8px;
+  line-height:1.3;
+}
+.motion-studio-arrangement-axes input {
+  min-width:17px;min-height:17px;flex:0 0 auto;
+}
+.motion-studio-arrangement-axis-mask p {margin:0; overflow-wrap:anywhere;}
+.animation-audio-source-dock {
+  min-width:0; display:grid;gap:12px; width:100%;
+}
+.animation-audio-source-dock .animation-audio-config-group {
+  min-width:0; margin:0;
+}
+.animation-audio-source-dock .animation-audio-config-grid {
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));
+  min-width:0;
+}
+.animation-audio-source-dock .animation-motion-recording-actions {
+  display:flex;flex-wrap:wrap;gap:9px;
+}
+.animation-audio-source-dock .animation-motion-recording-actions button {
+  min-height:44px;
+}
+@media(max-width:640px) {
+  .motion-studio-arrangement-axes {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .animation-audio-source-dock .animation-motion-recording-actions button {
+    flex:1 1 150px;
+  }
+}
+@media(max-width:390px) {
+  .motion-studio-arrangement-axes {grid-template-columns:1fr;}
+  .animation-audio-source-dock .animation-motion-recording-actions button {
+    width:100%;
+  }
+}
+
+
+/* MS4.3: responsive, theme-aware shared camera preset library. */
+.motion-studio-custom-presets {
+  min-width:0; display:grid; gap:12px; padding:13px;
+  border:1px solid var(--border); border-radius:12px;
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+}
+.motion-studio-custom-presets h3 {margin:0 0 6px;font-size:1rem;}
+.motion-studio-custom-presets p {margin:0;overflow-wrap:anywhere;}
+.motion-studio-custom-fields {
+  min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;
+}
+.motion-studio-custom-fields label {min-width:0;display:grid;gap:6px;}
+.motion-studio-custom-fields input,.motion-studio-custom-fields select {
+  width:100%;min-width:0;box-sizing:border-box;
+}
+.motion-studio-custom-actions {display:flex;gap:9px;flex-wrap:wrap;}
+.motion-studio-custom-actions button {min-height:44px;}
+@media(max-width:640px) {
+  .motion-studio-custom-fields {grid-template-columns:1fr;}
+  .motion-studio-custom-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .motion-studio-custom-actions button {width:100%;min-width:0;}
+}
+@media(max-width:390px) {
+  .motion-studio-custom-actions {grid-template-columns:1fr;}
+}
+
+
+/* MS4.4: recorder polish, native-axis limits and controller mapping. */
+.animation-motion-record-limits {
+  min-width:0; border:1px solid var(--border); border-radius:12px;
+  padding:12px; display:grid;gap:10px;
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+}
+.animation-motion-record-limits summary {cursor:pointer;font-weight:650;}
+.animation-motion-record-limits p {margin:8px 0;overflow-wrap:anywhere;}
+.animation-motion-axis-limit-grid {
+  display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0;
+}
+.animation-motion-axis-limit-grid label {display:grid;gap:5px;min-width:0;}
+.animation-motion-axis-limit-grid input {width:100%;min-width:0;box-sizing:border-box;}
+.animation-motion-axis-limit-grid small {color:var(--muted);}
+#animation-motion-record-unit-help {margin:0;overflow-wrap:anywhere;}
+@media(max-width:700px) {
+  .animation-motion-axis-limit-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media(max-width:390px) {
+  .animation-motion-axis-limit-grid {grid-template-columns:1fr;}
+}
+
+
+/* MS5.1: synchronized, frame-accurate CPU preview A/B review controls. */
+.motion-review-window {
+  display:grid;gap:10px;min-width:0;
+  padding:12px;border:1px solid var(--border);border-radius:12px;
+  background:color-mix(in srgb,var(--panel) 90%,transparent);
+}
+.motion-review-window h3 {margin:0;font-size:1rem;}
+.motion-review-window p {margin:0;overflow-wrap:anywhere;line-height:1.45;}
+.motion-review-controls {
+  display:grid;grid-template-columns:minmax(170px,1.2fr) repeat(2,minmax(100px,1fr));
+  gap:10px;min-width:0;align-items:end;
+}
+.motion-review-controls label {min-width:0;display:grid;gap:5px;}
+.motion-review-controls input[type=number] {width:100%;min-width:0;box-sizing:border-box;}
+.motion-review-controls .motion-review-loop-toggle {
+  display:flex;gap:8px;align-items:center;min-height:40px;
+}
+.motion-review-actions {display:flex;gap:8px;flex-wrap:wrap;align-items:end;}
+.motion-review-actions button {min-height:40px;}
+.motion-review-actions label {min-width:min(100%,180px);flex:1 1 180px;display:grid;gap:5px;}
+.motion-review-actions select {width:100%;min-width:0;}
+@media(max-width:640px) {
+  .motion-review-controls {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .motion-review-loop-toggle {grid-column:1/-1;}
+  .motion-review-actions button {flex:1 1 155px;}
+}
+@media(max-width:390px) {
+  .motion-review-controls {grid-template-columns:1fr;}
+  .motion-review-actions {display:grid;grid-template-columns:1fr;}
+  .motion-review-actions label {min-width:0;}
+}
+
+
+/* MS5.2: non-destructive side-by-side review of saved render PNGs. */
+.motion-review-split {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));
+  gap:12px;align-items:start;min-width:0;
+}
+.motion-review-split-image {
+  min-width:0;display:grid;gap:6px;overflow:hidden;
+}
+.motion-review-split-image[hidden] {display:none !important;}
+.motion-review-split-image img {
+  width:100%;height:auto;max-height:440px;object-fit:contain;
+  display:block;border-radius:8px;background:var(--panel);
+}
+.motion-review-render-chooser {
+  display:flex;gap:10px;flex-wrap:wrap;align-items:end;min-width:0;
+  border-top:1px solid var(--border);padding-top:12px;
+}
+.motion-review-render-chooser label {
+  flex:1 1 210px;display:grid;gap:6px;min-width:0;
+}
+.motion-review-render-chooser select {width:100%;min-width:0;}
+.motion-review-render-chooser button {min-height:40px;}
+.motion-review-render-chooser p {flex:1 1 100%;margin:0;overflow-wrap:anywhere;}
+@media(max-width:650px) {
+  .motion-review-split {grid-template-columns:minmax(0,1fr);}
+  .motion-review-render-chooser button {flex:1 1 130px;}
+}
+@media(max-width:390px) {
+  .motion-review-render-chooser {display:grid;grid-template-columns:1fr;}
+  .motion-review-render-chooser button {width:100%;}
+}
+
+
+/* MS5.3: keep preview checkboxes physically checkbox-sized, never full-width. */
+#view-animation #animation-motion-frame-player input[type="checkbox"] {
+  appearance:auto;
+  display:inline-block;
+  width:16px !important;
+  height:16px !important;
+  min-width:16px;
+  min-height:16px;
+  max-width:16px;
+  max-height:16px;
+  flex:0 0 16px;
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  accent-color:var(--accent);
+}
+#view-animation .motion-review-loop-toggle,
+#view-animation .animation-motion-player-actions label,
+#view-animation .animation-motion-gif-sync label {
+  align-items:center;
+  justify-content:flex-start;
+}
+.motion-review-refine {
+  display:grid;min-width:0;gap:10px;padding-top:12px;
+  border-top:1px solid var(--border);
+}
+.motion-review-refine h4 {margin:0;font-size:.95rem;}
+.motion-review-refine p {margin:0;overflow-wrap:anywhere;}
+.motion-review-refine-actions {display:flex;gap:8px;flex-wrap:wrap;}
+.motion-review-refine-actions button {min-height:42px;max-width:100%;}
+.motion-review-refine-results {
+  min-width:0;overflow-wrap:anywhere;
+  padding:10px;border:1px solid var(--border);border-radius:9px;
+  font-size:.83rem;line-height:1.5;
+}
+.motion-review-refine-results[hidden] {display:none;}
+@media(max-width:640px) {
+  .motion-review-refine-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .motion-review-refine-actions button {width:100%;min-width:0;white-space:normal;}
+}
+@media(max-width:390px) {
+  .motion-review-refine-actions {grid-template-columns:1fr;}
+}

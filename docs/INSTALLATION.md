@@ -39,7 +39,7 @@ Noninteractive folder and port selection:
 .\bootstrap.bat -InstallDir "D:\Morphorum" -Port 8080
 ~~~
 
-The published installer uses the `main` branch by default. `-Branch` is available for advanced testing, but is not needed for a normal installation.
+The published installer uses the `main` branch by default. `-Branch` is available for advanced testing, but is not needed for a normal installation. The Windows bootstrap accepts `-InstallDir`, `-Port`, and `-Branch`; use `bootstrap.bat -Help` to inspect its arguments. A standalone downloaded `bootstrap.bat` fetches the matching PowerShell bootstrap script from GitHub before proceeding.
 
 ### Windows: start the app
 
@@ -66,7 +66,7 @@ From a terminal on 64-bit Linux:
 curl -fsSL https://raw.githubusercontent.com/merberg-ai/Morphorum/main/scripts/bootstrap.sh | bash
 ~~~
 
-This installs into **`~/Morphorum`**. The bootstrap may ask for `sudo` to install Git using a supported package manager. If preferred, inspect/download the bootstrap script before executing it.
+This installs into **`~/Morphorum`** and clones the published `main` branch. The bootstrap may ask for `sudo` to install Git using a supported package manager. If preferred, inspect/download the bootstrap script before executing it. If run again against an existing installed checkout, the bootstrap invokes the guarded updater rather than treating it as a fresh installation.
 
 For a custom folder:
 
@@ -91,12 +91,36 @@ MORPHORUM_PORT_OVERRIDE=8080 ./run.sh
 
 The Linux launcher does not use the Windows saved-port file.
 
+## First launch: guided setup
+
+On a genuinely fresh installation, **First-Run Setup Wizard** appears automatically when you first load the standard local WebUI. Upgrading an existing installation does **not** assume that missing models mean you want onboarding.
+
+The seven screens guide you through:
+
+1. Welcome and host diagnostics (GPU/CUDA and available storage).
+2. WebUI (default) versus authenticated backend-only mode. Switching modes requires restarting Morphorum.
+3. SDXL and FLUX checkpoint folders on the **host computer**.
+4. Optional family-specific LoRA folders.
+5. Optional managed Z-Image-Turbo download, with an explicit confirmation and resumable progress.
+6. Exactly two **512 × 512, 48-frame, 12 FPS** starter animation choices: *Gentle Dolly In* and *Gentle Dolly Out*.
+7. A review page with **Create Example & Open Editor** or **Finish Without Example**.
+
+Opening the wizard never downloads models, renders frames, or creates a project. You can skip and return later from **Settings → Setup Wizard**. The small examples may be opened as editable but **not render-ready** projects if you have not configured a base model. Finishing or skipping onboarding does not erase existing settings or projects.
+
+To manually show setup on the next **WebUI** launch:
+
+| Windows | Linux |
+| --- | --- |
+| `.\run.bat --setup-wizard` | `./run.sh --setup-wizard` |
+
+Use the command only after stopping an already-running server. The option is incompatible with `--backend-only`, which deliberately has no browser interface. Model directories entered in the wizard refer to the machine running Morphorum, not necessarily the browser device on a LAN.
+
 ## After installation: choose a model
 
 1. Open **Models**.
 2. Download managed **Z-Image-Turbo** (approximately 33 GB), then choose **Use Model**, **or** specify your existing SDXL/FLUX folders in **Settings**, scan and select an available checkpoint.
 3. Use **Image Generation** to make one modest-resolution test image.
-4. For animation, choose **Motion Lab → New Project Wizard**.
+4. For animation, choose the first-run Dolly In/Out example or **Motion Lab → New Project Wizard**.
 
 A new installation with no saved projects may include the **Default** example animation: 120 frames at 24 FPS. It does not automatically have a model assigned, and a full 1024 × 1024 animation is not the best first GPU test.
 
