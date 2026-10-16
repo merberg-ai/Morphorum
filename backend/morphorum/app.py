@@ -114,6 +114,7 @@ from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
+from .ffmpeg_tools import ffmpeg_status, normalize_ffmpeg_settings
 from .system_info import (
     doctor_report,
     git_branch,
@@ -431,6 +432,21 @@ def get_settings() -> dict[str, Any]:
         "validation": validate_model_paths(settings),
         "model_families": model_family_definitions(),
     }
+
+
+@app.get("/api/tools/ffmpeg/status")
+def api_ffmpeg_status() -> dict[str, Any]:
+    return ffmpeg_status()
+
+
+@app.post("/api/tools/ffmpeg/check")
+def api_ffmpeg_check(payload: dict[str, Any]) -> dict[str, Any]:
+    """Test a proposed selection without saving or changing a binary."""
+    try:
+        config = normalize_ffmpeg_settings(payload, strict=True)
+        return ffmpeg_status({"tools": {"ffmpeg": config}})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/animation/projects")
@@ -1984,7 +2000,10 @@ def api_managed_model_download(model_id: str) -> dict[str, Any]:
 
 @app.put("/api/settings")
 def put_settings(payload: dict[str, Any]) -> dict[str, Any]:
-    settings = save_settings(payload)
+    try:
+        settings = save_settings(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     validation = validate_model_paths(settings)
     bad = sum(1 for item in validation if not item.get("is_directory") or not item.get("readable"))
     if bad:
