@@ -596,6 +596,8 @@
   }
   async function showImageJob(jobId) {
     if (!jobId) return;
+    if (state.activeJobId && state.activeJobId !== jobId)
+      window.MorphorumPollHealth?.reset('image:' + state.activeJobId);
     if (state.pollTimer) window.clearTimeout(state.pollTimer);
     state.pollTimer = null;
     try {
@@ -738,17 +740,23 @@
   }
 
   async function pollJob(jobId) {
+    if (state.activeJobId !== jobId) return;
+    const healthKey = 'image:' + jobId;
     try {
       const job = await api(`/api/generation/jobs/${encodeURIComponent(jobId)}`);
+      if (state.activeJobId !== jobId) return;
+      window.MorphorumPollHealth?.recovered(healthKey);
       updateProgress(job);
       renderResults(job);
       if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+        window.MorphorumPollHealth?.reset(healthKey);
         finishJob(job);
         return;
       }
       state.pollTimer = window.setTimeout(() => pollJob(jobId), 500);
     } catch (error) {
-      toast('Could not read generation progress', error.message, 'error');
+      if (state.activeJobId !== jobId) return;
+      window.MorphorumPollHealth?.failed(healthKey, 'Image generation', 'image');
       state.pollTimer = window.setTimeout(() => pollJob(jobId), 1500);
     }
   }
