@@ -138,7 +138,7 @@ def setup_status(*, forced: bool = False, backend_only: bool = False) -> dict[st
 
 def update_setup(*, action: str, step: str | None, revision: int,
                  forced: bool = False, template_id: str | None = None,
-                 model_id: str | None = None) -> dict[str, Any]:
+                 model_id: str | None = None, without_example: bool = False) -> dict[str, Any]:
     """Explicit user action, optimistic revision; no model/project side effects."""
     if action not in {"advance", "skip", "complete"}:
         raise SetupStateError("Unknown setup action.")
@@ -163,7 +163,7 @@ def update_setup(*, action: str, step: str | None, revision: int,
         elif action == "complete":
             if step != "finish" or state["step"] != "finish":
                 raise SetupStateError("Finish setup from the final review page.")
-            if state.get("example_project_id"):
+            if state.get("example_project_id") and not without_example:
                 from .animation_projects import _project_file
                 if not _project_file(state["example_project_id"]).is_file():
                     raise SetupStateError("Selected example was not saved yet.")
