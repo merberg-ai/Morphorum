@@ -221,3 +221,21 @@ are seconds. Duration equals total frames divided by FPS.
 Schedules accept frame-indexed values such as `0:(0.65), 48:(0.5)`; the
 timeline's interpolation controls how values change between keyframes.
 Help messages never mutate a saved project or trigger generation.
+
+## Check Render before generation (P2.5)
+
+In **Motion Lab → Render Monitor**, choose **Check Render** to inspect your
+current browser project settings without starting a job or saving changes.
+The report identifies blocking errors and non-blocking warnings, including
+missing model weights, incompatible sampler and dimensions, invalid schedules,
+required starting image, and unsupported step/guidance ranges. **Fix in
+Editor** opens the relevant setting; missing checkpoints can be repaired
+through Models. The check also runs automatically when you click **Render
+Animation**. Errors prevent submission; warnings require explicit approval.
+
+For very long projects, generation step/guidance ranges are checked at up to
+500 evenly distributed frames, and the report discloses the sampling.
+The renderer still validates the actual frames during generation. Preflight
+does not guarantee that a GPU has enough free VRAM or that a complex 3D
+camera projection will remain visible for every frame. No project data is
+changed or saved by the check.

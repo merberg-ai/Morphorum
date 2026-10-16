@@ -69,6 +69,7 @@ from .animation_render import (
     AnimationRenderError,
     animation_render_manager,
 )
+from .animation_preflight import check_animation_render_preflight
 from .motion_lab import MotionLabError, PRESETS as MOTION_LAB_PRESETS, compile_motion_lab
 from .motion_studio_presets import (
     CustomPresetError, CustomPresetConflict, CustomPresetMissing,
@@ -1507,6 +1508,25 @@ def api_motion_preview_frame(job_id: str, index: int):
         )
     except MotionPreviewError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/renders/preflight")
+def api_animation_render_preflight(payload: dict[str, Any]) -> dict[str, Any]:
+    """Read-only validation for the exact browser project about to be rendered."""
+    project_payload = payload.get("project")
+    if not isinstance(project_payload, dict):
+        raise HTTPException(status_code=400, detail="Animation project payload is required.")
+    project_id = str(project_payload.get("id") or "").strip().lower()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="Save the animation project before rendering.")
+    try:
+        normalized = normalize_animation_project(
+            project_payload, existing=project_payload, project_id=project_id,
+        )
+        source_path = animation_project_directory(project_id) / "assets" / "source.png"
+        return check_animation_render_preflight(normalized, source_path)
+    except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/animation/renders", status_code=202)

@@ -31,7 +31,7 @@ render behavior.
 - [x] P2.2 initial: Clarify separate still-image and project-specific animation checkpoint selectors.
 - [x] P2.3: Read-only indexed checkpoint/family/variant/sampler/resolution compatibility summary with missing-model guidance and navigation to Model Manager; preserve unsupported saved samplers for explicit repair.
 - [x] P2.4: Add optional contextual help to Image Generation and remaining animation, cadence and camera controls; show pixels, degrees and frame units plus an inline schedule example.
-- [ ] P2.5: Actionable pre-render validation, no destructive automatic repair.
+- [x] P2.5: Add read-only backend preflight endpoint, Check Render results, first-issue navigation, and automatic preflight before render submit; block errors and explicitly review warnings without modifying project data.
 - [ ] P2.6: Explain cumulative 3D motion and warn about risky camera schedules.
 
 ## P6 early safety
@@ -80,3 +80,12 @@ Contextual help icons use trusted static text, real buttons beside form labels, 
 - A missing checkpoint retains its saved ID; a saved sampler that is no longer supported is displayed, not silently replaced. Unsupported or unavailable capabilities are reported as warnings rather than an invented compatible status.
 - Model Manager shortcut, Choose Sampler and Edit Resolution focus/navigation are advisory. This pass does **not** disable render buttons, revalidate the full timeline, or automatically modify project settings; P2.5 handles pre-render validation.
 - Check both 2D/3D projects, supported/missing/unsupported models, Flux Schnell variant, blank checkpoint, large/custom dimensions, saved incompatible sampler, Model Manager scans and unsaved form state on Windows and phone.
+
+## P2.5 acceptance
+
+- Checking a render never saves a project, changes its schedules, allocates GPU work, starts an export, or writes output folders.
+- Backend preflight checks indexed and on-disk checkpoint availability, model family, supported adapter file format, sampler compatibility, output size and alignment, required start image, existing schedule and LoRA checks, hybrid opacity, plus sampled steps/guidance range and first-frame positive prompt.
+- Errors block the UI render action. Warnings require an explicit Render Anyway confirmation. The server render endpoint still performs its own authoritative existing validation.
+- The submitted render freezes the same collected browser draft that was checked. If the project changes during the async check/dialog, submission is canceled and the user must check again.
+- In large projects, per-frame generation-parameter checking samples up to 500 frames and prominently warns that remaining frames are checked during generation. GPU/model-inference health and cumulative camera projection are not guaranteed by preflight.
+- Test source-image versus prompt start, missing or incomplete checkpoints, incompatible sampler, alignment, invalid schedules, missing prompt, unsaved edits, navigation, warnings and cancellations, desktop and mobile. Physical Windows GPU acceptance required before merge.

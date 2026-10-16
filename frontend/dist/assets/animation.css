@@ -3553,3 +3553,34 @@ dialog#animation-deforum-dialog {
 @media(max-width:350px) {
   #view-animation .animation-compatibility-facts {grid-template-columns:minmax(0,1fr);}
 }
+
+/* P2.5: read-only render validation results, shared between Check and Render. */
+#view-animation .animation-preflight-report {
+  display:grid;gap:10px;border:1px solid var(--border);
+  border-radius:12px;padding:14px;margin:12px 0;
+  background:var(--panel);overflow-wrap:anywhere;min-width:0;
+}
+#view-animation .animation-preflight-report[hidden],
+#view-animation #animation-preflight-issues[hidden],
+#view-animation #animation-preflight-fix[hidden] {display:none!important;}
+#view-animation .animation-preflight-report[data-state="error"] {
+  border-color:color-mix(in srgb,var(--danger) 40%,var(--border));
+}
+#view-animation .animation-preflight-report[data-state="warning"] {
+  border-color:color-mix(in srgb,var(--warn) 40%,var(--border));
+}
+#view-animation .animation-preflight-report[data-state="ok"] {
+  border-color:color-mix(in srgb,var(--ok) 30%,var(--border));
+}
+#view-animation .animation-preflight-heading {
+  display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;
+}
+#view-animation .animation-preflight-heading strong {font-size:.9rem;}
+#view-animation .animation-preflight-report p {margin:0;font-size:.78rem;line-height:1.5;}
+#view-animation #animation-preflight-issues {
+  font-size:.8rem;line-height:1.5;margin:0;padding:0 0 0 19px;
+}
+#view-animation #animation-preflight-issues li {margin:4px 0;overflow-wrap:anywhere;}
+#view-animation #animation-preflight-issues li[data-severity="error"] {color:var(--danger);}
+#view-animation #animation-preflight-issues li[data-severity="warning"] {color:var(--warn);}
+#view-animation #animation-preflight-fix {min-height:40px;}

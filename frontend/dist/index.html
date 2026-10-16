@@ -988,12 +988,21 @@
                 <p class="muted">Render the real diffusion sequence. Choose a starting frame, render your animation, and follow progress here.</p>
               </div>
               <div class="button-row animation-render-actions">
+                <button class="secondary-button compact busy-button" id="animation-preflight-check" type="button" disabled><span class="spinner"></span><span class="button-label">Check Render</span></button>
                 <button class="secondary-button compact" id="animation-resume-render" type="button" disabled>Resume</button>
                 <button class="secondary-button compact danger" id="animation-cancel-render" type="button" disabled>Cancel</button>
                 <button class="primary-button compact busy-button" id="animation-start-render" type="button" disabled><span class="spinner"></span><span class="button-label">Render Animation</span></button>
               </div>
             </div>
 
+            <section id="animation-preflight-report" class="animation-preflight-report" aria-label="Pre-render validation results" aria-live="polite" hidden>
+              <div class="animation-preflight-heading">
+                <strong id="animation-preflight-heading">Review render settings</strong>
+                <button class="secondary-button compact" type="button" id="animation-preflight-fix" hidden>Fix in Editor</button>
+              </div>
+              <p class="muted" id="animation-preflight-meta"></p>
+              <ul id="animation-preflight-issues" hidden></ul>
+            </section>
             <div class="notice subtle animation-render-notice">
               <strong>Real diffusion render</strong>
               <span>Rendering may take some time. Completed frames are saved as the animation runs, and interrupted renders can be resumed.</span>

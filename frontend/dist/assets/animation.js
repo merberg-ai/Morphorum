@@ -678,6 +678,7 @@
   function markDirty({ validate = false } = {}) {
     if (!state.project || state.loading) return;
     state.dirty = true;
+    resetRenderPreflight();
     setStatus('Unsaved changes', 'dirty');
     scheduleInspectorRefresh({ validate });
   }
@@ -2897,6 +2898,11 @@
     const overlay = qs('#animation-preview-highlight-holes');
     if (overlay) overlay.disabled = !state.project || animationMode() !== '3d' ||
       Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    const preflightButton = qs('#animation-preflight-check');
+    if (preflightButton && !preflightButton.classList.contains('busy')) {
+      preflightButton.disabled = !state.project || renderActive ||
+        Boolean(state.motionJobId) || motionPreviewStarting || animationRenderStarting;
+    }
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
@@ -4335,6 +4341,115 @@
     }
   }
 
+  // P2.5: same frozen browser draft is checked before a GPU render is queued.
+  // A check never saves the project or changes any of its settings.
+  function resetRenderPreflight() {
+    const report = qs('#animation-preflight-report');
+    if (report) report.hidden = true;
+  }
+
+  function renderPreflightResult(result) {
+    const report = qs('#animation-preflight-report');
+    if (!report) return;
+    report.hidden = false;
+    report.dataset.state = result.valid ? (result.warnings ? 'warning' : 'ok') : 'error';
+    const heading = qs('#animation-preflight-heading');
+    if (heading) {
+      heading.textContent = result.errors
+        ? result.errors + ' blocking issue(s) · render not started'
+        : result.warnings
+          ? 'Ready with ' + result.warnings + ' warning(s)'
+          : 'Render check passed';
+    }
+    const meta = qs('#animation-preflight-meta');
+    if (meta) {
+      meta.textContent = (result.model_name || 'No indexed checkpoint') +
+        ' · ' + (Number(result.checked_frames) || 0) +
+        ' / ' + (Number(result.total_frames) || 0) + ' frames checked for scheduled generation parameters';
+    }
+    const list = qs('#animation-preflight-issues');
+    if (list) {
+      list.replaceChildren();
+      for (const issue of result.issues || []) {
+        const item = document.createElement('li');
+        item.textContent = (issue.severity === 'warning' ? 'Warning' : 'Error') +
+          ' · ' + issue.field + ': ' + issue.message;
+        item.dataset.severity = issue.severity;
+        list.appendChild(item);
+      }
+      list.hidden = !(result.issues || []).length;
+    }
+    const fix = qs('#animation-preflight-fix');
+    if (fix) fix.hidden = !result.errors;
+  }
+
+  const PREFLIGHT_EDITOR_FIELDS = Object.freeze({
+    'model.model_id': '#animation-model',
+    'model.family': '#animation-model',
+    'animation.max_frames': '#animation-max-frames',
+    'animation.width': '#animation-width',
+    'animation.height': '#animation-height',
+    'animation.start_mode': '#animation-start-mode',
+    'animation.source_image': '#animation-source-file',
+    'generation.sampler': '#animation-sampler',
+    'generation.steps': '#animation-steps',
+    'generation.guidance': '#animation-guidance',
+    'hybrid.composite_opacity': '#animation-hybrid-composite-opacity',
+    'tracks.prompts.positive': '#animation-prompt-list',
+  });
+
+  function showFirstPreflightFix() {
+    const issue = (state.lastPreflight?.issues || []).find(item => item.severity === 'error');
+    if (!issue) return;
+    if (issue.action === 'models') {
+      qs('.nav-button[data-view="models"]')?.click();
+      return;
+    }
+    showAnimationTab('editor');
+    const selector = PREFLIGHT_EDITOR_FIELDS[issue.field] ||
+      SCHEDULE_INPUTS[issue.field] || '#animation-name';
+    const target = qs(selector);
+    const card = target?.closest('article.card');
+    if (card?.classList.contains('animation-card-collapsed')) {
+      setAnimationCardCollapsed(card, false, { persist: false });
+    }
+    target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    if (target && typeof target.focus === 'function') target.focus();
+  }
+
+  async function runRenderPreflight(project) {
+    const result = await api('/api/animation/renders/preflight', {
+      method: 'POST', body: JSON.stringify({ project }),
+    });
+    state.lastPreflight = result;
+    renderPreflightResult(result);
+    return result;
+  }
+
+  async function checkRenderPreflight() {
+    if (!state.project || animationRenderStarting || renderIsActive()) return;
+    const check = qs('#animation-preflight-check');
+    if (check) setBusy(check, true);
+    try {
+      const project = collectProject();
+      const snapshot = JSON.stringify(project);
+      const result = await runRenderPreflight(project);
+      if (state.project?.id !== project.id || JSON.stringify(collectProject()) !== snapshot) {
+        resetRenderPreflight();
+        toast('Render check outdated', 'Project settings changed during the check. Please run it again.', 'warning');
+        return;
+      }
+      toast(result.valid ? 'Render check finished' : 'Render has blocking issues',
+        result.errors + ' error(s), ' + result.warnings + ' warning(s).',
+        result.valid ? (result.warnings ? 'warning' : 'success') : 'error');
+    } catch (error) {
+      resetRenderPreflight();
+      toast('Render check failed', error.message, 'error', 7000);
+    } finally {
+      if (check) { setBusy(check, false); renderSourceState(); }
+    }
+  }
+
   async function startAnimationRender() {
     if (!state.project || renderIsActive() || animationRenderStarting ||
         state.motionJobId || motionPreviewStarting) return;
@@ -4346,6 +4461,33 @@
       // Keep collection inside the try: invalid project inputs must not
       // strand the toolbar in its pending-render locked state.
       const project = collectProject();
+      const frozen = JSON.stringify(project);
+      const preflight = await runRenderPreflight(project);
+      if (!preflight.valid) {
+        toast('Render blocked by project settings',
+          'Review the pre-render error list before retrying.', 'error', 7500);
+        showAnimationTab('monitor');
+        return;
+      }
+      if (preflight.warnings) {
+        const messages = preflight.issues.filter(issue => issue.severity === 'warning')
+          .slice(0, 3).map(issue => issue.message);
+        const confirmed = await window.MorphorumDialog.confirm({
+          title: 'Render with warnings?',
+          message: messages.join(' ') +
+            ' The warnings do not prevent rendering. Continue with this exact project draft?',
+          confirmText: 'Render Anyway', cancelText: 'Review Warnings',
+        });
+        if (!confirmed) { showAnimationTab('monitor'); return; }
+      }
+      // Prevent an in-flight check or confirm dialog from rendering stale edits.
+      if (state.project?.id !== project.id ||
+          JSON.stringify(collectProject()) !== frozen) {
+        toast('Settings changed during render check',
+          'Run Render Animation again to check the current project.', 'warning', 6500);
+        resetRenderPreflight();
+        return;
+      }
       const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project }) });
       state.renderJobId = job.id;
       renderAnimationJob(job);
@@ -4423,6 +4565,7 @@
       return; // No selection, form or model capabilities need re-initializing.
     }
     state.modelIndexSignature = signature;
+    resetRenderPreflight();
     state.models = models;
     populateModelSelect({ preserveSelection: Boolean(state.project) });
     populateDeforumModelSelect();
@@ -10205,6 +10348,8 @@
       () => motionLabPreviewOrApply(true));
     qs('#animation-export-video')?.addEventListener('click', startVideoExport);
 
+    qs('#animation-preflight-check')?.addEventListener('click', checkRenderPreflight);
+    qs('#animation-preflight-fix')?.addEventListener('click', showFirstPreflightFix);
     qs('#animation-start-render')?.addEventListener('click', startAnimationRender);
     qs('#animation-cancel-render')?.addEventListener('click', cancelAnimationRender);
     qs('#animation-resume-render')?.addEventListener('click', resumeAnimationRender);
