@@ -44,6 +44,27 @@
   };
 
   const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
+  const LAST_ANIMATION_PROJECT_KEY = 'morphorum.animation.lastProjectId.v1';
+
+  function readLastAnimationProject() {
+    try { return localStorage.getItem(LAST_ANIMATION_PROJECT_KEY) || ''; }
+    catch (_) { return ''; }
+  }
+
+  function rememberAnimationProject(projectId) {
+    if (!projectId) return;
+    try { localStorage.setItem(LAST_ANIMATION_PROJECT_KEY, String(projectId)); }
+    catch (_) { /* Storage may be unavailable in a restricted browser. */ }
+  }
+
+  function forgetAnimationProject(projectId) {
+    if (!projectId) return;
+    try {
+      if (localStorage.getItem(LAST_ANIMATION_PROJECT_KEY) === projectId) {
+        localStorage.removeItem(LAST_ANIMATION_PROJECT_KEY);
+      }
+    } catch (_) { /* Browser storage is optional. */ }
+  }
 
   function readAnimationCardState() {
     try {
@@ -555,6 +576,52 @@
     button.disabled = busy;
   }
 
+  // P1: explain why the editor is locked without changing saved settings.
+  function renderEditorGuidance() {
+    const project = state.project;
+    const panel = qs('#animation-editor-guidance');
+    const open = qs('#animation-editor-open-project');
+    const context = qs('#animation-project-context');
+    if (panel) panel.hidden = Boolean(project);
+    if (open) open.hidden = state.projects.length === 0;
+    if (context) {
+      if (!project) {
+        context.textContent = state.projects.length
+          ? 'No project open · choose an existing project or create a new one.'
+          : 'No project open · create a project to begin editing.';
+      } else {
+        const selectedModelId = qs('#animation-model')?.value || project.model?.model_id || '';
+        const model = state.models.find(item => item.id === selectedModelId && item.kind === 'checkpoints');
+        const modelLabel = model?.name || (selectedModelId ? 'Model unavailable' : 'Model not selected');
+        context.textContent = (qs('#animation-name')?.value?.trim() || project.name || 'Untitled Animation') +
+          ' · ' + modelLabel + ' · ' + (state.dirty ? 'Unsaved changes' : 'Saved');
+      }
+    }
+    const modelHelp = qs('#animation-model-guidance');
+    const modelSelect = qs('#animation-model');
+    if (modelHelp) {
+      const selectedModelId = modelSelect?.value || project?.model?.model_id || '';
+      if (!project) {
+        modelHelp.hidden = true;
+      } else if (!selectedModelId) {
+        modelHelp.hidden = false;
+        modelHelp.textContent = state.models.some(item => item.kind === 'checkpoints')
+          ? 'Choose a checkpoint for this animation project. The still-image model selection is separate.'
+          : 'No checkpoints indexed. Open Models, configure or download a checkpoint, then scan models.';
+      } else if (!state.models.some(item => item.id === selectedModelId && item.kind === 'checkpoints')) {
+        modelHelp.hidden = false;
+        modelHelp.textContent = 'This project references a model not currently indexed on this computer. Scan Models or choose another compatible checkpoint.';
+      } else {
+        modelHelp.hidden = true;
+      }
+    }
+    if (modelSelect) {
+      modelSelect.title = project
+        ? 'Choose a checkpoint for the current animation project.'
+        : 'Open or create an animation project before selecting a model.';
+    }
+  }
+
   function setEditorEnabled(enabled) {
     qsa(
       '#view-animation input, #view-animation select, #view-animation textarea'
@@ -589,6 +656,7 @@
     badge.textContent = text;
     badge.className = 'badge animation-project-status';
     if (kind) badge.classList.add(kind);
+    renderEditorGuidance();
   }
 
   function scheduleInspectorRefresh({ validate = false } = {}) {
@@ -775,6 +843,7 @@
     select.value = selected;
     populateSamplerSelect(state.project?.generation?.sampler || '');
     populateResolutionPresets();
+    renderEditorGuidance();
   }
 
   function renderProjectSelect() {
@@ -4732,6 +4801,7 @@
       }
       projectManagerState.selectedId = '';
       await loadProjectList();
+      forgetAnimationProject(item.id);
       toast('Project moved to Trash',
         'Project removed from the list. Rendered animations and exports remain intact.',
         'success', 6500);
@@ -4800,10 +4870,23 @@
     renderProjectSelect();
     renderProjectManager();
     if (loadFirst && !state.project && state.projects.length) {
-      await loadProject(state.projects[0].id, { confirmDirty: false });
+      const savedId = readLastAnimationProject();
+      const preferred = state.projects.find(item => item.id === savedId)?.id || '';
+      if (savedId && !preferred) forgetAnimationProject(savedId);
+      const ordered = [preferred, state.projects[0].id].filter((id, index, list) =>
+        Boolean(id) && list.indexOf(id) === index);
+      let opened = false;
+      for (const id of ordered) {
+        if (await loadProject(id, { confirmDirty: false })) {
+          opened = true;
+          break;
+        }
+      }
+      if (!opened) fillForm();
     } else if (!state.project) {
       fillForm();
     }
+    renderEditorGuidance();
   }
 
   async function loadProject(projectId, { confirmDirty = true } = {}) {
@@ -4834,6 +4917,7 @@
       state.timelineSelection = null;
       state.depthPreview = null;
       fillForm();
+      rememberAnimationProject(state.project.id);
       void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
@@ -4878,6 +4962,7 @@
       state.depthPreview = null;
       await loadProjectList();
       fillForm();
+      rememberAnimationProject(state.project.id);
       void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
@@ -9623,6 +9708,8 @@
     qs('#animation-deforum-refresh')?.addEventListener('click', () => previewDeforumImport());
     qs('#animation-deforum-create')?.addEventListener('click', createDeforumProject);
     qs('#animation-deforum-model')?.addEventListener('change', () => previewDeforumImport());
+    qs('#animation-editor-open-project')?.addEventListener('click', () => showAnimationTab('projects'));
+    qs('#animation-editor-create-project')?.addEventListener('click', () => showAnimationTab('wizard'));
     qs('#animation-new')?.addEventListener('click', createProject);
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
@@ -9862,6 +9949,7 @@
       const repairedGuidance = repairConstantGuidanceForSelectedModel({ announce: true });
       renderPromptRows();
       markDirty({ validate: repairedGuidance });
+      renderEditorGuidance();
       renderSourceState();
     });
 
@@ -9931,6 +10019,7 @@
     }
     bind();
     setEditorEnabled(false);
+    renderEditorGuidance();
 
     window.addEventListener('resize', () => {
       window.clearTimeout(state.timelineResizeTimer);
@@ -9940,7 +10029,10 @@
       await Promise.all([
         loadCapabilities(),
         loadModels(),
-        loadDepthModels(),
+        loadDepthModels().catch(error => {
+          // Optional depth discovery must not block the basic Project Editor.
+          toast('Depth preview unavailable', error.message, 'warning', 6500);
+        }),
         api('/api/animation/video/availability').then(info => {
           state.videoAvailability = info;
           renderVideoExportState();

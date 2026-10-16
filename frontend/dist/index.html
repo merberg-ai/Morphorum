@@ -291,6 +291,15 @@
               <div><h2>Project</h2><p class="muted">Name your project and choose its animation settings.</p></div>
               <span class="badge" id="animation-schema-badge">Choose a project</span>
             </div>
+            <p class="animation-project-context muted" id="animation-project-context" aria-live="polite">No project open · choose a project to begin.</p>
+            <div class="animation-editor-guidance" id="animation-editor-guidance" role="status" aria-live="polite" hidden>
+              <div><strong>Open an animation project to unlock the editor</strong>
+                <p>Model and animation settings belong to a saved project. Your still-image model can work even when no animation project is open.</p></div>
+              <div class="animation-editor-guidance-actions">
+                <button class="secondary-button compact" type="button" id="animation-editor-open-project">Open a project</button>
+                <button class="primary-button compact" type="button" id="animation-editor-create-project">New Project Wizard</button>
+              </div>
+            </div>
             <div class="field-grid">
               <label class="animation-span-2"><span>Project</span><select id="animation-project-select"><option value="">No projects yet</option></select></label>
               <label class="animation-span-2"><span>Name</span><input id="animation-name" type="text" placeholder="Untitled Animation" disabled></label>
@@ -304,6 +313,7 @@
               <label class="animation-span-2"><span>Model</span><select id="animation-model" disabled><option value="">No model selected</option></select></label>
             </div>
             <p class="field-help" id="animation-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
+            <p class="field-help" id="animation-model-guidance" aria-live="polite" hidden></p>
           </article>
 
           <article class="card glass animation-cadence-card" id="animation-cadence-card">

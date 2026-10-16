@@ -108,7 +108,7 @@ A fresh installation with no existing projects also includes a **Default** anima
 - Two positive-prompt keyframes with cat/top-hat scenes
 - No model selected until you choose one
 
-Open **Motion Lab → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. For an early GPU test, try fewer frames and a model-supported resolution.
+Open **Motion Lab → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. The Project Editor explains why controls are locked until a project opens and provides shortcuts to Project Manager and the New Project Wizard. The browser remembers your last opened project when it is still available. Still-image model selection does not automatically select a model for an animation project. For an early GPU test, try fewer frames and a model-supported resolution.
 
 ## 5. Explore the Motion Lab workspaces
 

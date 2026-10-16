@@ -3439,3 +3439,27 @@ dialog#animation-deforum-dialog {
 @media(max-width:390px) {
   .motion-review-refine-actions {grid-template-columns:1fr;}
 }
+
+/* P1: contextual animation editor guidance. */
+#view-animation .animation-project-context {
+  min-width:0;max-width:100%;margin:0 0 12px;
+  font-size:.85rem;line-height:1.5;overflow-wrap:anywhere;
+}
+#view-animation .animation-editor-guidance {
+  display:grid;gap:12px;min-width:0;
+  margin:0 0 16px;padding:14px;
+  border:1px solid var(--border);border-radius:12px;background:var(--panel);
+}
+#view-animation .animation-editor-guidance[hidden],
+#view-animation #animation-model-guidance[hidden] {display:none !important;}
+#view-animation .animation-editor-guidance strong {display:block;line-height:1.4;}
+#view-animation .animation-editor-guidance p {margin:5px 0 0;line-height:1.5;overflow-wrap:anywhere;}
+#view-animation .animation-editor-guidance-actions {
+  display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+}
+#view-animation .animation-editor-guidance-actions button {min-height:40px;max-width:100%;}
+#view-animation .animation-editor-guidance-actions button[hidden] {display:none !important;}
+@media (max-width:390px) {
+  #view-animation .animation-editor-guidance-actions {display:grid;grid-template-columns:minmax(0,1fr);}
+  #view-animation .animation-editor-guidance-actions button {width:100%;white-space:normal;}
+}
