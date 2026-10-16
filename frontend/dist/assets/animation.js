@@ -10566,11 +10566,28 @@
     const audioCard = qs('#animation-motion-lab-audio');
     const controls = audioCard?.querySelector('.animation-motion-audio-controls');
     if (controls) {
-      const fields = Array.from(controls.children);
+      // Group by control identity, never by numeric child position: the
+      // length toggle and newer detector fields would otherwise shift the
+      // indices, misplacing Threshold/Release (or leaving them orphaned).
+      const labelOf = id => qs('#' + id)?.closest('label');
       const sections = [
-        ['Choose audio', fields.slice(0,2), true],
-        ['Beat detection', [fields[2],fields[3],fields[4],fields[6]], false],
-        ['Camera response', [fields[5],fields[7],fields[8],fields[9]], false],
+        ['Choose audio', [
+          labelOf('animation-motion-lab-audio-file'),
+          qs('.animation-motion-saved-soundtrack', controls),
+          qs('.animation-motion-audio-length', controls),
+        ], true],
+        ['Beat detection', [
+          labelOf('animation-motion-lab-audio-band'),
+          labelOf('animation-motion-lab-audio-detection'),
+          labelOf('animation-motion-lab-audio-sensitivity'),
+          labelOf('animation-motion-lab-audio-threshold'),
+        ], true],
+        ['Camera response', [
+          labelOf('animation-motion-lab-audio-axis'),
+          labelOf('animation-motion-lab-audio-distance'),
+          labelOf('animation-motion-lab-audio-attack'),
+          labelOf('animation-motion-lab-audio-release'),
+        ], true],
       ];
       for (const [label, elements, opened] of sections) {
         const details = document.createElement('details');
