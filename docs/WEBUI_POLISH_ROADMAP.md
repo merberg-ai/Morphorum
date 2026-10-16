@@ -159,9 +159,11 @@ started by this acceptance note; begin in `dev-webui` when authorized.
   background managed-model downloads with live bytes/percentage, completion
   and repair guidance. A failed index refresh no longer reports a successful
   scan. No changes to backend generation or download APIs.
-- [ ] **P4.2:** Extend consistent busy/status/error handling to Image
-  Generation submission/history/unload and Motion Lab preview/apply tasks;
-  preserve existing job progress/cancel controls.
+- [x] **P4.2:** Extend consistent operation-status and in-flight guards to
+  Image Generation submission, history refresh and model unload; Motion Lab
+  CPU preview generation, draft preview/apply and render submission. Preserve
+  existing detailed job progress and cancellation interfaces; distinguish
+  blocked, cancelled, queued, successful and failed operations.
 - [ ] **P4.3:** Audit toast prioritization, duplicated polling errors, console
   diagnostics, keyboard announcements and stalled/offline operations.
 - [ ] P4 Windows/phone acceptance. Keep `main` unchanged.
@@ -176,3 +178,27 @@ shows bytes and percentage and resumes status after browser reload (while
 catalog polling is active). Closing a notice does not cancel the operation.
 Independent concurrent operations remain tracked without stale responses.
 Test reduced-motion preferences and screen reader output.
+
+### P4.2 acceptance
+
+- Image submit reports a non-percentage pending state, rejects duplicate
+  submission requests, then yields to the existing generation job monitor;
+  errors remain visible with an actionable retry suggestion.
+- Refresh Image History has a proper busy button, disabled repeat action
+  and explicit success/error feedback. Model Unload cannot race with an
+  active or just-submitting image job; failure is reported without clearing
+  the loaded state incorrectly.
+- CPU Camera Preview updates status and measured progress from the preview
+  job, then reports a final success or error. It does not load a diffusion
+  model. Preview/apply of Motion Lab layers distinguishes draft-only
+  compile, required Editor-save confirmation, rebase confirmation, success,
+  failure and user cancellation.
+- Render submission reports preflight, warning confirmation, blocked
+  validation, cancellation, stale browser edits, queuing and submit errors.
+  A failed refresh of render history cannot retroactively mark an accepted
+  render as failed. Live frame/GPU progress remains in Render Monitor.
+- All feedback uses the P4.1 non-blocking operation ribbon; dismissing
+  feedback does not abort the running operation. Operations do not mutate
+  project settings beyond the user's explicitly authorized actions.
+- Windows GPU/CPU and Android UI testing of P4.2 still required. `main`
+  remains unchanged.

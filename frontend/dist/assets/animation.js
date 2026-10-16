@@ -4570,15 +4570,21 @@
       });
       const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project }) });
       state.renderJobId = job.id;
+      renderAnimationJob(job);
+      showAnimationTab('monitor');
+      // Once the host accepts the job, history availability must not turn
+      // an actual running render into a false submission failure.
+      pollAnimationRender(job.id);
       finishSubmit({
         title: 'Animation render queued',
         message: 'Job ' + job.id + ' accepted. Render Monitor shows live frames, GPU load and cancellation.',
       });
-      renderAnimationJob(job);
-      showAnimationTab('monitor');
-      await loadRenderHistory();
-      pollAnimationRender(job.id);
       toast('Animation render queued', 'Current browser project state was frozen into the render manifest.', 'success');
+      try {
+        await loadRenderHistory();
+      } catch (historyError) {
+        toast('Render history refresh unavailable', historyError.message, 'warning', 6500);
+      }
     } catch (error) {
       finishSubmit({
         tone: 'error', title: 'Animation render could not start',

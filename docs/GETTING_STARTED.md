@@ -309,3 +309,22 @@ the relevant page. Dismissing the notice never cancels ongoing work; model
 downloads continue in the backend. The existing image and animation render
 progress panels remain authoritative for GPU work. Progress for an
 indeterminate task does not imply a percentage or ETA.
+
+## Image and Motion Lab operation feedback (P4.2)
+
+Image Generation now reports **Submitting** and **Queued** as separate
+operations. The existing job-progress panel remains the place to monitor
+the denoiser, inspect images, or cancel a running job. Refreshing recent
+image jobs and unloading a model show a busy state, completion, or
+actionable errors. Image generation submissions cannot be repeated while
+the first request is still in flight.
+
+In Motion Lab, **Preview Camera Motion** displays a status and CPU-preview
+progress, including failure information, without loading the diffusion
+model. **Preview Draft** compiles motion without saving; **Apply to Animation**
+continues to require existing Save/Rebase confirmations and reports when
+the user cancels. **Render Animation** describes preflight checks,
+warnings, blocking errors and queue submission without inventing a GPU
+ETA. Detailed diffusion/frame metrics remain in **Render Monitor**.
+A queued render remains queued even if refreshing its history fails.
+The operation notice is dismissible and does not cancel background work.
