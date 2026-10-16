@@ -41,6 +41,10 @@
       report: null,
       busy: false,
     },
+    // Track model index changes separately from in-progress Editor edits.
+    modelIndexSignature: null,
+    modelIndexStale: false,
+    modelIndexRevision: 0,
   };
 
   const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
@@ -591,7 +595,7 @@
           ? 'No project open · choose an existing project or create a new one.'
           : 'No project open · create a project to begin editing.';
       } else {
-        const selectedModelId = qs('#animation-model')?.value || project.model?.model_id || '';
+        const selectedModelId = qs('#animation-model')?.value ?? project.model?.model_id ?? '';
         const model = state.models.find(item => item.id === selectedModelId && item.kind === 'checkpoints');
         const modelLabel = model?.name || (selectedModelId ? 'Model unavailable' : 'Model not selected');
         context.textContent = (qs('#animation-name')?.value?.trim() || project.name || 'Untitled Animation') +
@@ -601,7 +605,7 @@
     const modelHelp = qs('#animation-model-guidance');
     const modelSelect = qs('#animation-model');
     if (modelHelp) {
-      const selectedModelId = modelSelect?.value || project?.model?.model_id || '';
+      const selectedModelId = modelSelect?.value ?? project?.model?.model_id ?? '';
       if (!project) {
         modelHelp.hidden = true;
       } else if (!selectedModelId) {
@@ -726,15 +730,22 @@
     const select = qs('#animation-sampler');
     if (!select) return;
 
-    const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
+    const modelId = qs('#animation-model')?.value ?? state.project?.model?.model_id ?? '';
     const model = modelById(modelId);
     const current = String(select.value || '');
     select.replaceChildren();
 
     if (!model) {
+      // Do not erase a project's sampler when the model index temporarily
+      // loses that checkpoint. Re-scanning can restore it without an edit.
+      const savedSampler = modelId
+        ? (preferredSampler || current || state.project?.generation?.sampler || '')
+        : '';
       const option = document.createElement('option');
-      option.value = '';
-      option.textContent = 'Select a model first';
+      option.value = savedSampler;
+      option.textContent = modelId
+        ? (savedSampler ? 'Checkpoint unavailable · ' + savedSampler : 'Checkpoint unavailable')
+        : 'Select a model first';
       select.appendChild(option);
       select.disabled = true;
       return;
@@ -815,10 +826,15 @@
     return true;
   }
 
-  function populateModelSelect() {
+  function populateModelSelect({ preserveSelection = false } = {}) {
     const select = qs('#animation-model');
     if (!select) return;
-    const selected = state.project?.model?.model_id || select.value || '';
+    // Normal project loads use the saved checkpoint; live index refreshes use
+    // the current DOM value, including an intentionally empty/unsaved choice.
+    const selected = preserveSelection && state.project
+      ? select.value
+      : (state.project?.model?.model_id || select.value || '');
+    const previousSampler = qs('#animation-sampler')?.value || '';
     const models = state.models.filter(model => model.kind === 'checkpoints');
 
     select.replaceChildren();
@@ -842,7 +858,9 @@
       select.appendChild(missing);
     }
     select.value = selected;
-    populateSamplerSelect(state.project?.generation?.sampler || '');
+    populateSamplerSelect(
+      preserveSelection ? previousSampler : (state.project?.generation?.sampler || '')
+    );
     populateResolutionPresets();
     renderEditorGuidance();
   }
@@ -4229,14 +4247,67 @@
     }
   }
 
+  function modelIndexSignature(models) {
+    // Avoid needlessly rebuilding focused dropdowns when a refresh finds no changes.
+    return JSON.stringify(models.map(model => [
+      model.id, model.kind, model.name, model.family, model.variant,
+    ]));
+  }
+
+  function showModelIndexStatus(message) {
+    const status = qs('#animation-model-index-status');
+    if (!status) return;
+    status.hidden = !message;
+    status.textContent = message || '';
+  }
+
+  function applyAnimationModelIndex(models) {
+    if (!Array.isArray(models)) return;
+    const signature = modelIndexSignature(models);
+    const wasStale = state.modelIndexStale;
+    state.modelIndexStale = false;
+    showModelIndexStatus('');
+    if (signature === state.modelIndexSignature) {
+      if (wasStale) renderEditorGuidance();
+      return; // No selection, form or model capabilities need re-initializing.
+    }
+    state.modelIndexSignature = signature;
+    state.models = models;
+    populateModelSelect({ preserveSelection: Boolean(state.project) });
+    populateDeforumModelSelect();
+    // Do not mark the project dirty, repair guidance schedules, or mutate
+    // prompts on index refresh. Those are explicit user-edit operations.
+  }
+
+  function onAnimationModelsUpdated(event) {
+    const detail = event?.detail || {};
+    state.modelIndexRevision += 1;
+    if (detail.loaded === false) {
+      state.modelIndexStale = true;
+      showModelIndexStatus(
+        'Model index refresh failed. Keeping the last known models; retry a scan in Models.'
+      );
+      return;
+    }
+    if (detail.loaded === true && Array.isArray(detail.models)) {
+      applyAnimationModelIndex(detail.models);
+    }
+  }
+
   async function loadModels() {
+    // If Model Manager broadcasts a newer index while this request is in
+    // flight, the older response must not overwrite the fresh model list.
+    const revision = state.modelIndexRevision;
     try {
       const payload = await api('/api/models?limit=2000');
-      state.models = Array.isArray(payload.models) ? payload.models : [];
-      populateModelSelect();
-      populateDeforumModelSelect();
-      populateSamplerSelect(state.project?.generation?.sampler || '');
+      if (revision !== state.modelIndexRevision) return;
+      applyAnimationModelIndex(Array.isArray(payload.models) ? payload.models : []);
     } catch (error) {
+      if (revision !== state.modelIndexRevision) return;
+      state.modelIndexStale = true;
+      showModelIndexStatus(
+        'Model index unavailable. Showing the last known checkpoints; retry in Models.'
+      );
       toast('Animation model list unavailable', error.message, 'warning', 6000);
     }
   }
@@ -10114,6 +10185,9 @@
       motionLabBindAudioTransport();
     }
     bind();
+    // The event comes from Model Manager after both load and scan; it is
+    // authoritative and does not require another request from the Editor.
+    window.addEventListener('morphorum:models-updated', onAnimationModelsUpdated);
     setEditorEnabled(false);
     renderEditorGuidance();
 

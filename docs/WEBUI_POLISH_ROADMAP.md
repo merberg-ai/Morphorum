@@ -24,6 +24,16 @@ render behavior.
 - [x] P1.5: A project-aware Motion Lab wayfinder gives active workspace, project/save status, safe adjacent tool shortcuts and empty-project recovery without duplicating controls.
 - [x] P1.6: Reusable contextual help (?) for selected Editor/Composer controls, saved Appearance toggle, keyboard/touch support; future passes broaden coverage.
 
+## P2 implementation / acceptance
+
+- [x] P2.1: Subscribe the Project Editor and Deforum importer to Model Manager's indexed-model update event without a forced page refresh.
+- [x] P2.1 safety: Preserve unsaved checkpoint and sampler choices, including a deliberately cleared model; keep missing checkpoint IDs and reject stale fetches.
+- [x] P2.2 initial: Clarify separate still-image and project-specific animation checkpoint selectors.
+- [ ] P2.3: Model-family/variant/resolution/sampler compatibility indicators and missing-dependency actions.
+- [ ] P2.4: Extend context help and inline units to remaining generation settings.
+- [ ] P2.5: Actionable pre-render validation, no destructive automatic repair.
+- [ ] P2.6: Explain cumulative 3D motion and warn about risky camera schedules.
+
 ## P6 early safety
 
 - [x] Optional depth-service discovery failures no longer prevent project loading.

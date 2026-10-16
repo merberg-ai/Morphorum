@@ -176,3 +176,16 @@ The optional [backend-only mode](BACKEND_ONLY.md) lets a compatible native clien
 - [Troubleshooting](TROUBLESHOOTING.md)
 - [Current features and limitations](CURRENT_STATUS.md)
 - [Documentation index](README.md)
+
+## Refreshing models while editing
+
+Each animation project stores its own checkpoint selection independently of
+the Image Generation model selector. After changing model directories or
+installing a managed checkpoint, open **Models → Scan Models**. The animation
+Project Editor and Deforum importer automatically refresh their checkpoint
+lists without needing a browser reload. The current project's unsaved edits,
+checkpoint choice and compatible sampler remain intact. If a previously used
+model disappears from the index, it is shown as missing instead of silently
+choosing another checkpoint; restore its directory and scan again, or
+explicitly choose a replacement. An unsuccessful scan keeps the last known
+checkpoint list until a later successful refresh.
