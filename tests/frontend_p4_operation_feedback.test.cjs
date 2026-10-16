@@ -80,5 +80,6 @@ test('Managed download polling survives accepted-POST idle lag but terminates a 
   assert.match(models,/state\.downloadPendingChecks\.set\(modelId, 0\)/);
   assert.match(models,/if \(checks >= 15\)/);
   assert.match(models,/title: 'Model download did not start'/);
-  assert.match(models,/state\.downloadPendingChecks\.clear\(\)/);
+  assert.match(models,/Preserve accepted download IDs/);
+  assert.match(models,/state\.managedPollTimer = window\.setTimeout\(\(\) => loadManagedModels\(\), 6000\)/);
 });
