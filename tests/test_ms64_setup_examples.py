@@ -195,3 +195,49 @@ def test_ms65_setup_completion_respects_current_revision_and_preserves_existing_
     assert completed["status"] == "completed"
     assert path.read_bytes() == before
     assert setup.setup_status()["show_wizard"] is False
+
+
+
+def test_ms65_saved_example_remains_openable_after_original_model_is_unindexed(
+    isolated, monkeypatch,
+):
+    state = _prepare()
+    state = setup.update_setup(
+        action="advance", step="finish", revision=state["revision"],
+        template_id="gentle-dolly-in", model_id="removed-model",
+    )
+    record = {
+        "id": "removed-model", "family": "sdxl", "variant": "",
+        "kind": "checkpoints", "name": "Test checkpoint",
+    }
+    monkeypatch.setattr(examples, "get_model", lambda model_id: record)
+    project, reservation = examples.instantiate_example(
+        template_id="gentle-dolly-in", model_id="removed-model",
+        revision=state["revision"], forced=False,
+    )
+    assert project["model"]["model_id"] == "removed-model"
+    before = (isolated / "projects" / project["id"] / "project.json").read_bytes()
+    monkeypatch.setattr(examples, "get_model", lambda model_id: None)
+    again, repeated_state = examples.instantiate_example(
+        template_id="gentle-dolly-in", model_id="removed-model",
+        revision=reservation["revision"], forced=False,
+    )
+    assert repeated_state["example_project_id"] == project["id"]
+    assert again["id"] == project["id"]
+    assert (isolated / "projects" / project["id"] / "project.json").read_bytes() == before
+    assert len(list((isolated / "projects").glob("*/project.json"))) == 1
+
+
+def test_ms65_unindexed_checkpoint_cannot_reserve_new_example(isolated):
+    state = _prepare()
+    state = setup.update_setup(
+        action="advance", step="finish", revision=state["revision"],
+        template_id="gentle-dolly-in", model_id="missing-model",
+    )
+    with pytest.raises(setup.SetupStateError, match="no longer indexed"):
+        examples.instantiate_example(
+            template_id="gentle-dolly-in", model_id="missing-model",
+            revision=state["revision"], forced=False,
+        )
+    assert setup.setup_status()["example_project_id"] is None
+    assert not list((isolated / "projects").glob("*/project.json"))
