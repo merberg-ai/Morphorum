@@ -19,6 +19,7 @@ separate, explicit authorization.** Next development phase: P4.
 | P2 | Live model index updates, compatibility, generation help, pre-render checks, 3D camera-motion warnings | New models appear without refreshing; warnings never silently change schedules |
 | P3 | Responsive layout, controls, overflow, themes and accessibility | Verified from 360–1440 CSS px plus enlarged scaling |
 | P4 | Progress, feedback, toasts, loading state and actionable errors | Every operation signals its state and identifies failures clearly |
+| P4.4 | FFmpeg Manager: system detection, custom executable, local managed download | Safe verified FFmpeg/FFprobe selection across supported Windows/Linux hosts |
 | P5 | Motion Lab project summary, preview/apply/render clarity, audio reuse, units, navigation | No loss of unsaved work or saved media |
 | P6 | Startup fault isolation, refresh/reconnect, version/cache, sanitized diagnostics, regression tests, 3D warp error detail | Optional services cannot block the basic editor |
 | P7 | Portable project ZIP import/export including media, integrity manifest, optional large files and model remapping | Projects move between hosts without overwriting existing data |
@@ -211,3 +212,53 @@ not publish a separate persistent banner for every draft change. Clearing
 or switching previews also closes its operation notice as "no longer
 tracked," without claiming that an already queued CPU backend job was
 cancelled. Both behaviors need physical confirmation with P4.2.
+
+## P4.4: FFmpeg Manager (scheduled immediately after P4.3)
+
+User request, 2026-10-16: in **Settings**, offer three FFmpeg source modes:
+**Auto-detect installed FFmpeg**, **Custom executable path**, and **Morphorum-managed local FFmpeg** downloaded under the Morphorum installation (proposed: `tools/ffmpeg/`).
+This is a dedicated P4.4 milestone because downloader integrity, Windows/Linux packaging,
+FFprobe pairing, safe extraction, Settings persistence and video/audio integration
+are too large to bundle into P4.3's notification and reliability audit.
+No implementation or physical verification is implied by this planning entry.
+
+### P4.4 implementation sequence
+
+- [ ] **P4.4.1 / Resolver and validation:** Introduce a single backend-owned
+  FFmpeg/FFprobe resolver for `animation_video`, `animation_hybrid_source`,
+  `animation_hybrid_extract` and `project_soundtrack_motion`. Preserve
+  compatibility with `MORPHORUM_FFMPEG` and existing PATH behavior. Define
+  explicit selection precedence (saved user mode > legacy environment setting
+  > system PATH where applicable). In explicit custom/managed modes, never
+  silently run a different binary when selected binaries are missing. Probe
+  `-version` with bounded timeout and no shell; require the matching FFprobe
+  beside the executable for video source features and report capability gaps.
+- [ ] **P4.4.2 / Settings:** Add a responsive FFmpeg Manager under Settings
+  showing source mode, editable custom path, effective paths, version,
+  architecture, detection/validation outcome, actionable errors and a
+  user-triggered Test/Refresh operation. Persist settings using existing
+  atomic settings mechanics; never rewrite system PATH or install globally.
+- [ ] **P4.4.3 / Managed install:** Support vetted downloadable FFmpeg +
+  FFprobe bundles for supported Windows and Linux architectures, with a
+  versioned local destination under `ROOT/tools/ffmpeg/` (outside Git),
+  progress and cancellation through the P4 operation feedback system,
+  published provenance/checksum verification, download size limits, safe
+  archive extraction, staging + atomic promotion, cleanup/retry, and clear
+  replacement/update/removal controls. Avoid privileged/system installation,
+  unexpected auto-downloads, and executable bits where inappropriate.
+  State unsupported platforms explicitly. Review third-party distribution
+  and LGPL/GPL obligations before selecting managed bundle providers.
+- [ ] **P4.4.4 / Acceptance:** Regression-test video export (MP4/WebM),
+  hybrid-video probing/extraction, soundtrack MP3/OGG/FLAC conversion, missing
+  codec handling, PATH/legacy env/custom/managed precedence, invalid paths,
+  interrupted/corrupt downloads, Windows paths with spaces, Linux execute
+  permissions, restart persistence, offline operation after install, and
+  existing video-render jobs while Settings change. Do not mutate projects,
+  remove outputs or change an executable already captured for a running job.
+  Include automated tests and Windows/Linux physical acceptance; never merge
+  `main` without explicit authorization.
+
+**Release gates:** Complete P4.3 notification/error polish independently; then
+implement and verify P4.4 on `dev-webui`. Existing P4.2 GPU/phone acceptance
+is still pending and should not be represented as complete. FFmpeg install is
+always opt-in; system and custom installations remain valid alternatives.
