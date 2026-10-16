@@ -1,6 +1,6 @@
 # MS6 first-run setup wizard: implementation specification
 
-**Status:** MS6.1 and MS6.2 passed Windows physical acceptance; user approved proceeding from MS6.3 to MS6.4. **MS6.4 implemented on `dev-webui`, pending Windows physical acceptance**: two versioned native 3D starter projects, saved example and model selection, safe once-only creation, existing Project Editor handoff, and explicit completion. **MS6.5 remains planned**: end-to-end release regression and public documentation review. See [MS6_ARCHITECTURE_BASELINE.md](MS6_ARCHITECTURE_BASELINE.md) for the installer/migration rules.
+**Status (2026-10-15):** MS6.1, MS6.2 and MS6.4 have passed Windows physical acceptance; the user approved MS6.5 after the prior MS6.3 work. **MS6.5 implemented on `dev-webui`, pending a final Windows acceptance and separate merge decision.** The seven-step wizard, optional managed download, native starter project and durable completion flow are implemented. `main` remains untouched. See [MS6_ARCHITECTURE_BASELINE.md](MS6_ARCHITECTURE_BASELINE.md) for the installer/migration rules.
 
 ## Purpose and boundaries
 
@@ -177,4 +177,25 @@ Implementation details:
 6. Reopen/retry a previously created example and verify the **same** project ID and saved edits are preserved; a failed editor handoff must not set completed. Confirm **Finish Without Example** does not create a project and subsequent ordinary WebUI launch does not auto-open the wizard.
 7. Verify no downloads/renders are initiated by visiting any wizard page and that Settings and previously existing projects are unchanged.
 
-**Next: MS6.5** release regression, setup/error and resume edge cases, installer docs and polish after Windows physical acceptance.
+**MS6.5 implementation below:** completed release polish and regression authoring; Windows acceptance and the separate merge decision remain open.
+
+
+## MS6.5 release regression, polish and acceptance (2026-10-15)
+
+- **Completed release UX fixes:** A new example cannot advance until the bundled example catalog and model index have loaded successfully. A failed fetch leaves the wizard at its current page with an actionable error rather than silently selecting a default. Previously selected checkpoints that disappear from the model index are displayed as unavailable, never treated as render-ready. Unverified managed Z-Image remains gated.
+- **Navigation and accessibility:** Keyboard Tab / Shift+Tab focus now includes the actual nested form fields and page buttons instead of looping only among the wizard footer. Next remains disabled while examples are loading; modal Close is temporarily disabled during server-owned navigation changes. A successful Skip or Finish explicitly dismisses the wizard, even while its guarded request is completing. Escape and re-entry remain safe.
+- **Interrupted project recovery:** A durable project reservation normally requires the saved project to exist before completion. **Finish Without Example** now sends an explicit `without_example` flag and permits completion after a failed or interrupted project creation, without deleting the reservation or overwriting an existing project. A retry of Create continues to reuse the original project ID and keeps saved edits.
+- **Documentation:** Public `README.md`, `docs/INSTALLATION.md`, `docs/GETTING_STARTED.md`, `docs/CURRENT_STATUS.md`, `docs/TROUBLESHOOTING.md`, `docs/TESTING.md` and `docs/README.md` describe first-run behavior, backend-only differences, repeat access, optional downloads, no-model examples and diagnostics. This document retains the development acceptance record, separate from general user instructions.
+- **Automated tests:** Existing Python project/managed-download/setup suites plus added MS6.5 tests for interrupted reservations, optimistic revision, full modal keyboard focus, catalog readiness and stale model selection. GitHub Actions `Backend tests`, `Syntax checks` and `Installer checks` are the release gates.
+
+### MS6.5 Windows release-acceptance checklist
+
+1. On the Windows physical test installation, update `dev-webui`, then start `run.bat --setup-wizard` or reopen **Settings → Setup Wizard**. Confirm welcome diagnostics and correct WebUI/backend-only explanation. An existing install must not forcibly re-onboard under ordinary startup.
+2. Walk the entire seven-page flow with no model: verify folder checks are read-only until **Save Folders & Scan**; LoRA folders optional; Z-Image never downloads without user confirmation; two tiny example cards render; no premature Next while catalog is loading.
+3. Check both **Create Example & Open Editor** and **Finish Without Example** paths, preferably on separate clean state fixtures. The first opens a real 512 × 512, 48-frame 12-FPS 3D project without rendering; the second marks completed without creating a project. Refresh/restart: the wizard should not repeat after completion or Skip.
+4. In a separate fixture or while a project is safely editable, simulate browser reopening or a failed Editor handoff, then retry creation. It must reuse one project ID and preserve edits, never create a duplicate, and not silently discard unsaved editor work. If a reservation has no file, **Finish Without Example** must still permit a deliberate exit.
+5. Verify both Camera Z endpoints: Dolly In `+0.6`, Dolly Out `-0.6` at frame 47; synchronized tracks and neutral non-Z axes. If a base model is configured, verify the right family defaults. Do not confuse a partial managed model with Installed.
+6. Check phone-size WebUI controls and keyboard Tab, Shift+Tab, Escape, Back, Next and focus restoration, particularly path inputs, example cards, the model selector and final buttons. Resolve a separate-tab revision conflict by reopening setup without losing existing settings.
+7. Run Windows launch/repair smoke checks and relevant physical GPU tests only where safe, then record exact branch SHA, environment and results. Do **not** merge `main` or clean developer branches without separate approval.
+
+**Release gate:** The code is ready for physical acceptance once all three GitHub Actions workflows pass on the last `dev-webui` SHA. `main` and `dev-ui` remain unchanged.
