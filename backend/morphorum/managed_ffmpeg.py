@@ -345,7 +345,7 @@ class ManagedFFmpegManager:
             self.root.mkdir(parents=True, exist_ok=True)
             temp.mkdir(parents=False, exist_ok=False)
             download = temp / record["filename"]
-            self._update(job_id, status="downloading", message="Downloading verified FFmpeg package…",
+            self._update(job_id, status="downloading", message="Downloading FFmpeg package for SHA-256 verification…",
                          total_bytes=record["size_bytes"], progress=0.0)
             def progress(count: int, total: int) -> None:
                 self._update(job_id, downloaded_bytes=count, total_bytes=total,
@@ -429,6 +429,7 @@ class ManagedFFmpegManager:
                     except OSError:
                         pass
                 raise ManagedFFmpegError("Could not remove managed FFmpeg files.") from exc
+            self._job = None
             return self.status()
 
 
