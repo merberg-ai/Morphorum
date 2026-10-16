@@ -593,6 +593,7 @@
       status.textContent = 'Selection changed. Test this configuration, then Save Settings to activate it.';
       details.textContent = '';
       state.ffmpegRequestId = (state.ffmpegRequestId || 0) + 1;
+      window.MorphorumOperations?.retire('ffmpeg-check');
       test.disabled = false; test.classList.remove('busy');
       markSettingsDirty();
     }
@@ -602,6 +603,7 @@
       status.textContent = 'Path edited. Test the executable, then Save Settings.';
       details.textContent = '';
       state.ffmpegRequestId = (state.ffmpegRequestId || 0) + 1;
+      window.MorphorumOperations?.retire('ffmpeg-check');
       test.disabled = false; test.classList.remove('busy');
       markSettingsDirty();
     });
@@ -886,6 +888,8 @@
     const loader = qs('#settings-loading');
     if (!container || !state.settings) return;
 
+    state.ffmpegRequestId = (state.ffmpegRequestId || 0) + 1;
+    window.MorphorumOperations?.retire('ffmpeg-check');
     container.replaceChildren();
     const tabs = document.createElement('nav');
     tabs.id = 'settings-internal-tabs';
