@@ -6536,7 +6536,7 @@
         '<button type="button" data-event-reset>Reset detections</button>' +
         '<button type="button" data-event-clear-detected>Clear all detected markers</button>' +
         '<button type="button" data-event-persist>Save marker edits</button></div>' +
-        '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera motion until a later phase.</p>';
+        '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera schedules until you apply motion.</p>';
       const detectStage = qs('#motion-studio-stage-detect');
       if (detectStage) detectStage.appendChild(editor);
       else section.after(editor);
@@ -10082,7 +10082,7 @@
         : motionLabDraftLayers.length + ' draft layer(s) staged. Review motion curves before applying them to saved animation schedules.';
   }
 
-  function motionStudioSelectStage(name, {persist = true, focus = false} = {}) {
+  function motionStudioSelectStage(name, {persist = true, focus = false, navigate = true} = {}) {
     if (!MOTION_STUDIO_STAGES.some(([key]) => key === name)) name = 'source';
     motionStudioStage = name;
     for (const [key] of MOTION_STUDIO_STAGES) {
@@ -10099,6 +10099,12 @@
     }
     motionStudioDockWaveform();
     motionStudioRefreshStageStatus();
+    if (navigate) {
+      const target = qs('#motion-studio-stage-' + name);
+      // A long source/detection stage may have left the viewport near its
+      // bottom. Bring the next step into view when navigating via buttons.
+      target?.scrollIntoView?.({behavior:'auto', block:'start'});
+    }
     if (persist) try { localStorage.setItem(MOTION_STUDIO_STAGE_KEY, name); } catch (_) {}
   }
 
@@ -10192,8 +10198,12 @@
       row.appendChild(analyze);
       stages.analysis.insertBefore(row, analysis);
     }
-    const detection = audioCard?.querySelector('.animation-audio-config-group:nth-child(2)');
-    if (detection) stages.detect.appendChild(detection);
+    const detection = [...(audioCard?.querySelectorAll('.animation-audio-config-group') || [])]
+      .find(group => group.querySelector('summary')?.textContent === 'Beat detection');
+    if (detection) {
+      detection.open = true; // Detection controls are now the only form in this step.
+      stages.detect.appendChild(detection);
+    }
     const detectHelp = document.createElement('p');
     detectHelp.className = 'muted';
     detectHelp.textContent = 'Analysis finds beat candidates automatically. Adjust the detection settings, use the waveform to move or add markers, then Save marker edits.';
@@ -10295,7 +10305,7 @@
     try { motionStudioStage = localStorage.getItem(MOTION_STUDIO_STAGE_KEY) || 'source'; } catch (_) {}
     try { motionStudioAuthorMode = localStorage.getItem(MOTION_STUDIO_MODE_KEY) || 'cues'; } catch (_) {}
     motionStudioSelectAuthorMode(motionStudioAuthorMode, {persist:false});
-    motionStudioSelectStage(motionStudioStage, {persist:false});
+    motionStudioSelectStage(motionStudioStage, {persist:false, navigate:false});
     updateFooter();
     nav.addEventListener('click', updateFooter);
     nav.addEventListener('keydown', updateFooter);
@@ -10498,9 +10508,11 @@
           id="animation-audio-back-motion">← Motion Lab</button>
       </div>
       <div class="animation-audio-workflow">
-        <span><strong>1</strong> Choose WAV and analyze</span>
-        <span><strong>2</strong> Adjust beats and add a layer</span>
-        <span><strong>3</strong> Review curves and apply motion</span>
+        <span><strong>1</strong> Load audio</span>
+        <span><strong>2</strong> Analyze WAV</span>
+        <span><strong>3</strong> Edit beat markers</span>
+        <span><strong>4</strong> Create motion</span>
+        <span><strong>5</strong> Preview and apply</span>
       </div>
       <div class="animation-audio-workspace-actions">
         <button class="secondary-button compact" type="button"
