@@ -11,7 +11,7 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 | Image generation | Text-to-image, supported image-to-image, seed/batch controls and LoRAs |
 | Animations | Saved projects, prompts/keyframes, 2D and depth-aware 3D motion, camera presets, curve editing, preview |
 | Motion Lab | Six-axis composer, keyboard/touch motion recording, supported gamepad controls |
-| Onboarding | Seven-step New Project Wizard and no-model setup assistance |
+| Onboarding | Seven-step First-Run Setup Wizard with diagnostics, model/LoRA folders, optional Z-Image and 512 × 512 sample projects; separate seven-step New Project Wizard |
 | Audio / video | Optional soundtrack attachment, FFmpeg MP4/WebM exports, audio with supported renders |
 | Import | Compatible Deforum Motion Studio camera schedules into existing 3D projects |
 | Remote operation | Authenticated API-only server, versioned client capabilities, project assets, telemetry, previews and job recovery |
