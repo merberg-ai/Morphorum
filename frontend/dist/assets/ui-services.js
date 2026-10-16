@@ -121,6 +121,20 @@
   function createPollHealth(ops) {
     const failures = new Map();
     return {
+      // Read-only status GETs cannot hang indefinitely. Aborting the HTTP
+      // request never cancels the backend job.
+      async request(read, timeoutMs = 20000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          return await read(controller.signal);
+        } catch (error) {
+          if (controller.signal.aborted) throw new Error('Status request timed out. The job may still be running.');
+          throw error;
+        } finally {
+          clearTimeout(timer);
+        }
+      },
       failed(key, label, view = '') {
         const state = failures.get(key) || { count: 0, reported: false };
         state.count += 1;
@@ -168,7 +182,11 @@
     const panel = document.getElementById('operation-feedback');
     if (!panel) return;
     panel.hidden = !entry;
-    if (!entry) return;
+    if (!entry) {
+      const announcement = document.getElementById('operation-feedback-announcement');
+      if (announcement) { announcement.textContent = ''; delete announcement.dataset.signature; }
+      return;
+    }
     panel.dataset.tone = entry.tone;
     panel.setAttribute('aria-busy', String(entry.tone === 'busy'));
     // A separate live region announces transitions, not every progress tick.
