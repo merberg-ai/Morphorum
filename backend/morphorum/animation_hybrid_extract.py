@@ -14,7 +14,7 @@ from typing import Any
 
 from .animation_hybrid_source import HybridSourceError, managed_video_path, probe_managed_video
 from .animation_projects import animation_project_directory
-from .animation_video import ffmpeg_executable
+from .ffmpeg_tools import ffmpeg_executable
 
 MAX_EXTRACT_FRAMES = 1200
 MAX_FPS = 120.0
