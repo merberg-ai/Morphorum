@@ -87,6 +87,7 @@ class HybridExtractionManager:
         with self._lock:
             job = self._jobs[job_id]
             if job["status"] == "canceled":
+                self._binaries.pop(job_id, None)
                 return
             job["status"] = "running"
             project_id = job["project_id"]
@@ -153,7 +154,7 @@ class HybridExtractionManager:
         finally:
             with self._lock:
                 self._processes.pop(job_id, None)
-            self._binaries.pop(job_id, None)
+                self._binaries.pop(job_id, None)
             shutil.rmtree(staging, ignore_errors=True)
 
     def manifest(self, project_id: str) -> dict[str, Any]:
