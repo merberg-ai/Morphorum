@@ -4111,6 +4111,21 @@
     }
   }
 
+  let videoAvailabilityRequest = 0;
+  async function refreshVideoAvailability() {
+    const request = ++videoAvailabilityRequest;
+    try {
+      const info = await api('/api/animation/video/availability');
+      if (request !== videoAvailabilityRequest) return;
+      state.videoAvailability = info;
+    } catch (error) {
+      if (request !== videoAvailabilityRequest) return;
+      state.videoAvailability = {available: false, message:
+        'Cannot check FFmpeg on the host. Check backend connectivity and Settings.'};
+    }
+    renderVideoExportState();
+  }
+
   async function startVideoExport() {
     const job = state.renderJob;
     if (!job?.id || !state.project?.id || job.status !== 'completed' ||
@@ -10687,13 +10702,7 @@
           // Optional depth discovery must not block the basic Project Editor.
           toast('Depth preview unavailable', error.message, 'warning', 6500);
         }),
-        api('/api/animation/video/availability').then(info => {
-          state.videoAvailability = info;
-          renderVideoExportState();
-        }).catch(() => {
-          state.videoAvailability = { available: false, message: 'Cannot check host FFmpeg installation.' };
-          renderVideoExportState();
-        }),
+        refreshVideoAvailability(),
       ]);
       await loadProjectList({ loadFirst: true });
       populateSamplerSelect(qs('#animation-sampler')?.value || state.project?.generation?.sampler || '',
@@ -10724,5 +10733,8 @@
     openSavedProjectFromSetup,
   };
 
+  window.addEventListener('morphorum:settings-changed', () => {
+    void refreshVideoAvailability();
+  });
   window.addEventListener('DOMContentLoaded', start);
 })();
