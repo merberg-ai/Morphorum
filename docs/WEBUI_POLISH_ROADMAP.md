@@ -22,7 +22,7 @@ render behavior.
 - [x] P1.3 initial: Show current project, model and saved/unsaved status.
 - [x] P1.4: Restore last opened project if available, fall back safely, clear on deletion.
 - [ ] P1.5: Streamline tool navigation without duplicating existing controls.
-- [ ] P1.6: Reusable contextual help (?) with optional Settings toggle and accessible keyboard/touch behavior.
+- [x] P1.6: Reusable contextual help (?) for selected Editor/Composer controls, saved Appearance toggle, keyboard/touch support; future passes broaden coverage.
 
 ## P6 early safety
 
@@ -49,3 +49,7 @@ IDs, missing checkpoints, rename/unsaved status, Project Manager and New Project
 Wizard shortcuts, a failing optional depth endpoint, desktop/mobile layouts,
 browser refresh, and actual image/animation generation. Run Node/frontend CI;
 a green CI result does not replace a physical GPU test.
+
+## P1.6 acceptance notes
+
+Contextual help icons use trusted static text, real buttons beside form labels, and a shared dismissible tooltip. Mouse hover, focus, Enter/Space, tap, Escape, outside click, and mobile viewport layout must be checked. Settings → Appearance → Contextual Help persists on the backend; unsaved changes should revert on Settings reload. Hiding optional hints must never suppress warnings or errors. The code has not been physically GPU-tested yet.

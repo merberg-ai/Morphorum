@@ -166,6 +166,10 @@ def _normalize_preferences(settings: dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError):
         preview_limit = 5
     ui["image_preview_limit"] = max(1, min(preview_limit, 50))
+    help_hints = ui.get("show_help_hints", True)
+    if not isinstance(help_hints, bool):
+        help_hints = str(help_hints).strip().lower() not in {"0", "false", "no", "off"}
+    ui["show_help_hints"] = help_hints
 
     performance = settings.setdefault("performance", {})
     if not isinstance(performance, dict):

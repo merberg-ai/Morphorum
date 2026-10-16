@@ -890,3 +890,41 @@ button[aria-busy="true"]:disabled { opacity: .7; }
 .model-setup-help-body ol {padding-left:24px;margin:13px 0;}
 .model-setup-help-actions {display:flex;flex-wrap:wrap;justify-content:flex-end;gap:9px;margin-top:17px;}
 
+
+/* Shared contextual-help triggers and viewport-clamped hint surface. */
+.morphorum-help-field {position:relative;min-width:0;max-width:100%;}
+.morphorum-help-field > label {display:grid;width:100%;min-width:0;max-width:100%;}
+.morphorum-help-field > label > span:first-child {padding-inline-end:40px;overflow-wrap:anywhere;}
+.morphorum-help-trigger {
+  position:absolute;top:0;right:0;z-index:1;
+  display:grid;place-items:center;width:32px;height:32px;min-width:32px;min-height:32px;
+  border-radius:50%;border:1px solid var(--border);background:var(--panel-strong);
+  color:var(--text);font:600 .88rem/1 system-ui,sans-serif;cursor:help;padding:0;margin:0;
+}
+.morphorum-help-trigger:hover,.morphorum-help-trigger[aria-expanded="true"] {
+  background:var(--button-secondary-hover);border-color:var(--button-hover-border);
+}
+.morphorum-help-trigger:focus-visible {outline:2px solid var(--accent);outline-offset:3px;}
+html[data-help-hints="off"] .morphorum-help-trigger {display:none !important;}
+html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {padding-inline-end:0;}
+.morphorum-context-help-panel {
+  position:fixed;z-index:12000;box-sizing:border-box;max-height:calc(100dvh - 24px);
+  overflow:auto;padding:13px 15px;border:1px solid var(--button-hover-border);
+  border-radius:12px;background:var(--panel-strong);color:var(--text);
+  box-shadow:0 14px 38px rgba(0,0,0,.35);line-height:1.5;overflow-wrap:anywhere;
+}
+.morphorum-context-help-panel[hidden] {display:none !important;}
+.morphorum-context-help-title {display:block;font-size:.9rem;margin-bottom:5px;}
+.morphorum-context-help-body {font-size:.84rem;margin:0;}
+.context-help-settings-card .setting-toggle {display:block;padding:12px 0;cursor:pointer;}
+.context-help-settings-card .toggle-row {display:flex;align-items:flex-start;gap:12px;}
+.context-help-settings-card .toggle-row input[type="checkbox"] {
+  width:18px;height:18px;min-width:18px;min-height:18px;max-width:18px;
+  margin:3px 0 0;flex:0 0 18px;accent-color:var(--accent);
+}
+.context-help-settings-card .toggle-row strong,.context-help-settings-card .toggle-row small {display:block;}
+.context-help-settings-card .toggle-row small {color:var(--muted);margin-top:4px;line-height:1.45;}
+@media (pointer:coarse) {
+  .morphorum-help-trigger {width:40px;height:40px;min-width:40px;min-height:40px;}
+  .morphorum-help-field > label > span:first-child {padding-inline-end:46px;}
+}

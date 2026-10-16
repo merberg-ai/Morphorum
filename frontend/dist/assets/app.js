@@ -248,6 +248,7 @@
     state.settings.ui.font_style ||= 'modern';
     state.settings.ui.mono_font_style ||= 'modern-mono';
     state.settings.ui.ui_scale ||= 'compact';
+    state.settings.ui.show_help_hints = state.settings.ui.show_help_hints !== false;
     if (!Number.isFinite(Number(state.settings.ui.image_preview_limit))) {
       state.settings.ui.image_preview_limit = 5;
     }
@@ -393,6 +394,44 @@
     grid.append(themeField, fontField, monoField, scaleField);
     card.append(header, grid, preview);
     window.setTimeout(() => updateAppearanceDiagnostic(ui), 0);
+    return card;
+  }
+
+  function createHelpPreferencesCard() {
+    ensurePreferences();
+    const card = document.createElement('article');
+    card.className = 'card glass settings-preferences-card context-help-settings-card';
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const heading = document.createElement('div');
+    const title = document.createElement('h2');
+    title.textContent = 'Contextual Help';
+    const description = document.createElement('p');
+    description.className = 'muted';
+    description.textContent = 'Optional explanations beside generation and camera settings.';
+    heading.append(title, description);
+    header.appendChild(heading);
+    const row = document.createElement('label');
+    row.className = 'setting-toggle';
+    const toggleRow = document.createElement('div');
+    toggleRow.className = 'toggle-row';
+    const input = document.createElement('input');
+    input.id = 'ui-show-help-hints';
+    input.type = 'checkbox';
+    input.checked = state.settings.ui.show_help_hints !== false;
+    input.addEventListener('change', () => {
+      state.settings.ui.show_help_hints = input.checked;
+      window.MorphorumHelp?.setEnabled(input.checked);
+    });
+    const copy = document.createElement('div');
+    const name = document.createElement('strong');
+    name.textContent = 'Show (?) help buttons';
+    const detail = document.createElement('small');
+    detail.textContent = 'Hover, focus or tap for explanations. Important error and disabled-control messages stay visible.';
+    copy.append(name, detail);
+    toggleRow.append(input, copy);
+    row.appendChild(toggleRow);
+    card.append(header, row);
     return card;
   }
 
@@ -691,6 +730,7 @@
     container.appendChild(tabs);
     for (const pane of Object.values(panes)) container.appendChild(pane);
     panes.appearance.appendChild(createAppearanceCard());
+    panes.appearance.appendChild(createHelpPreferencesCard());
     panes.generation.appendChild(createPreferencesCard());
     panes.storage.appendChild(createManagedModelsCard());
     for (const [family, fallbackLabel, source, loraSource, supportsLoras] of FAMILY_DEFS) {
@@ -758,6 +798,7 @@
       ingestValidation(payload.validation || []);
       ensurePreferences();
       applyAppearance(state.settings.ui);
+      window.MorphorumHelp?.setEnabled(state.settings.ui.show_help_hints);
       renderSettings();
       setSettingsClean();
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
@@ -797,6 +838,7 @@
         font_style: state.settings.ui.font_style || 'modern',
         mono_font_style: state.settings.ui.mono_font_style || 'modern-mono',
         ui_scale: state.settings.ui.ui_scale || 'compact',
+        show_help_hints: state.settings.ui.show_help_hints !== false,
         image_preview_limit: Math.max(1, Math.min(50, Number(state.settings.ui.image_preview_limit) || 5)),
       },
       performance: {
@@ -818,6 +860,7 @@
       ingestValidation(payload.validation || []);
       ensurePreferences();
       applyAppearance(state.settings.ui);
+      window.MorphorumHelp?.setEnabled(state.settings.ui.show_help_hints);
       renderSettings();
       setSettingsClean();
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));

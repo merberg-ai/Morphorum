@@ -176,4 +176,139 @@
     return [...words, tag].join(', ');
   }
   window.MorphorumPromptTags = { lora: makeLoraSnippet };
+  // Shared P1.6 contextual-help service. Trusted static text, no HTML injection.
+  const HELP_TOPICS = Object.freeze({
+    "animation-model": {title: "Project checkpoint", body: "Still-image and animation model selections are separate. Select a checkpoint for this saved animation, then check resolution, sampler and guidance."},
+    "animation-mode": {title: "2D versus 3D", body: "2D warps the flat image. 3D estimates depth, then reprojects the previous image each frame. Too much camera travel can leave no visible scene."},
+    "animation-resolution-preset": {title: "Resolution", body: "Model-specific presets provide a starting point. Bigger frames use more VRAM and render more slowly."},
+    "animation-fps": {title: "Frame rate", body: "Frames per second controls playback duration and camera timing. Duration equals total frames divided by FPS."},
+    "animation-cadence": {title: "Diffusion cadence", body: "Cadence 1 redraws every eligible frame. Higher cadence transforms some frames without diffusion. Large motions between anchors can drift."},
+    "animation-strength": {title: "Frame retention", body: "Morphorum uses retention strength: 1 preserves the image and skips diffusion; 0 allows full redraw. Moderate values help preserve continuity."},
+    "animation-steps": {title: "Steps", body: "Higher diffusion steps may take longer, and the useful range depends on model and sampler. Turbo models commonly use fewer steps."},
+    "animation-guidance": {title: "Guidance", body: "Sets prompt influence; recommended values vary by model family. Use the automatically recommended starting point before tuning."},
+    "animation-sampler": {title: "Sampler", body: "Controls the denoising algorithm. Options depend on the selected model family."},
+    "animation-seed": {title: "Seed", body: "With otherwise matching conditions, a fixed seed helps reproduce an image. -1 selects a random seed."},
+    "animation-seed-behavior": {title: "Seed behavior", body: "Fixed reuses the same seed; Increment changes it by a step each frame; Random chooses new seeds. This can affect animation continuity."},
+    "animation-3d-translation-z": {title: "Depth motion (Z)", body: "Signed Z camera movement repeats per frame, not as one final position. Excessive cumulative movement can push the visible scene behind the camera."},
+    "animation-3d-rotation-y": {title: "Yaw rotation (Y)", body: "Rotation Y turns the camera around the vertical axis. A constant schedule repeats the turn on each frame; too much accumulated yaw can turn away from the scene."},
+    "animation-3d-fov": {title: "Camera field of view", body: "FOV is measured in degrees; 40° is the default. A narrow FOV paired with aggressive camera movement can project every pixel outside the image."},
+    "animation-3d-depth-resolution": {title: "Depth resolution", body: "Higher depth resolution may preserve more detail, but can require more CPU time and memory. Auto is a sensible starting point."},
+    "animation-3d-projection-mode": {title: "3D projection quality", body: "Smooth projection can improve edge detail over classic nearest-pixel projection, but neither mode prevents extreme camera travel from losing the image."},
+    "animation-motion-lab-strength": {title: "Motion layer strength", body: "Scales the amount of camera motion from this layer. It is different from diffusion retention strength."},
+    "animation-motion-lab-cycle": {title: "Cycle duration", body: "Length of a repeated movement in seconds. Shorter cycles repeat more often."},
+    "animation-motion-lab-blend": {title: "Layer blending", body: "Add combines motion with existing curves; Replace overwrites affected axes. Preview the result before applying."},
+  });
+  const HELP_PANEL_ID = 'morphorum-context-help-tooltip';
+  let helpEnabled = true, activeHelp = null, helpPinned = false, helpPanel = null;
+
+  function getHelpPanel() {
+    if (helpPanel) return helpPanel;
+    const panel = document.createElement('div');
+    panel.id = HELP_PANEL_ID;
+    panel.className = 'morphorum-context-help-panel';
+    panel.setAttribute('role', 'tooltip');
+    panel.hidden = true;
+    const title = document.createElement('strong');
+    title.className = 'morphorum-context-help-title';
+    const body = document.createElement('p');
+    body.className = 'morphorum-context-help-body';
+    panel.append(title, body);
+    document.body.appendChild(panel);
+    helpPanel = panel;
+    return panel;
+  }
+
+  function closeHelp() {
+    if (activeHelp) {
+      activeHelp.setAttribute('aria-expanded', 'false');
+      activeHelp.removeAttribute('aria-describedby');
+    }
+    activeHelp = null;
+    helpPinned = false;
+    if (helpPanel) helpPanel.hidden = true;
+  }
+
+  function positionHelp() {
+    if (!activeHelp || !helpPanel || helpPanel.hidden) return;
+    if (!activeHelp.isConnected) { closeHelp(); return; }
+    const rect = activeHelp.getBoundingClientRect();
+    const width = Math.min(360, Math.max(120, window.innerWidth - 24));
+    helpPanel.style.width = width + 'px';
+    helpPanel.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)) + 'px';
+    const height = helpPanel.getBoundingClientRect().height;
+    const y = rect.bottom + 8 + height <= window.innerHeight - 12
+      ? rect.bottom + 8 : rect.top - height - 8;
+    helpPanel.style.top = Math.max(12, Math.min(y, window.innerHeight - height - 12)) + 'px';
+  }
+
+  function showHelp(button, pin = false) {
+    if (!helpEnabled || !button?.isConnected) return;
+    if (activeHelp === button && pin && helpPinned) { closeHelp(); return; }
+    const topic = HELP_TOPICS[button.dataset.helpTopic];
+    if (!topic) return;
+    if (activeHelp && activeHelp !== button) closeHelp();
+    activeHelp = button;
+    helpPinned = helpPinned || pin;
+    const panel = getHelpPanel();
+    panel.querySelector('.morphorum-context-help-title').textContent = topic.title;
+    panel.querySelector('.morphorum-context-help-body').textContent = topic.body;
+    panel.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    button.setAttribute('aria-describedby', HELP_PANEL_ID);
+    positionHelp();
+  }
+
+  function addHelpButton(label) {
+    if (label.dataset.helpReady === '1') return;
+    const topic = HELP_TOPICS[label.dataset.helpTopic];
+    if (!topic || !label.parentNode) return;
+    // Keep the button *outside* the label to avoid activating its input.
+    const wrapper = document.createElement('div');
+    wrapper.className = 'morphorum-help-field';
+    if (label.classList.contains('animation-span-2')) {
+      label.classList.remove('animation-span-2');
+      wrapper.classList.add('animation-span-2');
+    }
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'morphorum-help-trigger';
+    button.dataset.helpTopic = label.dataset.helpTopic;
+    button.textContent = '?';
+    button.setAttribute('aria-label', 'Help: ' + topic.title);
+    button.setAttribute('aria-controls', HELP_PANEL_ID);
+    button.setAttribute('aria-expanded', 'false');
+    button.title = 'Explain ' + topic.title.toLowerCase();
+    label.parentNode.insertBefore(wrapper, label);
+    wrapper.append(label, button);
+    label.dataset.helpReady = '1';
+    button.addEventListener('pointerenter', event => {
+      if (event.pointerType === 'mouse') showHelp(button);
+    });
+    button.addEventListener('pointerleave', () => {
+      if (!helpPinned && document.activeElement !== button) closeHelp();
+    });
+    button.addEventListener('focus', () => showHelp(button));
+    button.addEventListener('blur', closeHelp);
+    button.addEventListener('click', () => showHelp(button, true));
+  }
+
+  function refreshHelp(root = document) {
+    root.querySelectorAll('label[data-help-topic]').forEach(addHelpButton);
+  }
+  function setHelpEnabled(enabled) {
+    helpEnabled = enabled !== false;
+    document.documentElement.dataset.helpHints = helpEnabled ? 'on' : 'off';
+    if (!helpEnabled) closeHelp();
+  }
+  document.addEventListener('click', event => {
+    if (!event.target.closest?.('.morphorum-help-trigger')) closeHelp();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeHelp();
+  });
+  document.addEventListener('scroll', positionHelp, true);
+  window.addEventListener('resize', positionHelp);
+  window.MorphorumHelp = {refresh: refreshHelp, setEnabled: setHelpEnabled};
+  document.addEventListener('DOMContentLoaded', () => refreshHelp());
+
 })();
