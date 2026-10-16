@@ -50,23 +50,17 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
-def ffmpeg_executable() -> str | None:
-    configured = os.environ.get("MORPHORUM_FFMPEG", "").strip()
-    return shutil.which(configured) if configured else shutil.which("ffmpeg")
+from .ffmpeg_tools import ffmpeg_executable
 
 
 def export_availability() -> dict[str, Any]:
-    executable = ffmpeg_executable()
+    # Read-only verification, no downloads, installation or GPU work.
+    from .ffmpeg_tools import ffmpeg_status
+    status = ffmpeg_status()
     return {
-        "available": executable is not None,
-        "executable": executable,
-        "formats": ["mp4", "webm"],
-        "qualities": ["high", "balanced", "compact"],
-        "message": (
-            "FFmpeg detected. Existing PNG frames can be exported without diffusion."
-            if executable else
-            "FFmpeg not found. Install FFmpeg on the Morphorum host and add it to "
-            "PATH, or set MORPHORUM_FFMPEG to the full ffmpeg executable path."
+        **status, "executable": status["ffmpeg_path"],
+        "message": status["message"] if not status["available"] else (
+            "FFmpeg ready. Existing PNG frames can be exported without diffusion."
         ),
     }
 
