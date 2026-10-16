@@ -127,6 +127,8 @@
           });
           state.reported = true;
           console.warn('[Morphorum] Polling interrupted for ' + label + '; retrying status checks.');
+          window.MorphorumClientDiagnostics?.record('warning',
+            label + ' polling interrupted; backend job status is not confirmed.');
         }
         failures.set(key, state);
       },
@@ -141,6 +143,8 @@
             tone: 'success', title: 'Live status restored',
             message: 'Morphorum can check the job again. Review its current status before taking action.',
           });
+          window.MorphorumClientDiagnostics?.record('info',
+            'Polling resumed for ' + key + '; status is available again.');
         }
       },
       reset(key) {
