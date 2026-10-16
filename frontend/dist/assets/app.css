@@ -982,6 +982,18 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
 .operation-feedback-sr-only {position:absolute!important;width:1px;height:1px;
   padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);
   white-space:nowrap;border:0;}
+/* P4.4.3 managed download controls */
+#view-settings .ffmpeg-install-panel {display:grid;gap:12px;min-width:0;padding:12px;
+  border:1px solid var(--border);border-radius:12px;}
+#view-settings .ffmpeg-install-panel[hidden],
+#view-settings .ffmpeg-install-panel progress[hidden],
+#view-settings .ffmpeg-install-panel button[hidden]{display:none!important;}
+#view-settings .ffmpeg-install-actions {display:flex;flex-wrap:wrap;gap:8px;min-width:0;}
+#view-settings .ffmpeg-install-actions button{max-width:100%;min-width:0;overflow-wrap:anywhere;}
+#view-settings .ffmpeg-install-panel progress{width:100%;height:12px;accent-color:var(--accent);}
+#view-settings #ffmpeg-manager-install-meta{margin:0;}
+@media(max-width:520px){#view-settings .ffmpeg-install-actions{display:grid;grid-template-columns:minmax(0,1fr);}
+  #view-settings .ffmpeg-install-actions button{width:100%;}}
 /* P4.4.2 FFmpeg preferences share the responsive Settings grid. */
 #view-settings .ffmpeg-manager-card {min-width:0;overflow-wrap:anywhere;}
 #view-settings .ffmpeg-manager-card .field-grid {grid-template-columns:minmax(0,1fr);}
