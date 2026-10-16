@@ -992,8 +992,6 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
 #view-settings .ffmpeg-install-actions button{max-width:100%;min-width:0;overflow-wrap:anywhere;}
 #view-settings .ffmpeg-install-panel progress{width:100%;height:12px;accent-color:var(--accent);}
 #view-settings #ffmpeg-manager-install-meta{margin:0;}
-@media(max-width:520px){#view-settings .ffmpeg-install-actions{display:grid;grid-template-columns:minmax(0,1fr);}
-  #view-settings .ffmpeg-install-actions button{width:100%;}}
 /* P4.4.2 FFmpeg preferences share the responsive Settings grid. */
 #view-settings .ffmpeg-manager-card {min-width:0;overflow-wrap:anywhere;}
 #view-settings .ffmpeg-manager-card .field-grid {grid-template-columns:minmax(0,1fr);}
