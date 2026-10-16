@@ -14,7 +14,7 @@ This guide covers the supported Windows and Linux installers, first launch, netw
 | Disk space | At least **8 GiB free** for initial runtime checks, plus model weights, caches and outputs; Z-Image-Turbo is approximately **33 GB** |
 | Internet | Needed for source, managed runtime/dependencies, and any models you download |
 | Git | Installed automatically on supported setups, or install it yourself |
-| FFmpeg | Needed for video export and some source video functions; Windows installer may use `winget`, Linux can use distribution packages |
+| FFmpeg + FFprobe | Used for video export and source-video/audio conversion; Windows installer may use `winget`, Linux distribution packages. In Settings → Storage → FFmpeg Manager, select auto-detection or supply a custom executable and test it. The managed downloader is a separate, upcoming phase. |
 
 Use the default installation directory if you are not sure. Avoid installing inside a source-controlled project or an existing folder containing unrelated files.
 
