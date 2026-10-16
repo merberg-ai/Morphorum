@@ -165,8 +165,15 @@ started by this acceptance note; begin in `dev-webui` when authorized.
   CPU preview generation, draft preview/apply and render submission. Preserve
   existing detailed job progress and cancellation interfaces; distinguish
   blocked, cancelled, queued, successful and failed operations.
-- [ ] **P4.3:** Audit toast prioritization, duplicated polling errors, console
-  diagnostics, keyboard announcements and stalled/offline operations.
+- [x] **P4.3 code complete:** Prioritize failures above background success
+  and progress notices; bound/dedupe toast stacks, make alerts accessible and
+  progress quiet for screen readers; emit browser-side runtime diagnostics;
+  detect repeated status polling failures and announce recovery once; bound
+  read-only polling GET requests with aborts that never cancel host jobs.
+  Preserve managed download tokens across temporary connectivity failures.
+  Targeted P4.1/P4.3 JavaScript regression checks passed (11/11 in an
+  isolated V8 harness, 2026-10-16), but full Node CI and physical GPU/browser
+  signoff have not been verified.
 - [ ] P4 Windows/phone acceptance. Keep `main` unchanged.
 
 ### P4.1 acceptance
@@ -212,6 +219,61 @@ not publish a separate persistent banner for every draft change. Clearing
 or switching previews also closes its operation notice as "no longer
 tracked," without claiming that an already queued CPU backend job was
 cancelled. Both behaviors need physical confirmation with P4.2.
+
+## P4.3 implementation / acceptance
+
+P4.3 is committed to `dev-webui`, not `main`. Existing P4.2 acceptance
+and the final combined P4 Windows/Android signoff remain outstanding.
+No behavioral changes to render cancellation, downloads, GPU execution,
+project persistence, or video/audio output are intended.
+
+- Operation tracker retains up to twelve settled notices, promotes errors
+  above warnings, live work and success, resolves same-priority notices by
+  last meaningful event (not start order), ignores stale tokens and allows
+  independently dismissing problems without canceling backend jobs.
+- Toast stack is capped to four, favors error/warning severity, ignores
+  identical messages for thirty seconds, and leaves errors visible longer.
+  The persistent operation ribbon is the canonical status of long operations.
+- A separate screen-reader live region announces lifecycle transitions,
+  not per-frame progress or repeatedly changing percentages. Errors use an
+  assertive announcement; normal changes are polite. Dismiss and navigation
+  retain their existing accessible buttons and reduced-motion styling.
+- Image Generation, Camera Preview, Animation Render, Video Export and
+  Managed Model download status checks report **one** warning after three
+  consecutive failures, continue retrying, and report recovery once.
+  A read-only status request times out after twenty seconds. A missing
+  status response does **not** imply a job failed or stopped; users should
+  check the Console before submitting a second job.
+- Managed model polling keeps accepted download tokens through connectivity
+  outages and backs off retry intervals instead of falsely reporting a failed
+  download. Browser-side retry warnings/recovery appear in Console → Runtime
+  and do not get sent to the server or include raw request payloads/paths.
+- The build/runtime offline label refreshes when telemetry fails and the
+  backend health endpoint is checked. Telemetry failure alone is **not**
+  treated as proof that the host or GPU job is down.
+- Automated checks: `node --test tests/frontend_p4_operation_feedback.test.cjs tests/frontend_p43_feedback.test.cjs`
+  (targeted tests passed in a V8 test harness; this is **not** a claim of a
+  successful repository-wide CI run).
+
+### Remaining physical P4.3 checks
+
+- [ ] With an image or animation actively rendering, temporarily stop/restart
+  the backend or disconnect the browser network. Verify one warning after
+  repeated status errors, no duplicate toasts, continued retry and recovery
+  without another render being submitted.
+- [ ] Test a deliberately stalled read-only status GET; after the bounded
+  timeout, confirm no backend cancel and an eventual recovery or warning.
+- [ ] Verify the managed Z-Image download can recover after lost catalog
+  connectivity without resetting the accepted download or claiming success.
+- [ ] Test concurrent Settings Save, model scan and render notifications;
+  prioritize failures, dismiss a notice without interrupting work, and
+  inspect the browser's Runtime Console events.
+- [ ] Check mobile/desktop, keyboard navigation, light/dark themes, screen
+  readers, reduced motion and 200% zoom. Confirm live-progress updates do not
+  repeatedly announce frames or percentages.
+- [ ] Run repository-wide CI and ordinary image/animation/video regression
+  work on Windows. P4.2 and P4.3 physical acceptance required before
+  promotion to `main`.
 
 ## P4.4: FFmpeg Manager (scheduled immediately after P4.3)
 
