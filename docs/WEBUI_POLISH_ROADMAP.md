@@ -97,3 +97,13 @@ Contextual help icons use trusted static text, real buttons beside form labels, 
 - The Project Editor offers **Review 3D Render Safety** to switch to Render Monitor and invoke the existing read-only P2.5 preflight check; it never saves or starts generation.
 - Live 3D zero-projection errors include frame, counts of points in front and within image bounds, resolved camera axes, and last successful projected coverage if known. No image pixels, depth, motion schedules, or renderer recovery behavior are altered.
 - P2.5 and P2.6 physical tests are **deferred at user request**. Keep main unchanged pending a combined Windows/Android acceptance pass.
+
+## P3 responsive and accessibility milestones
+
+- [x] P3.1: Keep four Render Monitor actions, preflight reports and 3D camera safety controls within small/mobile/zoomed layouts. Buttons have wrapped labels and full-size touch targets.
+- [ ] P3.2: Audit Model Manager, Settings, LoRA Manager, image results and long-text/table overflow with keyboard focus at desktop/tablet/phone sizes.
+- [ ] P3.3: Audit remaining Motion Lab editors, modals and timelines for 360–1440 CSS px and 200% browser scaling.
+
+P3.1 is a code/style regression checkpoint only. Actual 360px phone, 720px
+tablet and enlarged-scale browser rendering is **deferred**, bundled with
+P2.5–P2.6 physical acceptance. Do not mark P3 complete or merge to main.

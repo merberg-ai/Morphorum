@@ -262,3 +262,13 @@ automatically modified, and no synthetic replacement frames are inserted.
 Physical Windows/Android acceptance for P2.5 and P2.6 is bundled for the
 next available test session. Do not merge these development changes to
 main before that acceptance.
+
+## Responsive Render Monitor controls (P3.1)
+
+The **Check Render**, **Resume**, **Cancel** and **Render Animation**
+controls wrap on desktop; at phone widths they reorganize into a grid, with
+**Check Render** and **Render Animation** in full-width rows. On particularly
+narrow screens each control receives its own row. The preflight issue list,
+**Fix in Editor** button and 3D motion-safety guidance also wrap rather than
+requiring a horizontal page scroll. Actual device and browser-zoom acceptance
+is postponed to the combined physical test pass.

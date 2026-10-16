@@ -3584,3 +3584,49 @@ dialog#animation-deforum-dialog {
 #view-animation #animation-preflight-issues li[data-severity="error"] {color:var(--danger);}
 #view-animation #animation-preflight-issues li[data-severity="warning"] {color:var(--warn);}
 #view-animation #animation-preflight-fix {min-height:40px;}
+
+/* P3.1: keep new render/check actions and safety reports usable at zoom. */
+#view-animation .animation-render-card,
+#view-animation .animation-render-card .card-header,
+#view-animation .animation-render-actions,
+#view-animation .animation-preflight-report,
+#view-animation .animation-camera-safety-note {
+  min-width:0;max-width:100%;
+}
+#view-animation .animation-render-card .card-header {
+  flex-wrap:wrap;gap:12px;
+}
+#view-animation .animation-render-actions {
+  display:flex;align-items:center;flex-wrap:wrap;gap:8px;
+}
+#view-animation .animation-render-actions > button,
+#view-animation .animation-camera-safety-note button,
+#view-animation #animation-preflight-fix {
+  max-width:100%;min-width:0;min-height:42px;
+  white-space:normal;overflow-wrap:anywhere;
+}
+#view-animation .animation-preflight-heading,
+#view-animation .animation-preflight-meta,
+#view-animation .animation-preflight-issues {min-width:0;overflow-wrap:anywhere;}
+#view-animation .animation-camera-safety-note {
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+}
+#view-animation .animation-camera-safety-note > span {flex:1 1 250px;min-width:0;}
+@media(max-width:720px) {
+  #view-animation .animation-render-actions {
+    display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;justify-content:stretch;
+  }
+  #view-animation .animation-render-actions #animation-preflight-check,
+  #view-animation .animation-render-actions #animation-start-render {
+    grid-column:1/-1;
+  }
+  #view-animation .animation-render-actions > button {width:100%;}
+  #view-animation .animation-camera-safety-note {flex-direction:column;align-items:stretch;}
+  #view-animation .animation-camera-safety-note > span {flex:1 1 auto;}
+  #view-animation .animation-camera-safety-note button {width:100%;}
+}
+@media(max-width:390px) {
+  #view-animation .animation-render-actions {grid-template-columns:minmax(0,1fr);}
+  #view-animation .animation-render-actions > button {grid-column:1/-1;}
+}
