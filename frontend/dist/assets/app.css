@@ -982,6 +982,18 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
 .operation-feedback-sr-only {position:absolute!important;width:1px;height:1px;
   padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);
   white-space:nowrap;border:0;}
+/* P4.4.2 FFmpeg preferences share the responsive Settings grid. */
+#view-settings .ffmpeg-manager-card {min-width:0;overflow-wrap:anywhere;}
+#view-settings .ffmpeg-manager-card .field-grid {grid-template-columns:minmax(0,1fr);}
+#view-settings .ffmpeg-manager-card label,#view-settings .ffmpeg-manager-card input,
+#view-settings .ffmpeg-manager-card select {min-width:0;width:100%;max-width:100%;box-sizing:border-box;}
+#view-settings .ffmpeg-manager-details {max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;
+  font-size:.78rem;line-height:1.5;color:var(--muted);font-family:var(--font-mono,monospace);}
+#view-settings #ffmpeg-manager-status[data-ready="yes"] {color:var(--ok);}
+#view-settings #ffmpeg-manager-status[data-ready="no"] {color:var(--warn);}
+#view-settings #ffmpeg-manager-path-field[hidden],
+#view-settings #ffmpeg-manager-managed-note[hidden] {display:none!important;}
+
 /* P4.1 shared operation feedback: persistent state without toast repetition. */
 .workspace .operation-feedback {
   display:flex;align-items:flex-start;justify-content:space-between;
