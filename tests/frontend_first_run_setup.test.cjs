@@ -57,7 +57,10 @@ function harness(serverStatus){
         container.appendChild({tag:'p',textContent:kind+' folder editor'});
       },beforeNext:()=>true,reset:()=>{},welcome:()=>{}},
       MorphorumSetupZImage:{show:(container)=>container.appendChild({tag:'p',textContent:'Managed Z-Image download page'}),leave:()=>{}},
-      MorphorumSetupExamples:{showExamples:container=>container.appendChild({tag:'p',textContent:'Choose Dolly In or Out'}),showFinish:container=>container.appendChild({tag:'p',textContent:'Review example'}),selection:()=>({template_id:'gentle-dolly-in',model_id:''}),leave:()=>{}},
+      MorphorumSetupExamples:{showExamples:(container,snapshot,{onReady}={})=>{
+        container.appendChild({tag:'p',textContent:'Choose Dolly In or Out'});
+        Promise.resolve().then(()=>onReady?.(true));
+      },showFinish:container=>container.appendChild({tag:'p',textContent:'Review example'}),selection:()=>({template_id:'gentle-dolly-in',model_id:''}),leave:()=>{}},
     },
   };
   vm.runInNewContext(script,context);
@@ -163,6 +166,49 @@ test('MS6.1 responsive shell, Settings affordance, and no second project wizard'
   assert.match(html,/first-run-zimage\.js/);
   assert.match(html,/first-run-examples\.js/);
   assert.match(html,/project-wizard\.js/);
+});
+
+test('MS6.5 final complete closes wizard and does not automatically reopen',async()=>{
+  const h=harness({schema_version:1,eligible:true,show_wizard:true,
+    forced_for_launch:false,status:'in_progress',step:'finish',revision:9,
+    provenance:'fresh_installer',example_template_id:'gentle-dolly-in',example_model_id:''});
+  h.listeners.DOMContentLoaded();await h.flush();
+  await h.context.window.MorphorumFirstRunSetup.goto('finish');
+  // The real Review page calls this same guarded setup progress action.
+  const previous=h.status.revision;
+  const response=await h.context.fetch('/api/setup/progress',{
+    method:'POST',headers:{'X-Morphorum-Setup':'1'},
+    body:JSON.stringify({action:'complete',step:'finish',revision:previous,without_example:true}),
+  });
+  assert.equal(response.ok,true);
+  assert.equal(h.status.status,'completed');
+  const another=harness(h.status);
+  another.listeners.DOMContentLoaded();await another.flush();
+  assert.equal(another.overlay.hidden,true);
+});
+
+test('MS6.5 keyboard focus wraps across controls inside wizard, not just footer buttons',async()=>{
+  const h=harness({schema_version:1,eligible:true,show_wizard:true,
+    forced_for_launch:false,status:'not_started',step:'welcome',revision:1,
+    provenance:'fresh_installer'});
+  h.listeners.DOMContentLoaded();await h.flush();
+  const inside={disabled:false,hidden:false,focused:false,
+    focus(){this.focused=true;},getClientRects(){return [1];},closest(){return null;}};
+  const close=h.nodes['first-run-close'];
+  close.getClientRects=()=>[1];close.closest=()=>null;
+  const next=h.nodes['first-run-next'];
+  next.getClientRects=()=>[1];next.closest=()=>null;
+  h.overlay.querySelectorAll=()=>[close,inside,next];
+  h.context.document.activeElement=next;
+  let prevented=false;
+  h.overlay.listeners.keydown({key:'Tab',shiftKey:false,preventDefault(){prevented=true;}});
+  assert.equal(prevented,true);
+  assert.equal(close.focused,true);
+  h.context.document.activeElement=close;
+  prevented=false;
+  h.overlay.listeners.keydown({key:'Tab',shiftKey:true,preventDefault(){prevented=true;}});
+  assert.equal(prevented,true);
+  assert.equal(next.focused,true);
 });
 
 test('MS6.4 Finish Without Example persists completion and prevents auto-reopen',async()=>{
