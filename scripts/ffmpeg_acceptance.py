@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P4.4.4 host acceptance: exercise FFmpeg/FFprobe with real temporary media.
+r"""P4.4.4 host acceptance: exercise FFmpeg/FFprobe with real temporary media.
 
 No GPU, downloads, project writes, or system changes. Only the selected
 FFmpeg/FFprobe are executed. Outputs are created under TemporaryDirectory
