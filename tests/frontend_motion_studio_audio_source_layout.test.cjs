@@ -23,9 +23,18 @@ test('existing WAV, saved soundtrack and analyzer controls retain their IDs and 
     'animation-motion-lab-audio-file','animation-motion-lab-use-soundtrack',
     'animation-motion-lab-analyze-audio','animation-motion-lab-add-audio',
   ]) assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
-  assert.match(js,/\['Choose audio', fields\.slice\(0,2\), true\]/);
+  // Controls are grouped by stable IDs, not fragile child offsets.
+  for (const id of [
+    'animation-motion-lab-audio-file','animation-motion-lab-audio-band',
+    'animation-motion-lab-audio-detection','animation-motion-lab-audio-sensitivity',
+    'animation-motion-lab-audio-threshold','animation-motion-lab-audio-axis',
+    'animation-motion-lab-audio-distance','animation-motion-lab-audio-attack',
+    'animation-motion-lab-audio-release',
+  ]) assert.ok(js.includes("labelOf('" + id + "')"), id);
   assert.match(js,/audioSourceDock\.appendChild\(details\)/);
   assert.match(js,/audioSourceDock\.appendChild\(audioActions\)/);
+  assert.match(js,/modeAreas\.pulse\.appendChild\(actions\)/);
+  assert.match(js,/stages\.analysis\.insertBefore\(row, analysis\)/);
   assert.match(js,/qs\('#animation-motion-lab-use-soundtrack'\)\?\.addEventListener/);
   assert.match(js,/qs\('#animation-motion-lab-analyze-audio'\)\?\.addEventListener/);
 });
