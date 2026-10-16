@@ -21,7 +21,7 @@ render behavior.
 - [x] P1.2 initial: Explain disabled model selection and absent checkpoints.
 - [x] P1.3 initial: Show current project, model and saved/unsaved status.
 - [x] P1.4: Restore last opened project if available, fall back safely, clear on deletion.
-- [ ] P1.5: Streamline tool navigation without duplicating existing controls.
+- [x] P1.5: A project-aware Motion Lab wayfinder gives active workspace, project/save status, safe adjacent tool shortcuts and empty-project recovery without duplicating controls.
 - [x] P1.6: Reusable contextual help (?) for selected Editor/Composer controls, saved Appearance toggle, keyboard/touch support; future passes broaden coverage.
 
 ## P6 early safety
@@ -53,3 +53,12 @@ a green CI result does not replace a physical GPU test.
 ## P1.6 acceptance notes
 
 Contextual help icons use trusted static text, real buttons beside form labels, and a shared dismissible tooltip. Mouse hover, focus, Enter/Space, tap, Escape, outside click, and mobile viewport layout must be checked. Settings → Appearance → Contextual Help persists on the backend; unsaved changes should revert on Settings reload. Hiding optional hints must never suppress warnings or errors. The code has not been physically GPU-tested yet.
+
+## P1.5 navigation acceptance
+
+- The wayfinder stays outside the twelve dedicated workspace panels and does not clone tool controls.
+- With no project open it routes to Project Manager or New Project Wizard, not a disabled editor.
+- For an open project it suggests relevant workspaces and shows unsaved Editor state.
+- Route buttons only call the existing workspace switcher. They never save, apply motion, switch projects or start rendering; existing unsaved-edit confirmations remain authoritative.
+- Leaving active Live Recording through navigation uses the existing safe stop behavior.
+- Test desktop, tablet and narrow phones; verify the shortcuts on each workspace, model-setting edits remain dirty, and jobs continue through workspace navigation.

@@ -227,6 +227,21 @@
           <code id="animation-project-path" title="">Create or select an animation project.</code>
         </div>
 
+        <nav id="animation-workflow-guide" class="animation-workflow-guide" aria-label="Motion Lab next steps">
+          <div class="animation-workflow-guide-context">
+            <div class="animation-workflow-guide-breadcrumb">
+              <span class="muted">Current workspace</span>
+              <strong id="animation-workflow-current">Overview</strong>
+              <span class="animation-workflow-project" id="animation-workflow-project">No animation project open</span>
+            </div>
+            <p id="animation-workflow-hint">Open a project to begin editing and building camera motion.</p>
+          </div>
+          <div class="animation-workflow-guide-actions">
+            <button type="button" class="primary-button compact" id="animation-workflow-primary" data-workflow-tab="projects">Browse Projects</button>
+            <button type="button" class="secondary-button compact" id="animation-workflow-secondary" data-workflow-tab="wizard">New Project Wizard</button>
+          </div>
+        </nav>
+
         <dialog class="animation-import-dialog" id="animation-deforum-dialog" aria-labelledby="animation-deforum-title">
           <form method="dialog" class="animation-import-shell" id="animation-deforum-form">
             <div class="animation-import-heading">

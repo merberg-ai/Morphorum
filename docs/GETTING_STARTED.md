@@ -135,6 +135,8 @@ For music-driven movements, use [Motion Studio](MOTION_STUDIO.md) to select a sa
 
 The floating Motion Lab toolbar offers shortcuts to **Record**, **Stop**, **Curves**, **Preview**, **Apply**, and **Render Animation**. The buttons disable themselves during incompatible background actions.
 
+The slim **Motion Lab next steps** guide shows your current workspace, active project, saved/unsaved Editor state and one or two useful destinations. For example, after Camera Composer it suggests Motion Curves and Camera Preview; after Render Monitor it suggests Outputs. Its buttons **only navigate**: they do not save a project, apply curves, switch the selected project or start a render. When no project is open it directs you to Project Manager or the New Project Wizard.
+
 > [!TIP]
 > Camera previews and AI renders are different operations. Previewing a camera path can help you catch mistakes before running a full diffusion render. A final animation may still look different after frame-by-frame generation.
 

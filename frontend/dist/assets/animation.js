@@ -579,6 +579,7 @@
   // P1: explain why the editor is locked without changing saved settings.
   function renderEditorGuidance() {
     const project = state.project;
+    syncMotionWorkflowGuide();
     const panel = qs('#animation-editor-guidance');
     const open = qs('#animation-editor-open-project');
     const context = qs('#animation-project-context');
@@ -8929,6 +8930,94 @@
   // in a non-navigable vault so existing project and API semantics stay intact.
   // Audio Motion is a dedicated Motion Lab workspace using the same draft
   // camera layers, project, and render controls.
+  // P1.5: non-destructive next-step guidance. These routes only switch
+  // existing workspaces, never save, apply camera motion, or start a render.
+  const MOTION_WORKFLOW_LABELS = Object.freeze({
+    motion: 'Overview', wizard: 'New Project Wizard',
+    projects: 'Project Manager', editor: 'Project Editor',
+    composer: 'Camera Composer', recording: 'Live Recording',
+    curves: 'Motion Curves', preview: 'Camera Preview',
+    'motion-import': 'Import Motion Settings', audio: 'Motion Studio',
+    monitor: 'Render Monitor', outputs: 'Outputs',
+  });
+
+  const MOTION_WORKFLOW_PLANS = Object.freeze({
+    motion: ['Open Project Editor', 'editor', 'Browse Projects', 'projects',
+      'Open the project settings, then build camera motion or render.'],
+    wizard: ['Browse Projects', 'projects', 'All Tools', 'motion',
+      'Complete Save Project & Open Editor in the wizard before continuing.'],
+    projects: ['Open Project Editor', 'editor', 'New Project Wizard', 'wizard',
+      'Choose a project and use Open in Editor; switching tools does not open the selected project.'],
+    editor: ['Compose Camera Motion', 'composer', 'Render Monitor', 'monitor',
+      'Review project settings and save changes before rendering.'],
+    composer: ['Review Motion Curves', 'curves', 'Camera Preview', 'preview',
+      'Draft motion is not part of the saved camera timeline until you apply it.'],
+    recording: ['Review Motion Curves', 'curves', 'Camera Composer', 'composer',
+      'Stop your live recording before leaving. Captured takes enter the motion draft.'],
+    curves: ['Camera Preview', 'preview', 'Project Editor', 'editor',
+      'Check your curve edits; Apply to Animation is a separate action.'],
+    preview: ['Render Monitor', 'monitor', 'Motion Curves', 'curves',
+      'Camera previews do not render diffusion frames or save camera changes.'],
+    'motion-import': ['Review Motion Curves', 'curves', 'Project Editor', 'editor',
+      'Review imported values and explicitly apply them to the project.'],
+    audio: ['Review Motion Curves', 'curves', 'Camera Composer', 'composer',
+      'Audio-linked camera motion remains a draft until you apply it.'],
+    monitor: ['View Outputs', 'outputs', 'Project Editor', 'editor',
+      'Start and monitor renders here; navigation does not interrupt running jobs.'],
+    outputs: ['Project Editor', 'editor', 'Browse Projects', 'projects',
+      'Inspect saved results and exports, or return to editing.'],
+  });
+
+  function motionWorkflowPlan(tab, hasProject) {
+    const current = MOTION_WORKFLOW_LABELS[tab] ? tab : 'motion';
+    if (!hasProject && current !== 'wizard' && current !== 'projects') {
+      return {
+        current, primary: { label: 'Browse Projects', tab: 'projects' },
+        secondary: { label: 'New Project Wizard', tab: 'wizard' },
+        hint: 'Open an existing animation project or create one before editing or rendering.',
+      };
+    }
+    if (!hasProject && current === 'projects') {
+      return {
+        current, primary: { label: 'New Project Wizard', tab: 'wizard' },
+        secondary: { label: 'All Tools', tab: 'motion' },
+        hint: 'No animation project is open yet. Choose one here, or create a new project.',
+      };
+    }
+    const plan = MOTION_WORKFLOW_PLANS[current];
+    return {
+      current, primary: { label: plan[0], tab: plan[1] },
+      secondary: { label: plan[2], tab: plan[3] },
+      hint: plan[4],
+    };
+  }
+
+  function syncMotionWorkflowGuide() {
+    const guide = qs('#animation-workflow-guide');
+    if (!guide) return;
+    const plan = motionWorkflowPlan(animationTab, Boolean(state.project?.id));
+    const current = qs('#animation-workflow-current');
+    const project = qs('#animation-workflow-project');
+    const hint = qs('#animation-workflow-hint');
+    const primary = qs('#animation-workflow-primary');
+    const secondary = qs('#animation-workflow-secondary');
+    if (current) current.textContent = MOTION_WORKFLOW_LABELS[plan.current];
+    if (project) {
+      const title = String(qs('#animation-name')?.value || state.project?.name || 'Untitled Animation').trim();
+      project.textContent = state.project
+        ? title + (state.dirty ? ' · Unsaved Editor changes' : ' · Saved project')
+        : 'No animation project open';
+      project.title = state.project?.id || '';
+    }
+    if (hint) hint.textContent = plan.hint;
+    for (const [button, action] of [[primary, plan.primary], [secondary, plan.secondary]]) {
+      if (!button) continue;
+      button.textContent = action.label;
+      button.dataset.workflowTab = action.tab;
+      button.setAttribute('aria-label', action.label + ' (navigate, no changes saved)');
+    }
+  }
+
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
   const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'];
   const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
@@ -8966,6 +9055,7 @@
     }
     if (dock) dock.hidden = !MOTION_LAB_TOOL_TABS.has(name);
     if (persist) try { localStorage.setItem(ANIMATION_TAB_KEY, name); } catch (_) {}
+    syncMotionWorkflowGuide();
   }
 
   // Deforum settings inspection, guarded camera import and soundtrack attachment.
@@ -9710,6 +9800,11 @@
     qs('#animation-deforum-model')?.addEventListener('change', () => previewDeforumImport());
     qs('#animation-editor-open-project')?.addEventListener('click', () => showAnimationTab('projects'));
     qs('#animation-editor-create-project')?.addEventListener('click', () => showAnimationTab('wizard'));
+    qs('#animation-workflow-guide')?.addEventListener('click', event => {
+      const button = event.target.closest('button[data-workflow-tab]');
+      const target = button?.dataset.workflowTab;
+      if (target && VISIBLE_ANIMATION_TABS.includes(target)) showAnimationTab(target);
+    });
     qs('#animation-new')?.addEventListener('click', createProject);
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
