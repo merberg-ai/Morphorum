@@ -142,10 +142,7 @@
     });
     qs('back')?.addEventListener('click', () => {
       const i=STEPS.indexOf(step);
-      if (i > 0) {
-        if (step === 'zimage') window.MorphorumSetupZImage?.leave();
-        void action('advance',STEPS[i-1]);
-      }
+      if (i > 0) void action('advance',STEPS[i-1]);
     });
     qs('skip')?.addEventListener('click', () => void action('skip',null));
     qs('close')?.addEventListener('click',dismiss);
