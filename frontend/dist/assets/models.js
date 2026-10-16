@@ -288,6 +288,7 @@
     try {
       const payload = await api('/api/managed-models');
       state.managedModels = Array.isArray(payload.models) ? payload.models : [];
+      window.MorphorumPollHealth?.recovered('managed-models');
       renderManagedModels();
       reportManagedDownloads();
       scheduleManagedPoll();
@@ -299,26 +300,26 @@
     } catch (error) {
       const list = qs('#managed-model-list');
       if (list) {
-        {
-          const empty = document.createElement('div');
-          empty.className = 'model-empty';
-          const title = document.createElement('strong');
-          title.textContent = 'Could not load ' + 'managed catalog';
-          const detail = document.createElement('span');
-          detail.textContent = String(error.message);
-          empty.append(title, detail);
-          list.replaceChildren(empty);
-        }
+        const empty = document.createElement('div');
+        empty.className = 'model-empty';
+        const title = document.createElement('strong');
+        title.textContent = 'Could not refresh managed catalog';
+        const detail = document.createElement('span');
+        detail.textContent = 'Check the backend connection. In-progress downloads may still be running.';
+        empty.append(title, detail);
+        list.replaceChildren(empty);
       }
-      for (const [id, token] of state.downloadOperations) {
-        window.MorphorumOperations?.finish('download:' + id, token, {
-          tone: 'error', title: 'Model download status unavailable',
-          message: error.message + '. Open Models and retry the status check.',
-          view: 'models' });
+      const hasDownloads = state.downloadOperations.size > 0 ||
+        state.managedModels.some(model => ['checking', 'downloading'].includes(model.status));
+      if (hasDownloads) {
+        window.MorphorumPollHealth?.failed('managed-models', 'Managed download', 'models');
+        // Preserve accepted download IDs; losing contact is not a failed download.
+        window.clearTimeout(state.managedPollTimer);
+        state.managedPollTimer = window.setTimeout(() => loadManagedModels(), 6000);
+      } else {
+        toast('Managed catalog unavailable',
+          'Could not reach the host. Check the connection and refresh Models.', 'warning', 7000);
       }
-      state.downloadOperations.clear();
-      state.downloadPendingChecks.clear();
-      toast('Managed model catalog unavailable', error.message, 'error', 6500);
     }
   }
 
