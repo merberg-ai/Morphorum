@@ -1,8 +1,12 @@
-# Combined WebUI polish acceptance: P2.5, P2.6, P3.1
+# Combined WebUI polish acceptance: P2.5–P3.3
 
-> Status: **DEFERRED at the user's request**. Automated CI is not a
-> substitute for a physical Windows/GPU run. Do not merge into main until
-> the user reports acceptance.
+> **Milestone acceptance recorded · 2026-10-16.** The user reported testing
+> the changes through P3.3 and said they are working as expected. The
+> development head was `50101b146c3d502a61a59caba0f037438632268e`,
+> with frontend/backend CI passing. This is a **user-reported combined PASS**,
+> not independent verification that every checklist item and device size
+> below was tested. Unspecified checks remain unchecked for traceability.
+> **Do not merge to `main` without explicit authorization.**
 
 Use the dedicated Windows test installation with a backed-up/sacrificial
 animation project. Do not intentionally corrupt primary model folders,
@@ -88,9 +92,10 @@ branch/build SHA, GPU model, desktop browser, Android/browser if used, a
 short reproduction for failures, and relevant sanitized Console messages.
 Do not share credentials or private filesystem contents.
 
-**Gate:** P2.5, P2.6 and P3.1 remain pending physical signoff. Additional
-development passes may be committed to `dev-webui` but `main` must remain
-unchanged until the combined acceptance and separately authorized merge.
+**Gate update (2026-10-16):** User-reported combined acceptance now covers
+P2.5–P3.3. Unreported device/edge-case checks remain unverified.
+Additional development may occur on `dev-webui`; the merge to `main`
+still requires separate, explicit authorization.
 
 ## P3.2: Models, Settings, LoRA Manager, Image Results
 
@@ -115,8 +120,10 @@ unchanged until the combined acceptance and separately authorized merge.
 - [ ] Check dark/light theme contrast and mobile touch targets.
 - [ ] No data-loss, project changes or media regressions were introduced.
 
-P3.2 physical testing is deferred with P2.5/P2.6/P3.1. CI and static
-layout checks alone do not certify browser rendering at those sizes.
+P3.2 was originally deferred with P2.5/P2.6/P3.1. The user subsequently
+reported a successful combined test through P3.3; specific device widths
+were not itemized. CI and static layout checks alone never certify
+browser rendering at every size.
 
 ## P3.3: Motion Lab timeline, curves and dialogs
 
@@ -155,5 +162,8 @@ layout checks alone do not certify browser rendering at those sizes.
       image generation, Motion Studio/audio reuse, project drafts, P2.5
       render preflight, P2.6 camera advisories and the P3.1–P3.3 layouts
       all behave on the Windows test installation.
-- [ ] Record PASS/FAIL findings and the tested `dev-webui` commit SHA.
-      **No main merge** until acceptance is reported and authorized.
+- [x] Record overall combined PASS at the milestone level, reported by the
+      user on 2026-10-16 for P1–P3.3. The latest development commit was
+      `50101b146c3d502a61a59caba0f037438632268e`; an independently
+      observed test-machine SHA and per-case device results were not supplied.
+      **No main merge** until separately authorized.

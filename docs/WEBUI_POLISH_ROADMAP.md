@@ -1,9 +1,17 @@
 # WebUI polish plan (dev-webui)
 
 Working development backlog for the next Morphorum polish cycle.
-Keep main unchanged until automated checks and physical Windows/browser
-acceptance are complete. Preserve projects, models, settings, outputs and
-render behavior.
+Preserve projects, models, settings, outputs and render behavior.
+
+**Acceptance update · 2026-10-16:** User reported the combined changes
+through **P3.3 working as expected**, after the green frontend and backend
+CI runs on `dev-webui` (P3.3 head: `50101b146c3d502a61a59caba0f037438632268e`).
+Treat P1–P3 as **user-accepted at milestone level**. Exact browser/device
+coverage and individual edge-case checklist items were not separately
+reported; do not fabricate their results. Earlier "deferred/pending"
+notes below document the historical development checkpoint and are
+superseded by this acceptance update. **Do not merge to `main` without
+separate, explicit authorization.** Next development phase: P4.
 
 | Pass | Scope | Acceptance |
 | --- | --- | --- |
@@ -104,15 +112,17 @@ Contextual help icons use trusted static text, real buttons beside form labels, 
 - [x] P3.2: Fix intrinsic-width overflow in Model Manager, Settings, LoRA Manager and Image Results; add responsive button grids, accessible expanded filenames/paths, and keyboard focus styling. Device/zoom acceptance deferred.
 - [x] P3.3: Contain Motion Lab timeline, curve, inspector, 3D camera, previews, and Deforum import dialog at narrow/zoomed widths; make desktop timeline keyboard-scrollable and fit focused phone plots to actual card width. Physical acceptance deferred.
 
-P3.1 is a code/style regression checkpoint only. Actual 360px phone, 720px
-tablet and enlarged-scale browser rendering is **deferred**, bundled with
-P2.5–P2.6 physical acceptance. Do not mark P3 complete or merge to main.
+P3.1 was initially a code/style regression checkpoint; the combined P2.5–P3.3
+milestone subsequently received user-reported acceptance on 2026-10-16.
+Specific device widths and browser zoom checks remain unitemized. Do not
+merge to main without separate authorization.
 
-## Deferred combined test plan
+## Combined acceptance test plan
 
-The ready-to-use test checklist for P2.5, P2.6 and P3.1 is in
-[COMBINED_POLISH_TEST_PLAN.md](COMBINED_POLISH_TEST_PLAN.md). Physical Windows
-and phone testing is still pending; no merge to main is authorized.
+The [COMBINED_POLISH_TEST_PLAN.md](COMBINED_POLISH_TEST_PLAN.md) covers
+P2.5–P3.3. The user reported a successful combined test on 2026-10-16.
+Unreported individual checks remain unchecked for traceability. No merge
+to main is authorized.
 
 ## P3.2 code acceptance
 
@@ -130,4 +140,10 @@ and phone testing is still pending; no merge to main is authorized.
 - Motion Curve and Camera Path SVGs retain their logical coordinates, while their containers, field grids, readouts and action buttons shrink and wrap.
 - 3D preset, inspector, camera preview, and Deforum importer keep long filenames, descriptions and mapped fields within their scroll areas. Dialog Close/Cancel/Create actions remain keyboard/touch accessible.
 - Layout and accessibility changes do not save or apply motion, move keyframes, modify camera schedules, change model choices or start renders.
-- **P3 implementation is now complete, pending physical device/zoom acceptance.** P2.5–P3.3 are bundled in the combined checklist. Leave main unchanged until explicit approval.
+- **P3 implementation is complete and user-accepted at the combined milestone level (2026-10-16).** Detailed device/zoom results were not itemized. Leave main unchanged until explicit approval.
+
+## Next development phase: P4
+
+P4 targets clearer operation progress, consistent asynchronous busy/disabled
+states, toast notifications and actionable error messages. P4 work is not
+started by this acceptance note; begin in `dev-webui` when authorized.
