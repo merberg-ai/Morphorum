@@ -150,3 +150,48 @@ def test_conflicting_idempotent_retry_does_not_create_new_project(isolated):
             revision=reservation["revision"],forced=False,
         )
     assert len(list((isolated / "projects").glob("*/project.json"))) == 1
+
+
+
+def test_ms65_orphaned_reservation_has_explicit_non_destructive_exit(isolated):
+    state = _prepare()
+    reservation = setup.reserve_setup_example(
+        template_id="gentle-dolly-in", model_id="",
+        revision=state["revision"], forced=False,
+    )
+    assert reservation["example_project_id"]
+    assert not list((isolated / "projects").glob("*/project.json"))
+    with pytest.raises(setup.SetupStateError, match="not saved"):
+        setup.update_setup(
+            action="complete", step="finish", revision=reservation["revision"],
+        )
+    # An interrupted disk write must not trap the user in onboarding.
+    with TestClient(app_module.app) as client:
+        completed = client.post("/api/setup/progress", json={
+            "action": "complete", "step": "finish",
+            "revision": reservation["revision"], "without_example": True,
+        }, headers={"X-Morphorum-Setup": "1"})
+        assert completed.status_code == 200, completed.text
+        assert completed.json()["status"] == "completed"
+        assert completed.json()["example_project_id"] == reservation["example_project_id"]
+        assert client.get("/api/setup/status").json()["show_wizard"] is False
+    assert not list((isolated / "projects").glob("*/project.json"))
+
+
+def test_ms65_setup_completion_respects_current_revision_and_preserves_existing_data(isolated):
+    state = _prepare()
+    project, reserved = examples.instantiate_example(
+        template_id="gentle-dolly-in", model_id="",
+        revision=state["revision"], forced=False,
+    )
+    path = isolated / "projects" / project["id"] / "project.json"
+    before = path.read_bytes()
+    with pytest.raises(setup.SetupStateConflict):
+        setup.update_setup(action="complete", step="finish", revision=state["revision"])
+    assert path.read_bytes() == before
+    completed = setup.update_setup(
+        action="complete", step="finish", revision=reserved["revision"],
+    )
+    assert completed["status"] == "completed"
+    assert path.read_bytes() == before
+    assert setup.setup_status()["show_wizard"] is False
