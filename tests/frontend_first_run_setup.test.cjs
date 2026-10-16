@@ -54,6 +54,7 @@ function harness(serverStatus){
       MorphorumSetupFolders:{render:(container,kind)=>{
         container.appendChild({tag:'p',textContent:kind+' folder editor'});
       },beforeNext:()=>true,reset:()=>{},welcome:()=>{}},
+      MorphorumSetupZImage:{show:(container)=>container.appendChild({tag:'p',textContent:'Managed Z-Image download page'}),leave:()=>{}},
     },
   };
   vm.runInNewContext(script,context);
@@ -90,6 +91,10 @@ test('MS6.1 fresh installation automatically shows Welcome and progresses server
   assert.match(h.nodes['first-run-description'].children[0].textContent,/loras folder editor/);
   await h.click('next');
   assert.equal(h.status.step,'zimage');
+  assert.equal(h.nodes['first-run-next'].disabled,false);
+  assert.match(h.nodes['first-run-description'].children[0].textContent,/Managed Z-Image/);
+  await h.click('next');
+  assert.equal(h.status.step,'examples');
   assert.equal(h.nodes['first-run-next'].disabled,true);
   assert.ok(h.calls.every(call=>!call.url.includes('/download')&&!call.url.includes('/models/scan')
     &&!call.url.includes('/animation/projects')),'Opening and progressing should have no work side effects');
@@ -145,5 +150,6 @@ test('MS6.1 responsive shell, Settings affordance, and no second project wizard'
   assert.match(css,/@media \(max-width:550px\)/);
   assert.match(html,/first-run-setup\.js/);
   assert.match(html,/first-run-folders\.js/);
+  assert.match(html,/first-run-zimage\.js/);
   assert.match(html,/project-wizard\.js/);
 });
