@@ -78,6 +78,8 @@
     if (model.status === 'downloading') return 'Downloading';
     if (model.status === 'installed') return 'Installed';
     if (model.status === 'failed') return 'Download failed';
+    if (model.status === 'interrupted') return 'Interrupted · resumable';
+    if (model.status === 'partial') return 'Incomplete package';
     return 'Not installed';
   }
 
@@ -181,7 +183,8 @@
       spinner.className = 'spinner';
       const label = document.createElement('span');
       label.className = 'button-label';
-      label.textContent = model.status === 'failed' ? 'Retry Download' : 'Download';
+      label.textContent = model.status === 'failed' ? 'Retry Download' :
+        ['interrupted','partial'].includes(model.status) ? 'Resume / Repair' : 'Download';
       download.append(spinner, label);
       download.addEventListener('click', () => startManagedDownload(model.id));
       actions.appendChild(download);
