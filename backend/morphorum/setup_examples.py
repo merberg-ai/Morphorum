@@ -32,15 +32,15 @@ def example_catalog() -> dict[str, Any]:
 def eligible_model(model_id: str) -> dict[str, Any] | None:
     if not model_id:
         return None
-    record = get_model(model_id)
-    if not record or record.get("kind") != "checkpoints" or record.get("family") not in CAPABILITIES:
-        raise SetupStateError("Selected model is no longer indexed as an eligible checkpoint.")
-    # Unlike unmanaged checkpoint paths, managed weights need their verified
-    # completion marker. The manager itself is responsible for the index.
+    # Query the managed manager first so it can verify and refresh its index.
+    # Never claim that partial weights are a loadable checkpoint.
     if model_id == "managed:zimage-turbo":
         from .managed_models import managed_model_manager
         if not managed_model_manager.status("zimage-turbo")["installed"]:
             raise SetupStateError("Managed Z-Image package has not finished verifying.")
+    record = get_model(model_id)
+    if not record or record.get("kind") != "checkpoints" or record.get("family") not in CAPABILITIES:
+        raise SetupStateError("Selected model is no longer indexed as an eligible checkpoint.")
     return record
 
 
