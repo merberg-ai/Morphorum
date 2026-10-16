@@ -15,6 +15,9 @@
     draft: null,
     restoredModel: '',
     modelRequest: 0,
+    submitting: false,
+    unloading: false,
+    historyRefreshing: false,
   };
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -181,7 +184,8 @@
   function updateUnloadButton() {
     const button = qs('#unload-model');
     if (!button) return;
-    button.disabled = !state.modelLoaded || Boolean(state.activeJobId);
+    button.disabled = !state.modelLoaded || Boolean(state.activeJobId) ||
+      state.submitting || state.unloading;
   }
 
   async function refreshModelStatus() {
@@ -204,11 +208,14 @@
   }
 
   async function unloadModel() {
-    if (state.activeJobId) return;
+    if (state.activeJobId || state.submitting || state.unloading) return;
     const button = qs('#unload-model');
     if (!button) return;
+    state.unloading = true;
     button.classList.add('busy');
     button.disabled = true;
+    const operation = window.MorphorumOperations?.begin('image-model-unload',
+      'Unloading diffusion model', 'Releasing the loaded pipeline from host memory…', 'image');
     try {
       const result = await api('/api/generation/model/unload', {
         method: 'POST',
@@ -216,6 +223,12 @@
       });
       state.modelLoaded = false;
       updateUnloadButton();
+      window.MorphorumOperations?.finish('image-model-unload', operation, {
+        title: result.status === 'unloaded' ? 'Model unloaded' : 'No model was loaded',
+        message: result.status === 'unloaded'
+          ? 'Diffusion pipeline unloaded; CUDA cleanup requested on the host.'
+          : 'There was no active diffusion pipeline to unload.',
+        view: 'image' });
       toast(
         result.status === 'unloaded' ? 'Model unloaded' : 'No model loaded',
         result.status === 'unloaded'
@@ -224,9 +237,14 @@
         result.status === 'unloaded' ? 'success' : 'info'
       );
     } catch (error) {
+      window.MorphorumOperations?.finish('image-model-unload', operation, {
+        tone: 'error', title: 'Could not unload diffusion model',
+        message: error.message + '. Review Image Generation and retry when no job is active.',
+        view: 'image' });
       toast('Could not unload model', error.message, 'error', 7000);
       await refreshModelStatus();
     } finally {
+      state.unloading = false;
       button.classList.remove('busy');
       updateUnloadButton();
     }
@@ -251,7 +269,8 @@
     button.classList.toggle('busy', busy);
     const label = qs('.button-label', button);
     if (label) label.textContent = busy ? 'Generating…' : 'Generate';
-    button.disabled = busy || !(state.model && state.capabilities[state.model.family]?.supported);
+    button.disabled = busy || state.submitting || state.unloading ||
+      !(state.model && state.capabilities[state.model.family]?.supported);
     updateUnloadButton();
   }
 
@@ -529,7 +548,15 @@
     download.download = result.filename || 'morphorum.png';
     if (typeof dialog.showModal === 'function') dialog.showModal();
   }
-  async function loadImageJobHistory({ reconnect = false } = {}) {
+  async function loadImageJobHistory({ reconnect = false, announce = false } = {}) {
+    if (announce && state.historyRefreshing) return;
+    const button = qs('#image-history-refresh');
+    if (announce) {
+      state.historyRefreshing = true;
+      if (button) { button.disabled = true; button.classList.add('busy'); }
+    }
+    const operation = announce ? window.MorphorumOperations?.begin('image-history',
+      'Refreshing image job history', 'Loading recent jobs from the host…', 'image') : null;
     try {
       const payload = await api('/api/generation/jobs?limit=20');
       const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
@@ -551,7 +578,20 @@
         const job = jobs.find(j => ['queued','loading_model','generating'].includes(j.status)) || jobs[0];
         if (job) await showImageJob(job.id);
       }
-    } catch (error) { toast('Image history unavailable', error.message, 'warning'); }
+      if (announce) window.MorphorumOperations?.finish('image-history', operation, {
+        title: 'Image history refreshed',
+        message: jobs.length + ' recent job(s) loaded.', view: 'image' });
+    } catch (error) {
+      if (announce) window.MorphorumOperations?.finish('image-history', operation, {
+        tone: 'error', title: 'Image history refresh failed',
+        message: error.message + '. Check backend connectivity and retry.', view: 'image' });
+      toast('Image history unavailable', error.message, 'warning');
+    } finally {
+      if (announce) {
+        state.historyRefreshing = false;
+        if (button) { button.disabled = false; button.classList.remove('busy'); }
+      }
+    }
   }
   async function showImageJob(jobId) {
     if (!jobId) return;
@@ -710,7 +750,11 @@
   }
 
   async function generate() {
-    if (state.activeJobId) return;
+    if (state.activeJobId || state.submitting || state.unloading) return;
+    state.submitting = true;
+    const operation = window.MorphorumOperations?.begin('image-submit',
+      'Submitting image generation', 'Sending your settings to the local generation backend…',
+      'image');
     setGenerateBusy(true);
     const unloadButton = qs('#unload-model');
     if (unloadButton) unloadButton.disabled = true;
@@ -724,6 +768,10 @@
         body: JSON.stringify(buildPayload()),
       });
       state.activeJobId = job.id;
+      window.MorphorumOperations?.finish('image-submit', operation, {
+        title: 'Image generation queued',
+        message: 'Job ' + job.id + ' accepted. Use Image Generation for live progress and cancellation.',
+        view: 'image' });
       state.currentResultJobId = job.id;
       state.currentResults = [];
       state.renderedResults.clear();
@@ -736,11 +784,19 @@
       pollJob(job.id);
       loadImageJobHistory();
     } catch (error) {
+      window.MorphorumOperations?.finish('image-submit', operation, {
+        tone: 'error', title: 'Image generation could not start',
+        message: error.message + '. Check the selected model and generation settings, then retry.',
+        view: 'image' });
       state.activeJobId = null;
       setGenerateBusy(false);
       qs('#cancel-generation').hidden = true;
       refreshModelStatus();
       toast('Could not start generation', error.message, 'error', 8500);
+    } finally {
+      state.submitting = false;
+      // Keep the existing Generate button busy while the accepted job runs.
+      setGenerateBusy(Boolean(state.activeJobId));
     }
   }
 
@@ -795,7 +851,8 @@
     qs('#image-reset-draft')?.addEventListener('click', resetImageDraft);
     qs('#image-jump-results')?.addEventListener('click', () => qs('#image-results-heading')?.scrollIntoView({behavior:'smooth',block:'start'}));
     qs('#image-job-history')?.addEventListener('change', event => showImageJob(event.target.value));
-    qs('#image-history-refresh')?.addEventListener('click', () => loadImageJobHistory());
+    qs('#image-history-refresh')?.addEventListener('click',
+      () => loadImageJobHistory({ announce: true }));
     qs('#image-lightbox-close')?.addEventListener('click', () => qs('#image-result-lightbox')?.close());
     const root = qs('#view-image');
     root?.addEventListener('input', event => {
