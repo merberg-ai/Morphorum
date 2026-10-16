@@ -13,11 +13,13 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 | Motion Lab | Six-axis composer, keyboard/touch motion recording, supported gamepad controls; curve preview, ranged recording/refinement and saved-motion comparison |
 | Onboarding | Seven-step First-Run Setup Wizard with diagnostics, model/LoRA folders, optional Z-Image and 512 × 512 sample projects; separate seven-step New Project Wizard |
 | Audio / video | Motion Studio manual beat cues, soundtrack reuse, independent frequency channels, spectrum selection and continuous camera presets; optional audio attachment, FFmpeg MP4/WebM exports |
+| FFmpeg Manager | System detection or custom FFmpeg/FFprobe paths; optional SHA-256-verified managed FFmpeg install/update/remove on supported Windows/Linux hosts; host-side encoder checks |
 | Import | Compatible Deforum Motion Studio camera schedules into existing 3D projects |
 | Remote operation | Authenticated API-only server, versioned client capabilities, project assets, telemetry, previews and job recovery |
 
 ## Important limits
 
+- **FFmpeg and FFprobe are separately installed tools.** Use an existing pair or explicitly download Morphorum-managed FFmpeg in Settings. The optional BtbN static GPL package is third-party software with its own license. Windows managed install and media checks received owner acceptance; Linux-managed installation and selected resilience cases require further testing. See [FFmpeg Manager](FFMPEG_MANAGER.md).
 - **No model weights are included.** AI checkpoints are large; managed Z-Image-Turbo is approximately 33 GB.
 - **CUDA is recommended.** CPU use, where possible, can be extremely slow. Performance, memory use, and high-resolution animation stability depend on the model and graphics card.
 - **Not every Deforum setting is supported.** Imported camera motion is converted, not guaranteed to reproduce Deforum rendering pixel-for-pixel.
