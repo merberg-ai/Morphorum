@@ -21,7 +21,8 @@ def _convert_attached_audio(source: Path) -> bytes:
     if not executable:
         raise AudioMotionError(
             "The attached soundtrack is not a compatible PCM WAV. "
-            "Configure a working FFmpeg in Settings to convert MP3/OGG/FLAC."
+            "Install FFmpeg or choose a working installation in Settings → Storage → FFmpeg Manager "
+            "to convert MP3/OGG/FLAC."
         )
     # A maximum of 181 seconds is decoded so a track exceeding 3 minutes
     # fails normal analysis rather than silently cutting off a longer track.
