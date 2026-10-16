@@ -9,7 +9,7 @@ from .animation_projects import create_animation_project_once, load_animation_pr
 from .generation import CAPABILITIES
 from .model_index import get_model
 from .paths import ROOT
-from .setup_state import SetupStateError, reserve_setup_example
+from .setup_state import SetupStateError, reserve_setup_example, setup_status
 
 _MANIFEST = ROOT / "config" / "examples" / "first-run-dolly.json"
 _VALID_IDS = ("gentle-dolly-in", "gentle-dolly-out")
@@ -113,14 +113,27 @@ def instantiate_example(
     revision: int,
     forced: bool,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    # Validate inputs and package BEFORE reserving. Saved reservation remains
-    # the source of truth if a process dies between reservation and file write.
+    # When a project was already created, reopening it must not require that
+    # the originally selected checkpoint still exists. It is safe to view and
+    # edit a saved project even without a render-ready model.
+    prior = setup_status()
+    if (prior.get("example_project_id") and
+            prior.get("example_template_id") == template_id and
+            str(prior.get("example_model_id") or "") == model_id):
+        state = reserve_setup_example(
+            template_id=template_id, model_id=model_id, revision=revision, forced=forced,
+        )
+        existing = existing_example(state["example_project_id"])
+        if existing is not None:
+            return existing, state
+
+    # Validate first on a new reservation, so a stale or unknown model cannot
+    # reserve an unusable project ID or overwrite an existing saved project.
     payload = build_example(template_id, model_id)
     state = reserve_setup_example(
         template_id=template_id, model_id=model_id, revision=revision, forced=forced,
     )
-    project_id = state["example_project_id"]
-    project = create_animation_project_once(project_id, payload)
+    project = create_animation_project_once(state["example_project_id"], payload)
     return project, state
 
 
