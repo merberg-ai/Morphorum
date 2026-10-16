@@ -27,6 +27,23 @@ Keep that window running, and visit **http://127.0.0.1:7865** in your browser. I
 
 Morphorum runs on your own computer. The browser is only the interface: closing the browser tab does not necessarily stop a server-side job. To shut down Morphorum, press **Ctrl+C** in the terminal.
 
+## First-run setup wizard
+
+If this is a **fresh installation**, Morphorum opens a separate seven-step setup wizard when you first visit the WebUI. This is distinct from **Motion Lab → New Project Wizard**, which is for creating ordinary animation projects later.
+
+1. Review host diagnostics and the explanation of WebUI (the recommended default) versus authenticated backend-only mode.
+2. Add paths to existing **SDXL** or **FLUX** checkpoint folders on the computer running Morphorum. Check the folders and choose **Save Folders & Scan**. File detection is preliminary, not proof that every model will load.
+3. Add optional SDXL, FLUX or Z-Image LoRA folders, or simply continue. LoRAs do not replace a base checkpoint.
+4. Optionally download **Z-Image-Turbo** (approximately 33 GB). The download requires a separate confirmation. You can continue while the download runs and return to inspect its status.
+5. Select **Gentle Dolly In** or **Gentle Dolly Out**. Both use a small 512 × 512 3D animation, 48 frames at 12 FPS. Choose an available checkpoint, or use **No model yet** to make an editable but not render-ready example.
+6. On **Review & Finish**, choose **Create Example & Open Editor** to save a new project and open it in the existing Animation Project Editor. You can also select **Finish Without Example**. Neither action automatically starts an AI render.
+
+Use **Back** and **Next** to review the settings. **Skip for now** ends onboarding without deleting your existing configuration. Your progress is stored on the Morphorum host, so you can resume after reopening a browser or restarting the server. The completed or skipped wizard does not appear again automatically.
+
+To reopen onboarding on an existing installation, go to **Settings → Setup Wizard**. You can also restart in WebUI mode with `\.\run.bat --setup-wizard` (Windows) or `./run.sh --setup-wizard` (Linux). Changing to backend-only requires a server restart; the browser setup wizard does not run in that mode.
+
+If your example has no base model, first configure one in **Models**, then select it in **Project Editor** before rendering. For full setup details, see [Installation](INSTALLATION.md#first-launch-guided-setup) and [Troubleshooting](TROUBLESHOOTING.md).
+
 ## 2. Download or locate an image model
 
 Image generation cannot start until Morphorum has a usable model.
