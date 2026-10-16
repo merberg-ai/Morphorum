@@ -186,6 +186,29 @@ def test_success_installs_after_verified_unpack_and_preserves_ownership(tmp_path
     assert not (m.root / "current").exists()
 
 
+def test_update_preserves_previous_install_when_job_starts_during_download(tmp_path, monkeypatch):
+    archive = _archive_bytes()
+    monkeypatch.setattr(managed, "release_asset", lambda *_: _record(archive))
+    def download(_record, output, _cancel, progress):
+        output.write_bytes(archive)
+        progress(len(archive), len(archive))
+    monkeypatch.setattr(managed, "_download", download)
+    monkeypatch.setattr(ffmpeg_tools, "_version",
+                        lambda path, command: (command + " version test", None))
+    manager = managed.ManagedFFmpegManager(tmp_path / "ffmpeg")
+    manager._job = {"id": "initial", "status": "checking"}
+    manager._run("initial", threading.Event())
+    assert manager.status()["installed"]
+    name = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+    before = (manager.root / "current" / "bin" / name).read_bytes()
+    manager._job = {"id": "blocked", "status": "checking"}
+    manager._run("blocked", threading.Event(), lambda: True)
+    assert manager.status()["job"]["status"] == "failed"
+    assert "video export" in manager.status()["job"]["error"].lower()
+    assert manager.status()["installed"]
+    assert (manager.root / "current" / "bin" / name).read_bytes() == before
+
+
 def test_rejects_unowned_installation_on_start_and_remove(tmp_path):
     m = managed.ManagedFFmpegManager(tmp_path / "ffmpeg")
     (m.root / "current").mkdir(parents=True)
