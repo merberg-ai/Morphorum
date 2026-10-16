@@ -202,6 +202,38 @@ not replace a previously functioning managed copy.
 
 Also check available disk space, that the render actually completed, and whether the chosen export format is supported by the current pipeline.
 
+### FFmpeg acceptance checks (no GPU needed)
+
+Run the temporary-media smoke test after installing and saving the selected
+FFmpeg mode. It creates and removes test PNGs/WAVs/videos in a temporary
+directory; it does **not** edit project media or download models.
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ffmpeg_acceptance.py --mode managed
+```
+
+Linux:
+
+```bash
+./.venv/bin/python scripts/ffmpeg_acceptance.py --mode managed
+```
+
+For a system installation, use `--mode auto`. For a custom installation,
+use `--mode custom --custom-path "/full/path/to/ffmpeg"`.
+Omit `--mode` to use your saved Morphorum Settings.
+
+The script checks MP4 (libx264/AAC), WebM (libvpx-vp9/Opus), FFprobe metadata,
+hybrid frame extraction, and MP3/OGG/FLAC-to-PCM WAV conversions. If it reports
+a missing codec, install a package with all necessary codecs or select
+another FFmpeg installation. A working `ffmpeg -version` by itself is not
+enough to confirm compatibility.
+
+BtbN Linux static builds require glibc 2.28+ and kernel 4.18+; Alpine/musl
+systems should use a compatible system/custom binary. FFmpeg managed install
+does not ask for administrator privileges.
+
 ## Project is missing or was moved to Trash
 
 Look under **Motion Lab → Project Manager**. The manager lists projects from the application-managed `projects/` directory.
