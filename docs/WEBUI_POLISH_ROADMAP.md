@@ -307,13 +307,11 @@ back to a different binary. The Settings → Storage → FFmpeg Manager panel
 supports source choice, custom path, read-only version tests and persisted
 selection. Export/probe/extraction/audio users share one resolver, and Video
 Export refreshes after settings reload/save. A missing `ffprobe` leaves FFmpeg
-export usable but video import unavailable. No package downloader is implemented.
-Managed mode points only to the reserved `tools/ffmpeg/current/bin` layout
-and is intentionally unavailable until a separately verified package has been
-installed by P4.4.3. Windows/Linux live acceptance and repository CI are
-not yet verified. Do not merge into `main`.
+export usable but video import unavailable. P4.4.3 now adds an opt-in managed installer; see its checkpoint below.
+Windows/Linux live acceptance and repository CI are not yet verified.
+Do not merge into `main`.
 
-- [ ] **P4.4.3 / Managed install:** Support vetted downloadable FFmpeg +
+- [x] **P4.4.3 / Managed install (implemented; live acceptance pending):** Support vetted downloadable FFmpeg +
   FFprobe bundles for supported Windows and Linux architectures, with a
   versioned local destination under `ROOT/tools/ffmpeg/` (outside Git),
   progress and cancellation through the P4 operation feedback system,
@@ -323,6 +321,36 @@ not yet verified. Do not merge into `main`.
   unexpected auto-downloads, and executable bits where inappropriate.
   State unsupported platforms explicitly. Review third-party distribution
   and LGPL/GPL obligations before selecting managed bundle providers.
+**P4.4.3 checkpoint · 2026-10-16:** The new `managed_ffmpeg.py`
+manager uses BtbN's pinned FFmpeg 8.1 release-family static GPL packages
+for Windows x64/ARM64 and Linux x64/ARM64. Release metadata from GitHub's
+`releases/tags/latest` is checked for the exact allowlisted artifact name,
+URL, bounded archive size and published SHA-256 asset digest. Downloads are
+streamed with cancellation and size checks. Extraction accepts **only**
+`ffmpeg`/`ffprobe` executables, rejects archive traversal, symlinks,
+duplicate names and oversized entries. Both executables are probed in a
+private staging directory before promotion to
+`tools/ffmpeg/current/bin`. Failed validation leaves the previous
+installation intact; replacement is backed up and rolled back if promotion
+fails. Install, update/reinstall, cancel, and owned-install removal controls
+have progress reporting, recovery polling, responsive layout and are opt-in
+under Settings → Storage → FFmpeg Manager. Existing video/audio outputs and
+projects are never touched. Installation/removal is refused while tracked
+video exports or hybrid extractions are running; already-running subprocesses
+and the audio conversion path need final real-world race testing on Windows.
+
+GPL static releases provide x264 encoder support and have different license
+obligations than the application's Unlicense. Each local installation has a
+notice with provider, package, SHA-256, source URLs and licensing pointers.
+No FFmpeg binaries are checked into this repository. The external asset
+provider, licenses and source availability must be reevaluated for public
+distribution.
+
+**Gate:** Browser-level JS syntax/targeted regression test and Python unit
+coverage are prepared; no real download from GitHub nor Windows/Linux
+executable smoke test or full CI result has been verified in this turn.
+P4.4.4 acceptance remains open. Do not merge `main`.
+
 - [ ] **P4.4.4 / Acceptance:** Regression-test video export (MP4/WebM),
   hybrid-video probing/extraction, soundtrack MP3/OGG/FLAC conversion, missing
   codec handling, PATH/legacy env/custom/managed precedence, invalid paths,
