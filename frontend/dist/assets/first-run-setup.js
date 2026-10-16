@@ -21,12 +21,13 @@
   function dismiss() {
     const overlay = qs('overlay');
     if (overlay) overlay.hidden = true;
+    window.MorphorumSetupZImage?.leave();
     previousFocus?.focus?.();
   }
   function page() {
     const position = Math.max(0, STEPS.indexOf(step));
     qs('title').textContent = TITLES[position];
-    qs('progress').textContent = 'Step ' + (position + 1) + ' of 7 · MS6.2 model and LoRA setup';
+    qs('progress').textContent = 'Step ' + (position + 1) + ' of 7 · First-run configuration';
     const content = qs('description');
     content.replaceChildren();
     const paragraph = message => {
@@ -42,7 +43,7 @@
     if (step === 'welcome') {
       paragraph('Morphorum creates AI images and camera-driven animations on your computer. This setup will help you configure model folders, optional LoRAs, and a small starter project.');
       paragraph('Models are not included in a fresh installation. Downloads require your permission; opening this wizard will never download weights, generate frames or alter existing projects.');
-      paragraph('This wizard configures model folders first, then optional LoRAs. Managed Z-Image download and starter projects follow in subsequent releases.');
+      paragraph('This wizard configures checkpoint and LoRA folders, and optionally downloads a managed Z-Image model. Two starter animation projects will be added in the next milestone.');
       void window.MorphorumSetupFolders?.welcome(content);
     } else if (step === 'modes') {
       heading('WebUI: the default');
@@ -52,14 +53,16 @@
       paragraph('Stay in the normal WebUI to finish the setup steps.');
     } else if (step === 'models' || step === 'loras') {
       void window.MorphorumSetupFolders?.render(content,step);
+    } else if (step === 'zimage') {
+      window.MorphorumSetupZImage?.show(content,()=>void action('advance','examples'));
     } else {
       heading('This page is scheduled for the next MS6 implementation pass');
-      paragraph('Your progress is saved on the Morphorum host, not in browser storage. Model and LoRA folder verification is available now; managed Z-Image download and two 512 × 512 dolly examples will follow in MS6.3 and MS6.4.');
+      paragraph('Your progress is saved on the Morphorum host, not in browser storage. Folder checks and optional managed Z-Image downloads are available now; starter project creation follows in MS6.4.');
       paragraph('Close to resume here later, or Skip for now to return to the normal WebUI. Your existing settings and projects remain untouched.');
     }
     qs('back').disabled = position === 0;
-    qs('next').disabled = position >= 4;
-    qs('next').textContent = position === 1 ? 'Continue to Model Setup' : position === 2 ? 'Optional LoRA Folders' : position === 3 ? 'Continue to Z-Image' : 'Next';
+    qs('next').disabled = position >= 5;
+    qs('next').textContent = position === 1 ? 'Continue to Model Setup' : position === 2 ? 'Optional LoRA Folders' : position === 3 ? 'Continue to Z-Image' : position === 4 ? 'Continue Without Waiting' : 'Next';
     showError('');
   }
   async function fetchStatus() {
@@ -84,6 +87,7 @@
       if (!response.ok) throw new Error(String(data.detail || 'Setup update failed.'));
       snapshot = data;
       if (kind === 'skip') {dismiss(); return;}
+      if (step === 'zimage') window.MorphorumSetupZImage?.leave();
       step = destination;
       page();
     } catch (error) {
@@ -94,7 +98,7 @@
       if (!qs('overlay').hidden) {
         qs('skip').disabled = false;
         qs('back').disabled = STEPS.indexOf(step) === 0;
-        qs('next').disabled = STEPS.indexOf(step) >= 4;
+        qs('next').disabled = STEPS.indexOf(step) >= 5;
       }
     }
   }
@@ -114,6 +118,7 @@
       if (!reopen && !latest.show_wizard) return;
       snapshot = latest;
       window.MorphorumSetupFolders?.reset();
+      window.MorphorumSetupZImage?.leave();
       manual = reopen || latest.forced_for_launch;
       step = reopen && ['completed','skipped','legacy'].includes(latest.status)
         ? 'welcome' : STEPS.includes(latest.step) ? latest.step : 'welcome';
@@ -128,7 +133,7 @@
   function bind() {
     qs('next')?.addEventListener('click', () => {
       const i=STEPS.indexOf(step);
-      if (i < 4) {
+      if (i < 5) {
         try {
           if (i === 2 || i === 3) window.MorphorumSetupFolders?.beforeNext(STEPS[i]);
           void action('advance',STEPS[i+1]);
@@ -137,7 +142,10 @@
     });
     qs('back')?.addEventListener('click', () => {
       const i=STEPS.indexOf(step);
-      if (i > 0) void action('advance',STEPS[i-1]);
+      if (i > 0) {
+        if (step === 'zimage') window.MorphorumSetupZImage?.leave();
+        void action('advance',STEPS[i-1]);
+      }
     });
     qs('skip')?.addEventListener('click', () => void action('skip',null));
     qs('close')?.addEventListener('click',dismiss);
