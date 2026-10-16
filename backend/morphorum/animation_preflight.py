@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .animation_hybrid_render import HybridRenderError, validate_hybrid_composite
+from .camera_safety import camera_motion_advisories
 from .animation_render import MAX_RENDER_FRAMES
 from .animation_resolution import (
     project_schedule_series,
@@ -171,7 +172,14 @@ def check_animation_render_preflight(
                 f"Checked {checked_frames} of {total} frames for steps and guidance. "
                 "Other frames are checked during generation; preview a short run first.")
 
+    camera_safety = {"sampled_frames": 0, "total_frames": total,
+                     "issues": [], "basis": "not-applicable"}
+    if schedules_valid and str(animation.get("mode") or "2d").lower() == "3d":
+        camera_safety = camera_motion_advisories(project)
+        issues.extend(camera_safety["issues"])
+
     return {
+        "camera_safety": camera_safety,
         "valid": not any(issue["severity"] == "error" for issue in issues),
         "issues": issues,
         "errors": sum(item["severity"] == "error" for item in issues),

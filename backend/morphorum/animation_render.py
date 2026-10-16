@@ -55,6 +55,40 @@ class AnimationRenderError(RuntimeError):
     pass
 
 
+def _format_camera_warp_failure(
+    frame: int, exc: BaseException,
+    camera: dict[str, Any] | None,
+    last_coverage: tuple[int, float] | None,
+) -> str:
+    """Describe failed frame using actual resolved settings and prior coverage."""
+    message = f"3D depth/camera warp failed at frame {frame}: {exc}"
+    if camera:
+        values = []
+        for axis in ("translation_x", "translation_y", "translation_z",
+                     "rotation_x", "rotation_y", "rotation_z", "fov"):
+            if axis in camera:
+                try:
+                    values.append(f"{axis}={float(camera[axis]):+.4g}")
+                except (TypeError, ValueError):
+                    pass
+        if values:
+            message += ". Resolved camera: " + ", ".join(values)
+    if last_coverage is None:
+        message += ". No prior 3D coverage available in this render segment"
+    else:
+        previous, coverage = last_coverage
+        message += (
+            f". Last successful 3D projection: frame {previous}, "
+            f"projected coverage {coverage * 100:.1f}%"
+        )
+    if isinstance(exc, Camera3DError):
+        message += (
+            ". Review cumulative camera translation/rotation, field of view, "
+            "and Camera Preview before retrying"
+        )
+    return message
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -1718,6 +1752,7 @@ class AnimationRenderManager:
                 previous_resolved.get("camera_3d", {}).get("fov", 40.0)
             )
 
+        last_3d_coverage: tuple[int, float] | None = None
         for frame in range(start_frame, total):
             # Read-only allocator snapshot; never synchronize or clear CUDA
             # caches in the hot frame loop just to collect diagnostics.
@@ -1780,6 +1815,9 @@ class AnimationRenderManager:
                     if warp.hole_mask is not None:
                         mask_path.parent.mkdir(parents=True, exist_ok=True)
                         warp.hole_mask.save(mask_path)
+                    last_3d_coverage = (
+                        frame, float(warp.telemetry["projected_coverage"])
+                    )
                     depth_state = {
                         "disocclusion_mask": (
                             f"masks/frame_{frame:06d}.png" if warp.hole_mask is not None else None
@@ -1795,7 +1833,9 @@ class AnimationRenderManager:
                     }
                 except (DepthError, Camera3DError) as exc:
                     raise AnimationRenderError(
-                        f"3D depth/camera warp failed at frame {frame}: {exc}"
+                        _format_camera_warp_failure(
+                            frame, exc, resolved.get("camera_3d"), last_3d_coverage,
+                        )
                     ) from exc
             else:
                 warp_started = time.monotonic()
