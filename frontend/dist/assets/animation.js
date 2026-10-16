@@ -9956,5 +9956,25 @@
     }
   }
 
+  // First-run onboarding reuses the real editor rather than introducing a
+  // second project workspace. Return false if the user declines a safe switch.
+  async function openSavedProjectFromSetup(projectId) {
+    if (motionLabRecorder?.active || renderIsActive() || state.motionJobId ||
+        motionPreviewStarting || animationRenderStarting) {
+      toast('Finish the current job first',
+        'Wait for recording, preview or rendering before switching projects.', 'warning');
+      return false;
+    }
+    await loadProjectList();
+    const opened = await loadProject(projectId, { confirmDirty: true });
+    if (!opened) return false;
+    qs('.nav-button[data-view="animation"]')?.click();
+    showAnimationTab('editor');
+    return state.project?.id === projectId;
+  }
+  window.MorphorumAnimation = {
+    openSavedProjectFromSetup,
+  };
+
   window.addEventListener('DOMContentLoaded', start);
 })();
