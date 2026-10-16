@@ -25,7 +25,7 @@ import urllib.request
 import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Callable
 
 from . import ffmpeg_tools
 
@@ -294,14 +294,14 @@ class ManagedFFmpegManager:
                     and entry.is_dir() and not entry.is_symlink()):
                 shutil.rmtree(entry, ignore_errors=True)
 
-    def start(self) -> dict[str, Any]:
+    def start(self, busy_check: Callable[[], bool] | None = None) -> dict[str, Any]:
         if not supported_asset():
             raise ManagedFFmpegError("Managed FFmpeg is unsupported on this OS/architecture.")
         with self._lock:
             if self._job and self._job["status"] in DOWNLOAD_STATES:
                 raise ManagedFFmpegError("Managed FFmpeg installation is already running.")
             self._clean_abandoned_staging()
-            if (self.root / "current").exists() and not self._owned():
+            if ((self.root / "current").exists() or (self.root / "current").is_symlink()) and not self._owned():
                 raise ManagedFFmpegError(
                     "Unmanaged files exist at tools/ffmpeg/current; refusing to overwrite them."
                 )
@@ -313,7 +313,7 @@ class ManagedFFmpegManager:
                 "error": None, "asset_name": supported_asset(),
             }
             self._job = job
-            threading.Thread(target=self._run, args=(job["id"], self._cancel),
+            threading.Thread(target=self._run, args=(job["id"], self._cancel, busy_check),
                              daemon=True, name="morphorum-ffmpeg-install").start()
             return dict(job)
 
@@ -329,7 +329,8 @@ class ManagedFFmpegManager:
             if self._job and self._job["id"] == job_id:
                 self._job.update(fields)
 
-    def _run(self, job_id: str, cancel: threading.Event) -> None:
+    def _run(self, job_id: str, cancel: threading.Event,
+             busy_check: Callable[[], bool] | None = None) -> None:
         temp = self.root / (".staging-" + job_id)
         backup = self.root / (".previous-" + job_id)
         current = self.root / "current"
@@ -368,11 +369,16 @@ class ManagedFFmpegManager:
                     str(ff_error or pr_error) + "). Previous installation kept."
                 )
             _check_cancel(cancel)
+            if busy_check is not None and busy_check():
+                raise ManagedFFmpegError(
+                    "Video export or hybrid extraction began during the download. "
+                    "Finish that job and retry; the existing FFmpeg installation is unchanged."
+                )
             self._update(job_id, status="installing", message="Activating verified local FFmpeg…", progress=96.0)
             # Unlinking an active executable is often blocked on Windows.
             # Rename fails safely before installation changes; rollback if
             # replacing current later fails.
-            if current.exists():
+            if current.exists() or current.is_symlink():
                 if not self._owned():
                     raise ManagedFFmpegError("Current installation is not Morphorum-managed.")
                 current.rename(backup)
