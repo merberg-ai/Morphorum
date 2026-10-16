@@ -91,6 +91,30 @@ MORPHORUM_PORT_OVERRIDE=8080 ./run.sh
 
 The Linux launcher does not use the Windows saved-port file.
 
+## First launch: guided setup
+
+On a genuinely fresh installation, **First-Run Setup Wizard** appears automatically when you first load the standard local WebUI. Upgrading an existing installation does **not** assume that missing models mean you want onboarding.
+
+The seven screens guide you through:
+
+1. Welcome and host diagnostics (GPU/CUDA and available storage).
+2. WebUI (default) versus authenticated backend-only mode. Switching modes requires restarting Morphorum.
+3. SDXL and FLUX checkpoint folders on the **host computer**.
+4. Optional family-specific LoRA folders.
+5. Optional managed Z-Image-Turbo download, with an explicit confirmation and resumable progress.
+6. Exactly two **512 × 512, 48-frame, 12 FPS** starter animation choices: *Gentle Dolly In* and *Gentle Dolly Out*.
+7. A review page with **Create Example & Open Editor** or **Finish Without Example**.
+
+Opening the wizard never downloads models, renders frames, or creates a project. You can skip and return later from **Settings → Setup Wizard**. The small examples may be opened as editable but **not render-ready** projects if you have not configured a base model. Finishing or skipping onboarding does not erase existing settings or projects.
+
+To manually show setup on the next **WebUI** launch:
+
+| Windows | Linux |
+| --- | --- |
+| `\.\run.bat --setup-wizard` | `./run.sh --setup-wizard` |
+
+Use the command only after stopping an already-running server. The option is incompatible with `--backend-only`, which deliberately has no browser interface. Model directories entered in the wizard refer to the machine running Morphorum, not necessarily the browser device on a LAN.
+
 ## After installation: choose a model
 
 1. Open **Models**.
