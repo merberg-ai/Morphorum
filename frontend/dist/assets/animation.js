@@ -6331,7 +6331,9 @@
         '<button type="button" data-beat-undo disabled>Undo batch</button></div>' +
         '<p data-beat-summary class="muted">Review candidate hits before assigning.</p></details>' +
         '<p class="muted">Cues save with this WAV. Save cues, then Preview camera cues or Apply camera cues. Existing Motion Lab layers remain additive.</p>';
-      waveform.after(panel);
+      const cueStage = qs('#motion-studio-composer-cues');
+      if (cueStage) cueStage.appendChild(panel);
+      else waveform.after(panel);
       const options = panel.querySelector('[data-cue-preset]');
       for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
         const option = document.createElement('option');
@@ -6535,7 +6537,9 @@
         '<button type="button" data-event-clear-detected>Clear all detected markers</button>' +
         '<button type="button" data-event-persist>Save marker edits</button></div>' +
         '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera motion until a later phase.</p>';
-      section.after(editor);
+      const detectStage = qs('#motion-studio-stage-detect');
+      if (detectStage) detectStage.appendChild(editor);
+      else section.after(editor);
       editor.querySelector('[data-event-persist]')?.addEventListener('click', () => void motionLabSaveMarkers());
       editor.querySelector('[data-event-undo]')?.addEventListener('click', () => motionLabMarkerHistory(false));
       editor.querySelector('[data-event-redo]')?.addEventListener('click', () => motionLabMarkerHistory(true));
@@ -6813,6 +6817,7 @@
       visibility:'hidden','data-wave-playhead':''});
     motionLabWavePlayhead();
     motionLabEventEditor();
+    motionStudioDockWaveform();
     const desc = section.querySelector('[data-wave-description]');
     if (desc) desc.textContent = (mode === 'envelope'?'Frame-aligned energy envelope':
       mode === 'both'?'Envelope over separate L/R channels':
@@ -8234,6 +8239,7 @@
       !motionLabAudioAnalysis || motionLabAudioProjectId !== state.project?.id ||
       Number(motionLabAudioAnalysis.fps) !== Number(state.project?.animation?.fps);
     motionStudioUpdateChannelButtons();
+    motionStudioRefreshStageStatus();
   }
   async function motionLabUseProjectSoundtrack() {
     const projectId = state.project?.id;
@@ -10013,6 +10019,288 @@
     });
   }
 
+  // UX1/UX2: stage navigation contains the ORIGINAL Motion Studio controls.
+  // Nothing is cloned or serialized on stage changes. In particular, waveform
+  // playback, unsaved markers/cues, in-flight analysis and draft layers survive.
+  const MOTION_STUDIO_STAGE_KEY = 'morphorum.motionStudio.stage.v1';
+  const MOTION_STUDIO_MODE_KEY = 'morphorum.motionStudio.authorMode.v1';
+  const MOTION_STUDIO_STAGES = [
+    ['source', 'Load Audio', 'Select a WAV or reuse the saved project soundtrack.'],
+    ['analysis', 'Analyze WAV', 'Analyze audio and inspect its waveform and playback.'],
+    ['detect', 'Detect Beats', 'Tune detection and correct the detected markers.'],
+    ['compose', 'Create Motion', 'Choose beat cues, sound channels or continuous motion.'],
+    ['review', 'Preview & Apply', 'Check draft layers and apply to the animation when ready.'],
+  ];
+  const MOTION_STUDIO_AUTHOR_MODES = [
+    ['cues', 'Beat Cues'], ['channels', 'Sound Channels'],
+    ['continuous', 'Continuous Motion'], ['pulse', 'Single-Band Pulse'],
+  ];
+  let motionStudioStage = 'source';
+  let motionStudioAuthorMode = 'cues';
+
+  function motionStudioDockWaveform() {
+    const waveform = qs('#animation-audio-stereo-timeline');
+    if (!waveform) return;
+    const analysis = qs('#animation-audio-analysis-workspace');
+    const destination = motionStudioStage === 'detect'
+      ? qs('#motion-studio-stage-detect')
+      : motionStudioStage === 'compose'
+        ? qs('#motion-studio-composer-waveform') : analysis;
+    if (!destination) return;
+    if (destination === analysis) {
+      const diagnostics = analysis.querySelector('.animation-audio-legacy-envelope');
+      if (diagnostics) diagnostics.before(waveform);
+      else analysis.appendChild(waveform);
+    } else if (waveform.parentElement !== destination) {
+      destination.prepend(waveform);
+    }
+  }
+
+  function motionStudioRefreshStageStatus() {
+    const panel = qs('#animation-panel-audio');
+    if (!panel) return;
+    const analysis = motionLabAudioProjectId === state.project?.id
+      ? motionLabAudioAnalysis : null;
+    const selectedFile = qs('#animation-motion-lab-audio-file')?.files?.[0];
+    const count = analysis ? (motionLabEditedEvents || analysis.events?.events || []).length : 0;
+    const badges = [
+      selectedFile ? 'Selected WAV' : analysis ? 'WAV loaded' : 'Choose audio',
+      analysis ? 'Analyzed' : 'Not analyzed',
+      analysis ? count + ' markers' : 'Analyze first',
+      motionLabDraftLayers.length + ' draft layers',
+      motionLabDraftLayers.length ? 'Draft ready' : 'No draft layers',
+    ];
+    MOTION_STUDIO_STAGES.forEach(([key], index) => {
+      const badge = panel.querySelector('[data-motion-studio-stage-status="' + key + '"]');
+      if (badge) badge.textContent = badges[index];
+    });
+    const summary = qs('#motion-studio-review-summary');
+    if (summary) summary.textContent = !state.project?.id
+      ? 'Open a 3D project in Project Editor first.'
+      : !motionLabDraftLayers.length
+        ? 'No Motion Lab draft layers are staged yet. Create motion, then return here to preview or apply.'
+        : motionLabDraftLayers.length + ' draft layer(s) staged. Review motion curves before applying them to saved animation schedules.';
+  }
+
+  function motionStudioSelectStage(name, {persist = true, focus = false} = {}) {
+    if (!MOTION_STUDIO_STAGES.some(([key]) => key === name)) name = 'source';
+    motionStudioStage = name;
+    for (const [key] of MOTION_STUDIO_STAGES) {
+      const active = key === name;
+      const button = qs('#motion-studio-tab-' + key);
+      const stage = qs('#motion-studio-stage-' + key);
+      if (stage) stage.hidden = !active;
+      if (button) {
+        button.setAttribute('aria-selected', String(active));
+        button.classList.toggle('active', active);
+        button.tabIndex = active ? 0 : -1;
+        if (active && focus) button.focus();
+      }
+    }
+    motionStudioDockWaveform();
+    motionStudioRefreshStageStatus();
+    if (persist) try { localStorage.setItem(MOTION_STUDIO_STAGE_KEY, name); } catch (_) {}
+  }
+
+  function motionStudioSelectAuthorMode(name, {persist = true} = {}) {
+    if (!MOTION_STUDIO_AUTHOR_MODES.some(([key]) => key === name)) name = 'cues';
+    motionStudioAuthorMode = name;
+    for (const [key] of MOTION_STUDIO_AUTHOR_MODES) {
+      const active = key === name;
+      const button = qs('#motion-studio-mode-' + key);
+      const area = qs('#motion-studio-composer-' + key);
+      if (area) area.hidden = !active;
+      if (button) {
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', String(active));
+        button.tabIndex = active ? 0 : -1;
+      }
+    }
+    const hint = qs('#motion-studio-author-hint');
+    if (hint) hint.textContent = name === 'continuous'
+      ? 'Continuous movement can be staged without a WAV. No audio file is required.'
+      : !motionLabAudioAnalysis
+        ? 'Choose and analyze a WAV before creating audio-reactive motion.'
+        : 'Audio edits stay in the draft until you explicitly apply them.';
+    if (persist) try { localStorage.setItem(MOTION_STUDIO_MODE_KEY, name); } catch (_) {}
+  }
+
+  function setupMotionStudioStages(panel, audioIntro) {
+    const nav = document.createElement('nav');
+    nav.id = 'motion-studio-stage-nav';
+    nav.className = 'motion-studio-stage-nav';
+    nav.setAttribute('aria-label', 'Motion Studio workflow');
+    nav.setAttribute('role', 'tablist');
+    const stages = {};
+    MOTION_STUDIO_STAGES.forEach(([name, label, description], index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.id = 'motion-studio-tab-' + name;
+      button.className = 'motion-studio-stage-button';
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-controls', 'motion-studio-stage-' + name);
+      button.innerHTML = '<span class="motion-studio-stage-number">' +
+        (index + 1) + '</span><span class="motion-studio-stage-label"></span>' +
+        '<span class="motion-studio-stage-status" data-motion-studio-stage-status="' +
+        name + '"></span>';
+      button.querySelector('.motion-studio-stage-label').textContent = label;
+      button.addEventListener('click', () => motionStudioSelectStage(name));
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End'
+          ? MOTION_STUDIO_STAGES.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 :
+              MOTION_STUDIO_STAGES.length - 1)) % MOTION_STUDIO_STAGES.length;
+        motionStudioSelectStage(MOTION_STUDIO_STAGES[next][0], {focus: true});
+      });
+      nav.appendChild(button);
+      const stage = document.createElement('section');
+      stage.id = 'motion-studio-stage-' + name;
+      stage.className = 'motion-studio-stage';
+      stage.setAttribute('role', 'tabpanel');
+      stage.setAttribute('aria-labelledby', button.id);
+      stage.innerHTML = '<div class="motion-studio-stage-heading">' +
+        '<div><p class="eyebrow">STEP ' + (index + 1) + ' OF 5</p>' +
+        '<h3></h3><p class="muted"></p></div></div>';
+      stage.querySelector('h3').textContent = label;
+      stage.querySelector('.muted').textContent = description;
+      stage.hidden = index !== 0;
+      stages[name] = stage;
+    });
+    audioIntro.after(nav);
+    let previous = nav;
+    for (const [key] of MOTION_STUDIO_STAGES) {
+      previous.after(stages[key]);
+      previous = stages[key];
+    }
+    const sourceDock = qs('#animation-audio-source-dock');
+    const analysis = qs('#animation-audio-analysis-workspace');
+    const audioCard = qs('#animation-motion-lab-audio');
+    const channels = qs('#animation-motion-studio-channels');
+    const continuous = qs('#animation-motion-studio-arrangement');
+    const introActions = audioIntro.querySelector('.animation-audio-workspace-actions');
+    if (sourceDock) stages.source.appendChild(sourceDock);
+    if (analysis) stages.analysis.appendChild(analysis);
+    // The Analyze button is useful next to the analysis display, not between
+    // the file picker and unrelated motion controls.
+    const actions = sourceDock?.querySelector('.animation-motion-recording-actions');
+    const analyze = qs('#animation-motion-lab-analyze-audio');
+    if (analyze) {
+      const row = document.createElement('div');
+      row.className = 'motion-studio-step-actions';
+      row.appendChild(analyze);
+      stages.analysis.insertBefore(row, analysis);
+    }
+    const detection = audioCard?.querySelector('.animation-audio-config-group:nth-child(2)');
+    if (detection) stages.detect.appendChild(detection);
+    const detectHelp = document.createElement('p');
+    detectHelp.className = 'muted';
+    detectHelp.textContent = 'Analysis finds beat candidates automatically. Adjust the detection settings, use the waveform to move or add markers, then Save marker edits.';
+    stages.detect.appendChild(detectHelp);
+    const modes = document.createElement('nav');
+    modes.className = 'motion-studio-mode-nav';
+    modes.setAttribute('role', 'tablist');
+    modes.setAttribute('aria-label', 'Camera motion creation methods');
+    stages.compose.appendChild(modes);
+    const hint = document.createElement('p');
+    hint.id = 'motion-studio-author-hint';
+    hint.className = 'muted';
+    stages.compose.appendChild(hint);
+    const waveSlot = document.createElement('div');
+    waveSlot.id = 'motion-studio-composer-waveform';
+    stages.compose.appendChild(waveSlot);
+    const modeAreas = {};
+    MOTION_STUDIO_AUTHOR_MODES.forEach(([name,label],index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.id = 'motion-studio-mode-' + name;
+      button.className = 'motion-studio-mode-button';
+      button.textContent = label;
+      button.setAttribute('role','tab');
+      button.setAttribute('aria-controls','motion-studio-composer-' + name);
+      button.addEventListener('click', () => motionStudioSelectAuthorMode(name));
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End'
+          ? MOTION_STUDIO_AUTHOR_MODES.length-1
+          : (index + (event.key === 'ArrowRight' ? 1 :
+              MOTION_STUDIO_AUTHOR_MODES.length-1)) % MOTION_STUDIO_AUTHOR_MODES.length;
+        const key = MOTION_STUDIO_AUTHOR_MODES[next][0];
+        motionStudioSelectAuthorMode(key);
+        qs('#motion-studio-mode-' + key)?.focus();
+      });
+      modes.appendChild(button);
+      const area = document.createElement('section');
+      area.id = 'motion-studio-composer-' + name;
+      area.className = 'motion-studio-author-panel';
+      area.setAttribute('role','tabpanel');
+      area.setAttribute('aria-labelledby', button.id);
+      stages.compose.appendChild(area);
+      modeAreas[name] = area;
+    });
+    modeAreas.cues.innerHTML = '<p class="muted">Place camera cues on beats or at the playhead. Analyze a WAV to enable this editor.</p>';
+    const cueSlot = document.createElement('div');
+    cueSlot.id = 'motion-studio-composer-cues';
+    modeAreas.cues.appendChild(cueSlot);
+    if (channels) modeAreas.channels.appendChild(channels);
+    if (continuous) modeAreas.continuous.appendChild(continuous);
+    if (audioCard) modeAreas.pulse.appendChild(audioCard);
+    if (actions) modeAreas.pulse.appendChild(actions);
+    const review = document.createElement('p');
+    review.id = 'motion-studio-review-summary';
+    review.className = 'muted';
+    review.setAttribute('role','status');
+    stages.review.appendChild(review);
+    if (introActions) stages.review.appendChild(introActions);
+    const preview = document.createElement('button');
+    preview.type = 'button';
+    preview.className = 'secondary-button compact';
+    preview.textContent = 'Open Camera Preview';
+    preview.addEventListener('click', () => showAnimationTab('preview'));
+    const shortcuts = document.createElement('div');
+    shortcuts.className = 'motion-studio-step-actions';
+    shortcuts.appendChild(preview);
+    stages.review.appendChild(shortcuts);
+    const footer = document.createElement('div');
+    footer.className = 'motion-studio-stage-footer';
+    const back = document.createElement('button');
+    const forward = document.createElement('button');
+    back.type = 'button';
+    forward.type = 'button';
+    back.className = 'secondary-button compact';
+    forward.className = 'secondary-button compact';
+    back.textContent = '← Previous step';
+    forward.textContent = 'Next step →';
+    const updateFooter = () => {
+      const index = MOTION_STUDIO_STAGES.findIndex(([key]) => key === motionStudioStage);
+      back.disabled = index <= 0;
+      forward.disabled = index >= MOTION_STUDIO_STAGES.length-1;
+    };
+    back.addEventListener('click', () => {
+      const index = MOTION_STUDIO_STAGES.findIndex(([key]) => key === motionStudioStage);
+      motionStudioSelectStage(MOTION_STUDIO_STAGES[Math.max(0,index-1)][0]);
+      updateFooter();
+    });
+    forward.addEventListener('click', () => {
+      const index = MOTION_STUDIO_STAGES.findIndex(([key]) => key === motionStudioStage);
+      motionStudioSelectStage(MOTION_STUDIO_STAGES[Math.min(MOTION_STUDIO_STAGES.length-1,index+1)][0]);
+      updateFooter();
+    });
+    footer.append(back,forward);
+    panel.appendChild(footer);
+    // Last chosen page is a local UI preference only. It never alters audio,
+    // saved project data, marker edits or the current draft.
+    try { motionStudioStage = localStorage.getItem(MOTION_STUDIO_STAGE_KEY) || 'source'; } catch (_) {}
+    try { motionStudioAuthorMode = localStorage.getItem(MOTION_STUDIO_MODE_KEY) || 'cues'; } catch (_) {}
+    motionStudioSelectAuthorMode(motionStudioAuthorMode, {persist:false});
+    motionStudioSelectStage(motionStudioStage, {persist:false});
+    updateFooter();
+    nav.addEventListener('click', updateFooter);
+    nav.addEventListener('keydown', updateFooter);
+  }
+
   function setupAnimationWorkspaceTabs() {
     const layout = qs('#view-animation .animation-layout');
     const root = qs('#view-animation');
@@ -10304,7 +10592,7 @@
       const apply = qs('#animation-motion-lab-apply');
       if (apply && !apply.disabled) apply.click();
     });
-
+    setupMotionStudioStages(panels.audio, audioIntro);
 
     setupDeforumMotionImport(panels['motion-import']);
     motionLabSetupQuickActions(panels.motion);
