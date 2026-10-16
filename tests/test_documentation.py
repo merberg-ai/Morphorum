@@ -13,6 +13,7 @@ GUIDES = [
     "docs/NEW_PROJECT_WIZARD.md",
     "docs/INSTALLATION.md",
     "docs/TROUBLESHOOTING.md",
+    "docs/FFMPEG_MANAGER.md",
     "docs/CURRENT_STATUS.md",
     "docs/TESTING.md",
 ]
@@ -86,3 +87,22 @@ def test_first_project_wizard_user_docs_track_actual_flow() -> None:
     assert "NEW_PROJECT_WIZARD.md" in readme
     assert "No generation models available" in readme
     assert "model-setup-banner" in (ROOT / "frontend/dist/index.html").read_text(encoding="utf-8")
+
+
+def test_managed_ffmpeg_public_docs_track_shipped_manager() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs/FFMPEG_MANAGER.md").read_text(encoding="utf-8")
+    manager = (ROOT / "backend/morphorum/managed_ffmpeg.py").read_text(encoding="utf-8")
+    ui = (ROOT / "frontend/dist/assets/app.js").read_text(encoding="utf-8")
+    assert "docs/FFMPEG_MANAGER.md" in readme
+    assert "scripts/ffmpeg_acceptance.py" in guide
+    assert "tools/ffmpeg/current/bin" in guide
+    assert (ROOT / "scripts/ffmpeg_acceptance.py").is_file()
+    assert "SHA-256" in guide
+    assert "BtbN FFmpeg-Builds" in guide
+    assert "GPL" in guide
+    for word in ("libx264", "libvpx-vp9", "libopus"):
+        assert word in guide and word in manager
+    for label in ("Install managed FFmpeg", "Remove managed FFmpeg",
+                  "Test FFmpeg / FFprobe"):
+        assert label in ui or label in readme
