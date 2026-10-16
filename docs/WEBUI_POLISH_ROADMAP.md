@@ -107,3 +107,9 @@ Contextual help icons use trusted static text, real buttons beside form labels, 
 P3.1 is a code/style regression checkpoint only. Actual 360px phone, 720px
 tablet and enlarged-scale browser rendering is **deferred**, bundled with
 P2.5–P2.6 physical acceptance. Do not mark P3 complete or merge to main.
+
+## Deferred combined test plan
+
+The ready-to-use test checklist for P2.5, P2.6 and P3.1 is in
+[COMBINED_POLISH_TEST_PLAN.md](COMBINED_POLISH_TEST_PLAN.md). Physical Windows
+and phone testing is still pending; no merge to main is authorized.
