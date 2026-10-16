@@ -471,7 +471,7 @@
     const status = qs('#ffmpeg-manager-status');
     const details = qs('#ffmpeg-manager-details');
     if (!status || !details) return;
-    status.dataset.ready = info.available ? 'yes' : 'no';
+    status.dataset.ready = info.available && info.probe_available ? 'yes' : 'no';
     status.textContent = info.message || 'FFmpeg detection completed.';
     const lines = [
       'Source: ' + (info.source || info.mode || 'unknown'),
