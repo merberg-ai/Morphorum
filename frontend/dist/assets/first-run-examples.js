@@ -8,6 +8,7 @@
   let models = [];
   let catalog = null;
   let busy = false;
+  let choicesReady = false;
 
   const node = (tag, cls, value) => {
     const el = document.createElement(tag);
@@ -15,14 +16,17 @@
     if(value !== undefined) el.textContent=value;
     return el;
   };
-  function leave() { generation++; busy=false; }
+  function leave() { generation++; busy=false; choicesReady=false; }
   async function api(url, options={}) {
     const response=await fetch(url, {cache:'no-store',...options});
     const result=await response.json();
     if(!response.ok) throw new Error(String(result.detail||'Request failed'));
     return result;
   }
-  function selection() {return {template_id:chosen,model_id:modelId};}
+  function selection() {
+    if(!choicesReady) throw new Error('Starter examples are not ready. Check the catalog error and refresh setup.');
+    return {template_id:chosen,model_id:modelId};
+  }
   function selectionFrom(snapshot) {
     const id=snapshot?.example_template_id;
     chosen=OPTIONS.includes(id)?id:'gentle-dolly-in';
@@ -89,8 +93,9 @@
       'Both examples use the same alpine-cabin scene and fixed seed. Positive Camera Z pushes in; negative Camera Z pulls out. All other camera axes stay at zero. Preview Camera Motion before generating.');
     host.appendChild(prompt);
   }
-  async function showExamples(host, snapshot) {
+  async function showExamples(host, snapshot, {onReady}={}) {
     leave();const token=generation;
+    onReady?.(false);
     selectionFrom(snapshot);
     const title=node('h3','', 'Choose a four-second camera move');
     host.appendChild(title);
@@ -100,10 +105,14 @@
       if(token!==generation)return;
       host.replaceChildren(title);
       renderChoices(host,Boolean(snapshot?.example_project_id));
+      choicesReady=true;
+      onReady?.(true);
       if(snapshot?.example_project_id) warning(host,
         'A starter project has already been reserved for this setup. It will be reused, not overwritten.');
     } catch(error) {
       if(token===generation) {
+        choicesReady=false;
+        onReady?.(false);
         host.replaceChildren(title);
         warning(host,'Could not load the example catalog: '+error.message);
       }
@@ -157,9 +166,12 @@
     host.appendChild(details);
     const indexedModel=Boolean(index.find(m=>m.id===modelId));
     const pendingManaged=modelId==='managed:zimage-turbo' && !zimageReady;
+    const missingSelected=Boolean(modelId) && !indexedModel;
     const hasModel=indexedModel && !pendingManaged;
-    status.textContent=pendingManaged
-      ? 'The selected managed Z-Image package is not yet verified. Return to Example Animations and choose No model yet (editable project), or finish its download before creating.'
+    status.textContent=missingSelected
+      ? 'The previously selected checkpoint is no longer indexed. Return to Example Animations to select another model or choose No model yet.'
+      : pendingManaged
+        ? 'The selected managed Z-Image package is not yet verified. Return to Example Animations and choose No model yet (editable project), or finish its download before creating.'
       : hasModel
         ? 'Ready to create an editable project with the selected model. Rendering will not start.'
         : 'No usable base model selected. The example can be created, opened and edited, but is NOT render-ready. Select/download a model before generating.';
@@ -168,7 +180,7 @@
     const without=node('button','secondary-button','Finish Without Example');
     const change=node('button','secondary-button','Configure Model First');
     create.type=without.type=change.type='button';
-    if(pendingManaged) create.disabled=true;
+    if(pendingManaged || missingSelected) create.disabled=true;
     const error=node('p','first-run-example-error');
     error.setAttribute('role','alert');error.hidden=true;
     async function perform(fn) {
@@ -182,7 +194,7 @@
           toast?.('First-run setup',err.message,'error');}
       } finally {
         busy=false;
-        if(token===generation) {create.disabled=pendingManaged;without.disabled=change.disabled=false;}
+        if(token===generation) {create.disabled=pendingManaged||missingSelected;without.disabled=change.disabled=false;}
       }
     }
     create.addEventListener('click',()=>void perform(async()=>{
@@ -207,7 +219,7 @@
       if(!opened) throw Error('The example was saved but the Project Editor could not open it. Retry to open the same saved project, without creating another.');
       await complete();
     }));
-    without.addEventListener('click',()=>void perform(async()=>await complete()));
+    without.addEventListener('click',()=>void perform(async()=>await complete({without_example:true})));
     change.addEventListener('click',()=>window.MorphorumFirstRunSetup?.goto('models'));
     actions.append(create,without,change);
     host.append(actions,error);
