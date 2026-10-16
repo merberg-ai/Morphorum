@@ -9,6 +9,8 @@ venv/
 
 # Morphorum-managed runtime
 .runtime/
+# Downloaded third-party FFmpeg binaries and installation records
+tools/ffmpeg/
 
 # Node / frontend developer dependencies
 node_modules/
