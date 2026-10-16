@@ -32,29 +32,43 @@
   // request token: old network responses cannot overwrite a newer operation.
   function createOperationTracker(publish) {
     const active = new Map();
-    let settled = null;
+    const settledResults = new Map();
+    const dismissed = new Set();
     let sequence = 0;
-    let dismissedToken = null;
+    const priority = tone => ({error: 4, warning: 3, busy: 2, success: 1})[tone] || 0;
+    let current = null;
+    function select() {
+      const entries = [...active.values(), ...settledResults.values()]
+        .filter(entry => !dismissed.has(entry.token));
+      entries.sort((a, b) => priority(b.tone) - priority(a.tone) || b.token - a.token);
+      return entries[0] || null;
+    }
     function visible() {
-      const running = [...active.values()].at(-1);
-      const result = running || settled;
-      publish(result && result.token !== dismissedToken ? { ...result } : null);
+      current = select();
+      publish(current ? { ...current } : null);
+    }
+    function remember(entry) {
+      settledResults.delete(entry.key);
+      settledResults.set(entry.key, entry);
+      while (settledResults.size > 12) {
+        const oldest = settledResults.keys().next().value;
+        dismissed.delete(settledResults.get(oldest).token);
+        settledResults.delete(oldest);
+      }
     }
     return {
       begin(key, title, message = '', view = '') {
         const token = ++sequence;
         active.delete(key);
-        active.set(key, { key, token, title, message, view,
-          tone: 'busy', progress: null });
-        dismissedToken = null;
+        settledResults.delete(key); // Explicit retry retires that key's old error.
+        active.set(key, {key, token, title, message, view, tone: 'busy', progress: null});
         visible();
         return token;
       },
       update(key, token, options = {}) {
         const existing = active.get(key);
         if (!existing || existing.token !== token) return false;
-        active.set(key, { ...existing, ...options,
-          tone: 'busy', key, token });
+        active.set(key, {...existing, ...options, tone: 'busy', key, token});
         visible();
         return true;
       },
@@ -62,23 +76,78 @@
         const existing = active.get(key);
         if (!existing || existing.token !== token) return false;
         active.delete(key);
-        settled = { ...existing, ...options, key, token,
-          tone: ['success','warning','error'].includes(options.tone)
-            ? options.tone : 'success', progress: null };
-        dismissedToken = null;
+        remember({...existing, ...options, key, token,
+          tone: ['success', 'warning', 'error'].includes(options.tone)
+            ? options.tone : 'success', progress: null});
+        dismissed.delete(token); // A dismissed progress notice can still report the result.
         visible();
         return true;
       },
       dismiss() {
-        const running = [...active.values()].at(-1);
-        if (running) dismissedToken = running.token;
-        else settled = null;
-        visible(); // Dismissing never cancels backend work.
+        if (current) {
+          dismissed.add(current.token);
+          if (current.tone !== 'busy') settledResults.delete(current.key);
+        }
+        visible(); // Only the notice is dismissed, never the backend work.
+      },
+      retire(key) {
+        // Forget a stale job notice (e.g. project switched), not the job itself.
+        const running = active.get(key);
+        const settled = settledResults.get(key);
+        if (running) dismissed.delete(running.token);
+        if (settled) dismissed.delete(settled.token);
+        active.delete(key);
+        settledResults.delete(key);
+        visible();
       },
       snapshot() {
-        return { active: [...active.values()].map(v => ({ ...v })),
-          settled: settled && { ...settled } };
+        const results = [...settledResults.values()].map(value => ({...value}));
+        return { active: [...active.values()].map(value => ({...value})),
+          settled: results.at(-1) || null, results, visible: current && {...current} };
       },
+    };
+  }
+
+  // P4.3: One actionable warning per contiguous polling outage. Recovery is
+  // distinct from job completion; retries continue in the existing job monitor.
+  function createPollHealth(ops) {
+    const failures = new Map();
+    return {
+      failed(key, label, view = '') {
+        const state = failures.get(key) || { count: 0, reported: false };
+        state.count += 1;
+        if (state.count === 3) {
+          const operation = ops.begin('poll:' + key, label + ' updates interrupted',
+            'Morphorum cannot confirm the current job status. It may still be running. ' +
+            'Check your backend connection and Console before resubmitting.', view);
+          ops.finish('poll:' + key, operation, {
+            tone: 'warning', title: label + ' updates interrupted',
+            message: 'Live status checks failed repeatedly. The job may still be running; ' +
+              'check your connection and Console before attempting another submission.', view,
+          });
+          state.reported = true;
+          console.warn('[Morphorum] Polling interrupted for ' + label + '; retrying status checks.');
+        }
+        failures.set(key, state);
+      },
+      recovered(key) {
+        const state = failures.get(key);
+        if (!state) return;
+        failures.delete(key);
+        if (state.reported) {
+          const operation = ops.begin('poll:' + key, 'Connection restored',
+            'Live job status is available again.', '');
+          ops.finish('poll:' + key, operation, {
+            tone: 'success', title: 'Live status restored',
+            message: 'Morphorum can check the job again. Review its current status before taking action.',
+          });
+        }
+      },
+      reset(key) {
+        failures.delete(key);
+        ops.retire('poll:' + key);
+      },
+      snapshot(key) { return failures.get(key) ? {...failures.get(key)} : null; },
     };
   }
 
@@ -90,6 +159,18 @@
     if (!entry) return;
     panel.dataset.tone = entry.tone;
     panel.setAttribute('aria-busy', String(entry.tone === 'busy'));
+    // A separate live region announces transitions, not every progress tick.
+    const announcement = document.getElementById('operation-feedback-announcement');
+    if (announcement) {
+      const signature = [entry.token, entry.tone, entry.title].join(':');
+      if (announcement.dataset.signature !== signature) {
+        announcement.dataset.signature = signature;
+        announcement.setAttribute('role', entry.tone === 'error' ? 'alert' : 'status');
+        announcement.setAttribute('aria-live', entry.tone === 'error' ? 'assertive' : 'polite');
+        announcement.textContent = String(entry.title || 'Operation update') +
+          '. ' + String(entry.message || '');
+      }
+    }
     document.getElementById('operation-feedback-title').textContent =
       String(entry.title || 'Operation status');
     document.getElementById('operation-feedback-message').textContent =
@@ -119,6 +200,7 @@
 
   const operations = createOperationTracker(renderOperationFeedback);
   window.MorphorumOperations = operations;
+  window.MorphorumPollHealth = createPollHealth(operations);
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('operation-feedback-dismiss')?.addEventListener('click',
