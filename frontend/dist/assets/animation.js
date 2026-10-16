@@ -3,6 +3,7 @@
 
   let motionPreviewStarting = false;
   let animationRenderStarting = false;
+  let motionPreviewOperation = null; // Tracks a submitted CPU preview across polling.
   const state = {
     project: null,
     projects: [],
@@ -3531,6 +3532,16 @@
   }
 
   function updateMotionProgress(job) {
+    if (motionPreviewOperation &&
+        (!motionPreviewOperation.jobId || motionPreviewOperation.jobId === job.id)) {
+      const raw = job.progress == null ? null : Number(job.progress) * 100;
+      window.MorphorumOperations?.update('motion-preview', motionPreviewOperation.token, {
+        title: 'Generating camera motion preview',
+        message: String(job.message || job.status || 'Generating preview frames…'),
+        progress: raw != null && Number.isFinite(raw) ?
+          Math.max(0, Math.min(100, raw)) : null,
+      });
+    }
     const panel = qs('#animation-motion-progress');
     if (panel) panel.hidden = false;
     const percent = Math.max(0, Math.min(100, Math.round(Number(job.progress || 0) * 100)));
@@ -3543,6 +3554,19 @@
   }
 
   function finishMotionPreview(job) {
+    if (motionPreviewOperation?.jobId === job.id) {
+      window.MorphorumOperations?.finish('motion-preview', motionPreviewOperation.token, {
+        tone: job.status === 'failed' ? 'error' : 'success',
+        title: job.status === 'failed' ? 'Camera motion preview failed' :
+          'Camera motion preview complete',
+        message: job.status === 'failed'
+          ? String(job.error || job.message || 'The CPU camera preview failed.') +
+            ' Review Camera Preview and try again.'
+          : 'CPU preview is ready in Camera Preview. No diffusion model was loaded.',
+        view: 'animation',
+      });
+      motionPreviewOperation = null;
+    }
     state.motionJobId = null;
     window.clearTimeout(state.motionPollTimer);
     state.motionPollTimer = null;
@@ -3625,6 +3649,10 @@
         animationRenderStarting || renderIsActive()) return;
     motionPreviewStarting = true;
     const requestedProjectId = state.project.id;
+    const operation = window.MorphorumOperations?.begin('motion-preview',
+      'Starting camera motion preview',
+      'Submitting a CPU-only camera preview; no diffusion model will load…', 'animation');
+    motionPreviewOperation = { token: operation, jobId: null, projectId: requestedProjectId };
     motionLabSyncQuickActions();
     const button = qs('#animation-generate-motion-preview');
     if (button) {
@@ -3652,13 +3680,26 @@
           },
         }),
       });
-      if (state.project?.id !== requestedProjectId) return;
+      if (state.project?.id !== requestedProjectId) {
+        window.MorphorumOperations?.finish('motion-preview', operation, {
+          tone: 'warning', title: 'Camera preview no longer current',
+          message: 'The active project changed while the preview was submitting.',
+          view: 'animation' });
+        if (motionPreviewOperation?.token === operation) motionPreviewOperation = null;
+        return;
+      }
       state.motionJobId = job.id;
+      if (motionPreviewOperation?.token === operation) motionPreviewOperation.jobId = job.id;
       updateMotionProgress(job);
       motionLabSyncQuickActions();
       renderSourceState();
       pollMotionPreview(job.id);
     } catch (error) {
+      window.MorphorumOperations?.finish('motion-preview', operation, {
+        tone: 'error', title: 'Camera preview could not start',
+        message: error.message + '. Review Camera Preview settings and retry.',
+        view: 'animation' });
+      if (motionPreviewOperation?.token === operation) motionPreviewOperation = null;
       if (state.project?.id !== requestedProjectId) return;
       state.motionJobId = null;
       if (button) {
@@ -4461,6 +4502,18 @@
     motionLabSyncQuickActions();
     const button = qs('#animation-start-render');
     if (button) { button.classList.add('busy'); button.disabled = true; }
+    const operation = window.MorphorumOperations?.begin('animation-render-submit',
+      'Checking animation render',
+      'Validating checkpoint, schedules and project settings before queueing…',
+      'animation');
+    let operationFinished = false;
+    const finishSubmit = (options) => {
+      if (operationFinished) return;
+      operationFinished = true;
+      window.MorphorumOperations?.finish('animation-render-submit', operation, {
+        view: 'animation', ...options,
+      });
+    };
     try {
       // Keep collection inside the try: invalid project inputs must not
       // strand the toolbar in its pending-render locked state.
@@ -4468,12 +4521,20 @@
       const frozen = JSON.stringify(project);
       const preflight = await runRenderPreflight(project);
       if (!preflight.valid) {
+        finishSubmit({
+          tone: 'error', title: 'Animation render blocked',
+          message: preflight.errors + ' blocking issue(s). Open Render Monitor to fix the project settings.',
+        });
         toast('Render blocked by project settings',
           'Review the pre-render error list before retrying.', 'error', 7500);
         showAnimationTab('monitor');
         return;
       }
       if (preflight.warnings) {
+        window.MorphorumOperations?.update('animation-render-submit', operation, {
+          title: 'Render needs your confirmation',
+          message: preflight.warnings + ' non-blocking warning(s) require review before submitting.',
+        });
         const messages = preflight.issues.filter(issue => issue.severity === 'warning')
           .slice(0, 3).map(issue => issue.message);
         const confirmed = await window.MorphorumDialog.confirm({
@@ -4482,27 +4543,54 @@
             ' The warnings do not prevent rendering. Continue with this exact project draft?',
           confirmText: 'Render Anyway', cancelText: 'Review Warnings',
         });
-        if (!confirmed) { showAnimationTab('monitor'); return; }
+        if (!confirmed) {
+          finishSubmit({
+            tone: 'warning', title: 'Animation render not submitted',
+            message: 'You chose to review the preflight warnings. No render was queued.',
+          });
+          showAnimationTab('monitor');
+          return;
+        }
       }
       // Prevent an in-flight check or confirm dialog from rendering stale edits.
       if (state.project?.id !== project.id ||
           JSON.stringify(collectProject()) !== frozen) {
+        finishSubmit({
+          tone: 'warning', title: 'Render submission cancelled: settings changed',
+          message: 'The project changed during validation. Review settings and run Render again.',
+        });
         toast('Settings changed during render check',
           'Run Render Animation again to check the current project.', 'warning', 6500);
         resetRenderPreflight();
         return;
       }
+      window.MorphorumOperations?.update('animation-render-submit', operation, {
+        title: 'Submitting animation render',
+        message: 'Preflight passed. Sending the validated project to the render queue…',
+      });
       const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project }) });
       state.renderJobId = job.id;
+      finishSubmit({
+        title: 'Animation render queued',
+        message: 'Job ' + job.id + ' accepted. Render Monitor shows live frames, GPU load and cancellation.',
+      });
       renderAnimationJob(job);
       showAnimationTab('monitor');
       await loadRenderHistory();
       pollAnimationRender(job.id);
       toast('Animation render queued', 'Current browser project state was frozen into the render manifest.', 'success');
     } catch (error) {
+      finishSubmit({
+        tone: 'error', title: 'Animation render could not start',
+        message: error.message + '. Review Render Monitor and project settings before retrying.',
+      });
       renderAnimationJob(null);
       toast('Could not start animation render', error.message, 'error', 8000);
     } finally {
+      if (!operationFinished) finishSubmit({
+        tone: 'warning', title: 'Render submission cancelled',
+        message: 'The render was not queued. Review Render Monitor before retrying.',
+      });
       animationRenderStarting = false;
       renderSourceState();
     }
@@ -9214,6 +9302,19 @@
     motionLabBusy = true;
     motionLabBusyAction = apply ? 'apply' : curvesOnly ? 'curves' : 'preview';
     renderMotionLabDraft();
+    const operation = window.MorphorumOperations?.begin('motion-lab-workflow',
+      apply ? 'Applying Motion Lab layers' : 'Preparing Motion Lab preview',
+      apply ? 'Reviewing and applying camera layers to your project…' :
+        'Compiling draft camera layers without changing the saved animation…',
+      'animation');
+    let operationFinished = false;
+    const completeOperation = (options) => {
+      if (operationFinished) return;
+      operationFinished = true;
+      window.MorphorumOperations?.finish('motion-lab-workflow', operation, {
+        view: 'animation', ...options,
+      });
+    };
     try {
       if (apply && state.dirty) {
         const approved = await window.MorphorumDialog.confirm({
@@ -9222,6 +9323,10 @@
           variant: 'default', confirmText: 'Save & Apply', cancelText: 'Cancel',
         });
         if (!approved || state.project?.id !== projectId) return;
+        window.MorphorumOperations?.update('motion-lab-workflow', operation, {
+          title: 'Saving Editor changes',
+          message: 'Saving unsaved Editor settings before Motion Lab applies its layers…',
+        });
         const saved = await api('/api/animation/projects/' + encodeURIComponent(projectId), {
           method: 'PUT', body: JSON.stringify(collectProject()),
         });
@@ -9232,6 +9337,11 @@
         // Confirming the save doesn't confirm overwriting hand-edited tracks.
         // A separate explicit rebase confirmation is still required if needed.
       }
+      window.MorphorumOperations?.update('motion-lab-workflow', operation, {
+        title: apply ? 'Applying native camera schedules' : 'Compiling motion curves',
+        message: apply ? 'Sending draft layers to the saved animation project…' :
+          'Calculating draft motion diagnostics with the host CPU…',
+      });
       const endpoint = '/api/animation/projects/' +
         encodeURIComponent(projectId) + '/motion-lab/' + (apply ? 'apply' : 'preview');
       const payload = { layers: motionLabDraftLayers };
@@ -9280,15 +9390,37 @@
         fillForm();
         await loadTimeline();
         await loadProjectList();
+        completeOperation({
+          title: 'Motion Lab applied successfully',
+          message: 'Native camera schedules updated and project timeline refreshed.',
+        });
         toast('Motion Lab applied', 'Native 3D camera schedules updated without leaving Motion Lab.', 'success');
       } else if (!curvesOnly) {
+        completeOperation({
+          title: 'Motion Lab draft compiled',
+          message: 'Motion curves compiled; starting a separate CPU Camera Preview job.',
+        });
         await generateMotionPreview(result.project);
+      } else {
+        completeOperation({
+          title: 'Motion curves updated',
+          message: 'Draft motion diagnostics and curves refreshed without saving.',
+        });
       }
     } catch (error) {
+      completeOperation({
+        tone: 'error', title: apply ? 'Motion Lab apply failed' : 'Motion Lab preview failed',
+        message: error.message + '. Your draft layers remain available in Motion Lab.',
+      });
       motionLabNotify('Motion Lab: ' + error.message);
       toast('Motion Lab ' + (apply ? 'apply' : 'preview') + ' failed',
         error.message, 'error', 7000);
     } finally {
+      if (!operationFinished) completeOperation({
+        tone: 'warning',
+        title: 'Motion Lab action cancelled',
+        message: 'No further motion changes were applied. Draft layers remain available.',
+      });
       motionLabBusy = false;
       motionLabBusyAction = null;
       renderMotionLabDraft();
