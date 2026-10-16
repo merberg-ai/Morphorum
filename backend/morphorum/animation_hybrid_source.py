@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .animation_projects import animation_project_directory
-from .animation_video import ffmpeg_executable
+from .ffmpeg_tools import ffmpeg_executable, ffprobe_executable
 
 
 class HybridSourceError(ValueError):
@@ -161,14 +161,11 @@ async def store_managed_video(project_id: str, filename: str, chunks: Any) -> di
 
 
 def _probe_file(path: Path) -> dict[str, Any]:
-    ffmpeg = ffmpeg_executable()
-    if not ffmpeg:
-        raise HybridSourceError("FFmpeg/FFprobe is not installed.")
-    executable = Path(ffmpeg).with_name(
-        "ffprobe.exe" if Path(ffmpeg).suffix.lower() == ".exe" else "ffprobe"
-    )
-    if not executable.is_file():
-        raise HybridSourceError("FFprobe executable was not found next to FFmpeg.")
+    executable = ffprobe_executable()
+    if not executable:
+        raise HybridSourceError(
+            "FFprobe is unavailable for the selected FFmpeg. "
+            "Choose an installation containing both tools in Settings.")
     try:
         completed = subprocess.run(
             [str(executable), "-v", "error", "-show_streams", "-show_format",
