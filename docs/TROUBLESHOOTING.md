@@ -155,6 +155,9 @@ Morphorum prevents incompatible actions from running simultaneously. A busy butt
 
 ## Video export fails or FFmpeg is missing
 
+For source-selection screenshots-free instructions, local-managed download troubleshooting, license notes and the CPU-only acceptance command, see [FFmpeg Manager](FFMPEG_MANAGER.md).
+
+
 Open **Settings → Storage → FFmpeg Manager**. Set **Auto-detect** to use
 the FFmpeg available in the host's `PATH`, optionally overridden by the
 legacy `MORPHORUM_FFMPEG` environment variable. Select **Custom executable**
