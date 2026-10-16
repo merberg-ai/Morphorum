@@ -300,15 +300,19 @@
     document.documentElement.dataset.helpHints = helpEnabled ? 'on' : 'off';
     if (!helpEnabled) closeHelp();
   }
-  document.addEventListener('click', event => {
-    if (!event.target.closest?.('.morphorum-help-trigger')) closeHelp();
-  });
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') closeHelp();
-  });
-  document.addEventListener('scroll', positionHelp, true);
-  window.addEventListener('resize', positionHelp);
   window.MorphorumHelp = {refresh: refreshHelp, setEnabled: setHelpEnabled};
-  document.addEventListener('DOMContentLoaded', () => refreshHelp());
+  // UI utilities are also loaded in Node test sandboxes without a DOM.
+  // Register document listeners only in a real browser.
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('click', event => {
+      if (!event.target.closest?.('.morphorum-help-trigger')) closeHelp();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closeHelp();
+    });
+    document.addEventListener('scroll', positionHelp, true);
+    window.addEventListener('resize', positionHelp);
+    document.addEventListener('DOMContentLoaded', () => refreshHelp());
+  }
 
 })();
