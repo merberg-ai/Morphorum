@@ -56,6 +56,20 @@ Starting with `run.bat` or `./run.sh` permits local host access only. To use ano
 > [!WARNING]
 > Morphorum's LAN service does **not** currently provide authentication. Do not expose it to public networks or the internet.
 
+## First-run setup wizard does not appear, resume, or finish
+
+- **Existing installation?** Onboarding does not automatically appear because models are absent. Use **Settings → Setup Wizard**, or restart the WebUI with `run.bat --setup-wizard` (Windows) or `./run.sh --setup-wizard` (Linux).
+- **Installation unfinished:** Complete or repair the installation. The new installer marks setup ready only after its installation checks.
+- **Setup revision conflict:** Another browser/tab updated setup state. Close and reopen the wizard to retrieve the current server-owned state. Do not manually reset `data/setup-state.json`.
+- **Folder validation issue:** Enter an existing readable directory on the computer hosting Morphorum, check it, then **Save Folders & Scan**. A readable folder does not guarantee the right model family or that model weights can load.
+- **Z-Image transfer still active:** **Not Now** continues onboarding; interrupted files are incomplete, not a usable model. Resume/retry when space and network are available. The full package is about 33 GB plus a disk reserve.
+- **Example Animations cannot advance:** The catalog and model index may still be loading or unavailable. Refresh/reopen setup and inspect **Console**. If your selected checkpoint disappeared, choose another or **No model yet**.
+- **Project saved but the Editor did not open:** Resolve any unsaved-editor prompt or ongoing render/recording, then retry. The same project ID is reused without overwriting your changes.
+- **Finish Without Example:** Finishes onboarding with no model or render required. Create a normal project later through **Motion Lab → New Project Wizard**.
+- **Backend-only:** Has no browser wizard. Do not combine `--setup-wizard` and `--backend-only`.
+
+If the saved setup-state JSON is corrupted, preserve a backup for diagnostics rather than deleting it or user projects.
+
 ## Models are missing from the dropdown
 
 - Open **Settings** and confirm your checkpoint and LoRA directories point to real locations.
