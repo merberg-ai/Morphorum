@@ -195,8 +195,10 @@ test('MS6.5 keyboard focus wraps across controls inside wizard, not just footer 
   const inside={disabled:false,hidden:false,focused:false,
     focus(){this.focused=true;},getClientRects(){return [1];},closest(){return null;}};
   const close=h.nodes['first-run-close'];
+  close.hidden=false;
   close.getClientRects=()=>[1];close.closest=()=>null;
   const next=h.nodes['first-run-next'];
+  next.hidden=false;
   next.getClientRects=()=>[1];next.closest=()=>null;
   h.overlay.querySelectorAll=()=>[close,inside,next];
   h.context.document.activeElement=next;
