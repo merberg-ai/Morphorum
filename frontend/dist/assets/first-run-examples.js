@@ -109,7 +109,7 @@
       }
     }
   }
-  async function showFinish(host,snapshot,{reserved,complete,openEditor,toast}) {
+  async function showFinish(host,snapshot,{reserved,complete,openEditor,toast,manual}) {
     leave();const token=generation;
     selectionFrom(snapshot);
     host.appendChild(node('h3','','Review first-run example'));
@@ -190,7 +190,7 @@
         body:JSON.stringify({
           template_id:chosen,model_id:modelId,
           revision:snapshot.revision,
-          manual:snapshot.status==='legacy'||snapshot.forced_for_launch,
+          manual:Boolean(manual),
         }),
       });
       if(token!==generation)return;
