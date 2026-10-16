@@ -65,6 +65,24 @@ test('P4.4 Settings includes all three source choices and explicit test action',
   assert.match(app,/markSettingsDirty\(\)/);
 });
 
+test('P4.4.3 managed actions are explicitly user-triggered and guarded',()=>{
+  assert.match(app,/id = 'ffmpeg-manager-install'/);
+  assert.match(app,/id = 'ffmpeg-manager-cancel'/);
+  assert.match(app,/id = 'ffmpeg-manager-remove'/);
+  assert.match(app,/managedFFmpegAction\('install'\)/);
+  assert.match(app,/managedFFmpegAction\('remove'\)/);
+  assert.match(app,/MorphorumDialog\.confirm\(\{/);
+  assert.match(app,/api\('\/api\/tools\/ffmpeg\/managed'/);
+  assert.match(app,/ffmpeg-manager-install-progress/);
+  assert.match(app,/FFMPEG_BUSY_STATES\.has\(info\.job\.status\)/);
+  assert.match(app,/state\.ffmpegManagedTimer = window\.setTimeout\(refreshManagedFFmpeg, 900\)/);
+  assert.match(app,/window\.MorphorumPollHealth\?\.failed\('ffmpeg-managed'/);
+  assert.match(backend,/@app\.post\("\/api\/tools\/ffmpeg\/managed\/install", status_code=202\)/);
+  assert.match(backend,/@app\.post\("\/api\/tools\/ffmpeg\/managed\/cancel"\)/);
+  assert.match(backend,/@app\.delete\("\/api\/tools\/ffmpeg\/managed"\)/);
+  assert.match(backend,/_ffmpeg_binary_busy\(\)/);
+});
+
 test('P4.4 preserves responsive layout and video availability refresh',()=>{
   assert.match(css,/ffmpeg-manager-card/);
   assert.match(css,/ffmpeg-manager-details/);
