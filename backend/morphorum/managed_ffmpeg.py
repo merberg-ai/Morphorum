@@ -374,8 +374,9 @@ class ManagedFFmpegManager:
                          progress=100.0, version=ff_ver, probe_version=pr_ver, error=None)
         except _Cancelled as exc:
             self._update(job_id, status="cancelled", message=str(exc), error=None)
-        except (OSError, ValueError, ManagedFFmpegError, urllib.error.URLError,
-                zipfile.BadZipFile, tarfile.TarError) as exc:
+        except Exception as exc:
+            # A worker must always settle into a terminal state, even when a
+            # malformed release, archive or unforeseen IO condition occurs.
             self._update(job_id, status="failed",
                          message="Managed FFmpeg installation failed.",
                          error=str(exc)[:400])
