@@ -16,7 +16,8 @@ function servicesUnderTest() {
   const start = services.indexOf('  function createOperationTracker(publish) {');
   const end = services.indexOf('  function renderOperationFeedback(entry) {', start);
   assert.ok(start >= 0 && end > start);
-  const ctx = {Map, Set, console: {warn(){}},
+  const ctx = {Map, Set, AbortController, setTimeout, clearTimeout,
+    console: {warn(){}},
     window: {MorphorumClientDiagnostics: {record(){}}}};
   vm.runInNewContext(services.slice(start, end) +
     '\nthis.createTracker=createOperationTracker;this.createHealth=createPollHealth;', ctx);
@@ -86,6 +87,26 @@ test('P4.3 polling health warns once after repeated misses and distinguishes rec
   health.reset('render:a');
   assert.equal(health.snapshot('render:a'),null);
   assert.equal(ops.snapshot().results.some(x=>x.key==='poll:render:a'),false);
+});
+
+test('P4.3 times out only the status request, not the backend job',async()=>{
+  const {health}=servicesUnderTest();
+  let aborted=false;
+  await assert.rejects(
+    health.request(signal => new Promise((resolve, reject) => {
+      signal.addEventListener('abort',()=>{
+        aborted=true;
+        reject(new Error('HTTP read aborted'));
+      });
+    }), 10),
+    /Status request timed out/
+  );
+  assert.equal(aborted,true);
+  const job=await health.request(async signal => {
+    assert.equal(signal.aborted,false);
+    return {status:'generating'};
+  },100);
+  assert.equal(job.status,'generating');
 });
 
 test('P4.3 accessibility announces transitions, not rapidly changing percentages',()=>{
