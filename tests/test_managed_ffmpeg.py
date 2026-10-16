@@ -274,6 +274,48 @@ def test_crash_recovery_refuses_ambiguous_backup_candidates(tmp_path):
     assert not (manager.root / "current").exists()
 
 
+def test_incomplete_owned_install_can_be_repaired_without_claiming_ready(tmp_path, monkeypatch):
+    root = tmp_path / "ffmpeg"
+    current = root / "current"
+    current.mkdir(parents=True)
+    (current / "installation.json").write_text(json.dumps({
+        "managed_by": "Morphorum", "provider": managed.PROJECT_URL,
+    }))
+    manager = managed.ManagedFFmpegManager(root)
+    info = manager.status()
+    assert not info["installed"]
+    assert info["repair_needed"]
+    # A broken owned copy may be removed so Install can be retried safely.
+    manager.remove()
+    assert not current.exists()
+
+
+def test_removal_tombstone_prevents_resurrection_of_old_locked_backup(tmp_path):
+    root = tmp_path / "ffmpeg"
+    current = root / "current"
+    current.mkdir(parents=True)
+    bin_path = current / "bin"
+    bin_path.mkdir()
+    for name in ("ffmpeg", "ffprobe"):
+        (bin_path / ffmpeg_tools._bin_name(name)).write_bytes(b"binary")
+    (current / "installation.json").write_text(json.dumps({
+        "managed_by": "Morphorum", "provider": managed.PROJECT_URL,
+    }))
+    old = root / (".previous-" + "d" * 32)
+    old.mkdir()
+    (old / "bin").mkdir()
+    for name in ("ffmpeg", "ffprobe"):
+        (old / "bin" / ffmpeg_tools._bin_name(name)).write_bytes(b"binary")
+    (old / "installation.json").write_text(json.dumps({
+        "managed_by": "Morphorum", "provider": managed.PROJECT_URL,
+    }))
+    manager = managed.ManagedFFmpegManager(root)
+    assert not manager.remove()["installed"]
+    assert not managed.ManagedFFmpegManager(root).status()["installed"]
+    assert old.is_dir()
+    assert not current.exists()
+
+
 def test_rejects_unowned_installation_on_start_and_remove(tmp_path):
     m = managed.ManagedFFmpegManager(tmp_path / "ffmpeg")
     (m.root / "current").mkdir(parents=True)
