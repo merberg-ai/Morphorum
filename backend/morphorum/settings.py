@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from .paths import DEFAULT_CONFIG, ROOT, USER_CONFIG, ensure_runtime_dirs
+from .ffmpeg_tools import normalize_ffmpeg_settings
 
 MODEL_FAMILY_DEFS = {
     "sdxl": {
@@ -186,6 +187,11 @@ def _normalize_preferences(settings: dict[str, Any]) -> dict[str, Any]:
             "1", "true", "yes", "on"
         }
     performance["sdxl_vae_tiling"] = sdxl_vae_tiling
+    tools = settings.setdefault("tools", {})
+    if not isinstance(tools, dict):
+        tools = {}
+        settings["tools"] = tools
+    tools["ffmpeg"] = normalize_ffmpeg_settings(tools.get("ffmpeg"))
     return settings
 
 
@@ -206,6 +212,9 @@ def save_settings(update: dict[str, Any]) -> dict[str, Any]:
     """Merge a settings update into the current user configuration and write atomically."""
     if not isinstance(update, dict):
         raise ValueError("settings payload must be an object")
+    tools_update = update.get("tools")
+    if isinstance(tools_update, dict) and "ffmpeg" in tools_update:
+        normalize_ffmpeg_settings(tools_update["ffmpeg"], strict=True)
 
     ensure_runtime_dirs()
     current_user = _read_yaml(USER_CONFIG)
