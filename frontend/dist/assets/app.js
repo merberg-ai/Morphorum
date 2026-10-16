@@ -455,6 +455,163 @@
     return card;
   }
 
+  // P4.4.2: FFmpeg belongs to the host, not the browser. An unsaved choice
+  // can be checked safely; only Save Settings changes the active resolver.
+  function ensureFFmpegSettings() {
+    state.settings ||= {};
+    state.settings.tools ||= {};
+    state.settings.tools.ffmpeg ||= {mode: 'auto', custom_path: ''};
+    const config = state.settings.tools.ffmpeg;
+    if (!['auto', 'custom', 'managed'].includes(config.mode)) config.mode = 'auto';
+    config.custom_path = String(config.custom_path || '');
+    return config;
+  }
+
+  function renderFFmpegStatus(info) {
+    const status = qs('#ffmpeg-manager-status');
+    const details = qs('#ffmpeg-manager-details');
+    if (!status || !details) return;
+    status.dataset.ready = info.available ? 'yes' : 'no';
+    status.textContent = info.message || 'FFmpeg detection completed.';
+    const lines = [
+      'Source: ' + (info.source || info.mode || 'unknown'),
+      'FFmpeg: ' + (info.version || 'Not available'),
+      'FFprobe: ' + (info.probe_version || 'Not available'),
+      'FFmpeg executable: ' + (info.ffmpeg_path || 'Not found'),
+      'FFprobe executable: ' + (info.ffprobe_path || 'Not found'),
+    ];
+    details.textContent = lines.join('\n');
+    // Test results apply only to the unsaved selection until Save Settings.
+  }
+
+  async function checkFFmpegSettings({quiet = false} = {}) {
+    const config = ensureFFmpegSettings();
+    const selection = {mode: config.mode, custom_path: config.custom_path.trim()};
+    const serial = (state.ffmpegRequestId || 0) + 1;
+    state.ffmpegRequestId = serial;
+    const button = qs('#ffmpeg-manager-check');
+    const status = qs('#ffmpeg-manager-status');
+    const details = qs('#ffmpeg-manager-details');
+    if (button) {button.disabled = true;button.classList.add('busy');}
+    if (status) status.textContent = 'Checking selected FFmpeg and FFprobe…';
+    if (details) details.textContent = '';
+    const operation = quiet ? null : window.MorphorumOperations?.begin(
+      'ffmpeg-check','Checking FFmpeg tools',
+      'Testing the selected executables on the Morphorum host…','settings');
+    try {
+      const info = await api('/api/tools/ffmpeg/check', {
+        method: 'POST', body: JSON.stringify(selection),
+      });
+      if (serial !== state.ffmpegRequestId) return;
+      renderFFmpegStatus(info);
+      if (!quiet) window.MorphorumOperations?.finish('ffmpeg-check', operation, {
+        tone: info.available && info.probe_available ? 'success' : 'warning',
+        title: info.available && info.probe_available
+          ? 'FFmpeg and FFprobe verified' : 'FFmpeg setup needs attention',
+        message: info.message, view: 'settings',
+      });
+    } catch (error) {
+      if (serial !== state.ffmpegRequestId) return;
+      if (status) status.textContent = 'FFmpeg check failed: ' + error.message;
+      if (!quiet) window.MorphorumOperations?.finish('ffmpeg-check', operation, {
+        tone: 'error', title: 'FFmpeg check failed',
+        message: error.message + ' Check the selected path and backend connection.',
+        view: 'settings',
+      });
+    } finally {
+      if (serial === state.ffmpegRequestId && button) {
+        button.disabled = false; button.classList.remove('busy');
+      }
+    }
+  }
+
+  function createFFmpegManagerCard() {
+    const config = ensureFFmpegSettings();
+    const card = document.createElement('article');
+    card.className = 'card glass settings-preferences-card ffmpeg-manager-card';
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const heading = document.createElement('div');
+    const title = document.createElement('h2');
+    title.textContent = 'FFmpeg Manager';
+    const intro = document.createElement('p');
+    intro.className = 'muted';
+    intro.textContent = 'Select the host installation used for video export, hybrid video and audio conversion.';
+    heading.append(title, intro); header.appendChild(heading);
+    const grid = document.createElement('div');
+    grid.className = 'field-grid settings-preference-grid';
+    const modeField = document.createElement('label');
+    const modeLabel = document.createElement('span');
+    modeLabel.textContent = 'FFmpeg source';
+    const mode = document.createElement('select');
+    mode.id = 'ffmpeg-manager-mode';
+    for (const [value, label] of [
+      ['auto','Auto-detect from host PATH (or MORPHORUM_FFMPEG)'],
+      ['custom','Custom installed executable'],
+      ['managed','Morphorum-managed local FFmpeg'],
+    ]) {
+      const option = document.createElement('option');
+      option.value = value; option.textContent = label; mode.appendChild(option);
+    }
+    mode.value = config.mode;
+    modeField.append(modeLabel, mode);
+    const pathField = document.createElement('label');
+    pathField.id = 'ffmpeg-manager-path-field';
+    const pathTitle = document.createElement('span');
+    pathTitle.textContent = 'Custom FFmpeg executable path';
+    const customPath = document.createElement('input');
+    customPath.id = 'ffmpeg-manager-path';
+    customPath.className = 'path-input';
+    customPath.type = 'text';
+    customPath.spellcheck = false;
+    customPath.autocomplete = 'off';
+    customPath.placeholder = navigator.userAgent.includes('Windows')
+      ? 'D:\\Tools\\ffmpeg\\bin\\ffmpeg.exe' : '/usr/local/bin/ffmpeg';
+    customPath.value = config.custom_path;
+    pathField.append(pathTitle, customPath);
+    const managedNote = document.createElement('div');
+    managedNote.id = 'ffmpeg-manager-managed-note';
+    managedNote.className = 'path-message';
+    managedNote.textContent =
+      'Local managed install: tools/ffmpeg/current/bin inside Morphorum. ' +
+      'Automatic verified downloads are scheduled for P4.4.3 and are not available in this build.';
+    const status = document.createElement('p');
+    status.id = 'ffmpeg-manager-status';
+    status.className = 'path-message';
+    status.setAttribute('role','status');
+    status.textContent = 'Select Test FFmpeg to check this host.';
+    const details = document.createElement('pre');
+    details.id = 'ffmpeg-manager-details';
+    details.className = 'ffmpeg-manager-details';
+    const test = makeButton('Test FFmpeg / FFprobe', 'secondary-button compact busy-button');
+    test.id = 'ffmpeg-manager-check';
+    test.addEventListener('click', () => void checkFFmpegSettings());
+    function syncMode() {
+      config.mode = mode.value;
+      pathField.hidden = config.mode !== 'custom';
+      managedNote.hidden = config.mode !== 'managed';
+      status.textContent = 'Selection changed. Test this configuration, then Save Settings to activate it.';
+      details.textContent = '';
+      state.ffmpegRequestId = (state.ffmpegRequestId || 0) + 1;
+      test.disabled = false; test.classList.remove('busy');
+      markSettingsDirty();
+    }
+    mode.addEventListener('change', syncMode);
+    customPath.addEventListener('input', () => {
+      config.custom_path = customPath.value;
+      status.textContent = 'Path edited. Test the executable, then Save Settings.';
+      details.textContent = '';
+      state.ffmpegRequestId = (state.ffmpegRequestId || 0) + 1;
+      test.disabled = false; test.classList.remove('busy');
+      markSettingsDirty();
+    });
+    pathField.hidden = config.mode !== 'custom';
+    managedNote.hidden = config.mode !== 'managed';
+    grid.append(modeField, pathField);
+    card.append(header, grid, managedNote, status, details, test);
+    return card;
+  }
+
   function createManagedModelsCard() {
     const managed = ensureManagedModels();
     const card = document.createElement('article');
@@ -753,6 +910,7 @@
     panes.appearance.appendChild(createHelpPreferencesCard());
     panes.generation.appendChild(createPreferencesCard());
     panes.storage.appendChild(createManagedModelsCard());
+    panes.storage.appendChild(createFFmpegManagerCard());
     for (const [family, fallbackLabel, source, loraSource, supportsLoras] of FAMILY_DEFS) {
       if (source === 'managed' && !(supportsLoras && loraSource === 'external')) continue;
       const familyData = ensureFamily(family);
@@ -827,6 +985,7 @@
       window.MorphorumHelp?.setEnabled(state.settings.ui.show_help_hints);
       renderSettings();
       setSettingsClean();
+      void checkFFmpegSettings({quiet: true});
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       if (announce) {
         window.MorphorumOperations?.finish('settings', operation, {
@@ -864,6 +1023,10 @@
     const managed = ensureManagedModels();
     return {
       models,
+      tools: {ffmpeg: {
+        mode: ensureFFmpegSettings().mode,
+        custom_path: ensureFFmpegSettings().custom_path.trim(),
+      }},
       managed_models: {
         locations: {
           zimage: String(managed.locations.zimage || '.\\ckpts\\z-image').trim() || '.\\ckpts\\z-image',
@@ -904,6 +1067,7 @@
       window.MorphorumHelp?.setEnabled(state.settings.ui.show_help_hints);
       renderSettings();
       setSettingsClean();
+      void checkFFmpegSettings({quiet: true});
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       const warnings = (payload.validation || []).filter(item => !(item.exists && item.is_directory && item.readable));
       if (warnings.length) {
