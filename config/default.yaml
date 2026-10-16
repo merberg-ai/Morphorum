@@ -46,6 +46,11 @@ performance:
   sdxl_vae_tiling: false
   unload_after_minutes: 0
 
+tools:
+  ffmpeg:
+    mode: auto
+    custom_path: ""
+
 managed_models:
   locations:
     zimage: .\ckpts\z-image

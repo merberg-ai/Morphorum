@@ -141,6 +141,7 @@ test('high-resolution animation submits immediately without a 512px confirmation
   assert.ok(!script.includes('confirmHigherResolutionRender('));
   assert.ok(!script.includes('High-resolution render warning'));
   const submits = [];
+  const preflights = [];
   let prompts = 0;
   let renderId = 0;
   const startButton = { disabled: false, classList: { add() {} } };
@@ -152,6 +153,10 @@ test('high-resolution animation submits immediately without a 512px confirmation
     renderSourceState() {},
     renderIsActive: () => false,
     collectProject: () => ({ id: 'test', animation: { width: 1024, height: 1024 } }),
+    runRenderPreflight: async project => {
+      preflights.push(project.animation);
+      return { valid: true, errors: 0, warnings: 0, issues: [] };
+    },
     qs: selector => selector === '#animation-start-render' ? startButton : null,
     api: async (url, options) => {
       if (url === '/api/system/gpu-memory') throw Error('Must not poll GPU memory');
@@ -173,6 +178,7 @@ test('high-resolution animation submits immediately without a 512px confirmation
   vm.runInNewContext(script.slice(begin, end) +
     '\nthis.start = startAnimationRender;', context);
   await context.start();
+  assert.equal(preflights.length, 1, 'ready check happens before queuing');
   assert.equal(submits.length, 1);
   assert.equal(submits[0].width, 1024);
   assert.equal(submits[0].height, 1024);

@@ -40,3 +40,25 @@ def test_extraction_manifest_rejects_stale_video_after_replacement(tmp_path, mon
     video.write_bytes(b"replacement video data")
     with pytest.raises(HybridSourceError, match="previous video"):
         manager.manifest("project")
+
+
+def test_extraction_pins_ffmpeg_at_submission_even_if_settings_change(monkeypatch):
+    import morphorum.animation_hybrid_extract as extraction
+
+    class QueuedExecutor:
+        def submit(self, *_args):
+            return None
+
+    monkeypatch.setattr(extraction, "_POOL", QueuedExecutor())
+    monkeypatch.setattr(extraction, "probe_managed_video",
+                        lambda _project, _filename: {"duration_seconds": 5})
+    monkeypatch.setattr(extraction, "ffmpeg_executable", lambda: "/host/bin/ffmpeg-v1")
+    manager = extraction.HybridExtractionManager()
+    job = manager.start("project", "clip.mp4", 0, 1, 12)
+    assert manager._binaries[job["id"]] == "/host/bin/ffmpeg-v1"
+    monkeypatch.setattr(extraction, "ffmpeg_executable", lambda: "/host/bin/ffmpeg-v2")
+    assert manager._binaries[job["id"]] == "/host/bin/ffmpeg-v1"
+    manager.cancel("project", job["id"])
+    manager._run(job["id"])
+    assert job["id"] not in manager._binaries
+    assert manager.status("project", job["id"])["status"] == "canceled"

@@ -1,0 +1,60 @@
+name: FFmpeg integration smoke (CPU-only)
+
+on:
+  push:
+    branches: [dev-webui, main]
+    paths:
+      - 'backend/morphorum/ffmpeg_tools.py'
+      - 'backend/morphorum/managed_ffmpeg.py'
+      - 'backend/morphorum/animation_video.py'
+      - 'backend/morphorum/animation_hybrid_source.py'
+      - 'backend/morphorum/animation_hybrid_extract.py'
+      - 'backend/morphorum/project_soundtrack_motion.py'
+      - 'scripts/ffmpeg_acceptance.py'
+      - 'tests/test_managed_ffmpeg.py'
+      - 'tests/test_ffmpeg_tools.py'
+      - '.github/workflows/ffmpeg-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  media:
+    name: Native FFmpeg codec smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install distro FFmpeg for Linux baseline
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Install host FFmpeg for Windows baseline
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress
+          }
+          ffmpeg -version | Select-Object -First 1
+          ffprobe -version | Select-Object -First 1
+
+      - name: Run real MP4, WebM, hybrid extraction and audio round-trips
+        run: python scripts/ffmpeg_acceptance.py --mode auto
+
+      - name: Run FFmpeg resolver and managed installer fixture regressions
+        run: |
+          python -m pip install --disable-pip-version-check 'pytest>=8,<10'
+          python -m pytest tests/test_ffmpeg_tools.py tests/test_managed_ffmpeg.py tests/test_ffmpeg_acceptance.py -q

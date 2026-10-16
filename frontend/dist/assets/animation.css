@@ -3439,3 +3439,361 @@ dialog#animation-deforum-dialog {
 @media(max-width:390px) {
   .motion-review-refine-actions {grid-template-columns:1fr;}
 }
+
+/* P1: contextual animation editor guidance. */
+#view-animation .animation-project-context {
+  min-width:0;max-width:100%;margin:0 0 12px;
+  font-size:.85rem;line-height:1.5;overflow-wrap:anywhere;
+}
+#view-animation .animation-editor-guidance {
+  display:grid;gap:12px;min-width:0;
+  margin:0 0 16px;padding:14px;
+  border:1px solid var(--border);border-radius:12px;background:var(--panel);
+}
+#view-animation .animation-editor-guidance[hidden],
+#view-animation #animation-model-guidance[hidden] {display:none !important;}
+#view-animation .animation-editor-guidance strong {display:block;line-height:1.4;}
+#view-animation .animation-editor-guidance p {margin:5px 0 0;line-height:1.5;overflow-wrap:anywhere;}
+#view-animation .animation-editor-guidance-actions {
+  display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+}
+#view-animation .animation-editor-guidance-actions button {min-height:40px;max-width:100%;}
+#view-animation .animation-editor-guidance-actions button[hidden] {display:none !important;}
+@media (max-width:390px) {
+  #view-animation .animation-editor-guidance-actions {display:grid;grid-template-columns:minmax(0,1fr);}
+  #view-animation .animation-editor-guidance-actions button {width:100%;white-space:normal;}
+}
+
+/* P1.5: a lightweight, non-destructive workspace wayfinder. */
+#view-animation .animation-workflow-guide {
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  max-width:1260px;min-width:0;margin:0 auto 14px;padding:12px 14px;
+  border:1px solid var(--border);border-radius:12px;background:var(--panel);
+}
+#view-animation .animation-workflow-guide-context {display:grid;gap:5px;min-width:0;flex:1 1 340px;}
+#view-animation .animation-workflow-guide-breadcrumb {
+  display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center;min-width:0;
+  font-size:.84rem;
+}
+#view-animation .animation-workflow-guide-breadcrumb strong {font-size:.9rem;}
+#view-animation .animation-workflow-project {color:var(--muted);overflow-wrap:anywhere;min-width:0;}
+#view-animation .animation-workflow-guide-context p {
+  color:var(--muted);font-size:.82rem;line-height:1.45;margin:0;overflow-wrap:anywhere;
+}
+#view-animation .animation-workflow-guide-actions {
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end;
+  min-width:0;flex:0 1 auto;
+}
+#view-animation .animation-workflow-guide-actions button {
+  min-width:0;min-height:40px;max-width:100%;white-space:normal;
+}
+@media(max-width:850px) {
+  #view-animation .animation-workflow-guide {flex-wrap:wrap;}
+  #view-animation .animation-workflow-guide-actions {width:100%;justify-content:flex-start;}
+}
+@media(max-width:480px) {
+  #view-animation .animation-workflow-guide {padding:12px;}
+  #view-animation .animation-workflow-guide-actions {
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;
+  }
+  #view-animation .animation-workflow-guide-actions button {width:100%;font-size:.8rem;padding:8px;}
+}
+@media(max-width:360px) {
+  #view-animation .animation-workflow-guide-actions {grid-template-columns:minmax(0,1fr);}
+}
+
+/* P2.3: read-only capability and compatibility summary below the checkpoint selector. */
+#view-animation .animation-model-compatibility {
+  display:grid;gap:9px;padding:13px 14px;margin-top:12px;
+  border:1px solid var(--border);border-radius:12px;background:var(--panel);
+  min-width:0;max-width:100%;overflow-wrap:anywhere;
+}
+#view-animation .animation-model-compatibility[hidden],
+#view-animation .animation-compatibility-issues[hidden],
+#view-animation .animation-compatibility-note[hidden],
+#view-animation #animation-compatibility-action[hidden] {display:none !important;}
+#view-animation .animation-compatibility-heading {
+  display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;min-width:0;
+}
+#view-animation .animation-compatibility-heading > strong {font-size:.89rem;}
+#view-animation .animation-compatibility-status {
+  font-size:.76rem;border-radius:99px;border:1px solid var(--border);
+  color:var(--muted);padding:4px 10px;overflow-wrap:anywhere;
+}
+#view-animation .animation-compatibility-status[data-tone="attention"] {
+  color:var(--warn);border-color:color-mix(in srgb,var(--warn) 30%,var(--border));
+}
+#view-animation .animation-compatibility-status[data-tone="ok"] {
+  color:var(--ok);border-color:color-mix(in srgb,var(--ok) 25%,var(--border));
+}
+#view-animation .animation-compatibility-facts {
+  display:flex;gap:7px;flex-wrap:wrap;min-width:0;
+}
+#view-animation .animation-compatibility-fact {
+  font-size:.76rem;color:var(--muted);border:1px solid var(--border);
+  border-radius:8px;padding:5px 8px;background:var(--panel-strong);
+  min-width:0;max-width:100%;overflow-wrap:anywhere;
+}
+#view-animation .animation-compatibility-fact strong {color:var(--text);}
+#view-animation .animation-compatibility-issues {
+  margin:0;padding-left:20px;color:var(--warn);font-size:.81rem;line-height:1.5;
+}
+#view-animation .animation-compatibility-issues li + li {margin-top:4px;}
+#view-animation .animation-compatibility-note {
+  margin:0;font-size:.78rem;line-height:1.5;color:var(--muted);
+}
+#view-animation #animation-compatibility-action {
+  justify-self:start;min-height:40px;max-width:100%;white-space:normal;
+}
+@media(max-width:480px) {
+  #view-animation .animation-model-compatibility {padding:12px;}
+  #view-animation .animation-compatibility-heading {align-items:flex-start;}
+  #view-animation .animation-compatibility-facts {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media(max-width:350px) {
+  #view-animation .animation-compatibility-facts {grid-template-columns:minmax(0,1fr);}
+}
+
+/* P2.5: read-only render validation results, shared between Check and Render. */
+#view-animation .animation-preflight-report {
+  display:grid;gap:10px;border:1px solid var(--border);
+  border-radius:12px;padding:14px;margin:12px 0;
+  background:var(--panel);overflow-wrap:anywhere;min-width:0;
+}
+#view-animation .animation-preflight-report[hidden],
+#view-animation #animation-preflight-issues[hidden],
+#view-animation #animation-preflight-fix[hidden] {display:none!important;}
+#view-animation .animation-preflight-report[data-state="error"] {
+  border-color:color-mix(in srgb,var(--danger) 40%,var(--border));
+}
+#view-animation .animation-preflight-report[data-state="warning"] {
+  border-color:color-mix(in srgb,var(--warn) 40%,var(--border));
+}
+#view-animation .animation-preflight-report[data-state="ok"] {
+  border-color:color-mix(in srgb,var(--ok) 30%,var(--border));
+}
+#view-animation .animation-preflight-heading {
+  display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;
+}
+#view-animation .animation-preflight-heading strong {font-size:.9rem;}
+#view-animation .animation-preflight-report p {margin:0;font-size:.78rem;line-height:1.5;}
+#view-animation #animation-preflight-issues {
+  font-size:.8rem;line-height:1.5;margin:0;padding:0 0 0 19px;
+}
+#view-animation #animation-preflight-issues li {margin:4px 0;overflow-wrap:anywhere;}
+#view-animation #animation-preflight-issues li[data-severity="error"] {color:var(--danger);}
+#view-animation #animation-preflight-issues li[data-severity="warning"] {color:var(--warn);}
+#view-animation #animation-preflight-fix {min-height:40px;}
+
+/* P3.1: keep new render/check actions and safety reports usable at zoom. */
+#view-animation .animation-render-card,
+#view-animation .animation-render-card .card-header,
+#view-animation .animation-render-actions,
+#view-animation .animation-preflight-report,
+#view-animation .animation-camera-safety-note {
+  min-width:0;max-width:100%;
+}
+#view-animation .animation-render-card .card-header {
+  flex-wrap:wrap;gap:12px;
+}
+#view-animation .animation-render-actions {
+  display:flex;align-items:center;flex-wrap:wrap;gap:8px;
+}
+#view-animation .animation-render-actions > button,
+#view-animation .animation-camera-safety-note button,
+#view-animation #animation-preflight-fix {
+  max-width:100%;min-width:0;min-height:42px;
+  white-space:normal;overflow-wrap:anywhere;
+}
+#view-animation .animation-preflight-heading,
+#view-animation .animation-preflight-meta,
+#view-animation .animation-preflight-issues {min-width:0;overflow-wrap:anywhere;}
+#view-animation .animation-camera-safety-note {
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+}
+#view-animation .animation-camera-safety-note > span {flex:1 1 250px;min-width:0;}
+@media(max-width:720px) {
+  #view-animation .animation-render-actions {
+    display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;justify-content:stretch;
+  }
+  #view-animation .animation-render-actions #animation-preflight-check,
+  #view-animation .animation-render-actions #animation-start-render {
+    grid-column:1/-1;
+  }
+  #view-animation .animation-render-actions > button {width:100%;}
+  #view-animation .animation-camera-safety-note {flex-direction:column;align-items:stretch;}
+  #view-animation .animation-camera-safety-note > span {flex:1 1 auto;}
+  #view-animation .animation-camera-safety-note button {width:100%;}
+}
+@media(max-width:390px) {
+  #view-animation .animation-render-actions {grid-template-columns:minmax(0,1fr);}
+  #view-animation .animation-render-actions > button {grid-column:1/-1;}
+}
+
+/* P3.3: complex Motion Lab editors remain contained at 360–1440px and zoom. */
+#view-animation :is(
+  .animation-layout,.animation-timeline-card,.animation-inspector-card,
+  .animation-timeline-toolbar,.animation-timeline-editor,
+  .animation-timeline-scroll,.animation-motion-lab-visual-grid,
+  .animation-motion-lab-svg-wrap,.animation-motion-lab-curve-editor,
+  .animation-motion-lab-curve-fields,.animation-motion-lab-curve-actions,
+  .animation-camera-preset-bar,.animation-depth-card,.animation-depth-controls,
+  .animation-motion-preview-card,.animation-motion-frame-player,
+  .animation-motion-player-actions,.animation-motion-lab-playbar,
+  .animation-audio-analysis-workspace,.animation-audio-stereo-timeline
+) {min-width:0;max-width:100%;}
+#view-animation .animation-timeline-toolbar > *,
+#view-animation .animation-timeline-editor > *,
+#view-animation .animation-inspector-controls > *,
+#view-animation .animation-motion-lab-curve-fields > *,
+#view-animation .animation-camera-preset-bar > *,
+#view-animation .animation-motion-lab-playbar > *,
+#view-animation .animation-motion-lab-svg-wrap > * {min-width:0;max-width:100%;}
+#view-animation :is(
+  .animation-timeline-toolbar,.animation-timeline-editor,
+  .animation-inspector-controls,.animation-motion-lab-curve-fields,
+  .animation-camera-preset-bar
+) :is(input:not([type="checkbox"]),select,textarea) {
+  box-sizing:border-box;width:100%;min-width:0;max-width:100%;
+}
+#view-animation :is(
+  .animation-timeline-header-actions,.animation-timeline-editor-actions,
+  .animation-motion-lab-curve-actions,.animation-motion-lab-head-actions,
+  .animation-camera-preset-bar,.animation-motion-player-actions
+) button {
+  max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;
+}
+#view-animation .animation-timeline-scroll {
+  max-width:100%;min-width:0;scrollbar-width:thin;
+  scroll-padding-inline:12px;
+}
+#view-animation .animation-timeline-scroll:focus-visible {
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+#view-animation :is(
+  .animation-timeline-keyframe,.animation-timeline-keyframe-chip,
+  .animation-timeline-toolbar button,.animation-timeline-editor button,
+  .animation-motion-lab-key-list button,.animation-motion-lab-curve-actions button
+):focus-visible {
+  outline:2px solid var(--accent);outline-offset:3px;z-index:10;
+}
+#view-animation .animation-timeline-editor textarea,
+#view-animation .animation-curve-meta,
+#view-animation .animation-timeline-selection,
+#view-animation .animation-motion-lab-key-help,
+#view-animation .animation-motion-lab-readout,
+#view-animation .animation-motion-lab-visual-note {
+  min-width:0;overflow-wrap:anywhere;
+}
+#view-animation .animation-curve-meta {flex-wrap:wrap;}
+#view-animation .animation-curve-chart,
+#view-animation .animation-motion-lab-svg {
+  width:100%;max-width:100%;min-width:0;
+}
+#view-animation .animation-motion-lab-curve-editor {box-sizing:border-box;}
+#view-animation .animation-motion-lab-curve-actions button,
+#view-animation .animation-timeline-editor-actions button {
+  min-height:44px;
+}
+#view-animation .animation-camera-preset-bar button {min-height:44px;}
+#view-animation .animation-depth-preview-wrap,
+#view-animation .animation-source-preview-wrap,
+#view-animation .animation-motion-lab-svg-wrap {max-width:100%;min-width:0;}
+/* Dialog internals shrink independently of very long imported text/paths. */
+dialog#animation-deforum-dialog {
+  box-sizing:border-box;max-width:calc(100vw - 16px);
+  max-height:calc(100dvh - 16px);
+}
+#animation-deforum-dialog :is(
+  .animation-import-shell,.animation-import-section,
+  .animation-import-mappings,.animation-import-mapping,
+  .animation-import-fields,.animation-import-source,
+  .animation-import-summary,.animation-import-actions
+) {min-width:0;max-width:100%;}
+#animation-deforum-dialog .animation-import-mapping > *,
+#animation-deforum-dialog .animation-import-source > *,
+#animation-deforum-dialog .animation-import-actions > * {
+  min-width:0;max-width:100%;overflow-wrap:anywhere;
+}
+#animation-deforum-dialog .animation-import-actions button {
+  min-height:44px;white-space:normal;overflow-wrap:anywhere;
+}
+#animation-deforum-dialog :is(
+  .animation-import-close,.animation-import-actions button,
+  .animation-import-mapping summary
+):focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
+@media(max-width:900px) {
+  #view-animation .animation-inspector-controls {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  #view-animation .animation-inspector-controls .animation-frame-slider {
+    grid-column:1/-1;grid-row:auto;
+  }
+}
+@media(max-width:720px) {
+  #view-animation .animation-timeline-scroll {
+    /* The focused phone plot already scales to its container width. Keep
+       horizontal overflow local if browser zoom/font scaling needs it. */
+    overflow-x:auto;
+  }
+  #view-animation .animation-timeline-grid.mobile-focused {
+    min-width:0;max-width:100%;width:100%;
+  }
+  #view-animation .animation-timeline-editor-actions,
+  #view-animation .animation-motion-lab-curve-actions {
+    min-width:0;max-width:100%;
+  }
+  #view-animation .animation-motion-lab-curve-actions button {
+    flex:1 1 140px;min-height:44px;
+  }
+  #view-animation .animation-camera-preset-bar {
+    display:grid;grid-template-columns:minmax(0,1fr);
+  }
+  #view-animation .animation-camera-preset-bar :is(select,button) {width:100%;}
+  #view-animation .animation-motion-lab-playbar {
+    align-items:stretch;gap:9px;
+  }
+  #view-animation .animation-motion-lab-scrubber {flex:1 1 100%;}
+  #view-animation .animation-motion-lab-svg-wrap {overflow-wrap:anywhere;}
+  #animation-deforum-dialog .animation-import-actions {
+    gap:8px;grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:420px) {
+  #view-animation .animation-timeline-toolbar,
+  #view-animation .animation-timeline-editor,
+  #view-animation .animation-inspector-controls,
+  #view-animation .animation-motion-lab-curve-fields {
+    grid-template-columns:minmax(0,1fr);
+  }
+  #view-animation .animation-timeline-toolbar > *,
+  #view-animation .animation-timeline-editor > *,
+  #view-animation .animation-inspector-controls > *,
+  #view-animation .animation-motion-lab-curve-fields > * {
+    grid-column:1/-1;grid-row:auto;
+  }
+  #view-animation .animation-timeline-editor-actions {
+    grid-template-columns:minmax(0,1fr);
+  }
+  #view-animation .animation-timeline-editor-actions button {width:100%;}
+  #view-animation .animation-motion-lab-curve-actions {
+    display:grid;grid-template-columns:minmax(0,1fr);
+  }
+  #view-animation .animation-motion-lab-curve-actions button {width:100%;}
+  #view-animation .animation-motion-lab-playbar > button {
+    flex:1 1 120px;min-height:44px;
+  }
+  #animation-deforum-dialog .animation-import-actions {
+    grid-template-columns:minmax(0,1fr);
+  }
+  #animation-deforum-dialog .animation-import-actions > button {
+    grid-column:1/-1;width:100%;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  #view-animation :is(
+    .animation-timeline-scroll,.animation-motion-lab-svg,
+    .animation-motion-lab-curve-actions button
+  ) {scroll-behavior:auto;}
+}

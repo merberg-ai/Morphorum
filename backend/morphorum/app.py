@@ -69,6 +69,7 @@ from .animation_render import (
     AnimationRenderError,
     animation_render_manager,
 )
+from .animation_preflight import check_animation_render_preflight
 from .motion_lab import MotionLabError, PRESETS as MOTION_LAB_PRESETS, compile_motion_lab
 from .motion_studio_presets import (
     CustomPresetError, CustomPresetConflict, CustomPresetMissing,
@@ -113,6 +114,8 @@ from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
+from .ffmpeg_tools import ffmpeg_status, normalize_ffmpeg_settings
+from .managed_ffmpeg import managed_ffmpeg_manager, ManagedFFmpegError
 from .system_info import (
     doctor_report,
     git_branch,
@@ -430,6 +433,72 @@ def get_settings() -> dict[str, Any]:
         "validation": validate_model_paths(settings),
         "model_families": model_family_definitions(),
     }
+
+
+@app.get("/api/tools/ffmpeg/status")
+def api_ffmpeg_status() -> dict[str, Any]:
+    return ffmpeg_status()
+
+
+@app.post("/api/tools/ffmpeg/check")
+def api_ffmpeg_check(payload: dict[str, Any]) -> dict[str, Any]:
+    """Test a proposed selection without saving or changing a binary."""
+    try:
+        config = normalize_ffmpeg_settings(payload, strict=True)
+        return ffmpeg_status({"tools": {"ffmpeg": config}})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _ffmpeg_binary_busy() -> bool:
+    """Refuse replacing/removing binaries used by live encoding jobs."""
+    with video_export_manager._lock:
+        if video_export_manager._active_outputs:
+            return True
+    with hybrid_extraction_manager._lock:
+        if any(job.get("status") in {"queued", "running"}
+               for job in hybrid_extraction_manager._jobs.values()):
+            return True
+    return False
+
+
+@app.get("/api/tools/ffmpeg/managed")
+def api_managed_ffmpeg_status() -> dict[str, Any]:
+    return managed_ffmpeg_manager.status()
+
+
+@app.post("/api/tools/ffmpeg/managed/install", status_code=202)
+def api_managed_ffmpeg_install() -> dict[str, Any]:
+    if _ffmpeg_binary_busy():
+        raise HTTPException(status_code=409, detail=
+            "Wait for active video exports and hybrid extractions before changing FFmpeg.")
+    try:
+        job = managed_ffmpeg_manager.start(busy_check=_ffmpeg_binary_busy)
+        emit_console("info", "runtime", "Managed FFmpeg installation requested.")
+        return job
+    except ManagedFFmpegError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/tools/ffmpeg/managed/cancel")
+def api_managed_ffmpeg_cancel() -> dict[str, Any]:
+    try:
+        return managed_ffmpeg_manager.cancel()
+    except ManagedFFmpegError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.delete("/api/tools/ffmpeg/managed")
+def api_managed_ffmpeg_remove() -> dict[str, Any]:
+    if _ffmpeg_binary_busy():
+        raise HTTPException(status_code=409, detail=
+            "Wait for active video exports and hybrid extractions before removing FFmpeg.")
+    try:
+        result = managed_ffmpeg_manager.remove()
+        emit_console("info", "runtime", "Morphorum-managed FFmpeg removed.")
+        return result
+    except ManagedFFmpegError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get("/api/animation/projects")
@@ -1509,6 +1578,25 @@ def api_motion_preview_frame(job_id: str, index: int):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.post("/api/animation/renders/preflight")
+def api_animation_render_preflight(payload: dict[str, Any]) -> dict[str, Any]:
+    """Read-only validation for the exact browser project about to be rendered."""
+    project_payload = payload.get("project")
+    if not isinstance(project_payload, dict):
+        raise HTTPException(status_code=400, detail="Animation project payload is required.")
+    project_id = str(project_payload.get("id") or "").strip().lower()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="Save the animation project before rendering.")
+    try:
+        normalized = normalize_animation_project(
+            project_payload, existing=project_payload, project_id=project_id,
+        )
+        source_path = animation_project_directory(project_id) / "assets" / "source.png"
+        return check_animation_render_preflight(normalized, source_path)
+    except (AnimationProjectError, ScheduleError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/renders", status_code=202)
 def api_start_animation_render(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     project_payload = payload.get("project")
@@ -1964,7 +2052,10 @@ def api_managed_model_download(model_id: str) -> dict[str, Any]:
 
 @app.put("/api/settings")
 def put_settings(payload: dict[str, Any]) -> dict[str, Any]:
-    settings = save_settings(payload)
+    try:
+        settings = save_settings(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     validation = validate_model_paths(settings)
     bad = sum(1 for item in validation if not item.get("is_directory") or not item.get("readable"))
     if bad:

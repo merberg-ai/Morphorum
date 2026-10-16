@@ -57,6 +57,7 @@
     telemetryTimer: null,
     jobs: { image: null, animation: null },
     settingsDirty: false,
+    settingsRequestBusy: false,
     settingsTab: 'appearance',
     foregroundJobType: null,
   };
@@ -84,22 +85,41 @@
     button.disabled = busy;
   }
 
+  const recentToasts = new Map();
   function toast(title, message = '', type = 'info', timeout = 4200) {
     const stack = qs('#toast-stack');
     if (!stack) return;
-
+    const level = {info: 0, success: 1, warning: 2, error: 3};
+    const severity = level[type] ?? 0;
+    const signature = JSON.stringify([type, String(title), String(message)]);
+    const now = Date.now();
+    // Background reconnection failures must not generate a wall of identical toasts.
+    if (now - (recentToasts.get(signature) || 0) < 30000) return;
+    recentToasts.set(signature, now);
+    if (recentToasts.size > 80) recentToasts.delete(recentToasts.keys().next().value);
+    const displayed = [...stack.querySelectorAll('.toast')];
+    if (displayed.length >= 4) {
+      const evict = displayed.reduce((a, b) =>
+        (level[b.dataset.type] ?? 0) < (level[a.dataset.type] ?? 0) ? b : a);
+      if ((level[evict.dataset.type] ?? 0) > severity) return;
+      evict.remove();
+    }
     const item = document.createElement('div');
-    item.className = `toast ${type}`;
+    item.className = 'toast ' + type;
+    item.dataset.type = type;
+    item.setAttribute('role', type === 'error' ? 'alert' : 'status');
     item.innerHTML = `
       <div class="toast-bar"></div>
       <div><div class="toast-title"></div><div class="toast-message"></div></div>
-      <button class="toast-close" aria-label="Dismiss">×</button>`;
+      <button class="toast-close" aria-label="Dismiss notification">×</button>`;
     qs('.toast-title', item).textContent = title;
     qs('.toast-message', item).textContent = message;
     const close = () => item.remove();
     qs('.toast-close', item).addEventListener('click', close);
     stack.appendChild(item);
-    if (timeout > 0) window.setTimeout(close, timeout);
+    const visibleMs = type === 'error' ? Math.max(10000, timeout) :
+      type === 'warning' ? Math.max(7000, timeout) : timeout;
+    if (visibleMs > 0) window.setTimeout(close, visibleMs);
     return item;
   }
 
@@ -248,6 +268,7 @@
     state.settings.ui.font_style ||= 'modern';
     state.settings.ui.mono_font_style ||= 'modern-mono';
     state.settings.ui.ui_scale ||= 'compact';
+    state.settings.ui.show_help_hints = state.settings.ui.show_help_hints !== false;
     if (!Number.isFinite(Number(state.settings.ui.image_preview_limit))) {
       state.settings.ui.image_preview_limit = 5;
     }
@@ -393,6 +414,414 @@
     grid.append(themeField, fontField, monoField, scaleField);
     card.append(header, grid, preview);
     window.setTimeout(() => updateAppearanceDiagnostic(ui), 0);
+    return card;
+  }
+
+  function createHelpPreferencesCard() {
+    ensurePreferences();
+    const card = document.createElement('article');
+    card.className = 'card glass settings-preferences-card context-help-settings-card';
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const heading = document.createElement('div');
+    const title = document.createElement('h2');
+    title.textContent = 'Contextual Help';
+    const description = document.createElement('p');
+    description.className = 'muted';
+    description.textContent = 'Optional explanations beside generation and camera settings.';
+    heading.append(title, description);
+    header.appendChild(heading);
+    const row = document.createElement('label');
+    row.className = 'setting-toggle';
+    const toggleRow = document.createElement('div');
+    toggleRow.className = 'toggle-row';
+    const input = document.createElement('input');
+    input.id = 'ui-show-help-hints';
+    input.type = 'checkbox';
+    input.checked = state.settings.ui.show_help_hints !== false;
+    input.addEventListener('change', () => {
+      state.settings.ui.show_help_hints = input.checked;
+      window.MorphorumHelp?.setEnabled(input.checked);
+    });
+    const copy = document.createElement('div');
+    const name = document.createElement('strong');
+    name.textContent = 'Show (?) help buttons';
+    const detail = document.createElement('small');
+    detail.textContent = 'Hover, focus or tap for explanations. Important error and disabled-control messages stay visible.';
+    copy.append(name, detail);
+    toggleRow.append(input, copy);
+    row.appendChild(toggleRow);
+    card.append(header, row);
+    return card;
+  }
+
+  // P4.4.2: FFmpeg belongs to the host, not the browser. An unsaved choice
+  // can be checked safely; only Save Settings changes the active resolver.
+  function ensureFFmpegSettings() {
+    state.settings ||= {};
+    state.settings.tools ||= {};
+    state.settings.tools.ffmpeg ||= {mode: 'auto', custom_path: ''};
+    const config = state.settings.tools.ffmpeg;
+    if (!['auto', 'custom', 'managed'].includes(config.mode)) config.mode = 'auto';
+    config.custom_path = String(config.custom_path || '');
+    return config;
+  }
+
+  function renderFFmpegStatus(info) {
+    const status = qs('#ffmpeg-manager-status');
+    const details = qs('#ffmpeg-manager-details');
+    if (!status || !details) return;
+    status.dataset.ready = info.available && info.probe_available ? 'yes' : 'no';
+    status.textContent = info.message || 'FFmpeg detection completed.';
+    const lines = [
+      'Source: ' + (info.source || info.mode || 'unknown'),
+      'FFmpeg: ' + (info.version || 'Not available'),
+      'FFprobe: ' + (info.probe_version || 'Not available'),
+      'FFmpeg executable: ' + (info.ffmpeg_path || 'Not found'),
+      'FFprobe executable: ' + (info.ffprobe_path || 'Not found'),
+    ];
+    details.textContent = lines.join('\n');
+    // Test results apply only to the unsaved selection until Save Settings.
+  }
+
+  async function checkFFmpegSettings({quiet = false} = {}) {
+    const config = ensureFFmpegSettings();
+    const selection = {mode: config.mode, custom_path: config.custom_path.trim()};
+    const serial = (state.ffmpegRequestId || 0) + 1;
+    state.ffmpegRequestId = serial;
+    const button = qs('#ffmpeg-manager-check');
+    const status = qs('#ffmpeg-manager-status');
+    const details = qs('#ffmpeg-manager-details');
+    if (button) {button.disabled = true;button.classList.add('busy');}
+    if (status) status.textContent = 'Checking selected FFmpeg and FFprobe…';
+    if (details) details.textContent = '';
+    const operation = quiet ? null : window.MorphorumOperations?.begin(
+      'ffmpeg-check','Checking FFmpeg tools',
+      'Testing the selected executables on the Morphorum host…','settings');
+    try {
+      const info = await api('/api/tools/ffmpeg/check', {
+        method: 'POST', body: JSON.stringify(selection),
+      });
+      if (serial !== state.ffmpegRequestId) return;
+      renderFFmpegStatus(info);
+      if (!quiet) window.MorphorumOperations?.finish('ffmpeg-check', operation, {
+        tone: info.available && info.probe_available ? 'success' : 'warning',
+        title: info.available && info.probe_available
+          ? 'FFmpeg and FFprobe verified' : 'FFmpeg setup needs attention',
+        message: info.message, view: 'settings',
+      });
+    } catch (error) {
+      if (serial !== state.ffmpegRequestId) return;
+      if (status) status.textContent = 'FFmpeg check failed: ' + error.message;
+      if (!quiet) window.MorphorumOperations?.finish('ffmpeg-check', operation, {
+        tone: 'error', title: 'FFmpeg check failed',
+        message: error.message + ' Check the selected path and backend connection.',
+        view: 'settings',
+      });
+    } finally {
+      if (serial === state.ffmpegRequestId && button) {
+        button.disabled = false; button.classList.remove('busy');
+      }
+    }
+  }
+
+  const FFMPEG_BUSY_STATES = new Set([
+    'checking', 'downloading', 'verifying', 'extracting', 'installing',
+  ]);
+  function displayBytes(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) return '0 MB';
+    return (number / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+  function renderManagedFFmpeg(info) {
+    const box = qs('#ffmpeg-manager-install-panel');
+    if (!box) return;
+    const job = info.job || null;
+    const active = job && FFMPEG_BUSY_STATES.has(job.status);
+    const install = qs('#ffmpeg-manager-install');
+    const cancel = qs('#ffmpeg-manager-cancel');
+    const remove = qs('#ffmpeg-manager-remove');
+    const progress = qs('#ffmpeg-manager-install-progress');
+    const label = qs('#ffmpeg-manager-install-status');
+    const meta = qs('#ffmpeg-manager-install-meta');
+    if (install) {
+      install.disabled = !info.supported || active || state.ffmpegManagerActionBusy;
+      install.textContent = info.installed ? 'Update / Reinstall managed FFmpeg' :
+        info.repair_needed ? 'Repair managed FFmpeg' : 'Install managed FFmpeg';
+    }
+    if (cancel) {
+      cancel.hidden = !active;
+      cancel.disabled = !active || state.ffmpegManagerActionBusy;
+    }
+    if (remove) {
+      remove.hidden = !info.installed && !info.repair_needed;
+      remove.disabled = active || state.ffmpegManagerActionBusy;
+    }
+    if (progress) {
+      progress.hidden = !active;
+      progress.value = Math.max(0, Math.min(100, Number(job?.progress) || 0));
+    }
+    if (label) label.textContent = job
+      ? (job.message || job.status) +
+        (job.error ? ' ' + job.error : '') +
+        (active && job.total_bytes
+          ? ' (' + displayBytes(job.downloaded_bytes) + ' / ' +
+            displayBytes(job.total_bytes) + ')' : '')
+      : info.installed ? 'Managed FFmpeg installed.' :
+        info.repair_needed ? 'Managed FFmpeg files are incomplete. Repair or remove the installation.' :
+          info.message;
+    if (meta) meta.textContent =
+      'Package: ' + (info.asset_name || 'Unsupported architecture') +
+      '\nInstalled location: ' + info.managed_path +
+      '\nProvider: BtbN FFmpeg-Builds · GPL static builds';
+    if (job) {
+      const ops = window.MorphorumOperations;
+      const key = 'ffmpeg-managed';
+      if (active) {
+        if (state.ffmpegManagerJobId !== job.id || !state.ffmpegManagerOperation) {
+          if (state.ffmpegManagerOperation) ops?.retire(key);
+          state.ffmpegManagerJobId = job.id;
+          state.ffmpegManagerOperation = ops?.begin(key, 'Installing managed FFmpeg',
+            'Fetching and verifying an upstream package…', 'settings');
+        }
+        ops?.update(key, state.ffmpegManagerOperation, {
+          title: 'Managed FFmpeg: ' + job.status,
+          message: label?.textContent || job.message,
+          progress: Number(job.progress) || 0,
+        });
+      } else if (state.ffmpegManagerJobId !== job.id) {
+        // Recover a completed job after browser reload without claiming to
+        // have submitted it from this tab.
+        state.ffmpegManagerJobId = job.id;
+        if (job.status === 'installed' && ensureFFmpegSettings().mode === 'managed') {
+          // A fast completion or browser reconnection still refreshes
+          // video availability; no fictitious operation success is emitted.
+          void checkFFmpegSettings({quiet: true});
+          window.dispatchEvent(new CustomEvent('morphorum:settings-changed',
+            {detail: state.settings}));
+        }
+      } else if (state.ffmpegManagerOperation) {
+        ops?.finish(key, state.ffmpegManagerOperation, {
+          tone: job.status === 'installed' ? 'success' :
+            job.status === 'cancelled' ? 'warning' : 'error',
+          title: job.status === 'installed'
+            ? 'Managed FFmpeg installed'
+            : job.status === 'cancelled'
+              ? 'Managed FFmpeg installation cancelled' : 'Managed FFmpeg installation failed',
+          message: label?.textContent || job.message, view: 'settings',
+        });
+        state.ffmpegManagerOperation = null;
+        if (job.status === 'installed' && ensureFFmpegSettings().mode === 'managed') {
+          void checkFFmpegSettings({quiet: true});
+          window.dispatchEvent(new CustomEvent('morphorum:settings-changed',
+            {detail: state.settings}));
+        }
+      }
+    }
+  }
+
+  async function refreshManagedFFmpeg() {
+    window.clearTimeout(state.ffmpegManagedTimer);
+    state.ffmpegManagedTimer = null;
+    const request = (state.ffmpegManagedRequest || 0) + 1;
+    state.ffmpegManagedRequest = request;
+    try {
+      const info = await api('/api/tools/ffmpeg/managed');
+      if (request !== state.ffmpegManagedRequest) return;
+      window.MorphorumPollHealth?.recovered('ffmpeg-managed');
+      renderManagedFFmpeg(info);
+      if (info.job && FFMPEG_BUSY_STATES.has(info.job.status))
+        state.ffmpegManagedTimer = window.setTimeout(refreshManagedFFmpeg, 900);
+    } catch (error) {
+      if (request !== state.ffmpegManagedRequest) return;
+      const status = qs('#ffmpeg-manager-install-status');
+      if (status) status.textContent =
+        'Could not check managed FFmpeg installation. Check backend connectivity.';
+      if (state.ffmpegManagerOperation) {
+        window.MorphorumPollHealth?.failed('ffmpeg-managed', 'Managed FFmpeg', 'settings');
+        state.ffmpegManagedTimer = window.setTimeout(refreshManagedFFmpeg, 5000);
+      } else {
+        // No known in-flight install: allow a manual retry on the next
+        // Settings load rather than polling an offline host forever.
+        window.MorphorumClientDiagnostics?.record('warning',
+          'Could not inspect managed FFmpeg; check the backend connection.');
+      }
+    }
+  }
+
+  async function managedFFmpegAction(action) {
+    if (state.ffmpegManagerActionBusy) return;
+    if (action === 'remove') {
+      const accepted = await window.MorphorumDialog.confirm({
+        title: 'Remove Morphorum-managed FFmpeg?',
+        message: 'Only the verified FFmpeg installation in this Morphorum folder is removed. ' +
+          'Existing videos, projects and separately installed FFmpeg copies are kept.',
+        variant: 'danger', confirmText: 'Remove managed FFmpeg', cancelText: 'Keep installed',
+      });
+      if (!accepted) return;
+    }
+    state.ffmpegManagerActionBusy = true;
+    const key = 'ffmpeg-manager-action';
+    const token = window.MorphorumOperations?.begin(key,
+      action === 'install' ? 'Starting managed FFmpeg install' :
+        action === 'remove' ? 'Removing managed FFmpeg' : 'Cancelling installation',
+      'Contacting Morphorum backend…', 'settings');
+    try {
+      await api('/api/tools/ffmpeg/managed' +
+        (action === 'install' ? '/install' : action === 'cancel' ? '/cancel' : ''),
+        {method: action === 'remove' ? 'DELETE' : 'POST'});
+      window.MorphorumOperations?.finish(key, token, {
+        title: action === 'install' ? 'Managed FFmpeg download accepted'
+          : action === 'cancel' ? 'Cancel requested' : 'Managed FFmpeg removed',
+        message: action === 'install'
+          ? 'Checking upstream release; progress appears below.'
+          : action === 'cancel' ? 'The installer will stop safely at its next checkpoint.'
+          : 'Managed FFmpeg binaries were removed. Existing renders and exports are unchanged.',
+        view: 'settings',
+      });
+      if (action === 'remove' && ensureFFmpegSettings().mode === 'managed') {
+        void checkFFmpegSettings({quiet: true});
+        window.dispatchEvent(new CustomEvent('morphorum:settings-changed',
+          {detail: state.settings}));
+      }
+    } catch (error) {
+      window.MorphorumOperations?.finish(key, token, {
+        tone: 'error',
+        title: action === 'install' ? 'Could not start managed FFmpeg' :
+          action === 'cancel' ? 'Could not cancel FFmpeg installation' :
+            'Managed FFmpeg removal failed',
+        message: error.message, view: 'settings',
+      });
+    } finally {
+      state.ffmpegManagerActionBusy = false;
+      void refreshManagedFFmpeg();
+    }
+  }
+
+  function createFFmpegManagerCard() {
+    const config = ensureFFmpegSettings();
+    const card = document.createElement('article');
+    card.className = 'card glass settings-preferences-card ffmpeg-manager-card';
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const heading = document.createElement('div');
+    const title = document.createElement('h2');
+    title.textContent = 'FFmpeg Manager';
+    const intro = document.createElement('p');
+    intro.className = 'muted';
+    intro.textContent = 'Select the host installation used for video export, hybrid video and audio conversion.';
+    heading.append(title, intro); header.appendChild(heading);
+    const grid = document.createElement('div');
+    grid.className = 'field-grid settings-preference-grid';
+    const modeField = document.createElement('label');
+    const modeLabel = document.createElement('span');
+    modeLabel.textContent = 'FFmpeg source';
+    const mode = document.createElement('select');
+    mode.id = 'ffmpeg-manager-mode';
+    for (const [value, label] of [
+      ['auto','Auto-detect from host PATH (or MORPHORUM_FFMPEG)'],
+      ['custom','Custom installed executable'],
+      ['managed','Morphorum-managed local FFmpeg'],
+    ]) {
+      const option = document.createElement('option');
+      option.value = value; option.textContent = label; mode.appendChild(option);
+    }
+    mode.value = config.mode;
+    modeField.append(modeLabel, mode);
+    const pathField = document.createElement('label');
+    pathField.id = 'ffmpeg-manager-path-field';
+    const pathTitle = document.createElement('span');
+    pathTitle.textContent = 'Custom FFmpeg executable path';
+    const customPath = document.createElement('input');
+    customPath.id = 'ffmpeg-manager-path';
+    customPath.className = 'path-input';
+    customPath.type = 'text';
+    customPath.spellcheck = false;
+    customPath.autocomplete = 'off';
+    customPath.placeholder = navigator.userAgent.includes('Windows')
+      ? 'D:\\Tools\\ffmpeg\\bin\\ffmpeg.exe' : '/usr/local/bin/ffmpeg';
+    customPath.value = config.custom_path;
+    pathField.append(pathTitle, customPath);
+    const managedPanel = document.createElement('section');
+    managedPanel.id = 'ffmpeg-manager-install-panel';
+    managedPanel.className = 'ffmpeg-install-panel';
+    const managedNote = document.createElement('div');
+    managedNote.id = 'ffmpeg-manager-managed-note';
+    managedNote.className = 'path-message';
+    managedNote.textContent =
+      'Optional: download a verified GPL static FFmpeg/FFprobe pair into ' +
+      'tools/ffmpeg/current/bin. The download is started only by clicking Install.';
+    const actions = document.createElement('div');
+    actions.className = 'ffmpeg-install-actions';
+    const install = makeButton('Install managed FFmpeg', 'primary-button compact busy-button');
+    install.id = 'ffmpeg-manager-install';
+    install.addEventListener('click', () => void managedFFmpegAction('install'));
+    const cancel = makeButton('Cancel download', 'secondary-button compact');
+    cancel.id = 'ffmpeg-manager-cancel';
+    cancel.hidden = true;
+    cancel.addEventListener('click', () => void managedFFmpegAction('cancel'));
+    const remove = makeButton('Remove managed FFmpeg', 'secondary-button compact');
+    remove.id = 'ffmpeg-manager-remove';
+    remove.hidden = true;
+    remove.addEventListener('click', () => void managedFFmpegAction('remove'));
+    actions.append(install, cancel, remove);
+    const installProgress = document.createElement('progress');
+    installProgress.id = 'ffmpeg-manager-install-progress';
+    installProgress.max = 100;
+    installProgress.value = 0;
+    installProgress.hidden = true;
+    installProgress.setAttribute('aria-label', 'Managed FFmpeg installation progress');
+    const installStatus = document.createElement('div');
+    installStatus.id = 'ffmpeg-manager-install-status';
+    installStatus.className = 'path-message';
+    installStatus.setAttribute('role','status');
+    installStatus.textContent = 'Checking local installation…';
+    const installMeta = document.createElement('pre');
+    installMeta.id = 'ffmpeg-manager-install-meta';
+    installMeta.className = 'ffmpeg-manager-details';
+    const provider = document.createElement('a');
+    provider.href = 'https://github.com/BtbN/FFmpeg-Builds';
+    provider.target = '_blank';
+    provider.rel = 'noopener noreferrer';
+    provider.textContent = 'Provider, sources and GPL license details';
+    managedPanel.append(managedNote, actions, installProgress, installStatus,
+      installMeta, provider);
+    const status = document.createElement('p');
+    status.id = 'ffmpeg-manager-status';
+    status.className = 'path-message';
+    status.setAttribute('role','status');
+    status.textContent = 'Select Test FFmpeg to check this host.';
+    const details = document.createElement('pre');
+    details.id = 'ffmpeg-manager-details';
+    details.className = 'ffmpeg-manager-details';
+    const test = makeButton('Test FFmpeg / FFprobe', 'secondary-button compact busy-button');
+    test.id = 'ffmpeg-manager-check';
+    test.addEventListener('click', () => void checkFFmpegSettings());
+    function syncMode() {
+      config.mode = mode.value;
+      pathField.hidden = config.mode !== 'custom';
+      managedPanel.hidden = config.mode !== 'managed';
+      status.textContent = 'Selection changed. Test this configuration, then Save Settings to activate it.';
+      details.textContent = '';
+      state.ffmpegRequestId = (state.ffmpegRequestId || 0) + 1;
+      window.MorphorumOperations?.retire('ffmpeg-check');
+      test.disabled = false; test.classList.remove('busy');
+      markSettingsDirty();
+    }
+    mode.addEventListener('change', syncMode);
+    customPath.addEventListener('input', () => {
+      config.custom_path = customPath.value;
+      status.textContent = 'Path edited. Test the executable, then Save Settings.';
+      details.textContent = '';
+      state.ffmpegRequestId = (state.ffmpegRequestId || 0) + 1;
+      window.MorphorumOperations?.retire('ffmpeg-check');
+      test.disabled = false; test.classList.remove('busy');
+      markSettingsDirty();
+    });
+    pathField.hidden = config.mode !== 'custom';
+    managedPanel.hidden = config.mode !== 'managed';
+    grid.append(modeField, pathField);
+    card.append(header, grid, managedPanel, status, details, test);
     return card;
   }
 
@@ -670,6 +1099,8 @@
     const loader = qs('#settings-loading');
     if (!container || !state.settings) return;
 
+    state.ffmpegRequestId = (state.ffmpegRequestId || 0) + 1;
+    window.MorphorumOperations?.retire('ffmpeg-check');
     container.replaceChildren();
     const tabs = document.createElement('nav');
     tabs.id = 'settings-internal-tabs';
@@ -691,8 +1122,10 @@
     container.appendChild(tabs);
     for (const pane of Object.values(panes)) container.appendChild(pane);
     panes.appearance.appendChild(createAppearanceCard());
+    panes.appearance.appendChild(createHelpPreferencesCard());
     panes.generation.appendChild(createPreferencesCard());
     panes.storage.appendChild(createManagedModelsCard());
+    panes.storage.appendChild(createFFmpegManagerCard());
     for (const [family, fallbackLabel, source, loraSource, supportsLoras] of FAMILY_DEFS) {
       if (source === 'managed' && !(supportsLoras && loraSource === 'external')) continue;
       const familyData = ensureFamily(family);
@@ -730,9 +1163,11 @@
     renderSettingsDirtyState();
     loader.hidden = true;
     container.hidden = false;
+    void refreshManagedFFmpeg();
   }
 
   async function loadSettings({ announce = false } = {}) {
+    if (state.settingsRequestBusy) return;
     if (announce && state.settingsDirty) {
       const allowed = await window.MorphorumDialog.confirm({
         title:'Discard unsaved settings?',
@@ -742,7 +1177,12 @@
       if (!allowed) return;
     }
     const button = qs('#load-settings');
+    state.settingsRequestBusy = true;
     setBusy(button, true);
+    if (announce) qs('#save-settings').disabled = true;
+    const operation = announce
+      ? window.MorphorumOperations?.begin('settings', 'Reloading settings',
+        'Reading configuration from the Morphorum host…', 'settings') : null;
     try {
       const payload = await api('/api/settings');
       state.settings = payload.settings || {};
@@ -758,15 +1198,27 @@
       ingestValidation(payload.validation || []);
       ensurePreferences();
       applyAppearance(state.settings.ui);
+      window.MorphorumHelp?.setEnabled(state.settings.ui.show_help_hints);
       renderSettings();
       setSettingsClean();
+      void checkFFmpegSettings({quiet: true});
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
-      if (announce) toast('Settings loaded', 'Configuration reloaded from the Morphorum server.', 'success');
+      if (announce) {
+        window.MorphorumOperations?.finish('settings', operation, {
+          title: 'Settings reloaded', message: 'Server configuration loaded successfully.',
+          view: 'settings' });
+        toast('Settings loaded', 'Configuration reloaded from the Morphorum server.', 'success');
+      }
     } catch (error) {
+      if (announce) window.MorphorumOperations?.finish('settings', operation, {
+        tone: 'error', title: 'Settings reload failed', message: error.message,
+        view: 'settings' });
       toast('Could not load settings', error.message, 'error', 7000);
       qs('#settings-loading').innerHTML = `<strong>Settings failed to load.</strong><span>${escapeHtml(error.message)}</span>`;
     } finally {
+      state.settingsRequestBusy = false;
       setBusy(button, false);
+      if (announce) qs('#save-settings').disabled = false;
     }
   }
 
@@ -787,6 +1239,10 @@
     const managed = ensureManagedModels();
     return {
       models,
+      tools: {ffmpeg: {
+        mode: ensureFFmpegSettings().mode,
+        custom_path: ensureFFmpegSettings().custom_path.trim(),
+      }},
       managed_models: {
         locations: {
           zimage: String(managed.locations.zimage || '.\\ckpts\\z-image').trim() || '.\\ckpts\\z-image',
@@ -797,6 +1253,7 @@
         font_style: state.settings.ui.font_style || 'modern',
         mono_font_style: state.settings.ui.mono_font_style || 'modern-mono',
         ui_scale: state.settings.ui.ui_scale || 'compact',
+        show_help_hints: state.settings.ui.show_help_hints !== false,
         image_preview_limit: Math.max(1, Math.min(50, Number(state.settings.ui.image_preview_limit) || 5)),
       },
       performance: {
@@ -807,8 +1264,13 @@
   }
 
   async function saveSettings() {
+    if (state.settingsRequestBusy) return;
     const button = qs('#save-settings');
+    state.settingsRequestBusy = true;
     setBusy(button, true);
+    qs('#load-settings').disabled = true;
+    const operation = window.MorphorumOperations?.begin('settings', 'Saving settings',
+      'Validating and saving host configuration…', 'settings');
     try {
       const payload = await api('/api/settings', {
         method: 'PUT',
@@ -818,19 +1280,33 @@
       ingestValidation(payload.validation || []);
       ensurePreferences();
       applyAppearance(state.settings.ui);
+      window.MorphorumHelp?.setEnabled(state.settings.ui.show_help_hints);
       renderSettings();
       setSettingsClean();
+      void checkFFmpegSettings({quiet: true});
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
       const warnings = (payload.validation || []).filter(item => !(item.exists && item.is_directory && item.readable));
       if (warnings.length) {
-        toast('Settings saved', `${warnings.length} configured path${warnings.length === 1 ? '' : 's'} need attention.`, 'warning', 6000);
+        const message = `${warnings.length} configured path${warnings.length === 1 ? '' : 's'} need attention. Check the path status in Settings.`;
+        window.MorphorumOperations?.finish('settings', operation, {
+          tone: 'warning', title: 'Settings saved with path warnings',
+          message, view: 'settings' });
+        toast('Settings saved', message, 'warning', 6000);
       } else {
+        window.MorphorumOperations?.finish('settings', operation, {
+          title: 'Settings saved', message: 'Model and LoRA locations saved.',
+          view: 'settings' });
         toast('Settings saved', 'Model and LoRA locations were saved successfully.', 'success');
       }
     } catch (error) {
+      window.MorphorumOperations?.finish('settings', operation, {
+        tone: 'error', title: 'Settings save failed', message: error.message,
+        view: 'settings' });
       toast('Settings save failed', error.message, 'error', 7000);
     } finally {
+      state.settingsRequestBusy = false;
       setBusy(button, false);
+      qs('#load-settings').disabled = false;
     }
   }
 
@@ -946,6 +1422,16 @@
     if (qs('#view-console')?.classList.contains('active')) renderConsole();
   }
 
+  // Browser-side diagnostics appear in the normal Console, without sending
+  // filesystem paths, request URLs, job payloads or credentials to the server.
+  window.MorphorumClientDiagnostics = {
+    record(level, message) {
+      addConsoleEvent({id: 0, origin: 'browser', timestamp: new Date().toISOString(),
+        level: ['info', 'warning', 'error'].includes(level) ? level : 'info',
+        category: 'runtime', message: String(message).slice(0, 300)});
+    },
+  };
+
   function setConsoleConnection(ok, text) {
     const dot = qs('#console-dot');
     const label = qs('#console-status');
@@ -957,7 +1443,8 @@
   async function connectConsole() {
     try {
       const initial = await api('/api/console?limit=500');
-      state.events = initial.events || [];
+      const browserEvents = state.events.filter(event => event.origin === 'browser');
+      state.events = [...(initial.events || []), ...browserEvents].slice(-1200);
       state.lastEventId = state.events.reduce((max, event) => Math.max(max, Number(event.id) || 0), 0);
       renderConsole();
     } catch (error) {
@@ -1058,6 +1545,11 @@
 
   async function telemetryLoop() {
     const ok = await loadTelemetry();
+    if (!ok) {
+      // Telemetry can fail independently; only mark host offline if /health
+      // also fails. A failed optional GPU probe is not a render failure.
+      await loadHealth();
+    }
     window.clearTimeout(state.telemetryTimer);
     state.telemetryTimer = window.setTimeout(telemetryLoop, ok ? 2500 : 6000);
   }
@@ -1110,6 +1602,7 @@
       if (branchFull) branchFull.textContent = branch;
       if (commitFull) commitFull.textContent = commit;
       if (pill) pill.title = `Morphorum ${displayVersion} · ${branch} @ ${commit} · Tap for details`;
+      return true;
     } catch (error) {
       dot?.classList.add('bad');
       dot?.classList.remove('ok');
@@ -1123,6 +1616,7 @@
       for (const link of [branchLink, commitLink]) {
         if (link) { link.hidden = true; link.removeAttribute('href'); }
       }
+      return false;
     }
   }
 

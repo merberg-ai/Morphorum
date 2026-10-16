@@ -14,7 +14,7 @@ from typing import Any
 
 from .animation_hybrid_source import HybridSourceError, managed_video_path, probe_managed_video
 from .animation_projects import animation_project_directory
-from .animation_video import ffmpeg_executable
+from .ffmpeg_tools import ffmpeg_executable
 
 MAX_EXTRACT_FRAMES = 1200
 MAX_FPS = 120.0
@@ -42,17 +42,24 @@ class HybridExtractionManager:
     def __init__(self) -> None:
         self._jobs: dict[str, dict[str, Any]] = {}
         self._processes: dict[str, subprocess.Popen] = {}
+        self._binaries: dict[str, str] = {}
         self._lock = threading.RLock()
 
     def start(self, project_id: str, filename: str, start: Any, end: Any, fps: Any) -> dict[str, Any]:
         info = probe_managed_video(project_id, filename)
         params = validate_extraction(start, end, fps, info["duration_seconds"])
+        # Capture the same executable at acceptance. A later Settings change
+        # must not silently switch binaries after this job was queued.
+        binary = ffmpeg_executable()
+        if not binary:
+            raise HybridSourceError("FFmpeg is unavailable.")
         with self._lock:
             if any(j["project_id"] == project_id and j["status"] in ("queued", "running") for j in self._jobs.values()):
                 raise HybridSourceError("An extraction is already active for this project.")
             job_id = uuid.uuid4().hex
             job = {"id": job_id, "project_id": project_id, "status": "queued",
                    "source_filename": filename, **params, "frames": 0, "error": None}
+            self._binaries[job_id] = binary
             self._jobs[job_id] = job
         _POOL.submit(self._run, job_id)
         return dict(job)
@@ -80,18 +87,17 @@ class HybridExtractionManager:
         with self._lock:
             job = self._jobs[job_id]
             if job["status"] == "canceled":
+                self._binaries.pop(job_id, None)
                 return
             job["status"] = "running"
             project_id = job["project_id"]
             filename = job["source_filename"]
             start, end, fps = job["start"], job["end"], job["fps"]
+            binary = self._binaries[job_id]
         root = animation_project_directory(project_id) / "assets" / "hybrid"
         staging = root / (".extract-" + job_id)
         destination = root / "frames"
         try:
-            binary = ffmpeg_executable()
-            if not binary:
-                raise HybridSourceError("FFmpeg is unavailable.")
             staging.mkdir(parents=True, exist_ok=False)
             source = managed_video_path(project_id, filename)
             source_stat = source.stat()
@@ -148,6 +154,7 @@ class HybridExtractionManager:
         finally:
             with self._lock:
                 self._processes.pop(job_id, None)
+                self._binaries.pop(job_id, None)
             shutil.rmtree(staging, ignore_errors=True)
 
     def manifest(self, project_id: str) -> dict[str, Any]:

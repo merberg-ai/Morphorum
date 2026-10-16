@@ -108,7 +108,7 @@ A fresh installation with no existing projects also includes a **Default** anima
 - Two positive-prompt keyframes with cat/top-hat scenes
 - No model selected until you choose one
 
-Open **Motion Lab → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. For an early GPU test, try fewer frames and a model-supported resolution.
+Open **Motion Lab → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. The Project Editor explains why controls are locked until a project opens and provides shortcuts to Project Manager and the New Project Wizard. The browser remembers your last opened project when it is still available. Still-image model selection does not automatically select a model for an animation project. For an early GPU test, try fewer frames and a model-supported resolution.
 
 ## 5. Explore the Motion Lab workspaces
 
@@ -135,6 +135,8 @@ For music-driven movements, use [Motion Studio](MOTION_STUDIO.md) to select a sa
 
 The floating Motion Lab toolbar offers shortcuts to **Record**, **Stop**, **Curves**, **Preview**, **Apply**, and **Render Animation**. The buttons disable themselves during incompatible background actions.
 
+The slim **Motion Lab next steps** guide shows your current workspace, active project, saved/unsaved Editor state and one or two useful destinations. For example, after Camera Composer it suggests Motion Curves and Camera Preview; after Render Monitor it suggests Outputs. Its buttons **only navigate**: they do not save a project, apply curves, switch the selected project or start a render. When no project is open it directs you to Project Manager or the New Project Wizard.
+
 > [!TIP]
 > Camera previews and AI renders are different operations. Previewing a camera path can help you catch mistakes before running a full diffusion render. A final animation may still look different after frame-by-frame generation.
 
@@ -146,13 +148,13 @@ The floating Motion Lab toolbar offers shortcuts to **Record**, **Stop**, **Curv
 4. Follow the job under **Render Monitor**. Supported jobs can be cancelled or resumed as indicated by the interface.
 5. Open **Outputs** after completion to preview the animation and export it as **MP4** or **WebM** where supported.
 
-**FFmpeg is required** for video encoding. If video export is unavailable, run `ffmpeg -version` in a terminal and see [Troubleshooting](TROUBLESHOOTING.md#video-export-fails-or-ffmpeg-is-missing).
+**FFmpeg is required** for video encoding. Full setup and maintenance instructions are in the [FFmpeg Manager guide](FFMPEG_MANAGER.md).  Open **Settings → Storage → FFmpeg Manager** to auto-detect it, set a custom executable path or test the currently selected binary and matching FFprobe. Save Settings to activate a tested choice. You can also choose Managed and use **Install managed FFmpeg** to download an integrity-checked FFmpeg/FFprobe pair, then save Settings to activate it. After installing, you can run the [CPU-only FFmpeg acceptance check](TROUBLESHOOTING.md#ffmpeg-acceptance-checks-no-gpu-needed) to verify video, source-video extraction, and audio conversions. If export is unavailable, see [Troubleshooting](TROUBLESHOOTING.md#video-export-fails-or-ffmpeg-is-missing).
 
 For **Deforum Motion Settings Import**, explicitly attach the selected soundtrack before starting a new render to include it in MP4/WebM exports at the original render FPS. Source paths from exported settings are only references; see the [complete import guide](DEFORUM_MOTION_SETTINGS_IMPORT.md).
 
 ## 7. Personalize and maintain Morphorum
 
-Open **Settings** to select the UI theme, interface font, console font, and model directories.
+Open **Settings** to select the UI theme, interface font, console font, and model directories. Under **Appearance → Contextual Help**, the **Show (?) help buttons** checkbox controls explanations beside common generation and camera settings. Hover, focus or tap a help button; press **Escape** or click elsewhere to dismiss it. Saving Settings remembers the choice without disabling warnings or errors.
 
 The four themes are **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, and **Slate Graphite**. Your choices are saved and reused when you reopen the app.
 
@@ -174,3 +176,155 @@ The optional [backend-only mode](BACKEND_ONLY.md) lets a compatible native clien
 - [Troubleshooting](TROUBLESHOOTING.md)
 - [Current features and limitations](CURRENT_STATUS.md)
 - [Documentation index](README.md)
+
+## Refreshing models while editing
+
+Each animation project stores its own checkpoint selection independently of
+the Image Generation model selector. After changing model directories or
+installing a managed checkpoint, open **Models → Scan Models**. The animation
+Project Editor and Deforum importer automatically refresh their checkpoint
+lists without needing a browser reload. The current project's unsaved edits,
+checkpoint choice and compatible sampler remain intact. If a previously used
+model disappears from the index, it is shown as missing instead of silently
+choosing another checkpoint; restore its directory and scan again, or
+explicitly choose a replacement. An unsuccessful scan keeps the last known
+checkpoint list until a later successful refresh.
+
+## Animation checkpoint compatibility
+
+In **Motion Lab → Project Editor**, the **Checkpoint compatibility** panel
+shows the indexed model's family and variant, currently selected sampler and
+render size. It compares the settings against the backend's published model
+capabilities. SDXL images must be aligned to 8 pixels; Flux and Z-Image use
+16-pixel alignment. Image sizes must be 64–4096 pixels on each side.
+
+Warnings explain when a saved checkpoint is missing, the sampler is unsupported,
+or dimensions are incompatible. **Open Model Manager** takes you to the existing
+model inventory; **Choose a Sampler** and **Edit Resolution** focus the relevant
+control. A high-resolution VRAM notice is advisory. None of these actions
+automatically modifies the project, and an indexed model is not a guarantee
+that its weights still exist or GPU memory is sufficient. Complete pre-render
+validation is planned for a later milestone.
+
+## Contextual generation help and units
+
+Image Generation and Motion Lab offer small **(?)** help buttons alongside
+common model, seed, sampler, resolution, cadence, generation and camera controls.
+Hover, focus or tap to show explanations. **Settings → Appearance → Contextual
+Help** can hide these tips without hiding errors or warnings.
+
+Image dimensions and 2D pan use pixels (px); 2D/3D rotations use degrees per
+frame; 3D translation uses estimated scene units per frame. These are repeated
+per-frame motions, not final camera positions. Camera Composer fade and cycle
+are seconds. Duration equals total frames divided by FPS.
+
+Schedules accept frame-indexed values such as `0:(0.65), 48:(0.5)`; the
+timeline's interpolation controls how values change between keyframes.
+Help messages never mutate a saved project or trigger generation.
+
+## Check Render before generation (P2.5)
+
+In **Motion Lab → Render Monitor**, choose **Check Render** to inspect your
+current browser project settings without starting a job or saving changes.
+The report identifies blocking errors and non-blocking warnings, including
+missing model weights, incompatible sampler and dimensions, invalid schedules,
+required starting image, and unsupported step/guidance ranges. **Fix in
+Editor** opens the relevant setting; missing checkpoints can be repaired
+through Models. The check also runs automatically when you click **Render
+Animation**. Errors prevent submission; warnings require explicit approval.
+
+For very long projects, generation step/guidance ranges are checked at up to
+500 evenly distributed frames, and the report discloses the sampling.
+The renderer still validates the actual frames during generation. Preflight
+does not guarantee that a GPU has enough free VRAM or that a complex 3D
+camera projection will remain visible for every frame. No project data is
+changed or saved by the check.
+
+## 3D Camera Safety (P2.6)
+
+Camera translation and rotation are per-frame changes, not absolute end
+positions. A constant 3D Z move or Y rotation accumulates across dozens of
+frames, and a 3D projection may eventually contain **no visible pixels**.
+
+In Project Editor under **3D Camera Schedules**, choose **Review 3D Render
+Safety**. Morphorum opens Render Monitor and runs the normal read-only
+preflight check, which gives warnings about unusually strong movement,
+cumulative camera travel, and narrow fields of view. These estimates use
+sampled schedules. They do not run the depth model or predict pixel coverage.
+A real **Camera Preview** helps evaluate projected coverage before a render.
+
+If a live render's depth/camera warp fails, its error now reports the failed
+frame, resolved camera-axis values, the count of source samples remaining
+inside the view, and last successfully measured coverage when available.
+The guidance explains which settings to soften. No camera values are
+automatically modified, and no synthetic replacement frames are inserted.
+
+Physical Windows/Android acceptance for P2.5 and P2.6 is bundled for the
+next available test session. Do not merge these development changes to
+main before that acceptance.
+
+## Responsive Render Monitor controls (P3.1)
+
+The **Check Render**, **Resume**, **Cancel** and **Render Animation**
+controls wrap on desktop; at phone widths they reorganize into a grid, with
+**Check Render** and **Render Animation** in full-width rows. On particularly
+narrow screens each control receives its own row. The preflight issue list,
+**Fix in Editor** button and 3D motion-safety guidance also wrap rather than
+requiring a horizontal page scroll. Actual device and browser-zoom acceptance
+is postponed to the combined physical test pass.
+
+## Responsive Models, Settings, LoRAs and Image Results (P3.2)
+
+Morphorum arranges Model Manager filters in one column on very narrow
+screens, keeps model paths keyboard-expandable and selectable, and wraps
+managed download metadata. Settings groups wrap into a two-column phone
+layout; directory inputs and Check/Remove buttons stack at the smallest
+widths. LoRA Manager details and Image Generation's result actions also
+wrap rather than forcing a page-wide horizontal scrollbar. This is a
+layout-only update; scans, model downloads, generation and saved settings
+behave as before. Physical browser/zoom verification is deferred to the
+combined acceptance test.
+
+## Motion Lab timeline and controls at narrow widths (P3.3)
+
+The Visual Timeline uses a keyboard-focusable scroll region on desktop,
+with independent horizontal scrolling for many frames. At phone widths the
+focused single-track display fits the real available card width, including
+when the browser is zoomed in. Use the phone track picker, keyframe list and
+frame scrubber for precise edits. Motion Curves, 3D Camera and Inspector
+inputs, charts, dialogs and action buttons wrap to the available space.
+Deforum Import keeps long mapping values inside its vertically scrollable
+dialog. None of these responsive changes modifies project settings.
+Physical Windows/Android acceptance through P3.3 is included in the
+combined test plan and still pending.
+
+## Operation feedback (P4.1)
+
+A persistent operation notice at the top of the WebUI shows what the host
+is doing while you save/reload Settings, scan model directories, or install
+a managed checkpoint. It provides running progress (including live download
+bytes and percentage where available), completion, path warnings and
+actionable error details. **Open Models** or **Open Settings** returns to
+the relevant page. Dismissing the notice never cancels ongoing work; model
+downloads continue in the backend. The existing image and animation render
+progress panels remain authoritative for GPU work. Progress for an
+indeterminate task does not imply a percentage or ETA.
+
+## Image and Motion Lab operation feedback (P4.2)
+
+Image Generation now reports **Submitting** and **Queued** as separate
+operations. The existing job-progress panel remains the place to monitor
+the denoiser, inspect images, or cancel a running job. Refreshing recent
+image jobs and unloading a model show a busy state, completion, or
+actionable errors. Image generation submissions cannot be repeated while
+the first request is still in flight.
+
+In Motion Lab, **Preview Camera Motion** displays a status and CPU-preview
+progress, including failure information, without loading the diffusion
+model. **Preview Draft** compiles motion without saving; **Apply to Animation**
+continues to require existing Save/Rebase confirmations and reports when
+the user cancels. **Render Animation** describes preflight checks,
+warnings, blocking errors and queue submission without inventing a GPU
+ETA. Detailed diffusion/frame metrics remain in **Render Monitor**.
+A queued render remains queued even if refreshing its history fails.
+The operation notice is dismissible and does not cancel background work.

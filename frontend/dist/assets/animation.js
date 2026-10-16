@@ -3,6 +3,7 @@
 
   let motionPreviewStarting = false;
   let animationRenderStarting = false;
+  let motionPreviewOperation = null; // Tracks a submitted CPU preview across polling.
   const state = {
     project: null,
     projects: [],
@@ -41,9 +42,34 @@
       report: null,
       busy: false,
     },
+    // Track model index changes separately from in-progress Editor edits.
+    modelIndexSignature: null,
+    modelIndexStale: false,
+    modelIndexRevision: 0,
   };
 
   const ANIMATION_CARD_STORAGE_KEY = 'morphorum.animation.cards.v1';
+  const LAST_ANIMATION_PROJECT_KEY = 'morphorum.animation.lastProjectId.v1';
+
+  function readLastAnimationProject() {
+    try { return localStorage.getItem(LAST_ANIMATION_PROJECT_KEY) || ''; }
+    catch (_) { return ''; }
+  }
+
+  function rememberAnimationProject(projectId) {
+    if (!projectId) return;
+    try { localStorage.setItem(LAST_ANIMATION_PROJECT_KEY, String(projectId)); }
+    catch (_) { /* Storage may be unavailable in a restricted browser. */ }
+  }
+
+  function forgetAnimationProject(projectId) {
+    if (!projectId) return;
+    try {
+      if (localStorage.getItem(LAST_ANIMATION_PROJECT_KEY) === projectId) {
+        localStorage.removeItem(LAST_ANIMATION_PROJECT_KEY);
+      }
+    } catch (_) { /* Browser storage is optional. */ }
+  }
 
   function readAnimationCardState() {
     try {
@@ -555,6 +581,54 @@
     button.disabled = busy;
   }
 
+  // P1: explain why the editor is locked without changing saved settings.
+  function renderEditorGuidance() {
+    const project = state.project;
+    syncMotionWorkflowGuide();
+    const panel = qs('#animation-editor-guidance');
+    const open = qs('#animation-editor-open-project');
+    const context = qs('#animation-project-context');
+    if (panel) panel.hidden = Boolean(project);
+    if (open) open.hidden = state.projects.length === 0;
+    if (context) {
+      if (!project) {
+        context.textContent = state.projects.length
+          ? 'No project open · choose an existing project or create a new one.'
+          : 'No project open · create a project to begin editing.';
+      } else {
+        const selectedModelId = qs('#animation-model')?.value ?? project.model?.model_id ?? '';
+        const model = state.models.find(item => item.id === selectedModelId && item.kind === 'checkpoints');
+        const modelLabel = model?.name || (selectedModelId ? 'Model unavailable' : 'Model not selected');
+        context.textContent = (qs('#animation-name')?.value?.trim() || project.name || 'Untitled Animation') +
+          ' · ' + modelLabel + ' · ' + (state.dirty ? 'Unsaved changes' : 'Saved');
+      }
+    }
+    const modelHelp = qs('#animation-model-guidance');
+    const modelSelect = qs('#animation-model');
+    if (modelHelp) {
+      const selectedModelId = modelSelect?.value ?? project?.model?.model_id ?? '';
+      if (!project) {
+        modelHelp.hidden = true;
+      } else if (!selectedModelId) {
+        modelHelp.hidden = false;
+        modelHelp.textContent = state.models.some(item => item.kind === 'checkpoints')
+          ? 'Choose a checkpoint for this animation project. The still-image model selection is separate.'
+          : 'No checkpoints indexed. Open Models, configure or download a checkpoint, then scan models.';
+      } else if (!state.models.some(item => item.id === selectedModelId && item.kind === 'checkpoints')) {
+        modelHelp.hidden = false;
+        modelHelp.textContent = 'This project references a model not currently indexed on this computer. Scan Models or choose another compatible checkpoint.';
+      } else {
+        modelHelp.hidden = true;
+      }
+    }
+    if (modelSelect) {
+      modelSelect.title = project
+        ? 'Choose a checkpoint for the current animation project.'
+        : 'Open or create an animation project before selecting a model.';
+    }
+    renderAnimationModelCompatibility();
+  }
+
   function setEditorEnabled(enabled) {
     qsa(
       '#view-animation input, #view-animation select, #view-animation textarea'
@@ -589,6 +663,7 @@
     badge.textContent = text;
     badge.className = 'badge animation-project-status';
     if (kind) badge.classList.add(kind);
+    renderEditorGuidance();
   }
 
   function scheduleInspectorRefresh({ validate = false } = {}) {
@@ -604,6 +679,7 @@
   function markDirty({ validate = false } = {}) {
     if (!state.project || state.loading) return;
     state.dirty = true;
+    resetRenderPreflight();
     setStatus('Unsaved changes', 'dirty');
     scheduleInspectorRefresh({ validate });
   }
@@ -631,6 +707,145 @@
     return merged;
   }
 
+  // P2.3: compatibility is advisory. This function never edits project data,
+  // sampler selection, dimensions, or render state.
+  function describeAnimationModelCompatibility({
+    hasProject, modelId, model, capability = {}, sampler = '', width, height,
+    modelIndexStale = false,
+  } = {}) {
+    if (!hasProject) return { status: 'No project', tone: 'neutral', facts: [], issues: [], action: '' };
+    if (!modelId) return {
+      status: 'Select a checkpoint', tone: 'attention', facts: [], action: 'models',
+      issues: ['Choose an indexed checkpoint for this animation project. Image Generation uses a separate model selection.'],
+    };
+    if (!model || model.kind !== 'checkpoints') return {
+      status: 'Checkpoint unavailable', tone: 'attention', action: 'models',
+      facts: [['Checkpoint ID', String(modelId)]],
+      issues: ['The saved checkpoint is not indexed here. Open Models, check its folder or managed download, then scan again. Your saved project selection is preserved.'],
+    };
+
+    const family = String(model.family || '').toLowerCase();
+    const variant = String(model.variant || '').trim();
+    const name = String(capability.label || model.name || model.id || 'Checkpoint');
+    const divisor = family === 'flux' || family === 'zimage' ? 16 : 8;
+    const w = Number(width), h = Number(height);
+    const samplerOptions = Array.isArray(capability.samplers?.options)
+      ? capability.samplers.options : [];
+    const samplerNames = new Map(samplerOptions.map(item =>
+      [String(item.id || ''), String(item.label || item.id || '')]));
+    const issues = [];
+    let action = '';
+    let tone = 'ok';
+    let status = 'Indexed · compatible settings';
+    const facts = [
+      ['Family', family ? family.toUpperCase() : 'Unknown'],
+      ['Variant', variant || 'Standard'],
+      ['Sampler', samplerNames.get(String(sampler)) || (sampler ? String(sampler) : 'Not selected')],
+      ['Resolution', String(width || '?') + ' × ' + String(height || '?')],
+    ];
+    let note = modelIndexStale
+      ? 'This is the last known model index; a scan did not complete.'
+      : 'Indexed checkpoint. File integrity and GPU readiness are verified when generating.';
+
+    if (capability.supported === false) {
+      status = 'Unsupported model family';
+      tone = 'attention';
+      issues.push(capability.reason || 'This model family is not supported by the current generation backend.');
+      action = 'models';
+    } else if (capability.supported !== true) {
+      status = 'Compatibility unknown';
+      tone = 'attention';
+      issues.push('Generation capabilities are unavailable. Reopen Models and check the backend before rendering.');
+      action = 'models';
+    } else {
+      if (!samplerOptions.length) {
+        issues.push('No compatible samplers were reported for this checkpoint.');
+        action = 'models';
+      } else if (!samplerNames.has(String(sampler))) {
+        issues.push(sampler
+          ? 'Sampler "' + sampler + '" is not supported by ' + name + '. Choose a compatible sampler.'
+          : 'Choose a compatible sampler before rendering.');
+        action = 'sampler';
+      }
+      if (!Number.isInteger(w) || !Number.isInteger(h) ||
+          w < 64 || h < 64 || w > 4096 || h > 4096) {
+        issues.push('Width and height must be whole numbers between 64 and 4096 pixels.');
+        if (!action) action = 'resolution';
+      } else if (w % divisor || h % divisor) {
+        issues.push(name + ' requires width and height divisible by ' + divisor + '.');
+        if (!action) action = 'resolution';
+      } else if (w * h > 1048576) {
+        note += ' This resolution can require substantial VRAM; try a short render first.';
+      }
+      if (issues.length) {
+        tone = 'attention';
+        status = 'Review model settings';
+      }
+    }
+    return { status, tone, facts, issues, action, note };
+  }
+
+  function renderAnimationModelCompatibility() {
+    const panel = qs('#animation-model-compatibility');
+    if (!panel) return;
+    panel.hidden = !state.project;
+    if (!state.project) return;
+    const modelId = qs('#animation-model')?.value ?? state.project.model?.model_id ?? '';
+    const model = state.models.find(item => item.id === modelId && item.kind === 'checkpoints');
+    const details = describeAnimationModelCompatibility({
+      hasProject: true,
+      modelId,
+      model,
+      capability: model ? effectiveCapability(model) : {},
+      sampler: qs('#animation-sampler')?.value ?? '',
+      width: qs('#animation-width')?.value,
+      height: qs('#animation-height')?.value,
+      modelIndexStale: state.modelIndexStale,
+    });
+    const status = qs('#animation-compatibility-status');
+    if (status) {
+      status.textContent = details.status;
+      status.dataset.tone = details.tone;
+    }
+    const facts = qs('#animation-compatibility-facts');
+    if (facts) {
+      facts.replaceChildren();
+      for (const [label, value] of details.facts) {
+        const item = document.createElement('span');
+        item.className = 'animation-compatibility-fact';
+        const heading = document.createElement('strong');
+        heading.textContent = label + ': ';
+        item.append(heading, document.createTextNode(value));
+        facts.appendChild(item);
+      }
+    }
+    const issues = qs('#animation-compatibility-issues');
+    if (issues) {
+      issues.replaceChildren();
+      for (const issue of details.issues) {
+        const item = document.createElement('li');
+        item.textContent = issue;
+        issues.appendChild(item);
+      }
+      issues.hidden = details.issues.length === 0;
+    }
+    const note = qs('#animation-compatibility-note');
+    if (note) {
+      note.textContent = details.note || '';
+      note.hidden = !details.note;
+    }
+    const action = qs('#animation-compatibility-action');
+    if (action) {
+      const labels = {
+        models: 'Open Model Manager', sampler: 'Choose a Sampler',
+        resolution: 'Edit Resolution',
+      };
+      action.hidden = !details.action;
+      action.dataset.compatibilityAction = details.action;
+      action.textContent = labels[details.action] || '';
+    }
+  }
+
   function populateResolutionPresets() {
     const model=modelById(qs('#animation-model')?.value||'');
     const capability=model?effectiveCapability(model):{};
@@ -646,6 +861,7 @@
     const model=modelById(qs('#animation-model')?.value||'');
     window.MorphorumResolution.guidance(qs('#animation-resolution-help'),
       model?.family,qs('#animation-width')?.value,qs('#animation-height')?.value);
+    renderAnimationModelCompatibility();
   }
   function syncAnimationResolutionPreset() {
     window.MorphorumResolution.sync(qs('#animation-resolution-preset'),
@@ -653,19 +869,26 @@
     updateAnimationResolutionHelp();
   }
 
-  function populateSamplerSelect(preferredSampler = '') {
+  function populateSamplerSelect(preferredSampler = '', { preserveUnsupported = false } = {}) {
     const select = qs('#animation-sampler');
     if (!select) return;
 
-    const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
+    const modelId = qs('#animation-model')?.value ?? state.project?.model?.model_id ?? '';
     const model = modelById(modelId);
     const current = String(select.value || '');
     select.replaceChildren();
 
     if (!model) {
+      // Do not erase a project's sampler when the model index temporarily
+      // loses that checkpoint. Re-scanning can restore it without an edit.
+      const savedSampler = modelId
+        ? (preferredSampler || current || state.project?.generation?.sampler || '')
+        : '';
       const option = document.createElement('option');
-      option.value = '';
-      option.textContent = 'Select a model first';
+      option.value = savedSampler;
+      option.textContent = modelId
+        ? (savedSampler ? 'Checkpoint unavailable · ' + savedSampler : 'Checkpoint unavailable')
+        : 'Select a model first';
       select.appendChild(option);
       select.disabled = true;
       return;
@@ -700,7 +923,15 @@
     ].filter(Boolean);
     const valid = new Set(options.map(item => item.id));
     const selected = candidates.find(value => valid.has(value)) || fallback;
-    select.value = selected;
+    if (preserveUnsupported && preferredSampler && !valid.has(preferredSampler)) {
+      const missing = document.createElement('option');
+      missing.value = preferredSampler;
+      missing.textContent = 'Unsupported sampler · ' + preferredSampler;
+      select.appendChild(missing);
+      select.value = preferredSampler;
+    } else {
+      select.value = selected;
+    }
     select.disabled = false;
     select.title = capability.label
       ? `${capability.label} compatible samplers`
@@ -746,10 +977,15 @@
     return true;
   }
 
-  function populateModelSelect() {
+  function populateModelSelect({ preserveSelection = false } = {}) {
     const select = qs('#animation-model');
     if (!select) return;
-    const selected = state.project?.model?.model_id || select.value || '';
+    // Normal project loads use the saved checkpoint; live index refreshes use
+    // the current DOM value, including an intentionally empty/unsaved choice.
+    const selected = preserveSelection && state.project
+      ? select.value
+      : (state.project?.model?.model_id || select.value || '');
+    const previousSampler = qs('#animation-sampler')?.value || '';
     const models = state.models.filter(model => model.kind === 'checkpoints');
 
     select.replaceChildren();
@@ -773,8 +1009,12 @@
       select.appendChild(missing);
     }
     select.value = selected;
-    populateSamplerSelect(state.project?.generation?.sampler || '');
+    populateSamplerSelect(
+      preserveSelection ? previousSampler : (state.project?.generation?.sampler || ''),
+      { preserveUnsupported: true }
+    );
     populateResolutionPresets();
+    renderEditorGuidance();
   }
 
   function renderProjectSelect() {
@@ -1124,7 +1364,11 @@
 
     const maxFrames = Math.max(1, Number(state.timeline.max_frames || 1));
     const scroll = qs('#animation-timeline-scroll');
-    const availableWidth = Math.max(300, Number(scroll?.clientWidth || 360) - 4);
+    // Mobile-focused timeline uses the actual container width, including at
+    // 200% browser zoom. A 300px floor clipped its rightmost frames on phones.
+    // Retain the independent, horizontally scrollable desktop track scaling.
+    const measuredWidth = Number(scroll?.clientWidth || 360);
+    const availableWidth = Math.max(160, Math.floor(measuredWidth - 4));
     const contentWidth = mobile
       ? availableWidth
       : Math.max(640, Math.round(maxFrames * state.timelineScale));
@@ -1949,7 +2193,7 @@
       }
 
       populateModelSelect();
-      populateSamplerSelect(project.generation?.sampler || '');
+      populateSamplerSelect(project.generation?.sampler || '', { preserveUnsupported: true });
       const repairedGuidance = repairConstantGuidanceForSelectedModel();
       renderPromptRows();
       syncAnimationModeUi();
@@ -2659,6 +2903,11 @@
     const overlay = qs('#animation-preview-highlight-holes');
     if (overlay) overlay.disabled = !state.project || animationMode() !== '3d' ||
       Boolean(state.motionJobId) || renderActive || state.depthBusy;
+    const preflightButton = qs('#animation-preflight-check');
+    if (preflightButton && !preflightButton.classList.contains('busy')) {
+      preflightButton.disabled = !state.project || renderActive ||
+        Boolean(state.motionJobId) || motionPreviewStarting || animationRenderStarting;
+    }
     const renderButton = qs('#animation-start-render');
     if (renderButton) {
       const hasModel = Boolean(qs('#animation-model')?.value);
@@ -3204,7 +3453,16 @@
     motionLabAudioElement?.pause();
     window.clearTimeout(state.motionPollTimer);
     state.motionPollTimer = null;
+    if (state.motionJobId) window.MorphorumPollHealth?.reset('motion:' + state.motionJobId);
     state.motionJobId = null;
+    if (motionPreviewOperation) {
+      window.MorphorumOperations?.finish('motion-preview', motionPreviewOperation.token, {
+        tone: 'warning', title: 'Camera preview no longer tracked',
+        message: 'The active preview was reset. Any accepted CPU job may continue on the host.',
+        view: 'animation',
+      });
+      motionPreviewOperation = null;
+    }
     const panel = qs('#animation-motion-progress');
     if (panel) panel.hidden = true;
     const result = qs('#animation-motion-result');
@@ -3283,6 +3541,16 @@
   }
 
   function updateMotionProgress(job) {
+    if (motionPreviewOperation &&
+        (!motionPreviewOperation.jobId || motionPreviewOperation.jobId === job.id)) {
+      const raw = job.progress == null ? null : Number(job.progress) * 100;
+      window.MorphorumOperations?.update('motion-preview', motionPreviewOperation.token, {
+        title: 'Generating camera motion preview',
+        message: String(job.message || job.status || 'Generating preview frames…'),
+        progress: raw != null && Number.isFinite(raw) ?
+          Math.max(0, Math.min(100, raw)) : null,
+      });
+    }
     const panel = qs('#animation-motion-progress');
     if (panel) panel.hidden = false;
     const percent = Math.max(0, Math.min(100, Math.round(Number(job.progress || 0) * 100)));
@@ -3295,6 +3563,20 @@
   }
 
   function finishMotionPreview(job) {
+    if (motionPreviewOperation?.jobId === job.id) {
+      window.MorphorumOperations?.finish('motion-preview', motionPreviewOperation.token, {
+        tone: job.status === 'failed' ? 'error' : 'success',
+        title: job.status === 'failed' ? 'Camera motion preview failed' :
+          'Camera motion preview complete',
+        message: job.status === 'failed'
+          ? String(job.error || job.message || 'The CPU camera preview failed.') +
+            ' Review Camera Preview and try again.'
+          : 'CPU preview is ready in Camera Preview. No diffusion model was loaded.',
+        view: 'animation',
+      });
+      motionPreviewOperation = null;
+    }
+    if (state.motionJobId) window.MorphorumPollHealth?.reset('motion:' + state.motionJobId);
     state.motionJobId = null;
     window.clearTimeout(state.motionPollTimer);
     state.motionPollTimer = null;
@@ -3359,16 +3641,20 @@
 
   async function pollMotionPreview(jobId) {
     try {
-      const job = await api('/api/animation/motion-preview/' + encodeURIComponent(jobId));
+      const job = await window.MorphorumPollHealth.request(signal =>
+        api('/api/animation/motion-preview/' + encodeURIComponent(jobId), {signal}));
       // A project switch clears motionJobId. Never show an old response,
       // even when the HTTP request started before the switch/reload.
       if (state.motionJobId !== jobId) return;
+      window.MorphorumPollHealth?.recovered('motion:' + jobId);
       updateMotionProgress(job);
       if (job.status === 'completed' || job.status === 'failed') { finishMotionPreview(job); return; }
       state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 350);
     } catch (_) {
-      if (state.motionJobId === jobId)
+      if (state.motionJobId === jobId) {
+        window.MorphorumPollHealth?.failed('motion:' + jobId, 'Camera preview', 'animation');
         state.motionPollTimer = window.setTimeout(() => pollMotionPreview(jobId), 1000);
+      }
     }
   }
 
@@ -3377,6 +3663,10 @@
         animationRenderStarting || renderIsActive()) return;
     motionPreviewStarting = true;
     const requestedProjectId = state.project.id;
+    const operation = window.MorphorumOperations?.begin('motion-preview',
+      'Starting camera motion preview',
+      'Submitting a CPU-only camera preview; no diffusion model will load…', 'animation');
+    motionPreviewOperation = { token: operation, jobId: null, projectId: requestedProjectId };
     motionLabSyncQuickActions();
     const button = qs('#animation-generate-motion-preview');
     if (button) {
@@ -3404,13 +3694,26 @@
           },
         }),
       });
-      if (state.project?.id !== requestedProjectId) return;
+      if (state.project?.id !== requestedProjectId) {
+        window.MorphorumOperations?.finish('motion-preview', operation, {
+          tone: 'warning', title: 'Camera preview no longer current',
+          message: 'The active project changed while the preview was submitting.',
+          view: 'animation' });
+        if (motionPreviewOperation?.token === operation) motionPreviewOperation = null;
+        return;
+      }
       state.motionJobId = job.id;
+      if (motionPreviewOperation?.token === operation) motionPreviewOperation.jobId = job.id;
       updateMotionProgress(job);
       motionLabSyncQuickActions();
       renderSourceState();
       pollMotionPreview(job.id);
     } catch (error) {
+      window.MorphorumOperations?.finish('motion-preview', operation, {
+        tone: 'error', title: 'Camera preview could not start',
+        message: error.message + '. Review Camera Preview settings and retry.',
+        view: 'animation' });
+      if (motionPreviewOperation?.token === operation) motionPreviewOperation = null;
       if (state.project?.id !== requestedProjectId) return;
       state.motionJobId = null;
       if (button) {
@@ -3783,13 +4086,16 @@
   async function pollVideoExport(jobId) {
     if (state.videoJob?.id !== jobId) return;
     try {
-      const job = await api('/api/animation/video/jobs/' + encodeURIComponent(jobId));
+      const job = await window.MorphorumPollHealth.request(signal =>
+        api('/api/animation/video/jobs/' + encodeURIComponent(jobId), {signal}));
       if (state.videoJob?.id !== jobId) return;
+      window.MorphorumPollHealth?.recovered('video:' + jobId);
       state.videoJob = job;
       renderVideoExportState();
       if (['queued', 'encoding'].includes(job.status)) {
         state.videoPollTimer = window.setTimeout(() => pollVideoExport(jobId), 700);
       } else {
+        window.MorphorumPollHealth?.reset('video:' + jobId);
         await loadVideoExportHistory();
         if (job.status === 'completed') {
           toast('Video export complete', 'Download your ' + job.format.toUpperCase() + ' video.', 'success');
@@ -3799,9 +4105,25 @@
       }
     } catch (error) {
       if (state.videoJob?.id === jobId) {
+        window.MorphorumPollHealth?.failed('video:' + jobId, 'Video export', 'animation');
         state.videoPollTimer = window.setTimeout(() => pollVideoExport(jobId), 1200);
       }
     }
+  }
+
+  let videoAvailabilityRequest = 0;
+  async function refreshVideoAvailability() {
+    const request = ++videoAvailabilityRequest;
+    try {
+      const info = await api('/api/animation/video/availability');
+      if (request !== videoAvailabilityRequest) return;
+      state.videoAvailability = info;
+    } catch (error) {
+      if (request !== videoAvailabilityRequest) return;
+      state.videoAvailability = {available: false, message:
+        'Cannot check FFmpeg on the host. Check backend connectivity and Settings.'};
+    }
+    renderVideoExportState();
   }
 
   async function startVideoExport() {
@@ -3845,6 +4167,8 @@
   let renderHistoryGeneration = 0;
   function resetRenderUi() {
     ++renderHistoryGeneration;
+    if (state.renderJobId) window.MorphorumPollHealth?.reset('render:' + state.renderJobId);
+    if (state.videoJob?.id) window.MorphorumPollHealth?.reset('video:' + state.videoJob.id);
     window.clearTimeout(state.renderPollTimer);
     state.renderPollTimer = null;
     state.renderJobId = null;
@@ -4081,19 +4405,134 @@
     window.clearTimeout(state.renderPollTimer);
     if (!renderId || renderId !== state.renderJobId) return;
     try {
-      const job = await api('/api/animation/renders/' + encodeURIComponent(renderId));
+      const job = await window.MorphorumPollHealth.request(signal =>
+        api('/api/animation/renders/' + encodeURIComponent(renderId), {signal}));
       if (renderId !== state.renderJobId ||
           (job.project_id && job.project_id !== state.project?.id)) return;
+      window.MorphorumPollHealth?.recovered('render:' + renderId);
       renderAnimationJob(job);
       if (renderIsActive(job)) {
         state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 700);
       } else {
+        window.MorphorumPollHealth?.reset('render:' + renderId);
         await loadRenderHistory();
         if (job.status === 'completed') toast('Animation render complete', job.message || '', 'success');
         else if (job.status === 'failed') toast('Animation render failed', job.error || job.message || '', 'error', 8000);
       }
     } catch (_) {
-      if (renderId === state.renderJobId) state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 1500);
+      if (renderId === state.renderJobId) {
+        window.MorphorumPollHealth?.failed('render:' + renderId, 'Animation render', 'animation');
+        state.renderPollTimer = window.setTimeout(() => pollAnimationRender(renderId), 1500);
+      }
+    }
+  }
+
+  // P2.5: same frozen browser draft is checked before a GPU render is queued.
+  // A check never saves the project or changes any of its settings.
+  function resetRenderPreflight() {
+    const report = qs('#animation-preflight-report');
+    if (report) report.hidden = true;
+  }
+
+  function renderPreflightResult(result) {
+    const report = qs('#animation-preflight-report');
+    if (!report) return;
+    report.hidden = false;
+    report.dataset.state = result.valid ? (result.warnings ? 'warning' : 'ok') : 'error';
+    const heading = qs('#animation-preflight-heading');
+    if (heading) {
+      heading.textContent = result.errors
+        ? result.errors + ' blocking issue(s) · render not started'
+        : result.warnings
+          ? 'Ready with ' + result.warnings + ' warning(s)'
+          : 'Render check passed';
+    }
+    const meta = qs('#animation-preflight-meta');
+    if (meta) {
+      meta.textContent = (result.model_name || 'No indexed checkpoint') +
+        ' · ' + (Number(result.checked_frames) || 0) +
+        ' / ' + (Number(result.total_frames) || 0) + ' frames checked for scheduled generation parameters';
+    }
+    const list = qs('#animation-preflight-issues');
+    if (list) {
+      list.replaceChildren();
+      for (const issue of result.issues || []) {
+        const item = document.createElement('li');
+        item.textContent = (issue.severity === 'warning' ? 'Warning' : 'Error') +
+          ' · ' + issue.field + ': ' + issue.message;
+        item.dataset.severity = issue.severity;
+        list.appendChild(item);
+      }
+      list.hidden = !(result.issues || []).length;
+    }
+    const fix = qs('#animation-preflight-fix');
+    if (fix) fix.hidden = !result.errors;
+  }
+
+  const PREFLIGHT_EDITOR_FIELDS = Object.freeze({
+    'model.model_id': '#animation-model',
+    'model.family': '#animation-model',
+    'animation.max_frames': '#animation-max-frames',
+    'animation.width': '#animation-width',
+    'animation.height': '#animation-height',
+    'animation.start_mode': '#animation-start-mode',
+    'animation.source_image': '#animation-source-file',
+    'generation.sampler': '#animation-sampler',
+    'generation.steps': '#animation-steps',
+    'generation.guidance': '#animation-guidance',
+    'hybrid.composite_opacity': '#animation-hybrid-composite-opacity',
+    'tracks.prompts.positive': '#animation-prompt-list',
+  });
+
+  function showFirstPreflightFix() {
+    const issue = (state.lastPreflight?.issues || []).find(item => item.severity === 'error');
+    if (!issue) return;
+    if (issue.action === 'models') {
+      qs('.nav-button[data-view="models"]')?.click();
+      return;
+    }
+    showAnimationTab('editor');
+    const selector = PREFLIGHT_EDITOR_FIELDS[issue.field] ||
+      SCHEDULE_INPUTS[issue.field] || '#animation-name';
+    const target = qs(selector);
+    const card = target?.closest('article.card');
+    if (card?.classList.contains('animation-card-collapsed')) {
+      setAnimationCardCollapsed(card, false, { persist: false });
+    }
+    target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    if (target && typeof target.focus === 'function') target.focus();
+  }
+
+  async function runRenderPreflight(project) {
+    const result = await api('/api/animation/renders/preflight', {
+      method: 'POST', body: JSON.stringify({ project }),
+    });
+    state.lastPreflight = result;
+    renderPreflightResult(result);
+    return result;
+  }
+
+  async function checkRenderPreflight() {
+    if (!state.project || animationRenderStarting || renderIsActive()) return;
+    const check = qs('#animation-preflight-check');
+    if (check) setBusy(check, true);
+    try {
+      const project = collectProject();
+      const snapshot = JSON.stringify(project);
+      const result = await runRenderPreflight(project);
+      if (state.project?.id !== project.id || JSON.stringify(collectProject()) !== snapshot) {
+        resetRenderPreflight();
+        toast('Render check outdated', 'Project settings changed during the check. Please run it again.', 'warning');
+        return;
+      }
+      toast(result.valid ? 'Render check finished' : 'Render has blocking issues',
+        result.errors + ' error(s), ' + result.warnings + ' warning(s).',
+        result.valid ? (result.warnings ? 'warning' : 'success') : 'error');
+    } catch (error) {
+      resetRenderPreflight();
+      toast('Render check failed', error.message, 'error', 7000);
+    } finally {
+      if (check) { setBusy(check, false); renderSourceState(); }
     }
   }
 
@@ -4104,21 +4543,101 @@
     motionLabSyncQuickActions();
     const button = qs('#animation-start-render');
     if (button) { button.classList.add('busy'); button.disabled = true; }
+    const operation = window.MorphorumOperations?.begin('animation-render-submit',
+      'Checking animation render',
+      'Validating checkpoint, schedules and project settings before queueing…',
+      'animation');
+    let operationFinished = false;
+    const finishSubmit = (options) => {
+      if (operationFinished) return;
+      operationFinished = true;
+      window.MorphorumOperations?.finish('animation-render-submit', operation, {
+        view: 'animation', ...options,
+      });
+    };
     try {
       // Keep collection inside the try: invalid project inputs must not
       // strand the toolbar in its pending-render locked state.
       const project = collectProject();
+      const frozen = JSON.stringify(project);
+      const preflight = await runRenderPreflight(project);
+      if (!preflight.valid) {
+        finishSubmit({
+          tone: 'error', title: 'Animation render blocked',
+          message: preflight.errors + ' blocking issue(s). Open Render Monitor to fix the project settings.',
+        });
+        toast('Render blocked by project settings',
+          'Review the pre-render error list before retrying.', 'error', 7500);
+        showAnimationTab('monitor');
+        return;
+      }
+      if (preflight.warnings) {
+        window.MorphorumOperations?.update('animation-render-submit', operation, {
+          title: 'Render needs your confirmation',
+          message: preflight.warnings + ' non-blocking warning(s) require review before submitting.',
+        });
+        const messages = preflight.issues.filter(issue => issue.severity === 'warning')
+          .slice(0, 3).map(issue => issue.message);
+        const confirmed = await window.MorphorumDialog.confirm({
+          title: 'Render with warnings?',
+          message: messages.join(' ') +
+            ' The warnings do not prevent rendering. Continue with this exact project draft?',
+          confirmText: 'Render Anyway', cancelText: 'Review Warnings',
+        });
+        if (!confirmed) {
+          finishSubmit({
+            tone: 'warning', title: 'Animation render not submitted',
+            message: 'You chose to review the preflight warnings. No render was queued.',
+          });
+          showAnimationTab('monitor');
+          return;
+        }
+      }
+      // Prevent an in-flight check or confirm dialog from rendering stale edits.
+      if (state.project?.id !== project.id ||
+          JSON.stringify(collectProject()) !== frozen) {
+        finishSubmit({
+          tone: 'warning', title: 'Render submission cancelled: settings changed',
+          message: 'The project changed during validation. Review settings and run Render again.',
+        });
+        toast('Settings changed during render check',
+          'Run Render Animation again to check the current project.', 'warning', 6500);
+        resetRenderPreflight();
+        return;
+      }
+      window.MorphorumOperations?.update('animation-render-submit', operation, {
+        title: 'Submitting animation render',
+        message: 'Preflight passed. Sending the validated project to the render queue…',
+      });
       const job = await api('/api/animation/renders', { method: 'POST', body: JSON.stringify({ project }) });
       state.renderJobId = job.id;
       renderAnimationJob(job);
       showAnimationTab('monitor');
-      await loadRenderHistory();
+      // Once the host accepts the job, history availability must not turn
+      // an actual running render into a false submission failure.
       pollAnimationRender(job.id);
+      finishSubmit({
+        title: 'Animation render queued',
+        message: 'Job ' + job.id + ' accepted. Render Monitor shows live frames, GPU load and cancellation.',
+      });
       toast('Animation render queued', 'Current browser project state was frozen into the render manifest.', 'success');
+      try {
+        await loadRenderHistory();
+      } catch (historyError) {
+        toast('Render history refresh unavailable', historyError.message, 'warning', 6500);
+      }
     } catch (error) {
+      finishSubmit({
+        tone: 'error', title: 'Animation render could not start',
+        message: error.message + '. Review Render Monitor and project settings before retrying.',
+      });
       renderAnimationJob(null);
       toast('Could not start animation render', error.message, 'error', 8000);
     } finally {
+      if (!operationFinished) finishSubmit({
+        tone: 'warning', title: 'Render submission cancelled',
+        message: 'The render was not queued. Review Render Monitor before retrying.',
+      });
       animationRenderStarting = false;
       renderSourceState();
     }
@@ -4151,7 +4670,8 @@
     try {
       const payload = await api('/api/generation/capabilities');
       state.capabilities = payload.families || {};
-      populateSamplerSelect(state.project?.generation?.sampler || '');
+      populateSamplerSelect(qs('#animation-sampler')?.value || state.project?.generation?.sampler || '',
+        { preserveUnsupported: true });
       populateResolutionPresets();
     } catch (error) {
       state.capabilities = {};
@@ -4159,14 +4679,68 @@
     }
   }
 
+  function modelIndexSignature(models) {
+    // Avoid needlessly rebuilding focused dropdowns when a refresh finds no changes.
+    return JSON.stringify(models.map(model => [
+      model.id, model.kind, model.name, model.family, model.variant,
+    ]));
+  }
+
+  function showModelIndexStatus(message) {
+    const status = qs('#animation-model-index-status');
+    if (!status) return;
+    status.hidden = !message;
+    status.textContent = message || '';
+  }
+
+  function applyAnimationModelIndex(models) {
+    if (!Array.isArray(models)) return;
+    const signature = modelIndexSignature(models);
+    const wasStale = state.modelIndexStale;
+    state.modelIndexStale = false;
+    showModelIndexStatus('');
+    if (signature === state.modelIndexSignature) {
+      if (wasStale) renderEditorGuidance();
+      return; // No selection, form or model capabilities need re-initializing.
+    }
+    state.modelIndexSignature = signature;
+    resetRenderPreflight();
+    state.models = models;
+    populateModelSelect({ preserveSelection: Boolean(state.project) });
+    populateDeforumModelSelect();
+    // Do not mark the project dirty, repair guidance schedules, or mutate
+    // prompts on index refresh. Those are explicit user-edit operations.
+  }
+
+  function onAnimationModelsUpdated(event) {
+    const detail = event?.detail || {};
+    state.modelIndexRevision += 1;
+    if (detail.loaded === false) {
+      state.modelIndexStale = true;
+      showModelIndexStatus(
+        'Model index refresh failed. Keeping the last known models; retry a scan in Models.'
+      );
+      return;
+    }
+    if (detail.loaded === true && Array.isArray(detail.models)) {
+      applyAnimationModelIndex(detail.models);
+    }
+  }
+
   async function loadModels() {
+    // If Model Manager broadcasts a newer index while this request is in
+    // flight, the older response must not overwrite the fresh model list.
+    const revision = state.modelIndexRevision;
     try {
       const payload = await api('/api/models?limit=2000');
-      state.models = Array.isArray(payload.models) ? payload.models : [];
-      populateModelSelect();
-      populateDeforumModelSelect();
-      populateSamplerSelect(state.project?.generation?.sampler || '');
+      if (revision !== state.modelIndexRevision) return;
+      applyAnimationModelIndex(Array.isArray(payload.models) ? payload.models : []);
     } catch (error) {
+      if (revision !== state.modelIndexRevision) return;
+      state.modelIndexStale = true;
+      showModelIndexStatus(
+        'Model index unavailable. Showing the last known checkpoints; retry in Models.'
+      );
       toast('Animation model list unavailable', error.message, 'warning', 6000);
     }
   }
@@ -4732,6 +5306,7 @@
       }
       projectManagerState.selectedId = '';
       await loadProjectList();
+      forgetAnimationProject(item.id);
       toast('Project moved to Trash',
         'Project removed from the list. Rendered animations and exports remain intact.',
         'success', 6500);
@@ -4800,10 +5375,23 @@
     renderProjectSelect();
     renderProjectManager();
     if (loadFirst && !state.project && state.projects.length) {
-      await loadProject(state.projects[0].id, { confirmDirty: false });
+      const savedId = readLastAnimationProject();
+      const preferred = state.projects.find(item => item.id === savedId)?.id || '';
+      if (savedId && !preferred) forgetAnimationProject(savedId);
+      const ordered = [preferred, state.projects[0].id].filter((id, index, list) =>
+        Boolean(id) && list.indexOf(id) === index);
+      let opened = false;
+      for (const id of ordered) {
+        if (await loadProject(id, { confirmDirty: false })) {
+          opened = true;
+          break;
+        }
+      }
+      if (!opened) fillForm();
     } else if (!state.project) {
       fillForm();
     }
+    renderEditorGuidance();
   }
 
   async function loadProject(projectId, { confirmDirty = true } = {}) {
@@ -4834,6 +5422,7 @@
       state.timelineSelection = null;
       state.depthPreview = null;
       fillForm();
+      rememberAnimationProject(state.project.id);
       void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
@@ -4878,6 +5467,7 @@
       state.depthPreview = null;
       await loadProjectList();
       fillForm();
+      rememberAnimationProject(state.project.id);
       void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
@@ -8759,6 +9349,22 @@
     motionLabBusy = true;
     motionLabBusyAction = apply ? 'apply' : curvesOnly ? 'curves' : 'preview';
     renderMotionLabDraft();
+    // Dragged curves can recompile many times per second. Preserve their
+    // inline diagnostics without flooding the shared operation ribbon.
+    const operation = curvesOnly ? null : window.MorphorumOperations?.begin('motion-lab-workflow',
+      apply ? 'Applying Motion Lab layers' : 'Preparing Motion Lab preview',
+      apply ? 'Reviewing and applying camera layers to your project…' :
+        'Compiling draft camera layers without changing the saved animation…',
+      'animation');
+    let operationFinished = false;
+    const completeOperation = (options) => {
+      if (operationFinished) return;
+      operationFinished = true;
+      if (curvesOnly) return;
+      window.MorphorumOperations?.finish('motion-lab-workflow', operation, {
+        view: 'animation', ...options,
+      });
+    };
     try {
       if (apply && state.dirty) {
         const approved = await window.MorphorumDialog.confirm({
@@ -8767,6 +9373,10 @@
           variant: 'default', confirmText: 'Save & Apply', cancelText: 'Cancel',
         });
         if (!approved || state.project?.id !== projectId) return;
+        window.MorphorumOperations?.update('motion-lab-workflow', operation, {
+          title: 'Saving Editor changes',
+          message: 'Saving unsaved Editor settings before Motion Lab applies its layers…',
+        });
         const saved = await api('/api/animation/projects/' + encodeURIComponent(projectId), {
           method: 'PUT', body: JSON.stringify(collectProject()),
         });
@@ -8777,6 +9387,11 @@
         // Confirming the save doesn't confirm overwriting hand-edited tracks.
         // A separate explicit rebase confirmation is still required if needed.
       }
+      window.MorphorumOperations?.update('motion-lab-workflow', operation, {
+        title: apply ? 'Applying native camera schedules' : 'Compiling motion curves',
+        message: apply ? 'Sending draft layers to the saved animation project…' :
+          'Calculating draft motion diagnostics with the host CPU…',
+      });
       const endpoint = '/api/animation/projects/' +
         encodeURIComponent(projectId) + '/motion-lab/' + (apply ? 'apply' : 'preview');
       const payload = { layers: motionLabDraftLayers };
@@ -8825,15 +9440,37 @@
         fillForm();
         await loadTimeline();
         await loadProjectList();
+        completeOperation({
+          title: 'Motion Lab applied successfully',
+          message: 'Native camera schedules updated and project timeline refreshed.',
+        });
         toast('Motion Lab applied', 'Native 3D camera schedules updated without leaving Motion Lab.', 'success');
       } else if (!curvesOnly) {
+        completeOperation({
+          title: 'Motion Lab draft compiled',
+          message: 'Motion curves compiled; starting a separate CPU Camera Preview job.',
+        });
         await generateMotionPreview(result.project);
+      } else {
+        completeOperation({
+          title: 'Motion curves updated',
+          message: 'Draft motion diagnostics and curves refreshed without saving.',
+        });
       }
     } catch (error) {
+      completeOperation({
+        tone: 'error', title: apply ? 'Motion Lab apply failed' : 'Motion Lab preview failed',
+        message: error.message + '. Your draft layers remain available in Motion Lab.',
+      });
       motionLabNotify('Motion Lab: ' + error.message);
       toast('Motion Lab ' + (apply ? 'apply' : 'preview') + ' failed',
         error.message, 'error', 7000);
     } finally {
+      if (!operationFinished) completeOperation({
+        tone: 'warning',
+        title: 'Motion Lab action cancelled',
+        message: 'No further motion changes were applied. Draft layers remain available.',
+      });
       motionLabBusy = false;
       motionLabBusyAction = null;
       renderMotionLabDraft();
@@ -8844,6 +9481,94 @@
   // in a non-navigable vault so existing project and API semantics stay intact.
   // Audio Motion is a dedicated Motion Lab workspace using the same draft
   // camera layers, project, and render controls.
+  // P1.5: non-destructive next-step guidance. These routes only switch
+  // existing workspaces, never save, apply camera motion, or start a render.
+  const MOTION_WORKFLOW_LABELS = Object.freeze({
+    motion: 'Overview', wizard: 'New Project Wizard',
+    projects: 'Project Manager', editor: 'Project Editor',
+    composer: 'Camera Composer', recording: 'Live Recording',
+    curves: 'Motion Curves', preview: 'Camera Preview',
+    'motion-import': 'Import Motion Settings', audio: 'Motion Studio',
+    monitor: 'Render Monitor', outputs: 'Outputs',
+  });
+
+  const MOTION_WORKFLOW_PLANS = Object.freeze({
+    motion: ['Open Project Editor', 'editor', 'Browse Projects', 'projects',
+      'Open the project settings, then build camera motion or render.'],
+    wizard: ['Browse Projects', 'projects', 'All Tools', 'motion',
+      'Complete Save Project & Open Editor in the wizard before continuing.'],
+    projects: ['Open Project Editor', 'editor', 'New Project Wizard', 'wizard',
+      'Choose a project and use Open in Editor; switching tools does not open the selected project.'],
+    editor: ['Compose Camera Motion', 'composer', 'Render Monitor', 'monitor',
+      'Review project settings and save changes before rendering.'],
+    composer: ['Review Motion Curves', 'curves', 'Camera Preview', 'preview',
+      'Draft motion is not part of the saved camera timeline until you apply it.'],
+    recording: ['Review Motion Curves', 'curves', 'Camera Composer', 'composer',
+      'Stop your live recording before leaving. Captured takes enter the motion draft.'],
+    curves: ['Camera Preview', 'preview', 'Project Editor', 'editor',
+      'Check your curve edits; Apply to Animation is a separate action.'],
+    preview: ['Render Monitor', 'monitor', 'Motion Curves', 'curves',
+      'Camera previews do not render diffusion frames or save camera changes.'],
+    'motion-import': ['Review Motion Curves', 'curves', 'Project Editor', 'editor',
+      'Review imported values and explicitly apply them to the project.'],
+    audio: ['Review Motion Curves', 'curves', 'Camera Composer', 'composer',
+      'Audio-linked camera motion remains a draft until you apply it.'],
+    monitor: ['View Outputs', 'outputs', 'Project Editor', 'editor',
+      'Start and monitor renders here; navigation does not interrupt running jobs.'],
+    outputs: ['Project Editor', 'editor', 'Browse Projects', 'projects',
+      'Inspect saved results and exports, or return to editing.'],
+  });
+
+  function motionWorkflowPlan(tab, hasProject) {
+    const current = MOTION_WORKFLOW_LABELS[tab] ? tab : 'motion';
+    if (!hasProject && current !== 'wizard' && current !== 'projects') {
+      return {
+        current, primary: { label: 'Browse Projects', tab: 'projects' },
+        secondary: { label: 'New Project Wizard', tab: 'wizard' },
+        hint: 'Open an existing animation project or create one before editing or rendering.',
+      };
+    }
+    if (!hasProject && current === 'projects') {
+      return {
+        current, primary: { label: 'New Project Wizard', tab: 'wizard' },
+        secondary: { label: 'All Tools', tab: 'motion' },
+        hint: 'No animation project is open yet. Choose one here, or create a new project.',
+      };
+    }
+    const plan = MOTION_WORKFLOW_PLANS[current];
+    return {
+      current, primary: { label: plan[0], tab: plan[1] },
+      secondary: { label: plan[2], tab: plan[3] },
+      hint: plan[4],
+    };
+  }
+
+  function syncMotionWorkflowGuide() {
+    const guide = qs('#animation-workflow-guide');
+    if (!guide) return;
+    const plan = motionWorkflowPlan(animationTab, Boolean(state.project?.id));
+    const current = qs('#animation-workflow-current');
+    const project = qs('#animation-workflow-project');
+    const hint = qs('#animation-workflow-hint');
+    const primary = qs('#animation-workflow-primary');
+    const secondary = qs('#animation-workflow-secondary');
+    if (current) current.textContent = MOTION_WORKFLOW_LABELS[plan.current];
+    if (project) {
+      const title = String(qs('#animation-name')?.value || state.project?.name || 'Untitled Animation').trim();
+      project.textContent = state.project
+        ? title + (state.dirty ? ' · Unsaved Editor changes' : ' · Saved project')
+        : 'No animation project open';
+      project.title = state.project?.id || '';
+    }
+    if (hint) hint.textContent = plan.hint;
+    for (const [button, action] of [[primary, plan.primary], [secondary, plan.secondary]]) {
+      if (!button) continue;
+      button.textContent = action.label;
+      button.dataset.workflowTab = action.tab;
+      button.setAttribute('aria-label', action.label + ' (navigate, no changes saved)');
+    }
+  }
+
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
   const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'];
   const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
@@ -8881,6 +9606,8 @@
     }
     if (dock) dock.hidden = !MOTION_LAB_TOOL_TABS.has(name);
     if (persist) try { localStorage.setItem(ANIMATION_TAB_KEY, name); } catch (_) {}
+    // Navigation must remain usable even if optional guidance is unavailable.
+    if (typeof syncMotionWorkflowGuide === 'function') syncMotionWorkflowGuide();
   }
 
   // Deforum settings inspection, guarded camera import and soundtrack attachment.
@@ -9623,6 +10350,13 @@
     qs('#animation-deforum-refresh')?.addEventListener('click', () => previewDeforumImport());
     qs('#animation-deforum-create')?.addEventListener('click', createDeforumProject);
     qs('#animation-deforum-model')?.addEventListener('change', () => previewDeforumImport());
+    qs('#animation-editor-open-project')?.addEventListener('click', () => showAnimationTab('projects'));
+    qs('#animation-editor-create-project')?.addEventListener('click', () => showAnimationTab('wizard'));
+    qs('#animation-workflow-guide')?.addEventListener('click', event => {
+      const button = event.target.closest('button[data-workflow-tab]');
+      const target = button?.dataset.workflowTab;
+      if (target && VISIBLE_ANIMATION_TABS.includes(target)) showAnimationTab(target);
+    });
     qs('#animation-new')?.addEventListener('click', createProject);
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
@@ -9800,6 +10534,13 @@
       () => motionLabPreviewOrApply(true));
     qs('#animation-export-video')?.addEventListener('click', startVideoExport);
 
+    qs('#animation-camera-safety-check')?.addEventListener('click', () => {
+      if (!state.project) return;
+      showAnimationTab('monitor');
+      checkRenderPreflight();
+    });
+    qs('#animation-preflight-check')?.addEventListener('click', checkRenderPreflight);
+    qs('#animation-preflight-fix')?.addEventListener('click', showFirstPreflightFix);
     qs('#animation-start-render')?.addEventListener('click', startAnimationRender);
     qs('#animation-cancel-render')?.addEventListener('click', cancelAnimationRender);
     qs('#animation-resume-render')?.addEventListener('click', resumeAnimationRender);
@@ -9862,7 +10603,20 @@
       const repairedGuidance = repairConstantGuidanceForSelectedModel({ announce: true });
       renderPromptRows();
       markDirty({ validate: repairedGuidance });
+      renderEditorGuidance();
       renderSourceState();
+    });
+
+    qs('#animation-sampler')?.addEventListener('change', renderAnimationModelCompatibility);
+    qs('#animation-compatibility-action')?.addEventListener('click', () => {
+      const action = qs('#animation-compatibility-action')?.dataset.compatibilityAction;
+      if (action === 'models') {
+        qs('.nav-button[data-view="models"]')?.click();
+      } else if (action === 'sampler') {
+        qs('#animation-sampler')?.focus();
+      } else if (action === 'resolution') {
+        qs('#animation-width')?.focus();
+      }
     });
 
     qs('#animation-resolution-preset')?.addEventListener('change',event => {
@@ -9930,7 +10684,11 @@
       motionLabBindAudioTransport();
     }
     bind();
+    // The event comes from Model Manager after both load and scan; it is
+    // authoritative and does not require another request from the Editor.
+    window.addEventListener('morphorum:models-updated', onAnimationModelsUpdated);
     setEditorEnabled(false);
+    renderEditorGuidance();
 
     window.addEventListener('resize', () => {
       window.clearTimeout(state.timelineResizeTimer);
@@ -9940,17 +10698,16 @@
       await Promise.all([
         loadCapabilities(),
         loadModels(),
-        loadDepthModels(),
-        api('/api/animation/video/availability').then(info => {
-          state.videoAvailability = info;
-          renderVideoExportState();
-        }).catch(() => {
-          state.videoAvailability = { available: false, message: 'Cannot check host FFmpeg installation.' };
-          renderVideoExportState();
+        loadDepthModels().catch(error => {
+          // Optional depth discovery must not block the basic Project Editor.
+          toast('Depth preview unavailable', error.message, 'warning', 6500);
         }),
+        refreshVideoAvailability(),
       ]);
       await loadProjectList({ loadFirst: true });
-      populateSamplerSelect(state.project?.generation?.sampler || '');
+      populateSamplerSelect(qs('#animation-sampler')?.value || state.project?.generation?.sampler || '',
+        { preserveUnsupported: true });
+      renderAnimationModelCompatibility();
     } catch (error) {
       toast('Animation workspace initialization failed', error.message, 'error', 7000);
     }
@@ -9976,5 +10733,8 @@
     openSavedProjectFromSetup,
   };
 
+  window.addEventListener('morphorum:settings-changed', () => {
+    void refreshVideoAvailability();
+  });
   window.addEventListener('DOMContentLoaded', start);
 })();

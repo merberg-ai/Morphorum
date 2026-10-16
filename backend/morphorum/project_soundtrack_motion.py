@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from .animation_video import ffmpeg_executable
+from .ffmpeg_tools import ffmpeg_executable
 from .audio_motion import AudioMotionError
 from .audio_motion_upload import MAX_AUDIO_BYTES, analyze_managed_wav
 from .imported_soundtrack import MAX_IMPORT_AUDIO_BYTES
@@ -20,8 +20,9 @@ def _convert_attached_audio(source: Path) -> bytes:
     executable = ffmpeg_executable()
     if not executable:
         raise AudioMotionError(
-            "The attached soundtrack is not a compatible PCM WAV. Install FFmpeg "
-            "on the Morphorum host or set MORPHORUM_FFMPEG to convert MP3/OGG/FLAC."
+            "The attached soundtrack is not a compatible PCM WAV. "
+            "Install FFmpeg or choose a working installation in Settings → Storage → FFmpeg Manager "
+            "to convert MP3/OGG/FLAC."
         )
     # A maximum of 181 seconds is decoded so a track exceeding 3 minutes
     # fails normal analysis rather than silently cutting off a longer track.

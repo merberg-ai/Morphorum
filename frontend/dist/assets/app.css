@@ -890,3 +890,162 @@ button[aria-busy="true"]:disabled { opacity: .7; }
 .model-setup-help-body ol {padding-left:24px;margin:13px 0;}
 .model-setup-help-actions {display:flex;flex-wrap:wrap;justify-content:flex-end;gap:9px;margin-top:17px;}
 
+
+/* Shared contextual-help triggers and viewport-clamped hint surface. */
+.morphorum-help-field {position:relative;min-width:0;max-width:100%;}
+.morphorum-help-field > label {display:grid;width:100%;min-width:0;max-width:100%;}
+.morphorum-help-field > label > span:first-child {padding-inline-end:40px;overflow-wrap:anywhere;}
+.morphorum-help-trigger {
+  position:absolute;top:0;right:0;z-index:1;
+  display:grid;place-items:center;width:32px;height:32px;min-width:32px;min-height:32px;
+  border-radius:50%;border:1px solid var(--border);background:var(--panel-strong);
+  color:var(--text);font:600 .88rem/1 system-ui,sans-serif;cursor:help;padding:0;margin:0;
+}
+.morphorum-help-trigger:hover,.morphorum-help-trigger[aria-expanded="true"] {
+  background:var(--button-secondary-hover);border-color:var(--button-hover-border);
+}
+.morphorum-help-trigger:focus-visible {outline:2px solid var(--accent);outline-offset:3px;}
+html[data-help-hints="off"] .morphorum-help-trigger {display:none !important;}
+html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {padding-inline-end:0;}
+.morphorum-context-help-panel {
+  position:fixed;z-index:12000;box-sizing:border-box;max-height:calc(100dvh - 24px);
+  overflow:auto;padding:13px 15px;border:1px solid var(--button-hover-border);
+  border-radius:12px;background:var(--panel-strong);color:var(--text);
+  box-shadow:0 14px 38px rgba(0,0,0,.35);line-height:1.5;overflow-wrap:anywhere;
+}
+.morphorum-context-help-panel[hidden] {display:none !important;}
+.morphorum-context-help-title {display:block;font-size:.9rem;margin-bottom:5px;}
+.morphorum-context-help-body {font-size:.84rem;margin:0;}
+.context-help-settings-card .setting-toggle {display:block;padding:12px 0;cursor:pointer;}
+.context-help-settings-card .toggle-row {display:flex;align-items:flex-start;gap:12px;}
+.context-help-settings-card .toggle-row input[type="checkbox"] {
+  width:18px;height:18px;min-width:18px;min-height:18px;max-width:18px;
+  margin:3px 0 0;flex:0 0 18px;accent-color:var(--accent);
+}
+.context-help-settings-card .toggle-row strong,.context-help-settings-card .toggle-row small {display:block;}
+.context-help-settings-card .toggle-row small {color:var(--muted);margin-top:4px;line-height:1.45;}
+@media (pointer:coarse) {
+  .morphorum-help-trigger {width:40px;height:40px;min-width:40px;min-height:40px;}
+  .morphorum-help-field > label > span:first-child {padding-inline-end:46px;}
+}
+
+/* P2.4: contextual-help wrapping must preserve the full-width image preset. */
+.morphorum-help-field.image-resolution-preset-field {grid-column:1/-1;min-width:0;}
+.morphorum-help-field.image-resolution-preset-field > label {min-width:0;}
+.morphorum-help-field.image-resolution-preset-field select {min-width:0;width:100%;}
+.morphorum-help-field > label > span:first-child {min-width:0;max-width:100%;line-height:1.4;overflow-wrap:anywhere;}
+.morphorum-help-field > label > span:first-child small {font-size:.75em;white-space:normal;}
+
+/* P3.2: shared LoRA details and Settings content avoid intrinsic-width overflow. */
+#view-loras .lora-manager-grid,
+#view-loras .lora-manager-grid > *,
+#view-loras .lora-manager-section,
+#view-loras .lora-manager-insert,
+#view-loras .lora-manager-insert-controls,
+#view-loras .lora-manager-field,
+#view-loras .lora-manager-quick-use {min-width:0;max-width:100%;}
+#view-loras .lora-manager-field > *,
+#view-loras .lora-manager-insert-controls > *,
+#view-loras .lora-manager-list > *,
+#view-loras .lora-manager-section p,
+#view-loras .lora-manager-section code,
+#view-loras .lora-manager-details .card-header,
+#view-loras .lora-manager-details .card-header * {min-width:0;overflow-wrap:anywhere;}
+#view-loras .lora-manager-list .lora-manager-item {min-width:0;text-align:left;}
+#view-loras .lora-manager-item:focus-visible small,
+#view-loras .lora-manager-item.selected small {
+  white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;
+}
+#view-loras .lora-manager-item:focus-visible {
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+#view-loras .lora-manager-insert-controls input,
+#view-loras .lora-manager-insert-controls button {max-width:100%;}
+#view-loras .lora-manager-quick-actions button {
+  min-height:42px;white-space:normal;overflow-wrap:anywhere;
+}
+#view-settings .settings-grid,
+#view-settings .settings-pane,
+#view-settings .settings-pane > *,
+#view-settings .path-section,
+#view-settings .path-list,
+#view-settings .path-row,
+#view-settings .path-input-wrap {min-width:0;max-width:100%;}
+#view-settings .settings-pane input:not([type=checkbox]),
+#view-settings .settings-pane select {min-width:0;max-width:100%;}
+#view-settings .path-message,
+#view-settings .family-card .badge,
+#view-settings .settings-pane .card-header {overflow-wrap:anywhere;}
+#view-settings .settings-pane .card-header {min-width:0;flex-wrap:wrap;}
+
+/* P4.3: announcements are separate from frequently updating progress values. */
+.operation-feedback-sr-only {position:absolute!important;width:1px;height:1px;
+  padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);
+  white-space:nowrap;border:0;}
+/* P4.4.3 managed download controls */
+#view-settings .ffmpeg-install-panel {display:grid;gap:12px;min-width:0;padding:12px;
+  border:1px solid var(--border);border-radius:12px;}
+#view-settings .ffmpeg-install-panel[hidden],
+#view-settings .ffmpeg-install-panel progress[hidden],
+#view-settings .ffmpeg-install-panel button[hidden]{display:none!important;}
+#view-settings .ffmpeg-install-actions {display:flex;flex-wrap:wrap;gap:8px;min-width:0;}
+#view-settings .ffmpeg-install-actions button{max-width:100%;min-width:0;overflow-wrap:anywhere;}
+#view-settings .ffmpeg-install-panel progress{width:100%;height:12px;accent-color:var(--accent);}
+#view-settings #ffmpeg-manager-install-meta{margin:0;}
+/* P4.4.2 FFmpeg preferences share the responsive Settings grid. */
+#view-settings .ffmpeg-manager-card {min-width:0;overflow-wrap:anywhere;}
+#view-settings .ffmpeg-manager-card .field-grid {grid-template-columns:minmax(0,1fr);}
+#view-settings .ffmpeg-manager-card label,#view-settings .ffmpeg-manager-card input,
+#view-settings .ffmpeg-manager-card select {min-width:0;width:100%;max-width:100%;box-sizing:border-box;}
+#view-settings .ffmpeg-manager-details {max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;
+  font-size:.78rem;line-height:1.5;color:var(--muted);font-family:var(--font-mono,monospace);}
+#view-settings #ffmpeg-manager-status[data-ready="yes"] {color:var(--ok);}
+#view-settings #ffmpeg-manager-status[data-ready="no"] {color:var(--warn);}
+#view-settings #ffmpeg-manager-path-field[hidden],
+#view-settings #ffmpeg-manager-managed-note[hidden] {display:none!important;}
+
+/* P4.1 shared operation feedback: persistent state without toast repetition. */
+.workspace .operation-feedback {
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:12px;width:100%;max-width:1260px;min-width:0;box-sizing:border-box;
+  margin:0 auto 14px;padding:12px 14px;
+  border:1px solid var(--border-strong);border-radius:12px;
+  background:var(--panel);box-shadow:var(--shadow);
+}
+.workspace .operation-feedback[hidden],
+.workspace .operation-feedback-progress[hidden],
+.workspace #operation-feedback-open[hidden] {display:none!important;}
+.workspace .operation-feedback-copy {display:grid;gap:5px;flex:1 1 auto;min-width:0;}
+.workspace .operation-feedback-copy strong {font-size:.91rem;}
+.workspace .operation-feedback-copy > span {
+  color:var(--muted);font-size:.81rem;line-height:1.4;overflow-wrap:anywhere;
+}
+.workspace .operation-feedback[data-tone="error"] {border-color:color-mix(in srgb,var(--danger) 48%,var(--border));}
+.workspace .operation-feedback[data-tone="warning"] {border-color:color-mix(in srgb,var(--warn) 48%,var(--border));}
+.workspace .operation-feedback[data-tone="success"] {border-color:color-mix(in srgb,var(--ok) 34%,var(--border));}
+.workspace .operation-feedback-actions {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.workspace .operation-feedback-actions button {min-height:42px;max-width:100%;white-space:normal;}
+.workspace .operation-feedback-progress {
+  height:5px;width:100%;background:color-mix(in srgb,var(--text) 11%,transparent);
+  border-radius:99px;overflow:hidden;margin-top:5px;
+}
+.workspace .operation-feedback-progress > span {
+  display:block;height:100%;width:0;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  transition:width .18s ease;
+}
+.workspace .operation-feedback-progress.indeterminate > span {
+  width:36%;animation:operation-feedback-slide 1.8s ease-in-out infinite alternate;
+}
+@keyframes operation-feedback-slide {
+  0% {transform:translateX(-100%);}
+  100% {transform:translateX(285%);}
+}
+@media(max-width:680px) {
+  .workspace .operation-feedback {flex-wrap:wrap;padding:11px;}
+  .workspace .operation-feedback-actions {width:100%;justify-content:space-between;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .workspace .operation-feedback-progress > span {transition:none;animation:none;}
+  .workspace .operation-feedback-progress.indeterminate > span {width:100%;opacity:.65;}
+}

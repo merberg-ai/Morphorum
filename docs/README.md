@@ -11,6 +11,7 @@ Welcome! You do not need to know Python or Git to use Morphorum. Start with the 
 | **[First-Run Setup](GETTING_STARTED.md#first-run-setup-wizard)** | Initial seven-step setup, checkpoint folders, optional managed-model download and 3D starter projects |
 | **[New Project Wizard](NEW_PROJECT_WIZARD.md)** | Guided animation setup and explanations of the seven wizard steps |
 | **[Motion Studio](MOTION_STUDIO.md)** | Synchronize soundtrack beats, frequency channels, continuous camera motion and native 3D project tracks |
+| **[FFmpeg Manager](FFMPEG_MANAGER.md)** | Auto-detect, custom paths, verified local install, update/removal, media acceptance test and GPL terms |
 | **[Troubleshooting](TROUBLESHOOTING.md)** | Fix browser, installer, model, CUDA, LAN, project and video problems |
 
 ## Other workflows

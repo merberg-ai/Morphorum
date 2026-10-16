@@ -155,15 +155,87 @@ Morphorum prevents incompatible actions from running simultaneously. A busy butt
 
 ## Video export fails or FFmpeg is missing
 
-Run:
+For source-selection screenshots-free instructions, local-managed download troubleshooting, license notes and the CPU-only acceptance command, see [FFmpeg Manager](FFMPEG_MANAGER.md).
+
+
+Open **Settings → Storage → FFmpeg Manager**. Set **Auto-detect** to use
+the FFmpeg available in the host's `PATH`, optionally overridden by the
+legacy `MORPHORUM_FFMPEG` environment variable. Select **Custom executable**
+to point to the complete `ffmpeg.exe` (Windows) or `ffmpeg` (Linux)
+executable path. Choose **Test FFmpeg / FFprobe**, then **Save Settings**
+to activate a tested selection. Testing alone does not change your settings.
+
+You can also check from a terminal:
 
 ```text
 ffmpeg -version
+ffprobe -version
 ```
 
-If the command isn't found, install FFmpeg and restart your terminal or Morphorum session. Windows setup attempts a `winget` installation when needed; Linux users generally install FFmpeg through their distribution's package manager.
+If `ffmpeg` is missing, install it or provide a custom path. The Windows
+installer may offer a `winget` setup; Linux distributions generally provide
+both binaries through their package manager. If **FFmpeg ready / FFprobe
+missing** appears, ordinary video exports may still work, but hybrid video
+inspection requires FFprobe from the same installation. For explicit Custom
+or Managed modes Morphorum will not silently switch to another FFmpeg.
+
+Choose **Morphorum-managed local FFmpeg**, then click **Install managed
+FFmpeg**. Morphorum downloads the static FFmpeg and FFprobe pair directly from
+the BtbN GitHub release, validates its published SHA-256 digest, checks both
+executable versions, and installs it under `tools/ffmpeg/current/bin`. The
+package is approximately 100–200 MB depending on host architecture. Downloads
+are never automatic. After installation, click **Save Settings** to activate
+Managed mode. **Cancel download**, **Update / Reinstall**, and **Remove** are
+available in the same card. These operations do not delete any video output
+or externally installed FFmpeg binaries.
+
+Managed downloads currently support Windows x64/ARM64 and Linux x64/ARM64 with
+a compatible runtime (BtbN Linux builds require recent glibc). Other hosts
+can use Auto or Custom. Downloading requires GitHub access; running already
+installed binaries does not. The static **GPL build** includes encoders used
+by Morphorum's MP4 pipeline, so review the BtbN licensing and
+[FFmpeg licensing information](https://ffmpeg.org/legal.html). Installation
+records, a license notice and upstream source links are saved with the files.
+
+If an update or removal fails because files are in use, finish active
+video exports or extractions and retry. Existing verified installations are
+preserved on package checksum or extraction failure. If a download fails,
+check network access to GitHub and try Install again; a failed attempt does
+not replace a previously functioning managed copy.
 
 Also check available disk space, that the render actually completed, and whether the chosen export format is supported by the current pipeline.
+
+### FFmpeg acceptance checks (no GPU needed)
+
+Run the temporary-media smoke test after installing and saving the selected
+FFmpeg mode. It creates and removes test PNGs/WAVs/videos in a temporary
+directory; it does **not** edit project media or download models.
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ffmpeg_acceptance.py --mode managed
+```
+
+Linux:
+
+```bash
+./.venv/bin/python scripts/ffmpeg_acceptance.py --mode managed
+```
+
+For a system installation, use `--mode auto`. For a custom installation,
+use `--mode custom --custom-path "/full/path/to/ffmpeg"`.
+Omit `--mode` to use your saved Morphorum Settings.
+
+The script checks MP4 (libx264/AAC), WebM (libvpx-vp9/Opus), FFprobe metadata,
+hybrid frame extraction, and MP3/OGG/FLAC-to-PCM WAV conversions. If it reports
+a missing codec, install a package with all necessary codecs or select
+another FFmpeg installation. A working `ffmpeg -version` by itself is not
+enough to confirm compatibility.
+
+BtbN Linux static builds require glibc 2.28+ and kernel 4.18+; Alpine/musl
+systems should use a compatible system/custom binary. FFmpeg managed install
+does not ask for administrator privileges.
 
 ## Project is missing or was moved to Trash
 

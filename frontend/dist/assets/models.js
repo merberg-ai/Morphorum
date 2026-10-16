@@ -12,6 +12,9 @@
     families: [],
     managedModels: [],
     managedPollTimer: null,
+    downloadOperations: new Map(),
+    downloadPendingChecks: new Map(),
+    scanning: false,
   };
   const qs = (selector, root = document) => root.querySelector(selector);
   const toast = (title, message, type = 'info', timeout) => {
@@ -211,9 +214,70 @@
   function scheduleManagedPoll() {
     window.clearTimeout(state.managedPollTimer);
     state.managedPollTimer = null;
-    const active = state.managedModels.some(model => ['checking', 'downloading'].includes(model.status));
+    // The download request can be accepted before status changes from idle
+    // to checking. Continue polling pending requests until they resolve.
+    const active = state.downloadOperations.size > 0 ||
+      state.managedModels.some(model => ['checking', 'downloading'].includes(model.status));
     if (active) {
       state.managedPollTimer = window.setTimeout(() => loadManagedModels(), 900);
+    }
+  }
+
+
+  function reportManagedDownloads() {
+    const ops = window.MorphorumOperations;
+    if (!ops) return;
+    for (const model of state.managedModels) {
+      const key = 'download:' + model.id;
+      const running = ['checking','downloading'].includes(model.status);
+      let token = state.downloadOperations.get(model.id);
+      if (!token && running) {
+        token = ops.begin(key, 'Downloading ' + (model.name || model.id),
+          'Managed package is being prepared or downloaded…', 'models');
+        state.downloadOperations.set(model.id, token);
+      }
+      if (!token) continue;
+      const percent = Math.max(0, Math.min(100, Number(model.progress_percent) || 0));
+      if (running) state.downloadPendingChecks.delete(model.id);
+      if (running) {
+        const bytes = formatBytes(model.downloaded_bytes) + ' / ' +
+          formatBytes(model.expected_bytes || model.advertised_size_bytes);
+        ops.update(key, token, { title: (model.status === 'checking'
+          ? 'Preparing ' : 'Downloading ') + (model.name || model.id),
+          message: model.status === 'checking' ? 'Checking managed package files…'
+            : bytes + ' · ' + percent.toFixed(1) + '%',
+          progress: model.status === 'downloading' ? percent : null });
+      } else if (model.installed && model.status === 'installed') {
+        ops.finish(key, token, {
+          title: 'Managed model installed',
+          message: (model.name || model.id) + ' is ready. Select Use Model in Models.',
+          view: 'models' });
+        state.downloadOperations.delete(model.id);
+        state.downloadPendingChecks.delete(model.id);
+      } else if (['failed','interrupted','partial'].includes(model.status)) {
+        ops.finish(key, token, {
+          tone: model.status === 'failed' ? 'error' : 'warning',
+          title: model.status === 'failed' ? 'Model download failed' : 'Model download paused',
+          message: (model.error || model.name || model.id) +
+            '. Review the package in Models and use Resume / Repair if needed.',
+          view: 'models' });
+        state.downloadOperations.delete(model.id);
+        state.downloadPendingChecks.delete(model.id);
+      } else if (state.downloadPendingChecks.has(model.id)) {
+        // Bounded wait for catalog to acknowledge an accepted POST. An idle
+        // model forever is not evidence of a running background download.
+        const checks = (state.downloadPendingChecks.get(model.id) || 0) + 1;
+        if (checks >= 15) {
+          ops.finish(key, token, {
+            tone: 'error', title: 'Model download did not start',
+            message: 'The host accepted the request but did not report download activity. Check Models and retry or review the Console.',
+            view: 'models' });
+          state.downloadOperations.delete(model.id);
+          state.downloadPendingChecks.delete(model.id);
+        } else {
+          state.downloadPendingChecks.set(model.id, checks);
+        }
+      }
     }
   }
 
@@ -222,9 +286,12 @@
       state.managedModels.filter(model => model.installed).map(model => model.id)
     );
     try {
-      const payload = await api('/api/managed-models');
+      const payload = await window.MorphorumPollHealth.request(signal =>
+        api('/api/managed-models', {signal}));
       state.managedModels = Array.isArray(payload.models) ? payload.models : [];
+      window.MorphorumPollHealth?.recovered('managed-models');
       renderManagedModels();
+      reportManagedDownloads();
       scheduleManagedPoll();
 
       const newlyInstalled = state.managedModels.some(
@@ -234,28 +301,46 @@
     } catch (error) {
       const list = qs('#managed-model-list');
       if (list) {
-        {
-          const empty = document.createElement('div');
-          empty.className = 'model-empty';
-          const title = document.createElement('strong');
-          title.textContent = 'Could not load ' + 'managed catalog';
-          const detail = document.createElement('span');
-          detail.textContent = String(error.message);
-          empty.append(title, detail);
-          list.replaceChildren(empty);
-        }
+        const empty = document.createElement('div');
+        empty.className = 'model-empty';
+        const title = document.createElement('strong');
+        title.textContent = 'Could not refresh managed catalog';
+        const detail = document.createElement('span');
+        detail.textContent = 'Check the backend connection. In-progress downloads may still be running.';
+        empty.append(title, detail);
+        list.replaceChildren(empty);
       }
-      toast('Managed model catalog unavailable', error.message, 'error', 6500);
+      const hasDownloads = state.downloadOperations.size > 0 ||
+        state.managedModels.some(model => ['checking', 'downloading'].includes(model.status));
+      if (hasDownloads) {
+        window.MorphorumPollHealth?.failed('managed-models', 'Managed download', 'models');
+        // Preserve accepted download IDs; losing contact is not a failed download.
+        window.clearTimeout(state.managedPollTimer);
+        state.managedPollTimer = window.setTimeout(() => loadManagedModels(), 6000);
+      } else {
+        toast('Managed catalog unavailable',
+          'Could not reach the host. Check the connection and refresh Models.', 'warning', 7000);
+      }
     }
   }
 
   async function startManagedDownload(modelId) {
+    if (state.downloadOperations.has(modelId)) return;
     const model = state.managedModels.find(item => item.id === modelId);
+    const token = window.MorphorumOperations?.begin('download:' + modelId,
+      'Starting ' + (model?.name || modelId),
+      'Requesting managed package download from the host…', 'models');
+    if (token) state.downloadOperations.set(modelId, token);
     try {
       await api(`/api/managed-models/${encodeURIComponent(modelId)}/download`, {
         method: 'POST',
         body: '{}',
       });
+      state.downloadPendingChecks.set(modelId, 0);
+      window.MorphorumOperations?.update('download:' + modelId, token, {
+        title: 'Preparing ' + (model?.name || modelId),
+        message: 'Downloading in the background. Model Manager shows live bytes and percentage.',
+        progress: null });
       toast(
         'Model download started',
         `${model?.name || modelId} is downloading in the background. You can leave this page open to watch progress.`,
@@ -264,6 +349,12 @@
       );
       await loadManagedModels();
     } catch (error) {
+      window.MorphorumOperations?.finish('download:' + modelId, token, {
+        tone: 'error', title: 'Could not start model download',
+        message: error.message + '. Check storage/network access and retry in Models.',
+        view: 'models' });
+      state.downloadOperations.delete(modelId);
+      state.downloadPendingChecks.delete(modelId);
       toast('Could not start model download', error.message, 'error', 8000);
     }
   }
@@ -443,7 +534,7 @@
     return true; // Selection only: never load weights or navigate away from setup.
   }
 
-  async function loadModels({ announce = false } = {}) {
+  async function loadModels({ announce = false, propagate = false } = {}) {
     const list = qs('#model-list');
     try {
       const payload = await api('/api/models?limit=2000');
@@ -470,23 +561,43 @@
         detail: { models: [], loaded: false },
       }));
       toast('Model index unavailable', error.message, 'error', 6500);
+      if (propagate) throw error;
     }
   }
 
   async function scanModels() {
+    if (state.scanning) return;
+    state.scanning = true;
     const button = qs('#scan-models');
     setBusy(button, true);
+    const operation = window.MorphorumOperations?.begin('model-scan',
+      'Scanning model directories', 'Checking configured checkpoint and LoRA folders…', 'models');
     try {
       const result = await api('/api/models/scan', { method: 'POST', body: '{}' });
-      await loadModels();
+      window.MorphorumOperations?.update('model-scan', operation, {
+        title: 'Refreshing model index',
+        message: 'Scan completed. Updating checkpoint selectors across the WebUI…' });
+      await loadModels({ propagate: true });
       if (result.warnings?.length) {
-        toast('Model scan complete', `${result.total} file(s) indexed with ${result.warnings.length} warning(s).`, 'warning', 6000);
+        const message = `${result.total} file(s) indexed with ${result.warnings.length} warning(s). Review Models and paths in Settings.`;
+        window.MorphorumOperations?.finish('model-scan', operation, {
+          tone: 'warning', title: 'Model scan completed with warnings',
+          message, view: 'models' });
+        toast('Model scan complete', message, 'warning', 6000);
       } else {
-        toast('Model scan complete', `${result.total} file(s) indexed from ${result.scanned_roots} configured directories.`, 'success');
+        const message = `${result.total} file(s) indexed from ${result.scanned_roots} configured directories.`;
+        window.MorphorumOperations?.finish('model-scan', operation, {
+          title: 'Model scan complete', message, view: 'models' });
+        toast('Model scan complete', message, 'success');
       }
     } catch (error) {
+      window.MorphorumOperations?.finish('model-scan', operation, {
+        tone: 'error', title: 'Model scan failed',
+        message: error.message + '. Check model paths in Settings and retry the scan.',
+        view: 'models' });
       toast('Model scan failed', error.message, 'error', 7000);
     } finally {
+      state.scanning = false;
       setBusy(button, false);
     }
   }

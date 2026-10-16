@@ -127,6 +127,20 @@
     </nav>
 
     <main class="workspace">
+      <div id="operation-feedback-announcement" class="operation-feedback-sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+      <section class="operation-feedback" id="operation-feedback" aria-label="Recent operation" hidden>
+        <div class="operation-feedback-copy">
+          <strong id="operation-feedback-title">Working…</strong>
+          <span id="operation-feedback-message"></span>
+          <div class="operation-feedback-progress" id="operation-feedback-progress" role="progressbar" aria-label="Operation progress" aria-valuemin="0" aria-valuemax="100" hidden>
+            <span id="operation-feedback-fill"></span>
+          </div>
+        </div>
+        <div class="operation-feedback-actions">
+          <button id="operation-feedback-open" type="button" class="secondary-button compact" hidden>Open</button>
+          <button id="operation-feedback-dismiss" type="button" class="icon-button" aria-label="Dismiss operation notice; does not cancel the task" title="Dismiss notice (does not cancel task)">×</button>
+        </div>
+      </section>
       <section class="view active" id="view-image">
         <div class="page-heading">
           <div>
@@ -155,17 +169,17 @@
             <textarea id="image-negative-prompt" class="text-area" rows="3" placeholder="Things you don't want in the image"></textarea>
 
             <div class="field-grid">
-              <label><span>Model</span><select id="image-model-select"><option value="">Scan models first</option></select></label>
-              <label class="image-resolution-preset-field"><span>Resolution preset</span><select id="image-resolution-preset" disabled><option value="">Select a model</option></select></label>
-              <label><span>Width</span><input id="image-width" type="number" value="512" min="64" max="4096" step="8" disabled></label>
-              <label><span>Height</span><div class="inline-input"><input id="image-height" type="number" value="512" min="64" max="4096" step="8" disabled><button id="swap-resolution" class="icon-button" type="button" title="Swap width and height" disabled>⇄</button></div></label>
-              <label><span>Steps</span><input id="image-steps" type="number" value="25" min="1" max="150" disabled></label>
-              <label><span>Sampler</span><select id="image-sampler" disabled><option value="">Select a model</option></select></label>
-              <label><span id="guidance-label">CFG</span><input id="image-guidance" type="number" value="7" min="0" max="30" step="0.1" disabled></label>
-              <label><span>Seed</span><div class="inline-input"><input id="image-seed" type="number" value="-1" min="-1" step="1" disabled><button id="random-seed" class="icon-button" type="button" title="Random seed" disabled>⚄</button></div></label>
-              <label><span>Seed mode</span><select id="image-seed-mode" disabled><option value="fixed">Fixed</option><option value="increment">Increment</option><option value="random">Random</option></select></label>
-              <label id="seed-increment-field"><span>Increment by</span><input id="image-seed-increment" type="number" value="1" step="1" disabled></label>
-              <label><span>Images</span><input id="image-count" type="number" value="1" min="1" max="32" disabled></label>
+              <label data-help-topic="image-model-select"><span>Model</span><select id="image-model-select"><option value="">Scan models first</option></select></label>
+              <label class="image-resolution-preset-field" data-help-topic="image-resolution-preset"><span>Resolution preset</span><select id="image-resolution-preset" disabled><option value="">Select a model</option></select></label>
+              <label data-help-topic="image-width"><span>Width <small class="muted">(px)</small></span><input id="image-width" type="number" value="512" min="64" max="4096" step="8" disabled></label>
+              <label data-help-topic="image-height"><span>Height <small class="muted">(px)</small></span><div class="inline-input"><input id="image-height" type="number" value="512" min="64" max="4096" step="8" disabled><button id="swap-resolution" class="icon-button" type="button" title="Swap width and height" disabled>⇄</button></div></label>
+              <label data-help-topic="image-steps"><span>Steps <small class="muted">(per image)</small></span><input id="image-steps" type="number" value="25" min="1" max="150" disabled></label>
+              <label data-help-topic="image-sampler"><span>Sampler</span><select id="image-sampler" disabled><option value="">Select a model</option></select></label>
+              <label data-help-topic="image-guidance"><span id="guidance-label">CFG</span><input id="image-guidance" type="number" value="7" min="0" max="30" step="0.1" disabled></label>
+              <label data-help-topic="image-seed"><span>Seed</span><div class="inline-input"><input id="image-seed" type="number" value="-1" min="-1" step="1" disabled><button id="random-seed" class="icon-button" type="button" title="Random seed" disabled>⚄</button></div></label>
+              <label data-help-topic="image-seed-mode"><span>Seed mode</span><select id="image-seed-mode" disabled><option value="fixed">Fixed</option><option value="increment">Increment</option><option value="random">Random</option></select></label>
+              <label id="seed-increment-field" data-help-topic="image-seed-increment"><span>Increment by <small class="muted">(per image)</small></span><input id="image-seed-increment" type="number" value="1" step="1" disabled></label>
+              <label data-help-topic="image-count"><span>Images <small class="muted">(per batch)</small></span><input id="image-count" type="number" value="1" min="1" max="32" disabled></label>
             </div>
             <p class="field-help" id="image-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
 
@@ -184,7 +198,7 @@
 
           <article class="card glass preview-card image-preview-card">
             <div class="card-header"><div><h2 id="image-results-heading">Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
-            <div class="image-history-controls"><label for="image-job-history">Recent jobs</label><select id="image-job-history" aria-label="Recent Image Generation jobs"><option value="">No recent jobs</option></select><button class="secondary-button compact" id="image-history-refresh" type="button">Refresh</button></div>
+            <div class="image-history-controls"><label for="image-job-history">Recent jobs</label><select id="image-job-history" aria-label="Recent Image Generation jobs"><option value="">No recent jobs</option></select><button class="secondary-button compact busy-button" id="image-history-refresh" type="button"><span class="spinner"></span><span class="button-label">Refresh</span></button></div>
             <div class="preview-placeholder" id="image-empty-preview">
               <div class="preview-glyph">◇</div>
               <strong>No images yet</strong>
@@ -226,6 +240,21 @@
           <span class="badge" id="animation-project-status">No project loaded</span>
           <code id="animation-project-path" title="">Create or select an animation project.</code>
         </div>
+
+        <nav id="animation-workflow-guide" class="animation-workflow-guide" aria-label="Motion Lab next steps">
+          <div class="animation-workflow-guide-context">
+            <div class="animation-workflow-guide-breadcrumb">
+              <span class="muted">Current workspace</span>
+              <strong id="animation-workflow-current">Overview</strong>
+              <span class="animation-workflow-project" id="animation-workflow-project">No animation project open</span>
+            </div>
+            <p id="animation-workflow-hint">Open a project to begin editing and building camera motion.</p>
+          </div>
+          <div class="animation-workflow-guide-actions">
+            <button type="button" class="primary-button compact" id="animation-workflow-primary" data-workflow-tab="projects">Browse Projects</button>
+            <button type="button" class="secondary-button compact" id="animation-workflow-secondary" data-workflow-tab="wizard">New Project Wizard</button>
+          </div>
+        </nav>
 
         <dialog class="animation-import-dialog" id="animation-deforum-dialog" aria-labelledby="animation-deforum-title">
           <form method="dialog" class="animation-import-shell" id="animation-deforum-form">
@@ -291,19 +320,40 @@
               <div><h2>Project</h2><p class="muted">Name your project and choose its animation settings.</p></div>
               <span class="badge" id="animation-schema-badge">Choose a project</span>
             </div>
+            <p class="animation-project-context muted" id="animation-project-context" aria-live="polite">No project open · choose a project to begin.</p>
+            <div class="animation-editor-guidance" id="animation-editor-guidance" role="status" aria-live="polite" hidden>
+              <div><strong>Open an animation project to unlock the editor</strong>
+                <p>Model and animation settings belong to a saved project. Your still-image model can work even when no animation project is open.</p></div>
+              <div class="animation-editor-guidance-actions">
+                <button class="secondary-button compact" type="button" id="animation-editor-open-project">Open a project</button>
+                <button class="primary-button compact" type="button" id="animation-editor-create-project">New Project Wizard</button>
+              </div>
+            </div>
             <div class="field-grid">
               <label class="animation-span-2"><span>Project</span><select id="animation-project-select"><option value="">No projects yet</option></select></label>
               <label class="animation-span-2"><span>Name</span><input id="animation-name" type="text" placeholder="Untitled Animation" disabled></label>
-              <label><span>Max frames</span><input id="animation-max-frames" type="number" min="1" max="1000000" value="120" disabled></label>
-              <label><span>FPS</span><input id="animation-fps" type="number" min="1" max="240" step="0.01" value="24" disabled></label>
-              <label class="animation-span-2"><span>Resolution preset</span><select id="animation-resolution-preset" disabled><option value="">Select a model</option></select></label>
-              <label><span>Width</span><input id="animation-width" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
-              <label><span>Height</span><input id="animation-height" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
-              <label><span>Animation mode</span><select id="animation-mode" disabled><option value="2d">2D</option><option value="3d">3D depth-aware</option></select></label>
-              <label><span>Prompt transition</span><select id="animation-prompt-transition" disabled><option value="blend">Blend between keyframes</option><option value="hold">Hold until next keyframe</option></select></label>
-              <label class="animation-span-2"><span>Model</span><select id="animation-model" disabled><option value="">No model selected</option></select></label>
+              <label data-help-topic="animation-max-frames"><span>Max frames <small class="muted">(total)</small></span><input id="animation-max-frames" type="number" min="1" max="1000000" value="120" disabled></label>
+              <label data-help-topic="animation-fps"><span>FPS</span><input id="animation-fps" type="number" min="1" max="240" step="0.01" value="24" disabled></label>
+              <label class="animation-span-2" data-help-topic="animation-resolution-preset"><span>Resolution preset</span><select id="animation-resolution-preset" disabled><option value="">Select a model</option></select></label>
+              <label data-help-topic="animation-width"><span>Width <small class="muted">(px)</small></span><input id="animation-width" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
+              <label data-help-topic="animation-height"><span>Height <small class="muted">(px)</small></span><input id="animation-height" type="number" min="64" max="8192" step="8" value="1024" disabled></label>
+              <label data-help-topic="animation-mode"><span>Animation mode</span><select id="animation-mode" disabled><option value="2d">2D</option><option value="3d">3D depth-aware</option></select></label>
+              <label data-help-topic="animation-prompt-transition"><span>Prompt transition</span><select id="animation-prompt-transition" disabled><option value="blend">Blend between keyframes</option><option value="hold">Hold until next keyframe</option></select></label>
+              <label class="animation-span-2" data-help-topic="animation-model"><span>Model</span><select id="animation-model" disabled><option value="">No model selected</option></select></label>
             </div>
             <p class="field-help" id="animation-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
+            <p class="field-help" id="animation-model-guidance" aria-live="polite" hidden></p>
+            <p class="field-help" id="animation-model-index-status" role="status" aria-live="polite" hidden></p>
+            <section class="animation-model-compatibility" id="animation-model-compatibility" aria-label="Animation model compatibility" hidden>
+              <div class="animation-compatibility-heading">
+                <strong>Checkpoint compatibility</strong>
+                <span class="animation-compatibility-status" id="animation-compatibility-status" role="status" aria-live="polite">Checking settings</span>
+              </div>
+              <div class="animation-compatibility-facts" id="animation-compatibility-facts"></div>
+              <ul class="animation-compatibility-issues" id="animation-compatibility-issues" hidden></ul>
+              <p class="animation-compatibility-note" id="animation-compatibility-note" hidden></p>
+              <button class="secondary-button compact" id="animation-compatibility-action" type="button" hidden>Open Model Manager</button>
+            </section>
           </article>
 
           <article class="card glass animation-cadence-card" id="animation-cadence-card">
@@ -314,7 +364,7 @@
               </div>
             </div>
             <div class="animation-cadence-controls">
-              <label>
+              <label data-help-topic="animation-cadence-preset">
                 <span>Diffusion frequency</span>
                 <select id="animation-cadence-preset" disabled>
                   <option value="1">Every frame (cadence 1)</option>
@@ -326,15 +376,15 @@
                   <option value="custom">Custom keyframed schedule…</option>
                 </select>
               </label>
-              <label>
+              <label data-help-topic="animation-cadence">
                 <span>Keyframe schedule <small class="muted">(advanced)</small></span>
                 <input id="animation-cadence" class="animation-schedule" type="text" value="0:(1)" placeholder="0:(1), 24:(3)" disabled>
               </label>
             </div>
             <div class="animation-cadence-controls" data-animation-mode="3d">
-              <label><span>3D frame blending</span><select id="animation-temporal-mode" disabled><option value="forward">Forward only</option><option value="future-anchor">Depth-aligned blending</option></select></label>
-              <label><span>Blend strength</span><input id="animation-temporal-mix" type="number" min="0" max="1" step="0.05" value="0.65" disabled></label>
-              <label><span>Appearance guard (RGB difference)</span><input id="animation-temporal-contrast" type="number" min="1" max="255" step="1" value="96" disabled></label>
+              <label data-help-topic="animation-temporal-mode"><span>3D frame blending</span><select id="animation-temporal-mode" disabled><option value="forward">Forward only</option><option value="future-anchor">Depth-aligned blending</option></select></label>
+              <label data-help-topic="animation-temporal-mix"><span>Blend strength <small class="muted">(0–1)</small></span><input id="animation-temporal-mix" type="number" min="0" max="1" step="0.05" value="0.65" disabled></label>
+              <label data-help-topic="animation-temporal-contrast"><span>Appearance guard (RGB difference)</span><input id="animation-temporal-contrast" type="number" min="1" max="255" step="1" value="96" disabled></label>
             </div>
             <p class="animation-cadence-explainer muted" data-animation-mode="3d">Depth-aligned blending smooths movement between generated 3D frames where reliable scene depth is available. Higher blend strength keeps more detail from neighboring frames.</p>
             <p class="animation-cadence-explainer muted" id="animation-cadence-help" aria-live="polite">Cadence 1 runs diffusion for every eligible frame.</p>
@@ -352,7 +402,7 @@
 
             <div class="animation-start-grid">
               <div class="animation-start-controls">
-                <label>
+                <label data-help-topic="animation-start-mode">
                   <span>Start mode</span>
                   <select id="animation-start-mode" disabled>
                     <option value="prompt">Generate frame 0 from prompt</option>
@@ -362,7 +412,7 @@
                 <div class="animation-start-note" id="animation-start-mode-note">
                   Frame 0 will be generated with the selected model and frame-0 prompt. An uploaded image is optional and can still be used for the camera-motion preview.
                 </div>
-                <label>
+                <label data-help-topic="animation-source-file">
                   <span>Optional image</span>
                   <input id="animation-source-file" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" disabled>
                 </label>
@@ -458,7 +508,7 @@
             </div>
             <label class="animation-timeline-mobile-scrubber"><span>Frame scrubber</span><input id="animation-timeline-scrubber" type="range" min="0" max="119" value="0" disabled></label>
 
-            <div class="animation-timeline-scroll" id="animation-timeline-scroll">
+            <div class="animation-timeline-scroll" id="animation-timeline-scroll" role="region" tabindex="0" aria-label="Visual timeline tracks. Use arrow keys to scroll the timeline on desktop; use the track picker and frame scrubber on phones.">
               <div class="animation-timeline-empty" id="animation-timeline-empty">Create or load a project to view timeline tracks.</div>
               <div class="animation-timeline-grid" id="animation-timeline-grid" hidden></div>
             </div>
@@ -499,11 +549,11 @@
               <div><h2>2D Motion Schedules</h2><p class="muted">Pan, rotate, and zoom the scene over time. Even small zoom changes add up across frames.</p></div>
             </div>
             <div class="animation-schedule-grid">
-              <label><span>Border mode</span><select id="animation-border-mode" disabled><option value="replicate">Replicate edges</option><option value="wrap">Wrap opposite edge</option></select></label>
-              <label><span>Angle</span><input id="animation-angle" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Zoom factor / frame <small class="muted">(1.0 = none · 1.005 = slow in · 0.995 = slow out)</small></span><input id="animation-zoom" class="animation-schedule" type="text" value="0:(1.0)" disabled></label>
-              <label><span>Translation X</span><input id="animation-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Translation Y</span><input id="animation-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-border-mode"><span>Border mode</span><select id="animation-border-mode" disabled><option value="replicate">Replicate edges</option><option value="wrap">Wrap opposite edge</option></select></label>
+              <label data-help-topic="animation-angle"><span>Angle <small class="muted">(° / frame)</small></span><input id="animation-angle" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-zoom"><span>Zoom factor / frame <small class="muted">(1.0 = none · 1.005 = slow in · 0.995 = slow out)</small></span><input id="animation-zoom" class="animation-schedule" type="text" value="0:(1.0)" disabled></label>
+              <label data-help-topic="animation-translation-x"><span>Translation X <small class="muted">(px / frame)</small></span><input id="animation-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-translation-y"><span>Translation Y <small class="muted">(px / frame)</small></span><input id="animation-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
             </div>
           </article>
 
@@ -513,7 +563,7 @@
               <span class="badge">3D</span>
             </div>
             <div class="animation-camera-preset-bar">
-              <label><span>Camera movement preset</span><select id="animation-3d-preset" disabled>
+              <label data-help-topic="animation-3d-preset"><span>Camera movement preset</span><select id="animation-3d-preset" disabled>
                 <option value="">Choose a gentle camera motion…</option>
                 <option value="dolly-in">Slow dolly in</option>
                 <option value="dolly-out">Slow dolly out</option>
@@ -529,16 +579,21 @@
             </div>
             <p class="muted animation-camera-preset-note">Applying a preset replaces the six 3D motion schedules with constant per-frame values. It does not change FOV, depth settings, prompts, or LoRAs. Save to keep it.</p>
             <div class="animation-schedule-grid">
-              <label><span>Translation X</span><input id="animation-3d-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Translation Y</span><input id="animation-3d-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Translation Z <small class="muted">(signed depth motion)</small></span><input id="animation-3d-translation-z" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Rotation X</span><input id="animation-3d-rotation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Rotation Y</span><input id="animation-3d-rotation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Rotation Z</span><input id="animation-3d-rotation-z" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Field of view <small class="muted">(degrees)</small></span><input id="animation-3d-fov" class="animation-schedule" type="text" value="0:(40)" disabled></label>
-              <label><span>Depth resolution</span><select id="animation-3d-depth-resolution" disabled><option value="auto">Auto</option><option value="384">384 px</option><option value="512">512 px</option><option value="768">768 px</option><option value="full">Full render size</option></select></label>
-              <label><span>3D projection quality</span><select id="animation-3d-projection-mode" disabled><option value="legacy">Classic projection</option><option value="splat">Smooth subpixel projection</option></select></label>
-              <label><span>Exposed-pixel fill</span><select id="animation-3d-hole-fill" disabled><option value="nearest">Nearest visible pixel</option><option value="background">Background-aware fill</option></select></label>
+              <label data-help-topic="animation-3d-translation-x"><span>Translation X <small class="muted">(scene units / frame)</small></span><input id="animation-3d-translation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-3d-translation-y"><span>Translation Y <small class="muted">(scene units / frame)</small></span><input id="animation-3d-translation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-3d-translation-z"><span>Translation Z <small class="muted">(signed depth motion)</small></span><input id="animation-3d-translation-z" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-3d-rotation-x"><span>Rotation X <small class="muted">(° / frame)</small></span><input id="animation-3d-rotation-x" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-3d-rotation-y"><span>Rotation Y</span><input id="animation-3d-rotation-y" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-3d-rotation-z"><span>Rotation Z <small class="muted">(° / frame)</small></span><input id="animation-3d-rotation-z" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-3d-fov"><span>Field of view <small class="muted">(degrees)</small></span><input id="animation-3d-fov" class="animation-schedule" type="text" value="0:(40)" disabled></label>
+              <label data-help-topic="animation-3d-depth-resolution"><span>Depth resolution</span><select id="animation-3d-depth-resolution" disabled><option value="auto">Auto</option><option value="384">384 px</option><option value="512">512 px</option><option value="768">768 px</option><option value="full">Full render size</option></select></label>
+              <label data-help-topic="animation-3d-projection-mode"><span>3D projection quality</span><select id="animation-3d-projection-mode" disabled><option value="legacy">Classic projection</option><option value="splat">Smooth subpixel projection</option></select></label>
+              <label data-help-topic="animation-3d-hole-fill"><span>Exposed-pixel fill</span><select id="animation-3d-hole-fill" disabled><option value="nearest">Nearest visible pixel</option><option value="background">Background-aware fill</option></select></label>
+            </div>
+            <div class="notice subtle animation-camera-safety-note">
+              <strong>3D motion safety</strong>
+              <span>3D translation and rotation are applied again at each frame, so small values can accumulate. A long dolly or orbit may leave no visible pixels. Render preflight estimates risky schedules without loading depth; use Camera Preview to inspect actual projected coverage. Warnings cannot guarantee every frame is safe.</span>
+              <button type="button" class="secondary-button compact" id="animation-camera-safety-check">Review 3D Render Safety</button>
             </div>
             <div class="notice subtle">
               <strong>Projection details</strong>
@@ -551,15 +606,16 @@
               <div><h2>Generation State</h2><p class="muted">Set how strongly each frame changes, plus noise, steps, guidance, and seed behavior.</p></div>
             </div>
             <div class="field-grid">
-              <label><span>Strength schedule <small class="muted">(1 = preserve, 0 = redraw)</small></span><input id="animation-strength" class="animation-schedule" type="text" value="0:(0.65)" disabled></label>
-              <label><span>Noise schedule <small class="muted">(uniform)</small></span><input id="animation-noise" class="animation-schedule" type="text" value="0:(0.02)" disabled></label>
-              <label><span>Steps schedule</span><input id="animation-steps" class="animation-schedule" type="text" value="0:(20)" disabled></label>
-              <label><span>Guidance schedule</span><input id="animation-guidance" class="animation-schedule" type="text" value="0:(0)" disabled></label>
-              <label><span>Sampler</span><select id="animation-sampler" disabled><option value="">Select a model first</option></select></label>
-              <label><span>Seed</span><input id="animation-seed" type="number" min="-1" max="4294967295" value="-1" disabled></label>
-              <label><span>Seed behavior</span><select id="animation-seed-behavior" disabled><option value="fixed">Fixed</option><option value="increment">Increment</option><option value="random">Random</option></select></label>
-              <label><span>Seed increment</span><input id="animation-seed-increment" type="number" value="1" disabled></label>
+              <label data-help-topic="animation-strength"><span>Strength schedule <small class="muted">(1 = preserve, 0 = redraw)</small></span><input id="animation-strength" class="animation-schedule" type="text" value="0:(0.65)" disabled></label>
+              <label data-help-topic="animation-noise"><span>Noise schedule <small class="muted">(uniform)</small></span><input id="animation-noise" class="animation-schedule" type="text" value="0:(0.02)" disabled></label>
+              <label data-help-topic="animation-steps"><span>Steps schedule</span><input id="animation-steps" class="animation-schedule" type="text" value="0:(20)" disabled></label>
+              <label data-help-topic="animation-guidance"><span>Guidance schedule</span><input id="animation-guidance" class="animation-schedule" type="text" value="0:(0)" disabled></label>
+              <label data-help-topic="animation-sampler"><span>Sampler</span><select id="animation-sampler" disabled><option value="">Select a model first</option></select></label>
+              <label data-help-topic="animation-seed"><span>Seed</span><input id="animation-seed" type="number" min="-1" max="4294967295" value="-1" disabled></label>
+              <label data-help-topic="animation-seed-behavior"><span>Seed behavior</span><select id="animation-seed-behavior" disabled><option value="fixed">Fixed</option><option value="increment">Increment</option><option value="random">Random</option></select></label>
+              <label data-help-topic="animation-seed-increment"><span>Seed increment <small class="muted">(per frame)</small></span><input id="animation-seed-increment" type="number" value="1" disabled></label>
             </div>
+            <p class="field-help animation-schedule-syntax-help">Schedule example: <code>0:(0.65), 48:(0.5)</code> defines values at frame 0 and frame 48. Keyframe interpolation follows your timeline settings. Editing a schedule does not automatically apply Motion Lab drafts.</p>
           </article>
 
           <article class="card glass animation-motion-lab-intro" id="animation-motion-lab-intro">
@@ -597,7 +653,7 @@
               </div>
             </div>
             <div class="animation-motion-lab-fields">
-              <label><span>Preset</span><select id="animation-motion-lab-preset">
+              <label data-help-topic="animation-motion-lab-preset"><span>Preset</span><select id="animation-motion-lab-preset">
                 <option value="wave">Wave</option>
                 <option value="spiral">Spiral</option>
                 <option value="figure-eight">Figure Eight</option>
@@ -607,12 +663,12 @@
                 <option value="pull-out">Pull Out</option>
                 <option value="still">Still (Replace to reset)</option>
               </select></label>
-              <label><span>Strength (0–1)</span><input id="animation-motion-lab-strength" type="number" min="0" max="1" step=".05" value=".65"></label>
-              <label><span>Cycle (seconds)</span><input id="animation-motion-lab-cycle" type="number" min=".2" max="600" step=".1" value="2"></label>
-              <label><span>Fade (seconds)</span><input id="animation-motion-lab-fade" type="number" min="0" max="120" step=".05" value=".1"></label>
-              <label><span>Start frame</span><input id="animation-motion-lab-start" type="number" min="0" step="1" value="0"></label>
-              <label><span>End frame (0 = full)</span><input id="animation-motion-lab-end" type="number" min="0" step="1" value="0"></label>
-              <label><span>Blend</span><select id="animation-motion-lab-blend"><option value="add">Add to base</option><option value="replace">Replace affected axes</option></select></label>
+              <label data-help-topic="animation-motion-lab-strength"><span>Strength (0–1)</span><input id="animation-motion-lab-strength" type="number" min="0" max="1" step=".05" value=".65"></label>
+              <label data-help-topic="animation-motion-lab-cycle"><span>Cycle (seconds)</span><input id="animation-motion-lab-cycle" type="number" min=".2" max="600" step=".1" value="2"></label>
+              <label data-help-topic="animation-motion-lab-fade"><span>Fade (seconds)</span><input id="animation-motion-lab-fade" type="number" min="0" max="120" step=".05" value=".1"></label>
+              <label data-help-topic="animation-motion-lab-start"><span>Start frame <small class="muted">(0-based)</small></span><input id="animation-motion-lab-start" type="number" min="0" step="1" value="0"></label>
+              <label data-help-topic="animation-motion-lab-end"><span>End frame (0 = full)</span><input id="animation-motion-lab-end" type="number" min="0" step="1" value="0"></label>
+              <label data-help-topic="animation-motion-lab-blend"><span>Blend</span><select id="animation-motion-lab-blend"><option value="add">Add to base</option><option value="replace">Replace affected axes</option></select></label>
             </div>
             <details class="motion-field-help">
               <summary>What do Strength, Cycle, Fade, and Blend mean?</summary>
@@ -951,12 +1007,21 @@
                 <p class="muted">Render the real diffusion sequence. Choose a starting frame, render your animation, and follow progress here.</p>
               </div>
               <div class="button-row animation-render-actions">
+                <button class="secondary-button compact busy-button" id="animation-preflight-check" type="button" disabled><span class="spinner"></span><span class="button-label">Check Render</span></button>
                 <button class="secondary-button compact" id="animation-resume-render" type="button" disabled>Resume</button>
                 <button class="secondary-button compact danger" id="animation-cancel-render" type="button" disabled>Cancel</button>
                 <button class="primary-button compact busy-button" id="animation-start-render" type="button" disabled><span class="spinner"></span><span class="button-label">Render Animation</span></button>
               </div>
             </div>
 
+            <section id="animation-preflight-report" class="animation-preflight-report" aria-label="Pre-render validation results" aria-live="polite" hidden>
+              <div class="animation-preflight-heading">
+                <strong id="animation-preflight-heading">Review render settings</strong>
+                <button class="secondary-button compact" type="button" id="animation-preflight-fix" hidden>Fix in Editor</button>
+              </div>
+              <p class="muted" id="animation-preflight-meta"></p>
+              <ul id="animation-preflight-issues" hidden></ul>
+            </section>
             <div class="notice subtle animation-render-notice">
               <strong>Real diffusion render</strong>
               <span>Rendering may take some time. Completed frames are saved as the animation runs, and interrupted renders can be resumed.</span>

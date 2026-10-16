@@ -264,6 +264,20 @@ def render_depth_warp(
     projected_x_float = (target_focal * x2 / np.maximum(z2, 1e-6)) + cx
     projected_y_float = (target_focal * y2 / np.maximum(z2, 1e-6)) + cy
 
+    def no_visible_pixels(reason: str, in_bounds: int) -> Camera3DError:
+        source_count = width * height
+        front_count = int(np.count_nonzero(z2 > 1e-4))
+        return Camera3DError(
+            "3D camera projection produced no visible pixels "
+            f"({reason}; {front_count}/{source_count} source points in front, "
+            f"{in_bounds}/{source_count} inside image bounds; "
+            f"translation=({translation_x:+.4g}, {translation_y:+.4g}, "
+            f"{translation_z:+.4g}) scene units; "
+            f"rotation=({rotation_x:+.4g}, {rotation_y:+.4g}, "
+            f"{rotation_z:+.4g}) degrees; FOV={fov_value:g}°). "
+            "Reduce cumulative camera travel and inspect Camera Preview."
+        )
+
     if projection_mode == "legacy":
         # Keep the original exact nearest-sample Z-buffer implementation for
         # existing projects and A/B image comparisons.
@@ -276,7 +290,9 @@ def render_depth_warp(
 
         source_indices = np.nonzero(visible)[0]
         if source_indices.size == 0:
-            raise Camera3DError("3D camera projection produced no visible pixels.")
+            why = ("all source points behind camera" if not np.any(z2 > 1e-4)
+                   else "projected points outside output image")
+            raise no_visible_pixels(why, 0)
         destination_indices = (
             projected_y[source_indices] * width + projected_x[source_indices]
         )
@@ -304,9 +320,14 @@ def render_depth_warp(
         visible &= projected_y_float > -1.0
         visible &= projected_y_float < height
         source_indices = np.flatnonzero(visible)
-        output, valid_mask, zbuffer = _render_splat(
-            rgb, projected_x_float, projected_y_float, z2, visible,
-        )
+        try:
+            output, valid_mask, zbuffer = _render_splat(
+                rgb, projected_x_float, projected_y_float, z2, visible,
+            )
+        except Camera3DError as exc:
+            why = ("all source points behind camera" if not np.any(z2 > 1e-4)
+                   else "projected points outside output or no subpixel coverage")
+            raise no_visible_pixels(why, int(source_indices.size)) from exc
         if fill_mode == "background":
             filled = _fill_holes_background(output, valid_mask, zbuffer)
         else:
