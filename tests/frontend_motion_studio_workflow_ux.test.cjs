@@ -125,9 +125,11 @@ test('UX2 original live controls, cue editor and waveform move without cloning',
   assert.match(source,/if \(cueStage\) cueStage\.appendChild\(panel\)/);
   assert.match(source,/motionStudioDockWaveform\(\)/);
   for (const id of ['animation-motion-lab-audio-file','animation-motion-lab-analyze-audio',
-    'animation-motion-lab-add-audio','animation-audio-apply']) {
+    'animation-motion-lab-add-audio']) {
     assert.equal((html.match(new RegExp('id="'+id+'"','g')) || []).length, 1, id);
   }
+  // Apply shortcut is created exactly once in the Motion Studio template.
+  assert.equal((source.match(/id="animation-audio-apply"/g)||[]).length, 1);
   assert.match(source,/motionStudioSelectStage\(motionStudioStage, \{persist:false, navigate:false\}\)/);
 });
 
