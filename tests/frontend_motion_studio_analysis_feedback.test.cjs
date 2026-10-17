@@ -19,7 +19,7 @@ const analyzer=grab('async function motionLabAnalyzeAudio() {','function motionL
 const preview=grab('function motionLabAudioPreview() {','function motionLabAudioUi() {');
 
 function mockAnalyzer({file={name:'drums.wav',size:8192}, project=true, http=200,
-  matchLength=false, duration=1, draftLayers=[], previousAudio=null}={}) {
+  matchLength=false, duration=1, draftLayers=[], storedLayers=[], previousAudio=null}={}) {
   const elements={};
   const get=id=>elements[id] ||= {textContent:'',value:'.1',disabled:false,dataset:{},checked:false};
   get('#animation-motion-lab-audio-file').files=file?[file]:[];
@@ -31,7 +31,9 @@ function mockAnalyzer({file={name:'drums.wav',size:8192}, project=true, http=200
     events:{events:[{id:'beat-1'},{id:'beat-2'}]},
   };
   const ctx={
-    state:{project:project?{id:'p1',animation:{max_frames:4,fps:4}}:null},
+    state:{project:project?{id:'p1',animation:{max_frames:4,fps:4},
+      motion_lab:{layers:storedLayers}}:null},
+    window:{MorphorumDialog:{confirm:async()=>false}},
     motionLabDraftLayers:draftLayers,
     motionLabAudioProjectId:previousAudio?'p1':null,
     motionLabAudioAnalysis:previousAudio,
@@ -134,6 +136,18 @@ test('UX2.2 optional audio-length matching does not block analysis with existing
   assert.match(f.get('#animation-motion-lab-audio-length-status').textContent,/duration unchanged/i);
   assert.match(f.get('#motion-studio-analysis-status').textContent,/existing draft Motion Lab layer/i);
   assert.match(f.get('#motion-studio-analysis-status').textContent,/Analyzed drums.wav/);
+});
+
+test('UX2.2 declining to delete saved authoring history still analyzes WAV',async()=>{
+  const layers=[{id:'existing-saved-layer'}];
+  const f=mockAnalyzer({matchLength:true,duration:2,storedLayers:layers});
+  await f.ctx.motionLabAnalyzeAudio();
+  assert.equal(f.ctx.motionLabAudioProjectId,'p1');
+  assert.equal(f.ctx.motionLabAudioAnalysis,f.analysis);
+  assert.strictEqual(f.ctx.state.project.motion_lab.layers,layers);
+  assert.equal(layers.length,1);
+  assert.equal(f.get('#animation-motion-lab-audio-match-length').checked,false);
+  assert.match(f.get('#motion-studio-analysis-status').textContent,/Saved Motion Lab layers preserved/);
 });
 
 test('UX2.2 failed WAV analysis does not clear the existing analysis and drafts',async()=>{
