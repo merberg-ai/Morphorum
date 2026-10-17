@@ -2004,16 +2004,6 @@
   function renderPromptRows() {
     const list = qs('#animation-prompt-list');
     if (!list) return;
-    const validIds = new Set(state.projects.map(p => p.id));
-    for (const id of projectManagerState.bulkIds) if (!validIds.has(id)) projectManagerState.bulkIds.delete(id);
-    const bulkCount = qs('#animation-project-manager-bulk-count');
-    if (bulkCount) bulkCount.textContent = projectManagerState.bulkIds.size + ' selected';
-    const bulkDelete = qs('#animation-project-manager-bulk-trash');
-    if (bulkDelete) bulkDelete.disabled = projectManagerState.busy || !projectManagerState.bulkIds.size;
-    const selectVisible = qs('#animation-project-manager-select-visible');
-    if (selectVisible) selectVisible.disabled = projectManagerState.busy || !filtered.length;
-    const clearBulk = qs('#animation-project-manager-clear-selection');
-    if (clearBulk) clearBulk.disabled = projectManagerState.busy || !projectManagerState.bulkIds.size;
     list.replaceChildren();
 
     if (!state.project) {
@@ -5150,6 +5140,16 @@
       projectManagerState.selectedId =
         state.projects.find(p => p.id === state.project?.id)?.id || state.projects[0]?.id || '';
     }
+    const validIds = new Set(state.projects.map(p => p.id));
+    for (const id of projectManagerState.bulkIds) if (!validIds.has(id)) projectManagerState.bulkIds.delete(id);
+    const bulkCount = qs('#animation-project-manager-bulk-count');
+    if (bulkCount) bulkCount.textContent = projectManagerState.bulkIds.size + ' selected';
+    const bulkDelete = qs('#animation-project-manager-bulk-trash');
+    if (bulkDelete) bulkDelete.disabled = projectManagerState.busy || !projectManagerState.bulkIds.size;
+    const selectVisible = qs('#animation-project-manager-select-visible');
+    if (selectVisible) selectVisible.disabled = projectManagerState.busy || !filtered.length;
+    const clearBulk = qs('#animation-project-manager-clear-selection');
+    if (clearBulk) clearBulk.disabled = projectManagerState.busy || !projectManagerState.bulkIds.size;
     list.replaceChildren();
     if (!filtered.length) {
       const empty = document.createElement('p');
