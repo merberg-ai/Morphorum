@@ -47,6 +47,8 @@ def start_download(model_id: int, version_id: int, file_name: str) -> dict[str, 
     file = next((f for f in version["files"] if f["name"] == file_name), None)
     if not file:
         raise ValueError("File not available.")
+    if not isinstance(file.get("id"), int) or file["id"] <= 0:
+        raise ValueError("Missing Civitai file ID.")
     filename = _safe_file(file_name)
     base = version["base_model"]
     family = "sdxl" if base.startswith("SDXL") else "flux" if base.startswith("Flux.") else "zimage" if base.startswith("ZImage") else None
@@ -72,7 +74,7 @@ def start_download(model_id: int, version_id: int, file_name: str) -> dict[str, 
     job = {"id": job_id, "name": filename, "model_id": model_id, "version_id": version_id,
            "family": family, "kind": kind, "status": "queued", "bytes": 0,
            "total_bytes": int(size_kb * 1024) if isinstance(size_kb, (int,float)) else None,
-           "error": None, "url": f"https://civitai.com/api/download/models/{version_id}?type=Model&format=SafeTensor",
+           "error": None, "url": f"https://civitai.com/api/download/models/{version_id}?type=Model&format=SafeTensor&fileId={file['id']}",
            "expected_hash": sha, "destination": str(destination)}
     with _LOCK:
         _JOBS[job_id] = job
