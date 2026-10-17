@@ -9710,6 +9710,12 @@
       panel.hidden = !selected;
       panel.classList.toggle('active', selected);
     });
+    qsa('.main-nav [data-project-nav]').forEach(button => {
+      const selected = button.dataset.projectNav === name;
+      button.classList.toggle('active', selected);
+      if (selected) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
     qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => {
       const selected = button.dataset.motionNav === name;
       button.classList.toggle('active', selected);
@@ -10533,7 +10539,7 @@
     const nav = document.createElement('nav');
     nav.id = 'animation-workspace-nav';
     nav.className = 'animation-workspace-nav';
-    nav.setAttribute('aria-label', 'Motion Lab workspaces');
+    nav.setAttribute('aria-label', 'Project and Motion Lab workspaces');
     nav.setAttribute('role', 'tablist');
     const panels = {};
     const names = {
@@ -10560,7 +10566,8 @@
         qs('#animation-tab-' + keys[next])?.focus();
         showAnimationTab(keys[next]);
       });
-      nav.appendChild(button);
+      // Project destinations live in the primary menu; keep their real panels and IDs.
+      if (!['wizard','projects','editor'].includes(name)) nav.appendChild(button);
       const panel = document.createElement('section');
       panel.className = 'animation-workspace-panel';
       panel.id = 'animation-panel-' + name;
@@ -10620,7 +10627,6 @@
     const toolGrid = document.createElement('div');
     toolGrid.className = 'motion-lab-tool-grid';
     const toolCards = [
-      ['wizard', 'New Project Wizard', 'Create a project step by step, with guided defaults and explanations.'],
       ['composer', 'Camera Motion Composer', 'Layer motion presets, timing, and blend settings.'],
       ['recording', 'Live Motion Recording', 'Perform and edit a six-axis camera take.'],
       ['curves', 'Motion Curves & Camera Path', 'Edit frame-aligned keyframes using the full-width plots.'],
@@ -10628,8 +10634,6 @@
       ['motion-import', 'Import Motion Settings', 'Preview Deforum Motion Studio schedules and align soundtrack audio.'],
       ['audio', 'Motion Studio', 'Compose manual camera cues against music, edit beats and preview or apply motion to this project.'],
       ['monitor', 'Render Monitor', 'Watch progress, frame previews, and job diagnostics.'],
-      ['projects', 'Project Manager', 'Search, review, rename, and safely archive your animation projects.'],
-      ['editor', 'Project Editor', 'Configure projects, prompts, resolution, and timelines.'],
       ['outputs', 'Outputs', 'Review completed animations and export videos.'],
     ];
     for (const [name, title, description] of toolCards) {
