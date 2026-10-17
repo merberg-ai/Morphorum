@@ -32,7 +32,7 @@ function makeContext(project, api) {
   };
   const program = `
     let motionDirectorDeleteSelection = new Set(), motionDirectorDeleteUndo = null;
-    let animationTab = 'editor', motionLabSoundtrackBusy = false;
+    let animationTab = 'editor';
     async function motionLabUseProjectSoundtrack() {}
     let motionLabAudioAnalysis = null, motionLabAudioProjectId = null;
     let motionLabAudioElement = null, motionLabAudioUrl = null;
