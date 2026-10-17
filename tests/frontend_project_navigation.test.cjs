@@ -71,3 +71,27 @@ test('UX2.5 bulk trash uses confirmation and existing managed trash route',()=>{
   assert.match(animation,/encodeURIComponent\(item\.id\), \{method: 'DELETE'\}/);
   assert.match(animation,/failed\.push\(item\.name/);
 });
+
+test('UX2.5 bulk selection count and action state update in Project Manager only',()=>{
+  const pm=animation.slice(animation.indexOf('  function renderProjectManager() {'),
+    animation.indexOf('  async function projectManagerOpen() {'));
+  const prompt=animation.slice(animation.indexOf('  function renderPromptRows() {'),
+    animation.indexOf('  function renderProjectManager() {'));
+  assert.match(pm,/bulkCount\.textContent = projectManagerState\.bulkIds\.size/);
+  assert.match(pm,/bulkDelete\.disabled = projectManagerState\.busy/);
+  assert.doesNotMatch(prompt,/const bulkCount = qs\('#animation-project-manager-bulk-count'\)/);
+  assert.match(pm,/checkbox\.addEventListener\('change'/);
+});
+test('Motion Studio analyzed WAV prompts before replacing export soundtrack',()=>{
+  const analysis=animation.slice(animation.indexOf('  async function motionLabAnalyzeAudio() {'),
+    animation.indexOf('  function motionLabAddAudio() {'));
+  assert.match(analysis,/Replace project export soundtrack\?/);
+  assert.match(analysis,/motion-import\/soundtrack/);
+  assert.match(analysis,/Existing export soundtrack preserved/);
+  assert.match(analysis,/audio motion was analyzed but export soundtrack attachment failed/);
+});
+test('Motion Studio can restore a saved soundtrack automatically without replacing an edited WAV',()=>{
+  assert.match(animation,/!chosen && soundtrackAsset && animationTab === 'audio'/);
+  assert.match(animation,/!projectMediaAssets\('motion_lab_wav'\)\.length/);
+  assert.match(animation,/await motionLabUseProjectSoundtrack\(\)/);
+});
