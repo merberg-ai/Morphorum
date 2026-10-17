@@ -9698,6 +9698,18 @@
     if (name !== 'preview') motionFramePlayer?.pause();
     if (name !== 'recording' && motionLabRecorder?.active) motionLabStopRecording('tab-change');
     animationTab = name;
+    const pageHeading = {
+      projects: ['PROJECTS / LIBRARY', 'Project Manager', 'Browse, organize, open and manage your animation projects.'],
+      wizard: ['PROJECTS / CREATE', 'New Project Wizard', 'Create a new animation project with guided setup and sensible defaults.'],
+      editor: ['PROJECTS / EDIT', 'Project Editor', 'Configure the selected project, prompts, generation settings and animation timeline.'],
+    }[name] || ['MOTION LAB / IMAGE ANIMATION', 'Motion Lab',
+      'Compose camera movement, edit curves, preview animation and monitor renders in focused workspaces.'];
+    const eyebrow = qs('#animation-page-eyebrow');
+    const title = qs('#animation-page-title');
+    const description = qs('#animation-page-description');
+    if (eyebrow) eyebrow.textContent = pageHeading[0];
+    if (title) title.textContent = pageHeading[1];
+    if (description) description.textContent = pageHeading[2];
     if (name === 'wizard') void projectWizard?.open();
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
