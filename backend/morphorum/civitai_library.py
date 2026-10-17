@@ -47,7 +47,10 @@ def cached_metadata(model_id: str):
     if not load_settings().get("civitai", {}).get("enabled"):
         raise CivitaiSearchError("Civitai Hub is disabled.", 403)
     data = _read(model_id)
+    if data.get("preview_allowed_mature") and not load_settings()["civitai"].get("allow_mature", False):
+        data.pop("preview", None)
     if not load_settings()["civitai"].get("load_previews", True):
+        data.pop("preview", None)
         data.pop("preview_url", None)
     return data
 
@@ -109,6 +112,7 @@ def sync_metadata(model_id: str, *, client: httpx.Client | None = None):
                         preview = directory / ("preview" + ext)
                         with preview.open("wb") as output: output.write(data)
                         result["preview"] = preview.name
+                        result["preview_allowed_mature"] = bool(cfg.get("allow_mature", False))
             except httpx.RequestError:
                 result["preview_warning"] = "Preview download unavailable."
             finally:
