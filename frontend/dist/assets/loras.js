@@ -382,6 +382,15 @@
       if (request !== state.request) return;
       state.detail = detail;
       renderDetail();
+      // Offline cached metadata only: no Civitai request when selecting a LoRA.
+      try {
+        const cached = await api('/api/civitai/library/' + encodeURIComponent(record.id));
+        if (request === state.request && cached.synced) {
+          state.cached = cached;
+          renderDetail();
+          updatePromptSnippet();
+        }
+      } catch (_) { /* Hub disabled or no cache: keep existing local trigger words. */ }
       // Refresh the selected adapter's actual runtime state and log an audit.
       refreshRuntime();
     } catch (error) {
