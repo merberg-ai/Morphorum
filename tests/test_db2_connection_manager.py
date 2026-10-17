@@ -37,7 +37,11 @@ def test_per_client_token_issue_revoke_and_legacy_compat(credential_registry):
     assert backend_access.authorized_backend_request(f"Bearer {first}")
     assert backend_access.authorized_backend_request(f"Bearer {second}")
     assert backend_access.authorized_backend_request("Bearer " + "legacy" * 10)
-    assert not backend_access.authorized_backend_request("Bearer " + first[:-1] + "x")
+    # The replacement must differ from the actual final token character.
+    # Random token data can itself end in "x"; that is not tampering.
+    tampered = first[:-1] + ("x" if first[-1] != "x" else "y")
+    assert tampered != first
+    assert not backend_access.authorized_backend_request("Bearer " + tampered)
     cc.revoke_client(info["id"])
     assert not backend_access.authorized_backend_request(f"Bearer {first}")
     assert backend_access.authorized_backend_request(f"Bearer {second}")
