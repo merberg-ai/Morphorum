@@ -1389,6 +1389,12 @@
               <label class="field-label" for="lora-manager-search">Find a LoRA</label>
               <input id="lora-manager-search" type="search" placeholder="Search name or filename…">
             </div>
+            <div class="lora-bulk-toolbar">
+              <button type="button" class="secondary-button compact" id="lora-select-visible">Select visible</button>
+              <button type="button" class="secondary-button compact" id="lora-clear-selected">Clear selection</button>
+              <button type="button" class="primary-button compact busy-button" id="lora-sync-selected" disabled><span class="spinner"></span><span class="button-label">Sync Selected (0)</span></button>
+              <span class="muted" id="lora-bulk-status" role="status" aria-live="polite">0 selected</span>
+            </div>
             <div id="lora-manager-list" class="lora-manager-list" role="listbox" aria-label="LoRA library"><div class="model-empty">Loading library…</div></div>
             <p class="muted lora-manager-footnote">Uses the directories in Settings. Scanning refreshes the shared Models index.</p>
           </article>
