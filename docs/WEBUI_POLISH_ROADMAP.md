@@ -104,6 +104,8 @@ separate, explicit authorization.** Next development phase: P4.
 - [ ] **UX5:** Combined regression tests, updated public docs and user
   acceptance before any release PR merge.
 
+**UX5 audit started:** See [UX5_ACCEPTANCE_PLAN.md](UX5_ACCEPTANCE_PLAN.md) for the full release gate. At UX4.2 head the Syntax workflow failed 12/236 frontend assertions, Backend failed 1 test involving manual keyframe clipping, and Installer passed. A targeted backend safeguard correction preserves explicitly authored keyframe/recording axes, but CI must rerun. No release merge or blanket acceptance is authorized.
+
 **UX3 layout hotfix:** First owner Windows screenshot exposed a severe collapsed single-column card caused by nesting new section wrappers inside the pre-existing two-column Editor grid. Patched the Editor layout to use a full-width single-track outer grid and full-width cards, with CSS sizing regression assertions. Commit `467b980`; browser acceptance remains pending. No saved project data was changed.
 
 **UX3 Windows feedback:** Owner confirmed the full-width layout hotfix was much better. Treat that as a visual layout pass, not a complete save/generation/mobile regression signoff.
