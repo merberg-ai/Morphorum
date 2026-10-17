@@ -2180,6 +2180,66 @@ class GenerationManager:
             component_counts,
         )
 
+    @staticmethod
+    def _compare_sdxl_clip_checkpoint_values(
+        component: Any, adapter_name: str, checkpoint: dict[str, Any],
+        component_name: str,
+    ) -> dict[str, int]:
+        """Compare every expected PEFT A/B tensor to the actual injected parameter."""
+        import torch
+        from diffusers.utils.state_dict_utils import (
+            convert_state_dict_to_diffusers, convert_state_dict_to_peft,
+        )
+
+        prefix = component_name + "."
+        source = {
+            str(key)[len(prefix):]: value
+            for key, value in checkpoint.items()
+            if str(key).startswith(prefix)
+        }
+        expected = convert_state_dict_to_peft(
+            convert_state_dict_to_diffusers(source)
+        )
+        expected = {
+            key: value for key, value in expected.items()
+            if key.endswith((".lora_A.weight", ".lora_B.weight"))
+        }
+        if not expected:
+            raise GenerationError(
+                f"SDXL {component_name}: no comparable checkpoint LoRA A/B tensors."
+            )
+        actual = dict(component.named_parameters())
+        checked = 0
+        for key, value in expected.items():
+            for suffix in (".lora_A.weight", ".lora_B.weight"):
+                if key.endswith(suffix):
+                    param_name = key[:-len(suffix)] + suffix.replace(
+                        ".weight", f".{adapter_name}.weight"
+                    )
+                    break
+            else:
+                continue
+            loaded = actual.get(param_name)
+            if loaded is None:
+                raise GenerationError(
+                    f"SDXL {component_name}: checkpoint tensor {key} "
+                    "is missing from the injected adapter."
+                )
+            if tuple(loaded.shape) != tuple(value.shape):
+                raise GenerationError(
+                    f"SDXL {component_name}: shape mismatch for {key}."
+                )
+            if not torch.allclose(
+                loaded.detach().to(device="cpu", dtype=torch.float32),
+                value.detach().to(device="cpu", dtype=torch.float32),
+                rtol=1e-4, atol=1e-5,
+            ):
+                raise GenerationError(
+                    f"SDXL {component_name}: checkpoint value mismatch for {key}."
+                )
+            checked += 1
+        return {"checkpoint_values_verified": checked}
+
     @classmethod
     def _load_sdxl_full_text_encoder_adapter(
         cls,
@@ -2284,6 +2344,12 @@ class GenerationManager:
                     )
                 observed["checkpoint_tensors"] = expected_tensors
                 observed["coverage_verified"] = True
+                observed.update(
+                    cls._compare_sdxl_clip_checkpoint_values(
+                        getattr(pipe, component_name), adapter_name,
+                        state_dict, component_name,
+                    )
+                )
             diagnostics["components"][component_name] = observed
         return diagnostics
 
