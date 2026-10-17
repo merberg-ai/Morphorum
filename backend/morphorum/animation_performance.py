@@ -57,6 +57,8 @@ class AnimationPerformance:
     cumulative_diffusion_seconds: float = 0.0
     cumulative_prepare_seconds: float = 0.0
     cumulative_conditioning_seconds: float = 0.0
+    conditioning_cache_hits: int = 0
+    conditioning_cache_misses: int = 0
     maximum_frame_seconds: float = 0.0
     maximum_allocated_gib: float = 0.0
     maximum_reserved_gib: float = 0.0
@@ -91,6 +93,8 @@ class AnimationPerformance:
         self.cumulative_diffusion_seconds += diffusion
         self.cumulative_prepare_seconds += _finite_seconds(times.get("prepare"))
         self.cumulative_conditioning_seconds += _finite_seconds(times.get("conditioning"))
+        self.conditioning_cache_hits += max(0, int(record.get("conditioning_cache_hits") or 0))
+        self.conditioning_cache_misses += max(0, int(record.get("conditioning_cache_misses") or 0))
         self.maximum_frame_seconds = max(self.maximum_frame_seconds, total)
         self.latest_diffusion_seconds = diffusion
         self.last_device = str(record.get("pipeline_device") or "") or self.last_device
@@ -188,6 +192,8 @@ class AnimationPerformance:
             "total_diffusion_seconds": round(self.cumulative_diffusion_seconds, 3),
             "total_prepare_seconds": round(self.cumulative_prepare_seconds, 3),
             "total_conditioning_seconds": round(self.cumulative_conditioning_seconds, 3),
+            "conditioning_cache_hits": self.conditioning_cache_hits,
+            "conditioning_cache_misses": self.conditioning_cache_misses,
             "maximum_frame_seconds": round(self.maximum_frame_seconds, 3),
             "maximum_allocated_gib": round(self.maximum_allocated_gib, 3),
             "maximum_reserved_gib": round(self.maximum_reserved_gib, 3),
@@ -218,6 +224,8 @@ def performance_record(
     cuda_after: dict[str, Any] | None,
     model_status: dict[str, Any] | None,
     conditioning_cache_entries: int,
+    conditioning_cache_hits: int = 0,
+    conditioning_cache_misses: int = 0,
     phase_memory: dict[str, dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
     model_status = model_status if isinstance(model_status, dict) else {}
@@ -255,6 +263,8 @@ def performance_record(
             for item in model_status.get("active_loras") or []
         ],
         "conditioning_cache_entries": int(conditioning_cache_entries),
+        "conditioning_cache_hits": max(0, int(conditioning_cache_hits)),
+        "conditioning_cache_misses": max(0, int(conditioning_cache_misses)),
     }
 
 
