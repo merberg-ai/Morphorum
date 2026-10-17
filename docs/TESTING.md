@@ -15,6 +15,8 @@ The repository runs four complementary checks:
 
 See the current results under [Actions](https://github.com/merberg-ai/Morphorum/actions). Passing CI does not replace physical GPU, browser, and remote-network testing for affected features.
 
+**SDXL G5 release gate:** follow the [Windows GPU acceptance matrix](G5_RELEASE_ACCEPTANCE.md). It specifies sampler/schedule combinations, long CLIP conditioning, LoRA loading, animation caching, FLUX/Z-Image smoke checks, and explicit owner approval before merge. The [SDXL user guide](SDXL_GENERATION.md) explains expected diagnostic messages. Installer checks run on pull requests, even when a source-only push to `dev-webui` did not trigger them.
+
 ## Run tests locally
 
 A normal installed Morphorum has its own Python virtual environment. Install `pytest` in that environment if it is not already available.
