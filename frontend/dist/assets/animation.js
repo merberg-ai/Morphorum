@@ -659,6 +659,48 @@
       links.append(button);
     }
     summary.append(links);
+    // P5.2 action map: route to the original control, never duplicate its handler.
+    const workflow = document.createElement('section');
+    workflow.className = 'animation-p52-workflow';
+    workflow.setAttribute('aria-label', 'Preview apply save render and export workflow');
+    const title = document.createElement('h3');
+    title.textContent = 'From draft to finished video';
+    workflow.append(title);
+    const notice = document.createElement('p');
+    notice.className = 'animation-p52-notice';
+    notice.setAttribute('role', 'status');
+    notice.textContent = (draftCount
+      ? draftCount + ' unapplied motion layer(s). Rendering does not include these drafts until Apply to Animation. '
+      : 'No unapplied Motion Lab layers are currently listed. ') +
+      (state.dirty ? 'Project Editor has unsaved changes. Review and save before rendering.' :
+        'Project Editor reports no unsaved changes.');
+    workflow.append(notice);
+    const steps = document.createElement('div');
+    steps.className = 'animation-p52-steps';
+    const actions = [
+      ['1. Preview draft', 'Inspect camera motion temporarily. Does not update the project.', '[data-motion-nav="preview"]'],
+      ['2. Apply motion', 'Apply draft layers to the animation camera tracks. Review the resulting schedules before saving.', '[data-motion-nav="composer"]'],
+      ['3. Save project', 'Persist your current Editor changes. A preview alone is never saved.', '[data-project-nav="editor"]'],
+      ['4. Render animation', 'Generate frames using the project camera schedule, not unapplied drafts.', '[data-motion-nav="monitor"]'],
+      ['5. Export video', 'Encode completed render frames as video. Audio inclusion depends on that render’s soundtrack snapshot.', '[data-motion-nav="outputs"]']
+    ];
+    for (const [label, explanation, selector] of actions) {
+      const item = document.createElement('div');
+      const action = document.createElement('button');
+      const destination = qs(selector);
+      action.type = 'button';
+      action.className = 'secondary-button compact';
+      action.textContent = label;
+      action.disabled = !destination;
+      action.title = destination ? 'Open existing controls' : 'Workspace unavailable';
+      action.addEventListener('click', () => destination?.click());
+      const detail = document.createElement('p');
+      detail.textContent = explanation;
+      item.append(action, detail);
+      steps.append(item);
+    }
+    workflow.append(steps);
+    summary.append(workflow);
   }
 
   // P1: explain why the editor is locked without changing saved settings.
