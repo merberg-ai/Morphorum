@@ -116,6 +116,8 @@ separate, explicit authorization.** Next development phase: P4.
 
 **Motion Studio cue cleanup (2026-10-16):** Added checkbox multi-select to manually assigned camera/beat cues, Select All, Clear Selection, confirmed bulk deletion, Clear All and one-step Undo. Deletion modifies only unsaved cue state until Save Cues. Selection is reset on project audio reset. Frontend source assertions added; Windows verification and CI remain pending.\n\n**UX4.2 implementation checkpoint (2026-10-16):** Project Editor five-section navigation now supports Left/Right/Home/End keyboard keys with focused destination, exposes a compact mobile section picker at widths up to 600 CSS px, synchronizes selection and browser-persisted section state, and adds visible focus styling and source regression assertions. Uses existing editor section selection without implicit save or changes to project data. **CI and real mobile/Windows physical acceptance remain pending.**
 
+**UX5 CI remediation verified (2026-10-16):** Fixed stale primary-navigation tests and browser VM harnesses for Motion Studio soundtrack attachment and cue-selection restoration. At source commit `25eafd2`, GitHub Actions **Syntax checks PASS**, **Backend tests PASS**, **Installer checks PASS**. UX5 still needs physical Windows/mobile/GPU regression acceptance and final public-doc review before release. See `docs/UX5_ACCEPTANCE_PLAN.md`.
+
 ### UX3 implementation checkpoint (2026-10-16)
 
 - [x] Add five directly navigable Project Editor sections: **Setup**, **Sources & Media**, **Timeline & Prompts**, **Camera & Motion**, **Generation Settings**.
