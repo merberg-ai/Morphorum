@@ -111,6 +111,7 @@ from .loras import LoRAError
 from .lora_inspector import LoRAInspectionError, inspect_lora
 from .civitai import CivitaiLookupError, lookup_civitai
 from .civitai_search import CivitaiSearchError, search_models
+from .civitai_detail import model_details
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -447,6 +448,14 @@ def api_civitai_models(query: str = "", tag: str = "", username: str = "",
                              model_type=model_type, base_model=base_model,
                              sort=sort, period=period, cursor=cursor, limit=limit,
                              allow_mature=allow_mature)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.get("/api/civitai/models/{model_id}")
+def api_civitai_model_details(model_id: int) -> dict[str, Any]:
+    try:
+        return model_details(model_id)
     except CivitaiSearchError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
