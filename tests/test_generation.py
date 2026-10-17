@@ -2238,3 +2238,18 @@ def test_sdxl_long_prompt_hook_keeps_short_prompt_and_uses_embeds_for_overflow(m
     assert result["negative_pooled_prompt_embeds"] == "negative_pooled"
     assert len(observed) == 1
     assert long["prompt"] == "one two three four five six"
+
+
+def test_sdxl_checkpoint_value_verification_rejects_corrupt_clip_tensor() -> None:
+    component = FakeVerifiedSDXLComponent("encoder.layers.0.self_attn.q_proj")
+    component.inject("morphorum_test")
+    checkpoint = {
+        "text_encoder.encoder.layers.0.self_attn.q_proj.lora_A.weight":
+            torch.zeros(2, 2),
+        "text_encoder.encoder.layers.0.self_attn.q_proj.lora_B.weight":
+            torch.ones(2, 2),
+    }
+    with pytest.raises(GenerationError, match="checkpoint value mismatch"):
+        GenerationManager._compare_sdxl_clip_checkpoint_values(
+            component, "morphorum_test", checkpoint, "text_encoder",
+        )
