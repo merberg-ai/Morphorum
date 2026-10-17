@@ -10092,7 +10092,12 @@
       if (diagnostics) diagnostics.before(waveform);
       else analysis.appendChild(waveform);
     } else if (waveform.parentElement !== destination) {
-      destination.prepend(waveform);
+      // Keep the step title above the waveform, not below it.
+      if (destination.id === 'motion-studio-stage-detect') {
+        const heading = destination.querySelector('.motion-studio-stage-heading');
+        if (heading) heading.after(waveform);
+        else destination.prepend(waveform);
+      } else destination.prepend(waveform);
     }
   }
 
@@ -10272,14 +10277,14 @@
     analysisHint.id = 'motion-studio-analysis-hint';
     analysisHint.className = 'muted';
     analysisHint.setAttribute('role', 'status');
-    stages.analysis.appendChild(analysisHint);
+    stages.analysis.insertBefore(analysisHint, analysis);
     const analysisStatus = document.createElement('p');
     analysisStatus.id = 'motion-studio-analysis-status';
     analysisStatus.className = 'motion-studio-analysis-status';
     analysisStatus.setAttribute('role','status');
     analysisStatus.setAttribute('aria-live','polite');
     analysisStatus.textContent = 'Choose a WAV to analyze, or reuse an analyzed project soundtrack.';
-    stages.analysis.appendChild(analysisStatus);
+    stages.analysis.insertBefore(analysisStatus, analysis);
     // The Analyze button is useful next to the analysis display, not between
     // the file picker and unrelated motion controls.
     const actions = sourceDock?.querySelector('.animation-motion-recording-actions');
@@ -10296,7 +10301,7 @@
       beatsLink.disabled = true;
       beatsLink.addEventListener('click', () => motionStudioSelectStage('detect'));
       row.appendChild(beatsLink);
-      stages.analysis.insertBefore(row, analysis);
+      stages.analysis.insertBefore(row, analysisStatus);
     }
     const detection = [...(audioCard?.querySelectorAll('.animation-audio-config-group') || [])]
       .find(group => group.querySelector('summary')?.textContent === 'Beat detection');
