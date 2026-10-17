@@ -206,6 +206,28 @@ def cancel_download(job_id: str) -> dict[str, Any]:
             _save()
         return _snapshot(job)
 
+def remove_download(job_id: str) -> dict[str, Any]:
+    """Forget a finished/stopped queue entry without deleting installed weights.
+
+    Interrupted/failed partial files are discarded. Active worker entries cannot
+    be removed until cancellation completes, preventing worker/manifest races.
+    """
+    _initialize()
+    with _LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            raise KeyError("Download not found.")
+        if job_id in _RUNNING or job["status"] in ("queued", "downloading"):
+            raise ValueError("Cancel the active download and wait for it to stop before removing.")
+        if job["status"] not in ("completed", "failed", "cancelled", "interrupted"):
+            raise ValueError("Download is not removable in its current state.")
+        if job["status"] != "completed":
+            _part(job).unlink(missing_ok=True)
+        _JOBS.pop(job_id)
+        _save()
+        return {"removed": True, "id": job_id}
+
+
 def _run(job_id: str) -> None:
     with _LOCK:
         job = _JOBS[job_id]

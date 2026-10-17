@@ -112,7 +112,7 @@ from .lora_inspector import LoRAInspectionError, inspect_lora
 from .civitai import CivitaiLookupError, lookup_civitai
 from .civitai_search import CivitaiSearchError, search_models
 from .civitai_detail import model_details
-from .civitai_download import start_download, list_jobs, cancel_download, resume_download, retry_download
+from .civitai_download import start_download, list_jobs, cancel_download, resume_download, retry_download, remove_download
 from .civitai_auth import get_token, token_status, store_token, clear_token
 from .civitai_identify import identify_model
 from .civitai_updates import check_model_update
@@ -536,6 +536,18 @@ def api_civitai_cancel_download(job_id: str) -> dict[str, Any]:
         return cancel_download(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Download not found.") from exc
+
+
+@app.delete("/api/civitai/downloads/{job_id}")
+def api_civitai_remove_download(job_id: str) -> dict[str, Any]:
+    if not load_settings().get("civitai", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Civitai Hub disabled.")
+    try:
+        return remove_download(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Download not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/api/civitai/downloads/{job_id}/resume")

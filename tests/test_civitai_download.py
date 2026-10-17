@@ -61,3 +61,45 @@ def test_cancel_interrupted_removes_partial(monkeypatch, tmp_path):
     monkeypatch.setattr(dl, "_JOBS", {identifier: job})
     assert dl.cancel_download(identifier)["status"] == "cancelled"
     assert not partial.exists()
+
+@pytest.mark.parametrize("status", ["completed", "failed", "interrupted", "cancelled"])
+def test_remove_queue_entry_never_deletes_downloaded_model(monkeypatch, tmp_path, status):
+    from morphorum import civitai_download as dl
+    monkeypatch.setattr(dl, "_initialize", lambda: None)
+    writes = []
+    monkeypatch.setattr(dl, "_save", lambda: writes.append(True))
+    ident = "c" * 32
+    target = tmp_path / "model.safetensors"
+    target.write_bytes(b"keep downloaded weights")
+    job = {"id": ident, "name": target.name, "destination": str(target), "status": status}
+    part = dl._part(job)
+    part.write_bytes(b"discard partial")
+    monkeypatch.setattr(dl, "_JOBS", {ident: job})
+    monkeypatch.setattr(dl, "_RUNNING", set())
+    assert dl.remove_download(ident) == {"removed": True, "id": ident}
+    assert ident not in dl._JOBS
+    assert target.read_bytes() == b"keep downloaded weights"
+    assert part.exists() == (status == "completed")
+    assert writes
+
+@pytest.mark.parametrize("status", ["queued", "downloading"])
+def test_remove_rejects_active_jobs(monkeypatch, tmp_path, status):
+    from morphorum import civitai_download as dl
+    monkeypatch.setattr(dl, "_initialize", lambda: None)
+    ident = "d" * 32
+    job = {"id": ident, "destination": str(tmp_path / "model.safetensors"), "status": status}
+    monkeypatch.setattr(dl, "_JOBS", {ident: job})
+    monkeypatch.setattr(dl, "_RUNNING", set())
+    with pytest.raises(ValueError, match="Cancel"):
+        dl.remove_download(ident)
+    assert ident in dl._JOBS
+
+def test_remove_rejects_still_running_cancelled_job(monkeypatch, tmp_path):
+    from morphorum import civitai_download as dl
+    monkeypatch.setattr(dl, "_initialize", lambda: None)
+    ident = "e" * 32
+    job = {"id": ident, "destination": str(tmp_path / "model.safetensors"), "status": "cancelled"}
+    monkeypatch.setattr(dl, "_JOBS", {ident: job})
+    monkeypatch.setattr(dl, "_RUNNING", {ident})
+    with pytest.raises(ValueError, match="wait"):
+        dl.remove_download(ident)
