@@ -20,6 +20,7 @@
     if (!state.enabled) {
       state.serial++;
       state.loaded = false;
+      if (byId('civitai-search-button')) setBusy(false);
       const current = document.querySelector('#view-civitai.active');
       if (current) document.querySelector('.nav-button[data-view="models"]')?.click();
       byId('civitai-results')?.replaceChildren();
