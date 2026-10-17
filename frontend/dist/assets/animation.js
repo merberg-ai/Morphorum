@@ -596,12 +596,13 @@
       else intro.prepend(summary);
     }
     const project = state.project;
-    const field = (label, value) => {
+    const field = (label, value, tone = '') => {
       const el = document.createElement('div');
       const term = document.createElement('strong');
       const detail = document.createElement('span');
       term.textContent = label;
       detail.textContent = value;
+      if (tone) detail.classList.add(tone);
       el.append(term, detail);
       return el;
     };
@@ -630,16 +631,16 @@
     const grid = document.createElement('div');
     grid.className = 'animation-p5-summary-grid';
     grid.append(
-      field('Project', qs('#animation-name')?.value?.trim() || project.name || 'Untitled Animation'),
-      field('Editor', state.dirty ? 'Unsaved changes' : 'No unsaved Editor changes'),
-      field('Output', width > 0 && height > 0 ? width + ' × ' + height + ' px' : 'Not configured'),
-      field('Timeline', frameCount > 0 ? frameCount + ' frames' + (fps > 0 ? ' · ' + fps + ' FPS · ' + (frameCount / fps).toFixed(2) + ' s' : '') : 'Not configured'),
-      field('Camera', animationMode().toUpperCase()),
-      field('Checkpoint', model?.name || (modelId ? 'Saved model unavailable in index' : 'Not selected')),
-      field('Motion Lab draft', motionStatus),
-      field('Saved camera schedule', 'Separate from Motion Lab draft; inspect in Project Editor'),
-      field('Export soundtrack', soundtrackName && soundtrackName !== 'Not attached' ? soundtrackName : 'See Sources & Media (not verified here)'),
-      field('Analysis audio', 'Separate from attached export soundtrack; inspect in Motion Studio')
+      field('Project', qs('#animation-name')?.value?.trim() || project.name || 'Untitled Animation', 'summary-value-primary'),
+      field('Editor', state.dirty ? 'Unsaved changes' : 'No unsaved Editor changes', state.dirty ? 'summary-warn' : 'summary-good'),
+      field('Output', width > 0 && height > 0 ? width + ' × ' + height + ' px' : 'Not configured', 'summary-value-primary'),
+      field('Timeline', frameCount > 0 ? frameCount + ' frames' + (fps > 0 ? ' · ' + fps + ' FPS · ' + (frameCount / fps).toFixed(2) + ' s' : '') : 'Not configured', 'summary-info'),
+      field('Camera', animationMode().toUpperCase(), 'summary-info'),
+      field('Checkpoint', model?.name || (modelId ? 'Saved model unavailable in index' : 'Not selected'), model?.name ? 'summary-value-primary' : 'summary-warn'),
+      field('Motion Lab draft', motionStatus, unappliedCount ? 'summary-warn' : draftCount ? 'summary-good' : 'summary-info'),
+      field('Saved camera schedule', 'Separate from Motion Lab draft; inspect in Project Editor', 'summary-muted-info'),
+      field('Export soundtrack', soundtrackName && soundtrackName !== 'Not attached' ? soundtrackName : 'See Sources & Media (not verified here)', soundtrackName && soundtrackName !== 'Not attached' ? 'summary-info' : 'summary-muted-info'),
+      field('Analysis audio', 'Separate from attached export soundtrack; inspect in Motion Studio', 'summary-muted-info')
     );
     summary.append(grid);
     const help = document.createElement('p');
@@ -672,7 +673,7 @@
     title.textContent = 'From draft to finished video';
     workflow.append(title);
     const notice = document.createElement('p');
-    notice.className = 'animation-p52-notice';
+    notice.className = 'animation-p52-notice ' + (unappliedCount || state.dirty ? 'summary-warn-glow' : 'summary-info-glow');
     notice.setAttribute('role', 'status');
     notice.textContent = (unappliedCount
       ? unappliedCount + ' draft motion layer(s) differ from the applied camera schedule. Apply before rendering to include these changes. '

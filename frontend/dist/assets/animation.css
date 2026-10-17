@@ -4126,3 +4126,82 @@ dialog#animation-deforum-dialog {
 .animation-p52-steps > div { min-width: 0; padding: .75rem; border: 1px solid var(--border-color,rgba(180,190,210,.2)); border-radius: 8px; }
 .animation-p52-steps button { max-width: 100%; white-space: normal; text-align: left; }
 .animation-p52-steps p { margin: .5rem 0 0; font-size: .88rem; line-height: 1.45; overflow-wrap: anywhere; }
+
+
+/* P5 cyber-glass: overview only; honors theme and reduced-motion settings. */
+.animation-p5-project-summary {
+  position:relative;isolation:isolate;overflow:hidden;padding:1.1rem;
+  border:1px solid rgba(114,185,255,.28);border-radius:16px;
+  background:radial-gradient(circle at 4% 0%,rgba(66,189,255,.16),transparent 42%),
+    radial-gradient(circle at 100% 8%,rgba(167,102,255,.14),transparent 42%),
+    linear-gradient(155deg,rgba(25,39,66,.92),rgba(12,17,32,.94));
+  box-shadow:inset 0 1px rgba(255,255,255,.08),0 14px 34px rgba(0,0,0,.24),
+    0 0 25px rgba(82,163,255,.09);
+}
+.animation-p5-project-summary::before {
+  content:"";position:absolute;top:0;left:0;right:0;height:2px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,#63daff,#a878ff,transparent);
+  box-shadow:0 0 13px rgba(96,211,255,.5);
+}
+.animation-p5-project-summary > * {position:relative;z-index:1;}
+.animation-p5-summary-grid {
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));
+  gap:.85rem 1rem;
+}
+.animation-p5-summary-grid > div {
+  min-width:0;gap:.32rem;padding:.8rem .85rem;border-radius:12px;
+  background:linear-gradient(165deg,rgba(124,177,255,.075),rgba(255,255,255,.018));
+  border:1px solid rgba(139,185,255,.12);
+  box-shadow:inset 0 1px rgba(255,255,255,.04);
+  transition:border-color .18s ease,box-shadow .18s ease;
+}
+.animation-p5-summary-grid > div:hover {
+  border-color:rgba(120,202,255,.36);box-shadow:0 0 16px rgba(74,170,255,.10);
+}
+.animation-p5-summary-grid strong {
+  font-size:.73rem;font-weight:800;letter-spacing:.085em;line-height:1.3;
+  text-transform:uppercase;color:#9edaff;opacity:1;
+  text-shadow:0 0 10px rgba(81,192,255,.18);
+}
+.animation-p5-summary-grid span {
+  font-size:1rem;font-weight:700;line-height:1.42;overflow-wrap:anywhere;
+  color:#f3f7ff;
+}
+.animation-p5-summary-grid .summary-value-primary {color:#fff;font-weight:800;}
+.animation-p5-summary-grid .summary-good {color:#8cf0b5;text-shadow:0 0 10px rgba(93,244,165,.17);}
+.animation-p5-summary-grid .summary-info {color:#95d6ff;text-shadow:0 0 10px rgba(98,191,255,.16);}
+.animation-p5-summary-grid .summary-muted-info {color:#c2d4eb;font-weight:600;}
+.animation-p5-summary-grid .summary-warn {color:#ffda86;text-shadow:0 0 10px rgba(255,196,95,.18);}
+.animation-p5-summary-grid .summary-error {color:#ff9d9d;}
+.animation-p52-workflow {border-top-color:rgba(131,192,255,.22);}
+.animation-p52-workflow h3 {
+  font-size:1rem;letter-spacing:.05em;text-transform:uppercase;font-weight:800;color:#addfff;
+}
+.animation-p52-notice {
+  background:linear-gradient(110deg,rgba(63,144,244,.09),rgba(153,90,238,.06));
+  border-color:rgba(116,179,255,.2);border-radius:12px;color:#e2edff;
+}
+.animation-p52-notice.summary-info-glow {box-shadow:0 0 18px rgba(75,165,255,.1);}
+.animation-p52-notice.summary-warn-glow {border-color:rgba(255,201,101,.35);box-shadow:0 0 18px rgba(255,196,94,.11);}
+.animation-p52-steps > div {background:rgba(103,152,231,.05);border-color:rgba(127,180,255,.17);border-radius:12px;}
+.animation-p5-summary-links .secondary-button.compact,
+.animation-p52-steps .secondary-button.compact {
+  background:linear-gradient(180deg,rgba(105,181,255,.18),rgba(94,105,224,.07));
+  border-color:rgba(122,191,255,.34);
+  box-shadow:inset 0 1px rgba(255,255,255,.07);
+}
+.animation-p5-summary-links .secondary-button.compact:hover,
+.animation-p52-steps .secondary-button.compact:hover {
+  border-color:rgba(139,218,255,.6);box-shadow:0 0 15px rgba(86,187,255,.19);
+}
+.animation-p5-summary-links .secondary-button.compact:focus-visible,
+.animation-p52-steps .secondary-button.compact:focus-visible {
+  outline:2px solid #83dcff;outline-offset:3px;
+}
+@media (max-width:720px) {
+  .animation-p5-project-summary {padding:.85rem;}
+  .animation-p5-summary-grid {gap:.55rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,185px),1fr));}
+}
+@media (prefers-reduced-motion:reduce) {
+  .animation-p5-summary-grid > div {transition:none;}
+}
