@@ -558,10 +558,20 @@
       } catch (error) { toast('Metadata sync failed', error.message, 'error'); }
       finally { sync.disabled = false; sync.classList.remove('busy'); sync.textContent = 'Sync Civitai Info'; }
     });
-    fetch('/api/civitai/library/' + encodeURIComponent(model.id))
-      .then(async response => response.ok ? response.json() : null)
-      .then(showMetadata).catch(() => {});
-    row.append(nameWrap, family, kind, pathDetails, size, action, identify, update, sync);
+    const viewCache = document.createElement('button');
+    viewCache.type = 'button';
+    viewCache.className = 'secondary-button compact';
+    viewCache.textContent = 'View Cached Info';
+    viewCache.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/api/civitai/library/' + encodeURIComponent(model.id));
+        const data = await response.json();
+        if (!response.ok) throw Error(data.detail || 'Cache unavailable');
+        showMetadata(data);
+        if (!data.synced) toast('No cached metadata', 'Use Sync Civitai Info first.', 'info');
+      } catch (error) { toast('Cannot read Civitai cache', error.message, 'error'); }
+    });
+    row.append(nameWrap, family, kind, pathDetails, size, action, identify, update, sync, viewCache);
     return row;
   }
 
