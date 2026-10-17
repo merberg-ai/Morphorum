@@ -1703,7 +1703,7 @@ class AnimationRenderManager:
                     call_args = GenerationManager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
                     if call_args.get("prompt_embeds") is not None:
                         shape = tuple(call_args["prompt_embeds"].shape)
-                        mode = "CHUNKED / BLENDED" if shape[1] > 77 else "BLENDED / EMBEDDED"
+                        mode = "CHUNKED / BLENDED" if len(shape) > 1 and shape[1] > 77 else "BLENDED / EMBEDDED"
                     else:
                         shape = None
                         mode = "STANDARD"
@@ -2115,7 +2115,7 @@ class AnimationRenderManager:
                             if call_args.get("prompt_embeds") is not None else None
                         )
                         mode = (
-                            "CHUNKED / BLENDED" if shape and shape[1] > 77
+                            "CHUNKED / BLENDED" if shape and len(shape) > 1 and shape[1] > 77
                             else "BLENDED / EMBEDDED" if shape else "STANDARD"
                         )
                         emit_console("info", "animation",
