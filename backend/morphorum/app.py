@@ -110,6 +110,7 @@ from .deforum_import import (
 from .loras import LoRAError
 from .lora_inspector import LoRAInspectionError, inspect_lora
 from .civitai import CivitaiLookupError, lookup_civitai
+from .civitai_search import CivitaiSearchError, search_models
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -433,6 +434,21 @@ def get_settings() -> dict[str, Any]:
         "validation": validate_model_paths(settings),
         "model_families": model_family_definitions(),
     }
+
+
+@app.get("/api/civitai/models")
+def api_civitai_models(query: str = "", tag: str = "", username: str = "",
+                       model_type: str = "", base_model: str = "",
+                       sort: str = "Most Downloaded", period: str = "AllTime",
+                       cursor: str = "", limit: int = 20, allow_mature: bool = False) -> dict[str, Any]:
+    """Read-only, opt-in discovery API. Search credentials never leave the backend."""
+    try:
+        return search_models(query=query, tag=tag, username=username,
+                             model_type=model_type, base_model=base_model,
+                             sort=sort, period=period, cursor=cursor, limit=limit,
+                             allow_mature=allow_mature)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
 
 @app.post("/api/civitai/test-connection")
