@@ -351,6 +351,7 @@ def test_g52_static_long_sdxl_uses_shared_blend_cache_when_keys_match():
         conditioning_cache=cache, lora_signature=(("style", 0.5),),
     )
     initial = len(pipe.text_encoder.calls)
+    assert list(cache) == [("sdxl", "1 2 3 4 5 6", "2", True, (("style", 0.5),), 3)]
     blended = _prompt_conditioning_kwargs(
         pipe, "sdxl",
         _window("1 2 3 4 5 6", "1 2", 0.5),
