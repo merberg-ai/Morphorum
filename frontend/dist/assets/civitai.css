@@ -29,3 +29,5 @@
   .civitai-model-copy { padding: 10px; }
   .civitai-list .civitai-model-preview { width: 105px; flex-basis: 105px; }
 }
+
+#civitai-nav[hidden] { display: none !important; }
