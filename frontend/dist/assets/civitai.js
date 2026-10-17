@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const byId = id => document.getElementById(id);
-  const state = { enabled: false, layout: 'grid', serial: 0, busy: false, loaded: false, cursors: [''], page: 0, next: null };
+  const state = { enabled: false, layout: 'grid', serial: 0, busy: false, loaded: false, detailSerial: 0, cursors: [''], page: 0, next: null };
   const toast = (title, message, type) => window.MorphorumToast?.(title, message, type, 6500);
   const form = () => byId('civitai-search-form');
   const status = message => { byId('civitai-result-status').textContent = message; };
@@ -19,6 +19,8 @@
     byId('civitai-results')?.classList.toggle('civitai-list', state.layout === 'list');
     if (!state.enabled) {
       state.serial++;
+      state.detailSerial++;
+      byId('civitai-detail-dialog')?.close();
       state.loaded = false;
       if (byId('civitai-search-button')) setBusy(false);
       const current = document.querySelector('#view-civitai.active');
@@ -35,6 +37,74 @@
     button.querySelector('.button-label').textContent = busy ? 'Searching…' : 'Search models';
     byId('civitai-next').disabled = busy || !state.next;
     byId('civitai-previous').disabled = busy || state.page === 0;
+  }
+  async function showDetails(id) {
+    if (!state.enabled || !Number.isSafeInteger(id) || id <= 0) return;
+    const dialog = byId('civitai-detail-dialog');
+    const body = byId('civitai-detail-content');
+    if (!dialog || !body) return;
+    const request = ++state.detailSerial;
+    body.replaceChildren(elt('p', 'muted', 'Loading model details…'));
+    if (!dialog.open) dialog.showModal();
+    try {
+      const response = await fetch('/api/civitai/models/' + id, {headers: {Accept: 'application/json'}});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Model details unavailable');
+      if (request !== state.detailSerial || !state.enabled) return;
+      byId('civitai-detail-title').textContent = data.name || 'Model details';
+      body.replaceChildren();
+      body.append(elt('p', 'muted', 'By ' + (data.creator || 'Unknown creator') + ' · ' + (data.type || 'Model')));
+      if (data.description) body.append(elt('p', 'civitai-detail-description', data.description));
+      if (Array.isArray(data.tags) && data.tags.length) body.append(elt('p', 'muted', 'Tags: ' + data.tags.join(', ')));
+      const versions = Array.isArray(data.versions) ? data.versions : [];
+      if (!versions.length) { body.append(elt('p', 'muted', 'No versions available.')); return; }
+      const selectLabel = elt('label', 'civitai-detail-version-label', 'Model version');
+      const select = elt('select', 'civitai-detail-version');
+      versions.forEach((v, i) => {
+        const opt = elt('option', '', (v.name || 'Version') + ' · ' + (v.base_model || 'Unknown base'));
+        opt.value = String(i);
+        select.append(opt);
+      });
+      selectLabel.append(select);
+      const area = elt('section', 'civitai-detail-version-content');
+      function renderVersion() {
+        area.replaceChildren();
+        const v = versions[Number(select.value)] || versions[0];
+        area.append(elt('p', 'civitai-detail-compatibility', v.compatibility || 'Compatibility not verified'));
+        if (v.description) area.append(elt('p', 'civitai-detail-description', v.description));
+        if (v.trained_words?.length) area.append(elt('p', '', 'Trigger words: ' + v.trained_words.join(', ')));
+        const files = elt('div', 'civitai-detail-files');
+        for (const file of (v.files || [])) {
+          files.append(elt('p', 'muted', [file.name, file.format, Number.isFinite(Number(file.size_kb)) ? (Number(file.size_kb)/1024).toFixed(1) + ' MB' : ''].filter(Boolean).join(' · ')));
+        }
+        if (files.childNodes.length) {
+          area.append(elt('h3', '', 'Available files'), files);
+        }
+        const gallery = elt('div', 'civitai-detail-images');
+        for (const item of (v.images || [])) {
+          if (!/^https:\/\//.test(item.url || '')) continue;
+          const image = elt('img');
+          image.src = item.url;
+          image.alt = 'Civitai version example image';
+          image.loading = 'lazy';
+          image.referrerPolicy = 'no-referrer';
+          gallery.append(image);
+        }
+        if (gallery.childNodes.length) area.append(elt('h3', '', 'Example images'), gallery);
+      }
+      select.addEventListener('change', renderVersion);
+      body.append(selectLabel, area);
+      renderVersion();
+      const link = elt('a', 'secondary-button compact civitai-detail-external', 'Open on Civitai ↗');
+      link.href = 'https://civitai.com/models/' + id;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      body.append(link);
+    } catch (error) {
+      if (request !== state.detailSerial) return;
+      body.replaceChildren(elt('p', 'muted', error.message));
+      toast('Model details failed', error.message, 'error');
+    }
   }
   function card(item) {
     const root = elt('article', 'civitai-model-card');
@@ -58,6 +128,10 @@
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     body.append(link);
+    const details = elt('button', 'primary-button compact civitai-detail-open', 'Details & versions');
+    details.type = 'button';
+    details.addEventListener('click', () => void showDetails(item.id));
+    body.append(details);
     root.append(preview, body);
     return root;
   }
@@ -97,6 +171,7 @@
   }
   function activate() { if (state.enabled && !state.loaded && !state.busy) void search(0); }
   document.addEventListener('DOMContentLoaded', () => {
+    byId('civitai-detail-close')?.addEventListener('click', () => byId('civitai-detail-dialog')?.close());
     form()?.addEventListener('submit', event => {
       event.preventDefault();
       state.cursors = [''];
