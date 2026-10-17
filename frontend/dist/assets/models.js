@@ -446,6 +446,9 @@
     identify.className = 'secondary-button compact busy-button';
     identify.textContent = 'Identify on Civitai';
     identify.title = 'Explicit SHA-256 lookup; sends only the file hash to Civitai.';
+    const identityResult = document.createElement('div');
+    identityResult.className = 'model-civitai-identity';
+    nameWrap.append(identityResult);
     identify.addEventListener('click', async () => {
       identify.disabled = true;
       identify.classList.add('busy');
@@ -460,9 +463,12 @@
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
           link.textContent = 'Verified: ' + (result.name || 'Civitai model') + ' · ' + (result.version || 'version') + ' ↗';
-          nameWrap.append(link);
+          identityResult.replaceChildren(link);
           toast('Exact SHA-256 match', model.name + ' identified on Civitai.', 'success');
-        } else toast('No verified Civitai match', result.message || model.name, 'info');
+        } else {
+          identityResult.replaceChildren();
+          toast('No verified Civitai match', result.message || model.name, 'info');
+        }
       } catch (error) { toast('Civitai identification failed', error.message, 'error'); }
       finally {
         identify.disabled = false;
