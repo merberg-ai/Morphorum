@@ -75,3 +75,32 @@ def test_dual_clip_long_encoding_shapes_and_pooled_outputs():
         pipe, "1 2", do_classifier_free_guidance=False,
     )
     assert no_cfg[1] is None and no_cfg[3] is None
+
+
+def test_long_sdxl_encoder_can_pad_to_transition_endpoint_length():
+    import torch
+    from types import SimpleNamespace
+    from morphorum.sdxl_prompt_chunks import encode_sdxl_long_prompts
+
+    class Encoder:
+        def __init__(self, size):
+            self.size = size
+
+        def parameters(self):
+            yield torch.zeros(1)
+
+        def __call__(self, ids, output_hidden_states=False):
+            hidden = torch.ones(1, ids.shape[1], self.size)
+            return SimpleNamespace(
+                hidden_states=(hidden, hidden),
+                text_embeds=torch.ones(1, self.size),
+            )
+
+    pipe = SimpleNamespace(
+        tokenizer=Tokenizer(), tokenizer_2=Tokenizer(),
+        text_encoder=Encoder(3), text_encoder_2=Encoder(5),
+    )
+    a = encode_sdxl_long_prompts(pipe, "1 2", min_chunks=3)
+    b = encode_sdxl_long_prompts(pipe, "1 2 3 4 5 6 7 8 9 10 11")
+    assert a[0].shape == b[0].shape == (1, 21, 8)
+    assert a[1].shape == b[1].shape == (1, 21, 8)
