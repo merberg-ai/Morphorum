@@ -68,6 +68,23 @@
           });
           row.append(retry);
         }
+        if (['completed', 'failed', 'interrupted', 'cancelled'].includes(job.status)) {
+          const remove = elt('button', 'secondary-button compact', 'Remove');
+          remove.type = 'button';
+          remove.title = 'Remove this queue entry. Completed model files are kept; incomplete temporary data is discarded.';
+          remove.addEventListener('click', async () => {
+            remove.disabled = true;
+            try {
+              const response = await fetch('/api/civitai/downloads/' + encodeURIComponent(job.id), {method:'DELETE'});
+              const payload = await response.json();
+              if (!response.ok) throw Error(payload.detail || 'Could not remove queue entry.');
+              toast('Queue entry removed', job.name + ' removed from the queue. Installed model files remain untouched.', 'success');
+            } catch (error) {
+              toast('Remove failed', error.message, 'error');
+            } finally { void refreshDownloads(); }
+          });
+          row.append(remove);
+        }
         if (job.error) row.append(elt('p', 'muted', job.error));
         root.append(row);
       }
