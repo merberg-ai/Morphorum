@@ -45,7 +45,7 @@ def plan_clip_chunks(tokenizer: Any, text: str, *, max_chunks: int = 16) -> Clip
             f"SDXL prompt requires {len(slices)} CLIP chunks; maximum is {max_chunks}."
         )
     chunks = tuple(
-        tuple([bos, *part, eos, *([pad] * (capacity - len(part))))
+        tuple([bos, *part, eos, *([pad] * (capacity - len(part)))])
         for part in slices
     )
     return ClipChunkPlan(
