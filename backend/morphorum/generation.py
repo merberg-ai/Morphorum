@@ -3031,8 +3031,18 @@ class GenerationManager:
         """Describe actual prepared conditioning and CLIP chunk counts."""
         from .sdxl_prompt_chunks import plan_clip_chunks
         embeds = args.get("prompt_embeds")
+        tokenizers = (
+            getattr(pipe, "tokenizer", None),
+            getattr(pipe, "tokenizer_2", None),
+        )
+        limits = [
+            int(tokenizer.model_max_length)
+            for tokenizer in tokenizers
+            if tokenizer is not None
+        ]
+        clip_limit = max(limits) if limits else 77
         if embeds is not None:
-            mode = "chunked" if embeds.shape[1] > 77 else "embedded"
+            mode = "chunked" if embeds.shape[1] > clip_limit else "embedded"
         else:
             mode = "standard"
         result: dict[str, Any] = {"mode": mode}
