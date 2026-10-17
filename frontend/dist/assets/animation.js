@@ -2845,6 +2845,13 @@
           motionLabAudioAnalysis?.source_sha256 !== chosen)) {
         await restoreSavedMotionWav(chosen);
       }
+      // When entering Motion Studio with only an attached soundtrack,
+      // automatically create/restore its analyzed WAV. Keep existing manual
+      // WAV selections and edits intact.
+      if (!chosen && soundtrackAsset && animationTab === 'audio' &&
+          !motionLabSoundtrackBusy && animationMode() === '3d') {
+        await motionLabUseProjectSoundtrack();
+      }
     } catch (error) {
       if (token !== projectMediaGeneration || state.project?.id !== id) return;
       projectMedia.loading = false;
@@ -9860,6 +9867,13 @@
     if (eyebrow) eyebrow.textContent = pageHeading[0];
     if (title) title.textContent = pageHeading[1];
     if (description) description.textContent = pageHeading[2];
+    if (name === 'audio' && state.project?.id &&
+        projectMedia.projectId === state.project.id && !projectMedia.loading &&
+        projectMediaAssets('soundtrack').length &&
+        !projectMediaAssets('motion_lab_wav').length &&
+        !motionLabAudioAnalysis && !motionLabSoundtrackBusy) {
+      void motionLabUseProjectSoundtrack();
+    }
     if (name === 'wizard') void projectWizard?.open();
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
