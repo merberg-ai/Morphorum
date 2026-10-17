@@ -8,7 +8,7 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 | --- | --- |
 | Platforms | Windows 10/11, 64-bit Linux installers and browser UI |
 | Models | SDXL, FLUX and Z-Image, including managed Z-Image-Turbo; external checkpoint folders |
-| Image generation | Text-to-image, supported image-to-image, seed/batch controls and LoRAs |
+| Image generation | Text-to-image, supported image-to-image, seed/batch controls and LoRAs; SDXL-specific sampler/schedule selection, chunked CLIP prompt conditioning and adapter integrity reporting |
 | Animations | Saved projects, prompts/keyframes, 2D and depth-aware 3D motion, camera presets, curve editing, preview |
 | Motion Lab | Six-axis composer, keyboard/touch motion recording, supported gamepad controls; curve preview, ranged recording/refinement and saved-motion comparison |
 | Onboarding | Seven-step First-Run Setup Wizard with diagnostics, model/LoRA folders, optional Z-Image and 512 × 512 sample projects; separate seven-step New Project Wizard |
