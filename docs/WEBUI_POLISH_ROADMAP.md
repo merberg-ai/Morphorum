@@ -110,6 +110,8 @@ separate, explicit authorization.** Next development phase: P4.
 
 **UX4.1 implementation checkpoint:** Added a compact Project Editor identity/save-status strip, using the existing `state.dirty` and actual save/clear transitions rather than a separate inferred save flag. Responsive styling and source regression assertions were added. Further UX4 mobile/keyboard navigation polish and full physical/CI acceptance are still pending. No automatic saves or changes to project serialization.
 
+**Motion Lab generated-camera safety follow-up (2026-10-16):** Owner reported an automatically created `camera_3d.translation_x` schedule of +0.8 scene units/frame triggering render preflight on frame 6. The Motion Lab compiler already enforced configurable limits, but projects could raise those limits well above cautious render-safe values. Added an independent 0.08 scene-units/frame bound for *generated* X/Y/Z translation, respecting pre-existing hand-authored base camera schedules rather than silently rewriting them. Diagnostics report affected axes; regression tests cover raised limits and manual-base preservation. Already saved schedules are not automatically altered, and geometry/depth can still generate coverage warnings; use Camera Preview. CI and Windows physical acceptance pending. Commits `e0c7676`, `befff4e`.
+
 ### UX3 implementation checkpoint (2026-10-16)
 
 - [x] Add five directly navigable Project Editor sections: **Setup**, **Sources & Media**, **Timeline & Prompts**, **Camera & Motion**, **Generation Settings**.
