@@ -2004,6 +2004,16 @@
   function renderPromptRows() {
     const list = qs('#animation-prompt-list');
     if (!list) return;
+    const validIds = new Set(state.projects.map(p => p.id));
+    for (const id of projectManagerState.bulkIds) if (!validIds.has(id)) projectManagerState.bulkIds.delete(id);
+    const bulkCount = qs('#animation-project-manager-bulk-count');
+    if (bulkCount) bulkCount.textContent = projectManagerState.bulkIds.size + ' selected';
+    const bulkDelete = qs('#animation-project-manager-bulk-trash');
+    if (bulkDelete) bulkDelete.disabled = projectManagerState.busy || !projectManagerState.bulkIds.size;
+    const selectVisible = qs('#animation-project-manager-select-visible');
+    if (selectVisible) selectVisible.disabled = projectManagerState.busy || !filtered.length;
+    const clearBulk = qs('#animation-project-manager-clear-selection');
+    if (clearBulk) clearBulk.disabled = projectManagerState.busy || !projectManagerState.bulkIds.size;
     list.replaceChildren();
 
     if (!state.project) {
@@ -5096,7 +5106,7 @@
   }
 
 
-  const projectManagerState = { selectedId: '', busy: false };
+  const projectManagerState = { selectedId: '', bulkIds: new Set(), busy: false };
   function projectManagerDate(value) {
     const date = new Date(value || '');
     return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
@@ -5166,7 +5176,23 @@
         projectManagerState.selectedId = project.id;
         renderProjectManager();
       });
-      list.appendChild(button);
+      const row = document.createElement('div');
+      row.className = 'animation-project-manager-select-row';
+      const label = document.createElement('label');
+      label.className = 'animation-project-manager-select-label';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = projectManagerState.bulkIds.has(project.id);
+      checkbox.disabled = projectManagerState.busy;
+      checkbox.setAttribute('aria-label', 'Select ' + project.name + ' for bulk trash');
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) projectManagerState.bulkIds.add(project.id);
+        else projectManagerState.bulkIds.delete(project.id);
+        renderProjectManager();
+      });
+      label.appendChild(checkbox);
+      row.append(label, button);
+      list.appendChild(row);
     }
     details.replaceChildren();
     const selected = state.projects.find(p => p.id === projectManagerState.selectedId);
@@ -5317,6 +5343,71 @@
       renderProjectManager();
     }
   }
+  async function projectManagerBulkTrash() {
+    if (projectManagerState.busy || !projectManagerState.bulkIds.size) return;
+    const chosen = state.projects.filter(p => projectManagerState.bulkIds.has(p.id));
+    const active = chosen.find(p => p.id === state.project?.id);
+    const unsafe = Boolean(state.dirty || motionLabRecorder?.active || motionLabBusy ||
+      state.motionJobId || motionPreviewStarting || renderIsActive() || animationRenderStarting);
+    if (active && unsafe) {
+      toast('Cannot trash the active project',
+        'Save editor changes and finish active recording, preview or render jobs first.',
+        'warning', 7500);
+      return;
+    }
+    const preview = chosen.slice(0, 8).map(p => p.name).join(', ');
+    const confirmed = await window.MorphorumDialog.confirm({
+      title: 'Move ' + chosen.length + ' projects to Trash?',
+      message: 'Move these projects into the managed .trash folder: ' + preview +
+        (chosen.length > 8 ? ' and ' + (chosen.length - 8) + ' more' : '') +
+        '. Rendered animations and exported videos are NOT deleted.',
+      confirmText: 'Move ' + chosen.length + ' to Trash',
+      cancelText: 'Keep Projects',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    projectManagerState.busy = true;
+    renderProjectManager();
+    let succeeded = 0;
+    const failed = [];
+    let trashedActive = false;
+    try {
+      for (const item of chosen) {
+        try {
+          await api('/api/animation/projects/' + encodeURIComponent(item.id), {method: 'DELETE'});
+          projectManagerState.bulkIds.delete(item.id);
+          forgetAnimationProject(item.id);
+          succeeded++;
+          if (state.project?.id === item.id) trashedActive = true;
+        } catch (error) {
+          failed.push(item.name + ': ' + error.message);
+        }
+      }
+      if (trashedActive) {
+        clearMotionPreviewResult();
+        resetRenderUi();
+        state.project = null;
+        state.path = '';
+        state.timeline = null;
+        state.timelineSelection = null;
+        state.depthPreview = null;
+        resetHybridForProject();
+        fillForm();
+      }
+      if (succeeded) projectManagerState.selectedId = '';
+      await loadProjectList();
+      toast(failed.length ? 'Bulk trash partially completed' : 'Projects moved to Trash',
+        succeeded + ' moved to Trash; ' + failed.length + ' failed.' +
+        (failed.length ? ' ' + failed.slice(0, 3).join('; ') : '') +
+        ' Rendered videos and exports remain intact.',
+        failed.length ? 'warning' : 'success', 8500);
+    } catch (error) {
+      toast('Could not refresh Project Manager', error.message, 'error', 8000);
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
   function setupProjectManager(panel) {
     panel.innerHTML = [
       '<div class="motion-tool-page-heading">',
@@ -5333,6 +5424,12 @@
       '<div class="animation-project-manager-count-row"><strong>Projects</strong>',
       '<span id="animation-project-manager-count" class="muted"></span>',
       '<button type="button" id="animation-project-manager-refresh" class="secondary-button compact">Refresh</button></div>',
+      '<div class="animation-project-manager-bulk-actions">',
+      '<button type="button" class="secondary-button compact" id="animation-project-manager-select-visible">Select All Visible</button>',
+      '<button type="button" class="secondary-button compact" id="animation-project-manager-clear-selection">Clear Selection</button>',
+      '<span id="animation-project-manager-bulk-count" aria-live="polite">0 selected</span>',
+      '<button type="button" class="secondary-button compact animation-project-manager-danger" id="animation-project-manager-bulk-trash" disabled>Move Selected to Trash</button>',
+      '</div>',
       '<div class="animation-project-manager-list" id="animation-project-manager-list" aria-label="Animation projects"></div>',
       '</section><section class="card glass animation-project-manager-info" aria-label="Project details">',
       '<div class="card-header"><div><h2>Project Details</h2>',
@@ -5345,6 +5442,16 @@
       '</div><p class="muted animation-project-manager-help">Trash keeps the managed project folder for manual recovery.',
       ' Rendered frames and video exports live separately and are not removed.</p></section></div>',
     ].join('');
+    qs('#animation-project-manager-select-visible')?.addEventListener('click', () => {
+      const query = String(qs('#animation-project-manager-search')?.value || '').trim().toLowerCase();
+      for (const item of state.projects) if ([item.name,item.model_id,item.id,item.model_family].some(v =>
+        String(v || '').toLowerCase().includes(query))) projectManagerState.bulkIds.add(item.id);
+      renderProjectManager();
+    });
+    qs('#animation-project-manager-clear-selection')?.addEventListener('click', () => {
+      projectManagerState.bulkIds.clear(); renderProjectManager();
+    });
+    qs('#animation-project-manager-bulk-trash')?.addEventListener('click', () => void projectManagerBulkTrash());
     qs('#animation-project-manager-search')?.addEventListener('input', renderProjectManager);
     qs('#animation-project-manager-sort')?.addEventListener('change', renderProjectManager);
     qs('#animation-project-manager-refresh')?.addEventListener('click', async () => {
