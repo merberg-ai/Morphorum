@@ -8423,8 +8423,11 @@
         const fps = Number(state.project.animation.fps);
         const targetFrames = Math.ceil(Number(analysis.duration_seconds) * fps - 1e-9);
         if (!Number.isInteger(targetFrames) || targetFrames < 1 || targetFrames > 3000) {
-          throw new Error('Audio needs ' + targetFrames +
-            ' frames at ' + fps + ' FPS. Motion Lab supports at most 3000 frames; choose a shorter WAV or lower FPS manually.');
+          lengthNotice = 'Audio needs ' + targetFrames + ' frames at ' + fps +
+            ' FPS, exceeding Motion Lab\'s 3000-frame limit. Project length remains unchanged; ' +
+            'WAV analysis and beat editing remain available.';
+          matchLength.checked = false;
+          if (lengthStatus) lengthStatus.textContent = lengthNotice;
         }
         if (targetFrames !== Number(state.project.animation.max_frames)) {
           // The UI reports DRAFT layers. Saved Motion Lab authoring metadata
@@ -8454,9 +8457,10 @@
               variant: 'danger',
             });
             if (!discardStoredMotionLab) {
-              if (lengthStatus) lengthStatus.textContent =
-                'Duration unchanged. Saved Motion Lab layers preserved.';
-              return;
+              lengthNotice = 'Project duration unchanged. Saved Motion Lab layers preserved; ' +
+                'WAV analysis and beat editing remain available.';
+              matchLength.checked = false;
+              if (lengthStatus) lengthStatus.textContent = lengthNotice;
             }
           }
           const approved = !lengthNotice && await window.MorphorumDialog.confirm({
