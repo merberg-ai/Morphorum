@@ -2974,18 +2974,34 @@ class GenerationManager:
 
     @classmethod
     def _warn_sdxl_prompt_truncation(cls, pipe: Any, request: GenerationRequest) -> list[str]:
-        notices: list[str] = []
-        for info in cls._sdxl_prompt_token_diagnostics(pipe, request):
-            if info["truncated"]:
-                notices.append(
-                    f"SDXL {info['encoder']} {info['field']} prompt: "
-                    f"{info['tokens']} tokens exceeds {info['limit']}. "
-                    "Chunked conditioning will be selected when available."
-                )
-
-        for notice in notices:
-            emit_console("warning", "generation", notice)
-        return notices
+        """Warn only if overflowing text cannot use the SDXL chunking path."""
+        overflow = [
+            item for item in cls._sdxl_prompt_token_diagnostics(pipe, request)
+            if item["truncated"]
+        ]
+        if not overflow:
+            return []
+        details = "; ".join(
+            f"{item['encoder']} {item['field']} {item['tokens']}/{item['limit']}"
+            for item in overflow
+        )
+        chunking_available = all(
+            getattr(pipe, attr, None) is not None
+            for attr in ("tokenizer", "tokenizer_2", "text_encoder", "text_encoder_2")
+        )
+        if chunking_available:
+            emit_console(
+                "info", "generation",
+                f"SDXL long prompt detected ({details}). Chunked conditioning "
+                "is available; the actual mode will be logged when encoded.",
+            )
+            return []
+        notice = (
+            f"SDXL prompt exceeds CLIP capacity ({details}) but a required "
+            "SDXL text encoder/tokenizer is unavailable. Prompt text may be truncated."
+        )
+        emit_console("warning", "generation", notice)
+        return [notice]
 
     @staticmethod
     def apply_sdxl_long_prompt_conditioning(
@@ -3042,26 +3058,33 @@ class GenerationManager:
         ]
         clip_limit = max(limits) if limits else 77
         if embeds is not None:
-            mode = "chunked" if embeds.shape[1] > clip_limit else "embedded"
+            mode = "chunked" if len(embeds.shape) > 1 and embeds.shape[1] > clip_limit else "embedded"
         else:
             mode = "standard"
-        result: dict[str, Any] = {"mode": mode}
+        guidance_active = float(args.get("guidance_scale", 7.5)) > 1.0
+        result: dict[str, Any] = {"mode": mode, "guidance_active": guidance_active}
         if embeds is not None:
             result["shape"] = list(embeds.shape)
             result["negative_aligned"] = (
                 args.get("negative_prompt_embeds") is not None
+                and len(args["negative_prompt_embeds"].shape) > 1
                 and args["negative_prompt_embeds"].shape[1] == embeds.shape[1]
-            )
+            ) if guidance_active else None
+        prompt = str(args.get("prompt") or "")
+        negative = str(args.get("negative_prompt") or "")
         for label, tokenizer in (
-            ("clip_l", getattr(pipe, "tokenizer", None)),
-            ("clip_g", getattr(pipe, "tokenizer_2", None)),
+            ("clip_l", tokenizers[0]), ("clip_g", tokenizers[1]),
         ):
             if tokenizer is None:
                 continue
-            prompt = str(args.get("prompt") or "")
-            if prompt:
-                plan = plan_clip_chunks(tokenizer, prompt)
-                result[label] = {"tokens": plan.token_count, "chunks": len(plan.chunks)}
+            for field_name, text in (("", prompt), ("_negative", negative)):
+                if text:
+                    plan = plan_clip_chunks(tokenizer, text)
+                    result[label + field_name] = {
+                        "tokens": plan.token_count,
+                        "chunks": len(plan.chunks),
+                        "limit": plan.max_length,
+                    }
         return result
 
     def _build_call_args(
@@ -3128,6 +3151,7 @@ class GenerationManager:
         output_dir.mkdir(parents=True, exist_ok=True)
         total_images = len(job.seeds)
 
+        previous_sdxl_diagnostic: dict[str, Any] | None = None
         for image_index, seed in enumerate(job.seeds):
             if job.cancel_requested:
                 self._finish_cancelled(job)
@@ -3175,13 +3199,37 @@ class GenerationManager:
             call_args = self._build_call_args(job, generator, on_step_end)
             if job.model["family"] == "sdxl":
                 raw_prompt = call_args.get("prompt")
+                raw_negative = call_args.get("negative_prompt")
                 call_args = self.apply_sdxl_long_prompt_conditioning(pipe, call_args)
-                diagnostic_args = dict(call_args)
-                if raw_prompt:
-                    diagnostic_args["prompt"] = raw_prompt
+                diagnostic_args = {
+                    **call_args,
+                    "prompt": raw_prompt,
+                    "negative_prompt": raw_negative,
+                }
                 diagnostic = self.sdxl_conditioning_diagnostic(pipe, diagnostic_args)
                 job.conditioning_diagnostic = diagnostic
-                emit_console("info", "generation", f"SDXL conditioning: {diagnostic}")
+                if diagnostic != previous_sdxl_diagnostic:
+                    positive = ", ".join(
+                        f"{label} {diagnostic[key]['tokens']} tokens / "
+                        f"{diagnostic[key]['chunks']} chunks"
+                        for label, key in (("CLIP-L", "clip_l"), ("CLIP-G", "clip_g"))
+                        if key in diagnostic
+                    )
+                    negative = ", ".join(
+                        f"{label} {diagnostic[key]['tokens']} tokens / "
+                        f"{diagnostic[key]['chunks']} chunks"
+                        for label, key in (("CLIP-L", "clip_l_negative"), ("CLIP-G", "clip_g_negative"))
+                        if key in diagnostic
+                    )
+                    shape = diagnostic.get("shape")
+                    summary = (
+                        f"SDXL conditioning: {diagnostic['mode'].upper()}"
+                        + (f" · positive: {positive}" if positive else "")
+                        + (f" · negative: {negative}" if negative else "")
+                        + (f" · embeddings {shape}" if shape else "")
+                    )
+                    emit_console("info", "generation", summary)
+                    previous_sdxl_diagnostic = diagnostic
 
             with torch.inference_mode():
                 result = pipe(**call_args)
