@@ -61,6 +61,16 @@ The translucent **No generation models available** notice provides setup help if
 
 For step-by-step screenshots-free guidance, see [Your first image and animation](docs/GETTING_STARTED.md).
 
+## Current Motion Lab and project workflow
+
+The main navigation offers **Project Manager**, **New Project**, and **Project Editor** directly. Project Editor groups controls into **Setup**, **Sources & Media**, **Timeline & Prompts**, **Camera & Motion**, and **Generation Settings**. The Project Manager supports choosing multiple visible projects and moving them to Trash with confirmation; the operation is not permanent deletion.
+
+**Motion Lab → Overview** presents a live read-only project summary and a guided **Preview Draft → Apply Motion → Save Project → Render Animation → Export Video** workflow. Previewing does not save or apply camera movement. Applying Motion Lab layers updates the project's camera schedules, and the workflow's Save Project action calls the existing save operation. A render uses the applied project schedule, not an unapplied draft. Check Camera Preview and any preflight warnings before expensive 3D renders.
+
+**Motion Lab → Motion Studio** guides you through **Load Audio → Analyze WAV → Detect Beats → Assign Motion to Beats → Create Motion → Preview & Apply**. Beat-cue selections support bulk cleanup and undo before saving cues. The active project soundtrack may be reused for analysis and attached to future renders, but old render soundtracks are not rewritten; a past silent render must be regenerated to include subsequently attached audio. See [Motion Studio](docs/MOTION_STUDIO.md) for details.
+
+**Release/testing note:** Windows owner testing has confirmed successful animation generation and an MP4 with audio. Dedicated physical mobile acceptance is deferred, and the remaining P5 soundtrack-provenance, operation-feedback, unit consistency and closeout phases are not yet complete. This remains alpha software.
+
 ## What can Morphorum do?
 
 | Feature | What it provides |
@@ -69,8 +79,8 @@ For step-by-step screenshots-free guidance, see [Your first image and animation]
 | Models & LoRAs | Managed Z-Image-Turbo installation, external SDXL/FLUX folders, model-aware LoRA discovery |
 | First-Run Setup Wizard | Seven guided installation checks, optional Z-Image download, and two short 3D starter projects |
 | New Project Wizard | Seven guided pages from naming and model selection to motion, prompts and saving |
-| Motion Lab | Keyframes, 2D/3D camera movement, six-axis camera composer, live motion recording, curves and previews |
-| Motion Studio | Analyze project audio; edit beats, independent frequency channels and synchronized camera cues; stage, preview and apply movements |
+| Motion Lab | Camera authoring, read-only project overview, guided preview/apply/save/render/export flow, six-axis composer, live recording, curves and previews |
+| Motion Studio | Guided six-stage WAV workflow, beat detection, batch beat-cue assignments and cleanup, frequency channels, continuous presets, preview and apply |
 | Animation & Outputs | Frame rendering, progress monitoring, completed-frame previews, MP4/WebM export with FFmpeg |
 | FFmpeg Manager | Auto-detect host FFmpeg/FFprobe, choose a custom executable, or opt in to a verified local managed download, update and removal |
 | Import Motion Settings | Compatible Deforum Motion Studio camera schedules, optional soundtrack attachment |
