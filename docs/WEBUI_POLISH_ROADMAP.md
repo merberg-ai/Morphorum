@@ -106,6 +106,10 @@ separate, explicit authorization.** Next development phase: P4.
 
 **UX3 layout hotfix:** First owner Windows screenshot exposed a severe collapsed single-column card caused by nesting new section wrappers inside the pre-existing two-column Editor grid. Patched the Editor layout to use a full-width single-track outer grid and full-width cards, with CSS sizing regression assertions. Commit `467b980`; browser acceptance remains pending. No saved project data was changed.
 
+**UX3 Windows feedback:** Owner confirmed the full-width layout hotfix was much better. Treat that as a visual layout pass, not a complete save/generation/mobile regression signoff.
+
+**UX4.1 implementation checkpoint:** Added a compact Project Editor identity/save-status strip, using the existing `state.dirty` and actual save/clear transitions rather than a separate inferred save flag. Responsive styling and source regression assertions were added. Further UX4 mobile/keyboard navigation polish and full physical/CI acceptance are still pending. No automatic saves or changes to project serialization.
+
 ### UX3 implementation checkpoint (2026-10-16)
 
 - [x] Add five directly navigable Project Editor sections: **Setup**, **Sources & Media**, **Timeline & Prompts**, **Camera & Motion**, **Generation Settings**.
