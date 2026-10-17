@@ -169,6 +169,10 @@
 
   function switchView(name) {
     qsa('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === name));
+    if (name !== 'animation') qsa('.main-nav [data-project-nav]').forEach(button => {
+      button.classList.remove('active');
+      button.removeAttribute('aria-current');
+    });
     qs('.main-nav')?.classList.toggle('motion-section-active', name === 'animation');
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
     refreshNavMore(name);
@@ -1674,7 +1678,10 @@
 
   function bindUi() {
     bindModelSetupHelp();
-    qsa('.nav-button').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
+    qsa('.nav-button[data-view]').forEach(button => button.addEventListener('click', () => {
+      switchView(button.dataset.view);
+      if (button.dataset.view === 'animation') qs('#animation-tab-motion')?.click();
+    }));
     qsa('.main-nav [data-project-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
       qs('#animation-tab-' + button.dataset.projectNav)?.click();
