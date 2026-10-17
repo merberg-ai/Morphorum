@@ -318,6 +318,7 @@ class GenerationJob:
     seeds: list[int] = field(default_factory=list)
     results: list[dict[str, Any]] = field(default_factory=list)
     prompt_warnings: list[str] = field(default_factory=list)
+    conditioning_diagnostic: dict[str, Any] | None = None
     error: str | None = None
     cancel_requested: bool = False
     _started_monotonic: float | None = field(default=None, repr=False)
@@ -2816,9 +2817,8 @@ class GenerationManager:
                 notices.append(
                     f"SDXL {info['encoder']} {info['field']} prompt: "
                     f"{info['tokens']} tokens exceeds {info['limit']}. "
-                    "Standard CLIP encoding truncates excess tokens; "
-                    "move important details to the beginning. Long-prompt "
-                    "conditioning is not enabled yet."
+                     "
+                    "Chunked conditioning will be selected when available."
                 )
 
         for notice in notices:
@@ -2862,6 +2862,34 @@ class GenerationManager:
         if do_cfg:
             result["negative_prompt_embeds"] = neg
             result["negative_pooled_prompt_embeds"] = neg_pooled
+        return result
+
+    @staticmethod
+    def sdxl_conditioning_diagnostic(pipe: Any, args: dict[str, Any]) -> dict[str, Any]:
+        """Describe actual prepared conditioning and CLIP chunk counts."""
+        from .sdxl_prompt_chunks import plan_clip_chunks
+        embeds = args.get("prompt_embeds")
+        if embeds is not None:
+            mode = "chunked" if embeds.shape[1] > 77 else "embedded"
+        else:
+            mode = "standard"
+        result: dict[str, Any] = {"mode": mode}
+        if embeds is not None:
+            result["shape"] = list(embeds.shape)
+            result["negative_aligned"] = (
+                args.get("negative_prompt_embeds") is not None
+                and args["negative_prompt_embeds"].shape[1] == embeds.shape[1]
+            )
+        for label, tokenizer in (
+            ("clip_l", getattr(pipe, "tokenizer", None)),
+            ("clip_g", getattr(pipe, "tokenizer_2", None)),
+        ):
+            if tokenizer is None:
+                continue
+            prompt = str(args.get("prompt") or "")
+            if prompt:
+                plan = plan_clip_chunks(tokenizer, prompt)
+                result[label] = {"tokens": plan.token_count, "chunks": len(plan.chunks)}
         return result
 
     def _build_call_args(
@@ -2973,7 +3001,14 @@ class GenerationManager:
 
             call_args = self._build_call_args(job, generator, on_step_end)
             if job.model["family"] == "sdxl":
+                raw_prompt = call_args.get("prompt")
                 call_args = self.apply_sdxl_long_prompt_conditioning(pipe, call_args)
+                diagnostic_args = dict(call_args)
+                if raw_prompt:
+                    diagnostic_args["prompt"] = raw_prompt
+                diagnostic = self.sdxl_conditioning_diagnostic(pipe, diagnostic_args)
+                job.conditioning_diagnostic = diagnostic
+                emit_console("info", "generation", f"SDXL conditioning: {diagnostic}")
 
             with torch.inference_mode():
                 result = pipe(**call_args)
