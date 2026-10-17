@@ -141,6 +141,14 @@ Try these in order:
 
 Avoid assuming that a 1024 × 1024 still-image generation speed will match a multi-hundred-frame animation: animation can also involve depth estimation, warping, frame blending, and repeated img2img inference.
 
+## SDXL long prompts, chunking and LoRA initialization reports
+
+For SDXL, a long-looking prompt is not automatically truncated. Check the **actual conditioning status** during image/animation rendering. `CHUNKED` confirms the encoder produced multiple CLIP chunks; `STANDARD` means the native short-prompt path was used. The editor character-length notice is only a heuristic. A genuinely unavailable SDXL text encoder/tokenizer or an exceeded safety limit should be investigated rather than ignored.
+
+A Transformers `MISSING` adapter report or a PEFT warning that an active adapter was deleted can occur during initial LoRA injection or a compatibility retry. Check the **subsequent Morphorum LoRA verification** in the render view and Console. `CLIP weights matched checkpoint` confirms the compatibility loader's tensor-value comparison; `Active; source weight comparison unavailable` does **not** mean a source-value check occurred. `UNet-only fallback` means CLIP LoRA weights were not applied. Explicit checkpoint mismatch, incomplete payload, or failed activation messages require action; reduce LoRA complexity and inspect checkpoint compatibility.
+
+For more, see the [SDXL generation guide](SDXL_GENERATION.md) and [release acceptance checklist](G5_RELEASE_ACCEPTANCE.md).
+
 ## A Motion Lab preview or render button is disabled
 
 Morphorum prevents incompatible actions from running simultaneously. A busy button may be intentionally disabled while recording, updating curves, previewing camera motion, applying layers, or rendering animation.
