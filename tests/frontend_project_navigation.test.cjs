@@ -138,3 +138,16 @@ test('UX4.1 Editor save state updates only from actual dirty/clear transitions',
   assert.match(dirty,/syncProjectWorkspaceStatus\(\)/);
   assert.match(animation,/panel\.insertBefore\(context,layout\)/);
 });
+
+test('Motion Studio bulk cue removal is confirmed, reversible and draft-only',()=>{
+ const start=animation.indexOf('  function motionDirectorPanel()');
+ const end=animation.indexOf('  function motionLabStereoWaveform()',start);
+ const director=animation.slice(start,end);
+ for(const control of ['data-cue-select-all','data-cue-clear-selection','data-cue-delete-all','data-cue-delete-undo','data-cue-select-id'])
+   assert.ok(director.includes(control),control);
+ assert.match(director,/motionDirectorDeleteUndo = motionDirectorCues\.map/);
+ assert.match(director,/window\.MorphorumDialog\.confirm\(/);
+ assert.match(director,/motionDirectorDirty=true/);
+ assert.match(director,/motionDirectorCues = motionDirectorCues\.filter/);
+ assert.match(director,/check\.type='checkbox'/);
+});
