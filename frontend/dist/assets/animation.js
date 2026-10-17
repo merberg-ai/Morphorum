@@ -8160,16 +8160,30 @@
     const plot = qs('#animation-motion-lab-audio-plot');
     const analysis = motionLabAudioAnalysis;
     if (!preview || !plot) return;
-    if (!analysis || motionLabAudioProjectId !== state.project?.id ||
-        Number(analysis.fps) !== Number(state.project?.animation?.fps) ||
-        analysis.values.length !== Number(state.project?.animation?.max_frames)) {
+    const diagnostics = qs('#motion-studio-envelope-message');
+    const aligned = Boolean(analysis && motionLabAudioProjectId === state.project?.id &&
+      Number(analysis.fps) === Number(state.project?.animation?.fps) &&
+      Array.isArray(analysis.values) &&
+      analysis.values.length === Number(state.project?.animation?.max_frames));
+    if (!aligned) {
       preview.hidden = true;
       plot.replaceChildren();
+      if (diagnostics) diagnostics.textContent = analysis
+        ? 'Audio frame alignment changed. Re-analyze the WAV to refresh the envelope.'
+        : 'No envelope available yet. Select a WAV and choose Analyze WAV first.';
+      return;
+    }
+    const values = motionLabAudioSignal();
+    if (!values.length) {
+      preview.hidden = true;
+      plot.replaceChildren();
+      if (diagnostics) diagnostics.textContent =
+        'This frequency band has no usable signal. Choose Full mix or another band.';
       return;
     }
     preview.hidden = false;
-    const values = motionLabAudioSignal();
-    if (!values.length) { preview.hidden = true; return; }
+    if (diagnostics) diagnostics.textContent =
+      'Analyzed envelope ready · ' + values.length + ' frames. Adjust detection settings to update this graph.';
     const threshold = Number(qs('#animation-motion-lab-audio-threshold')?.value);
     const gate = Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : .1;
     const attack = Number(qs('#animation-motion-lab-audio-attack')?.value);
@@ -8291,12 +8305,27 @@
     const file = qs('#animation-motion-lab-audio-file')?.files?.[0];
     const projectId = state.project?.id;
     const status = qs('#animation-motion-lab-audio-info');
-    if (!projectId || animationMode() !== '3d' || !file) {
-      motionLabNotify('Choose a 3D project and PCM WAV audio file.');
+    const stageStatus = qs('#motion-studio-analysis-status');
+    const report = message => {
+      if (status) status.textContent = message;
+      if (stageStatus) stageStatus.textContent = message;
+    };
+    if (!projectId || animationMode() !== '3d') {
+      const message = 'Open a 3D project in Project Editor before analyzing audio.';
+      report(message);
+      motionLabNotify(message);
+      return;
+    }
+    if (!file) {
+      if (motionLabAudioProjectId === projectId && motionLabAudioAnalysis) {
+        report('Project WAV is already analyzed. Choose View Detected Beats to inspect its markers.');
+      } else {
+        report('No local WAV selected. Choose a PCM WAV in Step 1 or use the saved project soundtrack.');
+      }
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
-      motionLabNotify('WAV exceeds 20 MiB.');
+      report('WAV exceeds the 20 MiB analysis limit. Select a smaller PCM WAV.');
       return;
     }
     // A manual selection wins over any in-flight automatic project restore.
@@ -8313,7 +8342,8 @@
     motionLabAudioProjectId = null;
     motionLabReleaseAudio();
     motionLabAudioPreview();
-    if (status) status.textContent = 'Analyzing WAV on host…';
+    report('Analyzing ' + file.name + ' on the Morphorum host…');
+    if (stageStatus) stageStatus.dataset.busy = 'true';
     motionLabAudioUi();
     try {
       const response = await fetch('/api/animation/projects/' + encodeURIComponent(projectId) +
@@ -8442,18 +8472,23 @@
       motionLabStereoWaveform();
       motionDirectorPanel();
       motionLabAudioPreview();
-      if (status) status.textContent = 'Analyzed ' + file.name + ': ' +
-        analysis.values.length + ' frames · ' + analysis.duration_seconds.toFixed(2) +
-        ' seconds · frame-aligned full-band RMS.';
+      report('Analyzed ' + file.name + ': ' + analysis.values.length +
+        ' frames · ' + analysis.duration_seconds.toFixed(2) + ' seconds · ' +
+        (analysis.events?.events?.length || 0) +
+        ' beat candidate(s). Choose View Detected Beats to inspect or edit them.');
       const badge = qs('#animation-motion-lab-audio-status');
       if (badge) badge.textContent = 'WAV ready';
       void restoreProjectMedia();
     } catch (error) {
-      if (status) status.textContent = 'Audio import failed: ' + (error?.message || error);
-      motionLabNotify('Audio import failed: ' + (error?.message || error));
+      const message = 'Audio import failed: ' + (error?.message || error);
+      report(message);
+      motionLabNotify(message);
+    } finally {
+      if (stageStatus) delete stageStatus.dataset.busy;
+      motionLabAudioUi();
+      motionLabAudioPreview();
+      motionStudioRefreshStageStatus();
     }
-    motionLabAudioUi();
-    motionLabAudioPreview();
   }
   function motionLabAddAudio() {
     const analysis = motionLabAudioAnalysis;
@@ -10074,6 +10109,25 @@
       const badge = panel.querySelector('[data-motion-studio-stage-status="' + key + '"]');
       if (badge) badge.textContent = badges[index];
     });
+    const analysisHint = qs('#motion-studio-analysis-hint');
+    if (analysisHint) analysisHint.textContent = !state.project?.id
+      ? 'Open an animation project before analyzing audio.'
+      : animationMode() !== '3d'
+        ? 'This project is in 2D mode. Choose 3D in Project Editor before analyzing audio for camera motion.'
+        : selectedFile
+          ? 'Selected: ' + selectedFile.name + ' · ' +
+            (selectedFile.size / 1048576).toFixed(2) + ' MiB. Choose Analyze WAV below.'
+          : analysis
+            ? 'The project WAV is already analyzed. Review the waveform or go to Detect Beats.'
+            : 'Choose a WAV in Step 1 or use the saved project soundtrack, then analyze it here.';
+    const showBeats = qs('#motion-studio-show-detected');
+    if (showBeats) showBeats.disabled = !analysis;
+    const detectionStatus = qs('#motion-studio-detection-info');
+    if (detectionStatus) detectionStatus.textContent = analysis
+      ? count + ' detected or edited beat marker(s). Select a marker to edit it, then Save marker edits.'
+      : 'No beat markers yet. Analyze a WAV in Step 2 to detect candidate beats automatically.';
+    const placeholder = qs('.animation-audio-preview-placeholder');
+    if (placeholder) placeholder.hidden = Boolean(analysis);
     const summary = qs('#motion-studio-review-summary');
     if (summary) summary.textContent = !state.project?.id
       ? 'Open a 3D project in Project Editor first.'
