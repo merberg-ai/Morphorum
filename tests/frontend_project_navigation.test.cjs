@@ -128,3 +128,13 @@ test('UX3 layout regression: Editor section wrappers and cards remain full width
   assert.match(css,/#animation-panel-editor \.animation-editor-group-cards\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
   assert.match(css,/#animation-panel-editor \.animation-editor-group-cards > article\.card\s*\{[^}]*width:\s*100%/);
 });
+
+test('UX4.1 Editor save state updates only from actual dirty/clear transitions',()=>{
+  assert.match(animation,/function syncProjectWorkspaceStatus\(\)/);
+  assert.match(animation,/node\.dataset\.saveState = !state\.project/);
+  assert.match(animation,/currentProject\.id = 'animation-editor-current-project'/);
+  assert.match(animation,/saveState\.id = 'animation-editor-save-state'/);
+  const dirty=animation.slice(animation.indexOf('  function markDirty('),animation.indexOf('  function modelById('));
+  assert.match(dirty,/syncProjectWorkspaceStatus\(\)/);
+  assert.match(animation,/panel\.insertBefore\(context,layout\)/);
+});
