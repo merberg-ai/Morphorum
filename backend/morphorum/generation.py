@@ -319,6 +319,7 @@ class GenerationJob:
     results: list[dict[str, Any]] = field(default_factory=list)
     prompt_warnings: list[str] = field(default_factory=list)
     conditioning_diagnostic: dict[str, Any] | None = None
+    lora_diagnostic: dict[str, Any] | None = None
     error: str | None = None
     cancel_requested: bool = False
     _started_monotonic: float | None = field(default=None, repr=False)
@@ -394,6 +395,55 @@ class GenerationManager:
             "sdxl_transition_profile": deepcopy(self._sdxl_transition_profile),
             "busy": active,
         }
+
+    def sdxl_lora_diagnostics(self) -> dict[str, Any]:
+        """Small, honest SDXL adapter report for render UIs.
+
+        Coverage/value verification refers only to the normalized full
+        text-encoder loader. A normal adapter load has not been compared
+        against the source checkpoint and must not be labeled as such.
+        """
+        active = dict(self._active_lora_signature)
+        adapters: list[dict[str, Any]] = []
+        for item in self._pipeline_loras.values():
+            name = str(item.get("adapter_name") or "")
+            if name not in active or item.get("family") != "sdxl":
+                continue
+            compatibility = item.get("compatibility")
+            diagnostic = item.get("diagnostics") or {}
+            components = diagnostic.get("components") or {}
+            verified = bool(
+                compatibility == "sdxl-text-encoder-normalized"
+                and all(
+                    (components.get(tower) or {}).get("coverage_verified")
+                    and (components.get(tower) or {}).get("checkpoint_values_verified")
+                    == (components.get(tower) or {}).get("checkpoint_tensors")
+                    for tower in ("text_encoder", "text_encoder_2")
+                )
+            )
+            if compatibility == "sdxl-clean-unet-only":
+                status = "unet_only"
+            elif verified:
+                status = "checkpoint_verified"
+            else:
+                status = "active_not_value_checked"
+            adapters.append({
+                "name": str(item.get("name") or name),
+                "adapter_name": name,
+                "weight": active[name],
+                "status": status,
+                "components": {
+                    part: {
+                        "tensors": int(data.get("tensors", 0)),
+                        "checkpoint_values_verified": int(
+                            data.get("checkpoint_values_verified", 0)
+                        ),
+                    }
+                    for part, data in components.items()
+                    if isinstance(data, dict)
+                },
+            })
+        return {"adapters": adapters, "active_count": len(adapters)}
 
     def unload_model(self) -> dict[str, Any]:
         with self._lock:
@@ -2701,7 +2751,15 @@ class GenerationManager:
                         + ", ".join(inactive)
                     )
 
+            previous_adapters = {name for name, _ in self._active_lora_signature}
             self._active_lora_signature = signature
+            if family == "sdxl" and previous_adapters != set(adapter_names):
+                emit_console(
+                    "info", "generation",
+                    "SDXL LoRA adapter set changed: "
+                    f"{len(previous_adapters)} previous -> {len(adapter_names)} active; "
+                    "activation confirmed. Weight-only updates are not reported here.",
+                )
             adapter_signature = tuple(adapter_names)
             if adapter_signature != self._verified_lora_adapters:
                 verification = (
@@ -3018,6 +3076,7 @@ class GenerationManager:
         )
         self.configure_loras(pipe, job.model, job.request.loras)
         if job.model["family"] == "sdxl":
+            job.lora_diagnostic = self.sdxl_lora_diagnostics()
             job.prompt_warnings = self._warn_sdxl_prompt_truncation(pipe, job.request)
         job.model_load_seconds = max(0.0, time.monotonic() - load_started)
         job._started_monotonic = time.monotonic()
