@@ -1102,32 +1102,53 @@
     state.settings.civitai ||= {};
     const cfg = state.settings.civitai;
     const card = document.createElement('article');
-    card.className = 'card glass settings-preferences-card';
+    card.className = 'card glass settings-preferences-card civitai-settings-card';
+    const heading = document.createElement('div');
+    heading.className = 'civitai-settings-heading';
     const title = document.createElement('h2');
     title.textContent = 'Civitai Hub';
     const description = document.createElement('p');
     description.className = 'muted';
-    description.textContent = 'Optional online model discovery. Disabled by default. Local models and LoRA inspection remain available.';
-    card.append(title, description);
-    const toggle = (label, key, fallback = false) => {
+    description.textContent = 'Optional online model discovery. Local models and LoRA inspection remain available when disabled.';
+    heading.append(title, description);
+    card.append(heading);
+
+    const toggles = document.createElement('div');
+    toggles.className = 'civitai-settings-options';
+    const toggle = (label, key, fallback = false, hint = '') => {
       const wrap = document.createElement('label');
-      wrap.className = 'settings-preference-toggle';
-      const caption = document.createElement('span');
-      caption.textContent = label;
+      wrap.className = 'civitai-settings-toggle';
+      const copy = document.createElement('span');
+      copy.className = 'civitai-settings-toggle-copy';
+      const strong = document.createElement('strong');
+      strong.textContent = label;
+      copy.append(strong);
+      if (hint) {
+        const small = document.createElement('small');
+        small.className = 'muted';
+        small.textContent = hint;
+        copy.append(small);
+      }
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.checked = cfg[key] === undefined ? fallback : cfg[key] === true;
       input.addEventListener('change', () => { cfg[key] = input.checked; markSettingsDirty(); });
-      wrap.append(caption, input);
-      card.appendChild(wrap);
+      wrap.append(copy, input);
+      toggles.append(wrap);
     };
-    toggle('Enable Civitai Hub', 'enabled');
+    toggle('Enable Civitai Hub', 'enabled', false, 'Enable online discovery and Civitai connectivity.');
     toggle('Allow mature previews', 'allow_mature');
     toggle('Load model thumbnails', 'load_previews', true);
-    toggle('Check for updates automatically (future Hub feature)', 'auto_check_updates');
+    toggle('Check for updates automatically', 'auto_check_updates', false, 'Reserved for future update scanning.');
+    card.append(toggles);
+
+    const selects = document.createElement('div');
+    selects.className = 'civitai-settings-selects';
     const selectField = (label, key, values, fallback) => {
-      const labelEl = document.createElement('label');
-      labelEl.textContent = label;
+      const field = document.createElement('label');
+      field.className = 'civitai-settings-field';
+      const caption = document.createElement('span');
+      caption.textContent = label;
       const select = document.createElement('select');
       for (const [value, text] of values) {
         const option = document.createElement('option');
@@ -1140,34 +1161,55 @@
         cfg[key] = key === 'concurrent_downloads' ? Number(select.value) : select.value;
         markSettingsDirty();
       });
-      labelEl.appendChild(select);
-      card.appendChild(labelEl);
+      field.append(caption, select);
+      selects.append(field);
     };
-    selectField('Browsing layout', 'layout', [['grid','Thumbnail grid'],['list','Compact list']], 'grid');
-    selectField('Concurrent downloads (future Hub feature)', 'concurrent_downloads', [[1,'1'],[2,'2'],[3,'3']], 1);
+    selectField('Browsing layout', 'layout', [['grid', 'Thumbnail grid'], ['list', 'Compact list']], 'grid');
+    selectField('Concurrent downloads (future feature)', 'concurrent_downloads', [[1,'1'],[2,'2'],[3,'3']], 1);
+    card.append(selects);
+
+    const connection = document.createElement('section');
+    connection.className = 'civitai-settings-connection';
+    const connectionTitle = document.createElement('h3');
+    connectionTitle.textContent = 'Connection';
     const notice = document.createElement('p');
     notice.className = 'muted';
-    notice.textContent = 'Optional API token: set CIVITAI_API_TOKEN in the host environment. The token is never sent to the browser. Save settings before testing.';
+    notice.textContent = 'Optional API token: configure CIVITAI_API_TOKEN on the Morphorum host. Save settings before testing.';
     const test = document.createElement('button');
     test.type = 'button';
-    test.className = 'secondary-button';
-    test.textContent = 'Test Connection';
-    const status = document.createElement('p');
-    status.setAttribute('role','status');
+    test.className = 'secondary-button busy-button civitai-test-button';
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    const testLabel = document.createElement('span');
+    testLabel.textContent = 'Test Connection';
+    test.append(spinner, testLabel);
+    const status = document.createElement('span');
+    status.className = 'civitai-settings-sr-only';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
     test.addEventListener('click', async () => {
       test.disabled = true;
-      status.textContent = 'Connecting to Civitai…';
+      test.classList.add('busy');
+      testLabel.textContent = 'Testing connection…';
+      status.textContent = 'Testing Civitai connection';
       try {
-        const result = await api('/api/civitai/test-connection', {method:'POST',body:'{}'});
-        status.textContent = result.message + (result.status ? ' HTTP ' + result.status : '') +
+        const result = await api('/api/civitai/test-connection', {method:'POST', body:'{}'});
+        const summary = result.message + (result.status ? ' HTTP ' + result.status : '') +
           (result.authenticated ? ' (token configured)' : ' (public access)');
-        toast(result.ok ? 'Civitai connected' : 'Civitai connection failed', status.textContent, result.ok ? 'success' : 'warning');
+        status.textContent = summary;
+        toast(result.ok ? 'Civitai connected' : 'Civitai connection failed', summary, result.ok ? 'success' : 'warning');
       } catch (error) {
         status.textContent = error.message;
         toast('Civitai test failed', error.message, 'error');
-      } finally { test.disabled = false; }
+      } finally {
+        test.disabled = false;
+        test.classList.remove('busy');
+        testLabel.textContent = 'Test Connection';
+      }
     });
-    card.append(notice, test, status);
+    connection.append(connectionTitle, notice, test, status);
+    card.append(connection);
     return card;
   }
 
