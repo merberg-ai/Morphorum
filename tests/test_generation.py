@@ -1140,6 +1140,10 @@ class FakeVerifiedSDXLComponent:
         for adapter in self.peft_config:
             yield f"{self.target}.lora_A.{adapter}.weight", torch.ones(2, 2)
             yield f"{self.target}.lora_B.{adapter}.weight", torch.ones(2, 2)
+            if getattr(self, "inject_out_proj", False):
+                extra = self.target.replace(".q_proj", ".out_proj")
+                yield f"{extra}.lora_A.{adapter}.weight", torch.ones(2, 2)
+                yield f"{extra}.lora_B.{adapter}.weight", torch.ones(2, 2)
 
     def inject(self, adapter: str):
         self.peft_config[adapter] = object()
@@ -1165,6 +1169,8 @@ class FakeSDXLFullRankRepairPipe(FakeSDXLRankBugPipe):
             second_name = "text_model." + second_name
         self.text_encoder_2 = FakeVerifiedSDXLComponent(second_name)
         self.encoder_loads = []
+        for encoder in (self.text_encoder, self.text_encoder_2):
+            encoder.inject_out_proj = key_style == "kohya"
 
     def load_lora_weights(self, source, **kwargs):
         self.loads.append({"path": source, **kwargs})
