@@ -39,6 +39,21 @@
           });
           row.append(cancel);
         }
+        if (['interrupted','failed'].includes(job.status)) {
+          const resume = elt('button', 'secondary-button compact busy-button', 'Resume');
+          resume.addEventListener('click', async () => {
+            resume.disabled = true;
+            resume.classList.add('busy');
+            try {
+              const response = await fetch('/api/civitai/downloads/' + encodeURIComponent(job.id) + '/resume', {method:'POST'});
+              const result = await response.json();
+              if (!response.ok) throw Error(result.detail || 'Resume failed');
+              toast('Download resumed', job.name, 'success');
+            } catch (error) { toast('Resume failed', error.message, 'error'); }
+            finally { void refreshDownloads(); }
+          });
+          row.append(resume);
+        }
         if (job.error) row.append(elt('p', 'muted', job.error));
         root.append(row);
       }
