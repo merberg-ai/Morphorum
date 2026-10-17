@@ -75,6 +75,8 @@ separate, explicit authorization.** Next development phase: P4.
 - [ ] Retain the existing project selection, unsaved-edit prompts, wizard progress, project restore, deep links, back navigation, keyboard/phone access, and setup shortcuts. Move/reparent existing workspaces instead of cloning form controls or modifying project data.
 - [ ] Update labels, wayfinding and documentation so users can go directly to project creation and management without entering Motion Lab. Regression-check open projects, draft edits, active renders, and navigation on desktop and mobile.
 
+**UX2.4 implementation checkpoint (2026-10-16):** Primary navigation now links directly to Project Manager, New Project Wizard and Project Editor, with those entries removed from the Motion Lab sidebar and tool-card launcher. All three retain the original panels and handlers; Motion Lab primary entry opens its Overview. Focused source regression tests added in `tests/frontend_project_navigation.test.cjs`. **Automated CI and physical Windows/mobile acceptance are pending**; do not mark UX2.4 fully accepted yet.
+
 ### UX2.5 · Safe bulk project trash (Project Manager)
 
 - [ ] Add accessible multi-select (checkboxes), **Select All Visible**, **Clear Selection**, and a selected-count action bar with **Move Selected to Trash**. Filters/search/pagination must not silently include hidden projects; use stable project IDs rather than row positions.
