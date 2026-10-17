@@ -177,6 +177,7 @@
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
     refreshNavMore(name);
     if (name === 'console') renderConsole();
+    if (name === 'civitai') window.MorphorumCivitai?.activate?.();
     if (name === 'loras') window.MorphorumLoras?.refreshRuntime?.();
     try { history.replaceState(null, '', `#${name}`); } catch (_) {}
   }
@@ -1320,6 +1321,7 @@
       applyAppearance(state.settings.ui);
       window.MorphorumHelp?.setEnabled(state.settings.ui.show_help_hints);
       renderSettings();
+      window.MorphorumCivitai?.settingsChanged?.(state.settings.civitai || {});
       setSettingsClean();
       void checkFFmpegSettings({quiet: true});
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
@@ -1871,7 +1873,7 @@
     document.addEventListener('focusout', () => window.setTimeout(syncMobileViewport, 120));
     syncMobileViewport();
     const requested = location.hash.replace('#', '');
-    if (['image', 'animation', 'models', 'loras', 'settings', 'console'].includes(requested)) switchView(requested);
+    if (['image', 'animation', 'models', 'loras', 'civitai', 'settings', 'console'].includes(requested)) switchView(requested);
   }
 
   async function start() {
