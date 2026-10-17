@@ -64,7 +64,7 @@ test('UX2.5 Motion Studio appears directly after Overview',()=>{
 test('UX2.5 bulk trash uses confirmation and existing managed trash route',()=>{
   assert.match(animation,/animation-project-manager-select-visible/);
   assert.match(animation,/animation-project-manager-clear-selection/);
-  assert.match(animation,/animation-project-manager-bulk-trash/);
+  assert.doesNotMatch(animation,/animation-project-manager-bulk-trash/);
   assert.match(animation,/projectManagerState\.bulkIds\.add\(item\.id\)/);
   assert.match(animation,/window\.MorphorumDialog\.confirm\(/);
   assert.match(animation,/async function projectManagerBulkTrash\(/);
@@ -78,7 +78,7 @@ test('UX2.5 bulk selection count and action state update in Project Manager only
   const prompt=animation.slice(animation.indexOf('  function renderPromptRows() {'),
     animation.indexOf('  function renderProjectManager() {'));
   assert.match(pm,/bulkCount\.textContent = projectManagerState\.bulkIds\.size/);
-  assert.match(pm,/bulkDelete\.disabled = projectManagerState\.busy/);
+  assert.match(pm,/trashButton\.textContent = projectManagerState\.bulkIds\.size > 1/);
   assert.doesNotMatch(prompt,/const bulkCount = qs\('#animation-project-manager-bulk-count'\)/);
   assert.match(pm,/checkbox\.addEventListener\('change'/);
 });
@@ -94,4 +94,15 @@ test('Motion Studio can restore a saved soundtrack automatically without replaci
   assert.match(animation,/!chosen && soundtrackAsset && animationTab === 'audio'/);
   assert.match(animation,/!projectMediaAssets\('motion_lab_wav'\)\.length/);
   assert.match(animation,/await motionLabUseProjectSoundtrack\(\)/);
+});
+
+test('UX2.5 one trash button routes multi-checkbox to batch and retains single confirmation',()=>{
+  const single=animation.slice(animation.indexOf('  async function projectManagerTrash() {'),
+    animation.indexOf('  async function projectManagerBulkTrash() {'));
+  assert.match(single,/projectManagerState\.bulkIds\.size > 1/);
+  assert.match(single,/await projectManagerBulkTrash\(\)/);
+  assert.match(single,/projectManagerState\.bulkIds\.size === 1/);
+  assert.match(single,/window\.MorphorumDialog\.prompt\(/);
+  assert.match(single,/projectManagerState\.bulkIds\.delete\(item\.id\)/);
+  assert.doesNotMatch(animation,/id="animation-project-manager-bulk-trash"/);
 });
