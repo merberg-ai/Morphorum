@@ -894,6 +894,7 @@ class AnimationRenderJob:
     preview: dict[str, Any] | None = None
     current_prompt_state: dict[str, Any] = field(default_factory=dict)
     current_frame_state: dict[str, Any] = field(default_factory=dict)
+    lora_diagnostic: dict[str, Any] | None = None
     resumed: bool = False
     performance: dict[str, Any] = field(default_factory=dict)
     _frame_times: list[float] = field(default_factory=list, repr=False)
@@ -1634,6 +1635,12 @@ class AnimationRenderManager:
                         on_model_load,
                     )
                 )
+                if family == "sdxl" and isinstance(
+                    getattr(generation_manager, "_pipeline_loras", None), dict
+                ):
+                    job.lora_diagnostic = GenerationManager.sdxl_lora_diagnostics(
+                        generation_manager
+                    )
                 job.model_load_seconds = max(
                     0.0,
                     time.monotonic() - load_started,
@@ -2022,6 +2029,12 @@ class AnimationRenderManager:
                     time.monotonic() - prepare_started,
                 )
                 phase_memory["post_prepare"] = generation_manager.cuda_memory_status()
+                if family == "sdxl" and isinstance(
+                    getattr(generation_manager, "_pipeline_loras", None), dict
+                ):
+                    job.lora_diagnostic = GenerationManager.sdxl_lora_diagnostics(
+                        generation_manager
+                    )
                 if job.model_load_seconds is None:
                     job.model_load_seconds = max(
                         0.0,
