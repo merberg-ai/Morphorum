@@ -40,6 +40,8 @@ def model_details(model_id: int, *, client: httpx.Client | None = None) -> dict[
         data = json.loads(b"".join(chunks))
         if not isinstance(data, dict) or data.get("id") != model_id:
             raise CivitaiSearchError("Unexpected Civitai model detail response.", 502)
+        if data.get("nsfw") and not settings.get("allow_mature", False):
+            raise CivitaiSearchError("This model is hidden by mature-content settings.", 403)
         creator = data.get("creator") if isinstance(data.get("creator"), dict) else {}
         versions = []
         for version in (data.get("modelVersions") or [])[:40]:
