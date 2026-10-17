@@ -9710,6 +9710,8 @@
       panel.hidden = !selected;
       panel.classList.toggle('active', selected);
     });
+    const projectDestination = ['wizard','projects','editor'].includes(name);
+    qs('.main-nav .nav-button[data-view="animation"]')?.classList.toggle('active', !projectDestination);
     qsa('.main-nav [data-project-nav]').forEach(button => {
       const selected = button.dataset.projectNav === name;
       button.classList.toggle('active', selected);
