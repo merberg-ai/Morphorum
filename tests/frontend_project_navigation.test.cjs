@@ -151,3 +151,15 @@ test('Motion Studio bulk cue removal is confirmed, reversible and draft-only',()
  assert.match(director,/motionDirectorCues = motionDirectorCues\.filter/);
  assert.match(director,/check\.type='checkbox'/);
 });
+
+test('UX4.2 keyboard and phone Project Editor section navigation is synchronized',()=>{
+  const css=fs.readFileSync(path.join(root,'assets','animation.css'),'utf8');
+  assert.match(animation,/mobilePicker\.id = 'animation-editor-mobile-section'/);
+  assert.match(animation,/mobilePicker\.addEventListener\('change'/);
+  assert.match(animation,/mobilePicker\.value = key/);
+  assert.match(animation,/ArrowLeft','ArrowRight','Home','End'/);
+  assert.match(animation,/buttons\.get\(sectionKeys\[next\]\)\.focus\(\)/);
+  assert.match(animation,/removeAttribute\('aria-current'\)/);
+  assert.match(css,/@media \(max-width:600px\)/);
+  assert.match(css,/#animation-panel-editor \.animation-editor-mobile-section/);
+});
