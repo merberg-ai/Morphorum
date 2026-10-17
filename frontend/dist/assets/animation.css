@@ -4084,3 +4084,10 @@ dialog#animation-deforum-dialog {
  #animation-editor-context {align-items:flex-start;flex-direction:column;}
  #animation-editor-save-state {margin-left:0;}
 }
+
+/* Motion Studio bulk cue assignment cleanup. */
+.animation-audio-cue-select-row {display:flex;align-items:center;gap:.35rem;min-width:0;}
+.animation-audio-cue-select-row > input[type="checkbox"] {flex:0 0 auto;width:1rem;height:1rem;cursor:pointer;}
+.animation-audio-cue-select-row > .animation-audio-cue-item {min-width:0;max-width:100%;overflow-wrap:anywhere;}
+.animation-audio-director-actions [data-cue-selection-count] {white-space:nowrap;font-size:.8rem;}
+@media(max-width:600px) {.animation-audio-cue-select-row > .animation-audio-cue-item {white-space:normal;}}
