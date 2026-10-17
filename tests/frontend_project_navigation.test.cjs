@@ -53,3 +53,21 @@ test('UX2.4 global page heading follows project destination',()=>{
   assert.match(animation,/if \(title\) title\.textContent = pageHeading\[1\]/);
   assert.match(animation,/if \(description\) description\.textContent = pageHeading\[2\]/);
 });
+
+test('UX2.5 Motion Studio appears directly after Overview',()=>{
+  const nav=html.match(/<div class="motion-lab-sidebar"[\s\S]*?<\/div>/)?.[0]||'';
+  const overview=nav.indexOf('data-motion-nav="motion"');
+  const audio=nav.indexOf('data-motion-nav="audio"');
+  const composer=nav.indexOf('data-motion-nav="composer"');
+  assert.ok(overview>=0 && audio>overview && composer>audio);
+});
+test('UX2.5 bulk trash uses confirmation and existing managed trash route',()=>{
+  assert.match(animation,/animation-project-manager-select-visible/);
+  assert.match(animation,/animation-project-manager-clear-selection/);
+  assert.match(animation,/animation-project-manager-bulk-trash/);
+  assert.match(animation,/projectManagerState\.bulkIds\.add\(item\.id\)/);
+  assert.match(animation,/window\.MorphorumDialog\.confirm\(/);
+  assert.match(animation,/async function projectManagerBulkTrash\(/);
+  assert.match(animation,/encodeURIComponent\(item\.id\), \{method: 'DELETE'\}/);
+  assert.match(animation,/failed\.push\(item\.name/);
+});
