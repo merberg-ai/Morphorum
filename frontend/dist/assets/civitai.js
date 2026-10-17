@@ -128,7 +128,7 @@
         for (const file of (v.files || [])) {
           const line = elt('div', 'civitai-detail-file');
           line.append(elt('p', 'muted', [file.name, file.format, Number.isFinite(Number(file.size_kb)) ? (Number(file.size_kb)/1024).toFixed(1) + ' MB' : ''].filter(Boolean).join(' · ')));
-          if (/\\.safetensors$/i.test(file.name || '')) {
+          if (/\.safetensors$/i.test(file.name || '')) {
             const download = elt('button', 'secondary-button compact busy-button', 'Add to download queue');
             download.type = 'button';
             download.addEventListener('click', () => void queueDownload(id, v.id, file.name, download));
