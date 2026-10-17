@@ -193,7 +193,7 @@ def _run(job_id: str) -> None:
     target = Path(job["destination"])
     try:
         existing = part.stat().st_size if part.exists() else 0
-        if existing >= job["total_bytes"]:
+        if existing > job["total_bytes"] + 1024 * 1024:
             raise ValueError("Unexpected partial file length; discard and retry.")
         _check_space(job, existing)
         token = os.environ.get("CIVITAI_API_TOKEN", "").strip()
@@ -232,11 +232,12 @@ def _run(job_id: str) -> None:
                     out.flush()
                     os.fsync(out.fileno())
         with _LOCK:
-            if job["status"] == "cancelled":
+            if job["status"] == "cancelled" or not load_settings().get("civitai", {}).get("enabled"):
+                job["status"] = "cancelled"
                 part.unlink(missing_ok=True)
                 return
-            if part.stat().st_size != job["total_bytes"]:
-                raise ValueError("Downloaded size differs from expected size.")
+            if part.stat().st_size <= 0 or abs(part.stat().st_size - job["total_bytes"]) > 1024 * 1024:
+                raise ValueError("Downloaded size differs substantially from advertised size.")
             sha = hashlib.sha256()
             with part.open("rb") as source:
                 for chunk in iter(lambda: source.read(4 * 1024 * 1024), b""):
@@ -249,7 +250,8 @@ def _run(job_id: str) -> None:
             os.link(part, target)
             part.unlink(missing_ok=True)
             job["status"] = "completed"
-            job["bytes"] = job["total_bytes"]
+            job["bytes"] = target.stat().st_size
+            job["total_bytes"] = target.stat().st_size
             job["error"] = None
             _save()
         try:
