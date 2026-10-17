@@ -119,3 +119,18 @@ No downloads or model modifications occur in C1.3. Runtime/CI and physical Windo
 6. Disable the Hub during an active transfer, confirm it stops and local generation is unaffected.
 
 **Code committed, not yet runtime/Windows verified. Do not merge to main before acceptance.**
+
+## C2.3: Authentication & diagnostic controls (awaiting Windows acceptance)
+
+Settings → Civitai Hub now has a masked key field and **Save/Replace Key** / **Clear Key** actions. Stored credentials use `data/.civitai-token` (host-only; restrictive permissions where supported), not the public settings JSON. The `CIVITAI_API_TOKEN` environment variable takes precedence. Keys are never sent back to the browser, stored in queue metadata, or included in raw download-error messages. Note: the local key file is **not encrypted at rest**; protect local system access and backups.
+
+**Test Connection** now validates a configured token against Civitai's authenticated `/api/v1/me` endpoint. Anonymous mode reports public access only. The Download queue now distinguishes HTTP 401, HTTP 403 and HTTP 429. Failed or interrupted jobs offer **Retry from beginning**, removing preserved partial bytes after a disk-space check; existing Resume remains available.
+
+### Test procedure for formerly blocked models
+1. Create an API token in your Civitai account.
+2. Open Settings → Civitai Hub, paste the token, click Save/Replace Key and then Test Connection.
+3. Return to the failed download and click Retry from beginning.
+4. Verify the model downloads or receives a clear access-denied response (account access restrictions may remain even with a valid key).
+5. Refresh Settings: the token itself must never reappear in the input or any API JSON, only the configured status.
+
+Do not merge until Windows testing; no automated execution was performed in this chat.
