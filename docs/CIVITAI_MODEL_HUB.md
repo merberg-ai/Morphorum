@@ -244,3 +244,21 @@ Verified installed checkpoint and LoRA entries in the Civitai Hub now offer **Us
 6. Remove a test checkpoint from the index and reopen its project to confirm the existing missing-model warning rather than a silent replacement.
 
 Code committed; automated tests and Windows physical verification remain pending. Do not merge to main without acceptance.
+
+## C4.3: Bulk verification and final Hub polish (Windows acceptance pending)
+
+The **Models** library now includes compact multi-select checkboxes plus **Select visible**, **Clear selection**, **Identify Selected**, and **Check Updates**. Selection persists across filter changes and is pruned when the indexed library is refreshed. Operations execute sequentially via the existing guarded single-item SHA-256 identification and update endpoints, with current-item status and a completed/failed/unchanged summary. Individual errors do not abort the rest of the batch. Nothing is downloaded or overwritten.
+
+The previously completed C4.1/C4.2 Hub gallery continues to show verified installed versions (from C3.3 local metadata) and actions for Image and Project Editor; unverified versions are never advertised as installed. The existing download queue, Civitai metadata/preview cards, LoRA bulk sync, and Civitai Hub opt-in remain unchanged.
+
+### C4.3 Windows test checklist
+
+1. In **Models**, select a few indexed LoRAs and checkpoints; filter to another family and select more. Confirm the count reflects all checked models.
+2. Click **Identify Selected**. Verify progress, success/unmatched/error summary and that one failed file does not abort the batch.
+3. Click **Check Updates** on the selection. Confirm it uses each local model's exact identity and does not update or replace model files.
+4. Clear selection and verify disabled bulk actions; rescan libraries and confirm stale IDs are discarded.
+5. Test narrow/mobile layouts: checkboxes should remain small, the toolbar should wrap, and all model-row controls remain usable.
+6. In Civitai Hub, verify installed-version indicators and Image/Project actions, model detail previews, and the download queue still work.
+7. Disable Civitai Hub and ensure bulk operations report guarded failures instead of performing network requests.
+
+**C4.3 is staged on the feature branch only.** Automated tests and physical Windows validation are still pending. Final release hardening and merge belong to C5.
