@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from .civitai_auth import get_token
 import re
 import shutil
 import threading
@@ -173,6 +174,25 @@ def resume_download(job_id: str) -> dict[str, Any]:
         _dispatch()
         return _snapshot(job)
 
+def retry_download(job_id: str) -> dict[str, Any]:
+    _initialize()
+    with _LOCK:
+        job = _JOBS.get(job_id)
+        if not job:
+            raise KeyError("Download not found.")
+        if job["status"] not in ("failed", "interrupted"):
+            raise ValueError("Only failed or interrupted downloads can be retried.")
+        if job_id in _RUNNING:
+            raise ValueError("Download still active.")
+        if Path(job["destination"]).exists():
+            raise ValueError("Destination already exists.")
+        _check_space(job)
+        _part(job).unlink(missing_ok=True)
+        job["bytes"], job["error"], job["status"] = 0, None, "queued"
+        _save()
+        _dispatch()
+        return _snapshot(job)
+
 def cancel_download(job_id: str) -> dict[str, Any]:
     _initialize()
     with _LOCK:
@@ -196,7 +216,7 @@ def _run(job_id: str) -> None:
         if existing > job["total_bytes"] + 1024 * 1024:
             raise ValueError("Unexpected partial file length; discard and retry.")
         _check_space(job, existing)
-        token = os.environ.get("CIVITAI_API_TOKEN", "").strip()
+        token = get_token()
         headers = {"Accept": "application/octet-stream", "User-Agent": "Morphorum/0.1"}
         if token:
             headers["Authorization"] = "Bearer " + token
@@ -262,7 +282,14 @@ def _run(job_id: str) -> None:
         with _LOCK:
             if job["status"] != "cancelled":
                 job["status"] = "failed"
-                job["error"] = str(exc)[:180]
+                if isinstance(exc, httpx.HTTPStatusError):
+                    code = exc.response.status_code
+                    job["error"] = ("Authentication required or invalid API key (HTTP 401)." if code == 401 else
+                                    "Access denied by Civitai (HTTP 403)." if code == 403 else
+                                    "Civitai rate limit reached (HTTP 429)." if code == 429 else
+                                    f"Civitai HTTP {code} download error.")
+                else:
+                    job["error"] = "Download failed or connection interrupted." if isinstance(exc, httpx.RequestError) else str(exc)[:180]
     finally:
         if job["status"] == "cancelled":
             part.unlink(missing_ok=True)
