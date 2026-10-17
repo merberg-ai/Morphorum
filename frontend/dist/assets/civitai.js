@@ -118,6 +118,51 @@
     byId('civitai-next').disabled = busy || !state.next;
     byId('civitai-previous').disabled = busy || state.page === 0;
   }
+  async function installedActions(modelId, host) {
+    if (!state.enabled) return;
+    try {
+      const response = await fetch('/api/civitai/installed/' + encodeURIComponent(modelId));
+      const result = await response.json();
+      if (!response.ok) throw Error(result.detail || 'Installed lookup unavailable');
+      host.replaceChildren();
+      const matches = result.installed || [];
+      host.append(elt('span', 'muted', matches.length ? matches.length + ' verified local installation(s)' : 'Not verified as installed · Sync Civitai Info in Models/LoRAs'));
+      for (const match of matches) {
+        const wrap = elt('div', 'civitai-installed-match');
+        wrap.append(elt('span', 'muted', match.name + ' · ' + match.family.toUpperCase()));
+        const use = elt('button', 'secondary-button compact', match.kind === 'checkpoints' ? 'Use in Image' : 'Add to Image Prompt');
+        use.type = 'button';
+        use.addEventListener('click', async () => {
+          use.disabled = true;
+          try {
+            if (match.kind === 'checkpoints') {
+              const selected = await window.MorphorumModels?.selectExisting?.(match.id);
+              if (!selected) throw Error('Checkpoint is not present in the current model selector. Refresh Models.');
+              document.querySelector('.nav-button[data-view="image"]')?.click();
+              toast('Checkpoint selected', 'Ready in Image. Model weights are not loaded until generation.', 'success');
+            } else {
+              const selected = document.querySelector('#image-model-select');
+              const current = selected?.value;
+              if (!current) throw Error('Choose a compatible checkpoint in Image first.');
+              const modelsResponse = await fetch('/api/models/' + encodeURIComponent(current));
+              if (!modelsResponse.ok) throw Error('Selected image model unavailable.');
+              const currentModel = await modelsResponse.json();
+              if (currentModel.family !== match.family) throw Error('LoRA family ' + match.family + ' does not match selected checkpoint ' + currentModel.family + '.');
+              const applied = window.MorphorumImage?.insertFromManager?.({
+                id: match.id, family: match.family, name: match.name, weight: 1,
+                triggers: Array.isArray(match.trained_words) ? match.trained_words : []
+              });
+              if (!applied) throw Error('LoRA could not be added. Refresh Image LoRAs and retry.');
+              toast('LoRA added to Image prompt', match.name, 'success');
+            }
+          } catch (error) { toast('Cannot use installed model', error.message, 'warning'); }
+          finally { use.disabled = false; }
+        });
+        wrap.append(use);
+        host.append(wrap);
+      }
+    } catch (error) { host.replaceChildren(elt('span', 'muted', error.message)); }
+  }
   async function showDetails(id) {
     if (!state.enabled || !Number.isSafeInteger(id) || id <= 0) return;
     const dialog = byId('civitai-detail-dialog');
@@ -133,6 +178,12 @@
       if (request !== state.detailSerial || !state.enabled) return;
       byId('civitai-detail-title').textContent = data.name || 'Model details';
       body.replaceChildren();
+      const installed = elt('section', 'civitai-installed-actions');
+      installed.append(elt('strong', '', 'Installed in Morphorum'));
+      const installedBody = elt('div', 'civitai-installed-list', 'Checking installed versions…');
+      installed.append(installedBody);
+      body.append(installed);
+      void installedActions(id, installedBody);
       body.append(elt('p', 'muted', 'By ' + (data.creator || 'Unknown creator') + ' · ' + (data.type || 'Model')));
       if (data.description) body.append(elt('div', 'civitai-description-panel', data.description));
       if (Array.isArray(data.tags) && data.tags.length) body.append(elt('p', 'muted', 'Tags: ' + data.tags.join(', ')));
@@ -220,6 +271,9 @@
     details.type = 'button';
     details.addEventListener('click', () => void showDetails(item.id));
     body.append(details);
+    const installed = elt('div', 'civitai-installed-actions');
+    body.append(installed);
+    void installedActions(item.id, installed);
     root.append(preview, body);
     return root;
   }
