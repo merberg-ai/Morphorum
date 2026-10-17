@@ -8334,19 +8334,11 @@
       return;
     }
     // A manual selection wins over any in-flight automatic project restore.
+    // Keep the previous analyzed WAV, markers, cues and draft layers intact
+    // until the new result is validated. Rejected duration matching must not
+    // discard audio editing state as a side effect.
     const uploadToken = ++projectAudioRestoreGeneration;
-    motionLabEditedEvents = null;
-    motionDirectorCues = [];
-    motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
-    ++motionStudioSpectrumToken;
-    motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
-    motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
-    motionStudioSelectedChannel = '';
-    motionStudioRenderChannels();
-    motionLabAudioAnalysis = null;
-    motionLabAudioProjectId = null;
-    motionLabReleaseAudio();
-    motionLabAudioPreview();
+    let lengthNotice = '';
     report('Analyzing ' + file.name + ' on the Morphorum host…');
     if (stageStatus) stageStatus.dataset.busy = 'true';
     motionLabAudioUi();
@@ -8380,13 +8372,18 @@
           // can still exist after all visible draft layers were cleared.
           // Never discard that invisible saved history without explicit consent.
           if (motionLabDraftLayers.length) {
-            throw new Error('Cannot resize with ' + motionLabDraftLayers.length +
-              ' draft Motion Lab layer(s). Clear the draft first. No settings were changed.');
+            // A length-matching request is OPTIONAL. Never turn an audio
+            // analysis into a demand to delete the user's existing draft.
+            lengthNotice = 'Project duration unchanged: ' + motionLabDraftLayers.length +
+              ' existing draft Motion Lab layer(s) prevent automatic resizing. ' +
+              'Audio analysis and beat editing remain available.';
+            matchLength.checked = false;
+            if (lengthStatus) lengthStatus.textContent = lengthNotice;
           }
           const storedLayerCount = Array.isArray(state.project.motion_lab?.layers)
             ? state.project.motion_lab.layers.length : 0;
           let discardStoredMotionLab = false;
-          if (storedLayerCount) {
+          if (storedLayerCount && !lengthNotice) {
             discardStoredMotionLab = await window.MorphorumDialog.confirm({
               title: 'Clear saved Motion Lab history?',
               message: 'The composer shows 0 draft layers, but this project still has ' +
@@ -8403,7 +8400,7 @@
               return;
             }
           }
-          const approved = await window.MorphorumDialog.confirm({
+          const approved = !lengthNotice && await window.MorphorumDialog.confirm({
             title: 'Match project length to WAV?',
             message: 'Audio ' + Number(analysis.duration_seconds).toFixed(2) + 's. ' +
               'Change project from ' + state.project.animation.max_frames + ' to ' +
@@ -8413,7 +8410,8 @@
             cancelText: 'Keep Duration',
           });
           if (!approved) {
-            if (lengthStatus) lengthStatus.textContent = 'Length matching canceled. Project unchanged.';
+            if (lengthStatus && !lengthNotice) lengthStatus.textContent =
+              'Length matching canceled. Project unchanged; WAV analysis continues.';
           } else {
             const editorFrames = qs('#animation-max-frames');
             if (!editorFrames) throw new Error('Cannot locate the Editor frame-count field.');
@@ -8456,11 +8454,21 @@
           Number(analysis.fps) !== Number(state.project.animation.fps)) {
         throw new Error('Audio frame alignment changed; analyze again.');
       }
+      if (state.project?.id !== projectId || projectAudioRestoreGeneration !== uploadToken) return;
+      // Commit only after a validated response and successful length decision.
+      // Hydration replaces event/cue overrides for the new SHA.
       if (!(await motionStudioHydrateEdits(projectId, analysis, () =>
         projectAudioRestoreGeneration === uploadToken))) return;
+      motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
+      ++motionStudioSpectrumToken;
+      motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
+      motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
+      motionStudioSelectedChannel = '';
+      motionLabReleaseAudio();
       motionLabAudioAnalysis = analysis;
       motionLabAudioProjectId = projectId;
       motionStudioRestoreChannels(projectId, analysis);
+      motionStudioRenderChannels();
       motionLabAudioUrl = URL.createObjectURL(file);
       motionLabAudioElement = new Audio(motionLabAudioUrl);
       motionLabAudioElement.preload = 'auto';
@@ -8480,7 +8488,8 @@
       report('Analyzed ' + file.name + ': ' + analysis.values.length +
         ' frames · ' + analysis.duration_seconds.toFixed(2) + ' seconds · ' +
         (analysis.events?.events?.length || 0) +
-        ' beat candidate(s). Choose View Detected Beats to inspect or edit them.');
+        ' beat candidate(s). Choose View Detected Beats to inspect or edit them.' +
+        (lengthNotice ? ' ' + lengthNotice : ''));
       const badge = qs('#animation-motion-lab-audio-status');
       if (badge) badge.textContent = 'WAV ready';
       void restoreProjectMedia();
