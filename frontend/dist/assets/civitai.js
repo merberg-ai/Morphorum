@@ -148,6 +148,7 @@
               if (!modelsResponse.ok) throw Error('Selected image model unavailable.');
               const currentModel = await modelsResponse.json();
               if (currentModel.family !== match.family) throw Error('LoRA family ' + match.family + ' does not match selected checkpoint ' + currentModel.family + '.');
+              await window.MorphorumImage?.refreshLoras?.();
               const applied = window.MorphorumImage?.insertFromManager?.({
                 id: match.id, family: match.family, name: match.name, weight: 1,
                 triggers: Array.isArray(match.trained_words) ? match.trained_words : []
