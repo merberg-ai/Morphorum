@@ -157,3 +157,21 @@ The **Models** manager now offers **Identify on Civitai** on each indexed model 
 - The dedicated **LoRAs** manager's selected-adapter **Identification** section includes **Identify on Civitai**. It uses the same explicit SHA-256 lookup endpoint as Models, while the existing LoRA metadata and sidecar lookup remain available.
 - Identification results are tied to the selected LoRA. Switching adapters clears the previous identification and ignores stale asynchronous responses.
 - Verify repeated clicks in Models do not stack links, then identify a selected LoRA and switch selection while a request is running.
+
+## C3.2: Explicit installed-model update detection (Windows acceptance pending)
+
+**Models** rows and the dedicated **LoRAs** Identification panel now offer **Check Updates**. This endpoint re-identifies a local file by exact SHA-256, fetches its Civitai model's version list, and compares dated versions against the identified installed version.
+
+`POST /api/civitai/updates/{model_id}` is read-only and honors the Hub's enabled state and maturity preference through the existing identification/detail endpoints. The API returns newer version candidates, release dates, base-model families, verified installed version, and advisory compatibility flags. A version with the same base family and model kind is only **potentially compatible**, not guaranteed compatible. Cross-family versions remain visible but explicitly flagged for verification.
+
+The checks are initiated only by user action. No automatic network traffic, local file modification, download, or replacement takes place in C3.2. Civitai detail listing is currently capped at 40 versions; no newer result only means no newer *dated version in that returned set*. Models lacking exact hash matches or usable dates cannot be confidently classified as up to date.
+
+### Windows test
+
+1. Identify a locally installed Civitai LoRA, then press **Check Updates**. Confirm newer versions and links are correct.
+2. Repeat in the LoRAs manager; ensure the result is cleared when changing selected adapters.
+3. Check an up-to-date or unrecognized model. Confirm that an unverified match does not claim a verified update.
+4. Test a model that has SDXL and FLUX variants. Cross-family releases should show a compatibility warning.
+5. Disable Hub and verify the update endpoint refuses requests without affecting local generation.
+
+**Committed, but automated execution and physical Windows tests are still pending.**
