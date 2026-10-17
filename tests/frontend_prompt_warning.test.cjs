@@ -32,3 +32,18 @@ test('image and animation show scoped LoRA verification results without masking 
     assert.match(source, /textContent = parts\.join/);
   }
 });
+
+
+test('G5.3 keeps real SDXL generation diagnostics separate from warnings', () => {
+  assert.match(html, /id="image-conditioning-diagnostic"/);
+  assert.match(html, /id="animation-conditioning-diagnostic"/);
+  assert.match(image, /showImagePromptWarnings\(job\)/);
+  assert.match(image, /qs\('#image-conditioning-diagnostic'\)/);
+  assert.match(image, /clip_l_negative/);
+  assert.match(image, /clip_g_negative/);
+  assert.match(image, /Negative conditioning aligned/);
+  assert.match(animation, /renderAnimationConditioningDiagnostic\(job\)/);
+  assert.match(animation, /conditioning_cache_hits/);
+  assert.match(animation, /conditioning_cache_misses/);
+  assert.doesNotMatch(animation, /some text may be truncated/);
+});
