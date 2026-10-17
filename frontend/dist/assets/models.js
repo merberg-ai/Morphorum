@@ -441,7 +441,36 @@
       });
     }
 
-    row.append(nameWrap, family, kind, pathDetails, size, action);
+    const identify = document.createElement('button');
+    identify.type = 'button';
+    identify.className = 'secondary-button compact busy-button';
+    identify.textContent = 'Identify on Civitai';
+    identify.title = 'Explicit SHA-256 lookup; sends only the file hash to Civitai.';
+    identify.addEventListener('click', async () => {
+      identify.disabled = true;
+      identify.classList.add('busy');
+      identify.textContent = 'Identifying…';
+      try {
+        const response = await fetch('/api/civitai/identify/' + encodeURIComponent(model.id), {method: 'POST'});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Identification failed');
+        if (result.found) {
+          const link = document.createElement('a');
+          link.href = result.url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = 'Verified: ' + (result.name || 'Civitai model') + ' · ' + (result.version || 'version') + ' ↗';
+          nameWrap.append(link);
+          toast('Exact SHA-256 match', model.name + ' identified on Civitai.', 'success');
+        } else toast('No verified Civitai match', result.message || model.name, 'info');
+      } catch (error) { toast('Civitai identification failed', error.message, 'error'); }
+      finally {
+        identify.disabled = false;
+        identify.classList.remove('busy');
+        identify.textContent = 'Identify on Civitai';
+      }
+    });
+    row.append(nameWrap, family, kind, pathDetails, size, action, identify);
     return row;
   }
 
