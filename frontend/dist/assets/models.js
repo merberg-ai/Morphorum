@@ -476,7 +476,45 @@
         identify.textContent = 'Identify on Civitai';
       }
     });
-    row.append(nameWrap, family, kind, pathDetails, size, action, identify);
+    const update = document.createElement('button');
+    update.type = 'button';
+    update.className = 'secondary-button compact busy-button';
+    update.textContent = 'Check Updates';
+    update.title = 'Read-only Civitai version check. Does not download or replace files.';
+    const updateResult = document.createElement('div');
+    updateResult.className = 'model-civitai-identity';
+    nameWrap.append(updateResult);
+    update.addEventListener('click', async () => {
+      update.disabled = true;
+      update.classList.add('busy');
+      update.textContent = 'Checking…';
+      try {
+        const response = await fetch('/api/civitai/updates/' + encodeURIComponent(model.id), {method:'POST'});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Update check failed');
+        updateResult.replaceChildren();
+        if (result.status === 'newer_available') {
+          const heading = document.createElement('strong');
+          heading.textContent = result.candidates.length + ' newer version(s): ';
+          updateResult.append(heading);
+          result.candidates.slice(0, 3).forEach((candidate, index) => {
+            const link = document.createElement('a');
+            link.href = candidate.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = candidate.version + (candidate.potentially_compatible ? ' (same base)' : ' (verify compatibility)') + ' ↗';
+            if (index) updateResult.append(document.createTextNode(' · '));
+            updateResult.append(link);
+          });
+          toast('Civitai updates found', model.name + ': ' + result.candidates.length + ' newer versions.', 'info');
+        } else {
+          updateResult.textContent = result.message || 'No newer versions found.';
+          toast('Civitai update check', updateResult.textContent, 'info');
+        }
+      } catch (error) { toast('Update check failed', error.message, 'error'); }
+      finally { update.disabled = false; update.classList.remove('busy'); update.textContent = 'Check Updates'; }
+    });
+    row.append(nameWrap, family, kind, pathDetails, size, action, identify, update);
     return row;
   }
 
