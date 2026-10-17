@@ -3920,3 +3920,36 @@ dialog#animation-deforum-dialog {
 @media(prefers-reduced-motion:reduce) {
   #animation-panel-audio .motion-studio-stage-nav {scroll-behavior:auto;}
 }
+
+
+/* UX2.1: Analysis and diagnostic feedback must stay visible after reparenting. */
+#animation-panel-audio .animation-audio-preview-placeholder[hidden] {
+  display:none!important;
+}
+#animation-panel-audio .motion-studio-analysis-result,
+#animation-panel-audio .motion-studio-analysis-status {
+  display:block;margin:0;padding:10px 13px;border:1px solid var(--border);
+  border-radius:9px;line-height:1.5;overflow-wrap:anywhere;
+}
+#animation-panel-audio .motion-studio-analysis-status {
+  background:color-mix(in srgb,var(--accent) 7%,transparent);
+}
+#animation-panel-audio .motion-studio-analysis-status[data-busy="true"] {
+  border-color:var(--accent);
+}
+#animation-panel-audio #motion-studio-envelope-message {
+  margin:10px 0;line-height:1.5;
+}
+#animation-panel-audio #animation-audio-analysis-workspace > .animation-audio-legacy-envelope {
+  width:100%;min-width:0;
+}
+#animation-panel-audio #motion-studio-stage-analysis .motion-studio-step-actions,
+#animation-panel-audio #motion-studio-stage-detect .motion-studio-step-actions {
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+}
+@media(max-width:640px) {
+  #animation-panel-audio #motion-studio-stage-analysis .motion-studio-step-actions button,
+  #animation-panel-audio #motion-studio-stage-detect .motion-studio-step-actions button {
+    min-height:44px;
+  }
+}
