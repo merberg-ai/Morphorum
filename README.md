@@ -122,6 +122,7 @@ The usual launcher provides both a **web interface and generation API**, typical
 
 - **[Install & maintain](docs/INSTALLATION.md)**: Windows/Linux setup, custom locations, updates, repairs, data backups
 - **[Getting started](docs/GETTING_STARTED.md)**: first-run setup, first image, animation and video
+- **[SDXL generation](docs/SDXL_GENERATION.md)**: samplers, schedules, long positive/negative prompts, LoRA verification, animation performance
 - **[Motion Studio](docs/MOTION_STUDIO.md)**: audio-driven motion, independent sound channels, recording, presets and synchronized preview
 - **[FFmpeg Manager](docs/FFMPEG_MANAGER.md)**: select, verify, install, update or remove local video/audio utilities
 - **[Backend-only mode](docs/BACKEND_ONLY.md)**: LAN setup, per-client credentials, connection checks, security
