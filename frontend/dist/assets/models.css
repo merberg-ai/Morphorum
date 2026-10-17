@@ -254,3 +254,35 @@
   #view-models .model-family-badge,
   #view-models .model-kind-badge {justify-self:start;}
 }
+
+/* C3.1 verified identity: keep one compact result instead of expanding the model row. */
+.model-civitai-identity { display: block; font-size: .78rem; line-height: 1.4; overflow-wrap: anywhere; }
+.model-civitai-identity:empty { display: none; }
+.model-civitai-identity a { display: inline-block; max-width: 100%; }
+.lora-exact-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.lora-exact-identity a { overflow-wrap: anywhere; font-size: .86rem; }
+.lora-exact-identity p { margin: 0; }
+
+.model-civitai-metadata, .lora-civitai-cached { display:flex; flex-direction:column; align-items:flex-start; gap:6px; max-width:420px; margin-top:8px; font-size:.79rem; overflow-wrap:anywhere; }
+.model-civitai-thumbnail { display:block; width:104px; max-height:150px; object-fit:cover; border-radius:9px; border:1px solid var(--border); }
+
+/* C3.3 multi-select LoRA library, independent of the inspected LoRA. */
+.lora-bulk-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.lora-bulk-toolbar #lora-bulk-status { font-size:.8rem; }
+.lora-manager-select-row { display:flex; align-items:center; gap:10px; min-width:0; }
+.lora-manager-select-row .lora-manager-item { flex:1; min-width:0; }
+.lora-manager-select-row .lora-bulk-checkbox {
+  appearance:auto; flex:0 0 17px; width:17px !important; height:17px !important;
+  min-width:17px !important; min-height:17px !important; max-width:17px; max-height:17px;
+  margin:0 2px; padding:0; accent-color:var(--accent); cursor:pointer;
+}
+@media(max-width:600px) { .lora-bulk-toolbar { gap:6px; } .lora-bulk-toolbar button { font-size:.79rem; } }
+
+/* C4.3 compact batch library actions; never inherit full-sized checkbox styles. */
+.model-bulk-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:9px 0; }
+.model-bulk-toolbar .muted { font-size:.78rem; }
+.model-row > .model-bulk-checkbox {
+  appearance:auto; flex:0 0 17px; width:17px !important; height:17px !important;
+  min-width:17px !important; min-height:17px !important; max-width:17px; max-height:17px;
+  margin:0 4px 0 0; padding:0; accent-color:var(--accent); cursor:pointer;
+}

@@ -177,6 +177,9 @@
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
     refreshNavMore(name);
     if (name === 'console') renderConsole();
+    const projectToggle = qs('#project-nav-toggle');
+    if (projectToggle) projectToggle.classList.toggle('active', name === 'animation' && !qs('.main-nav.motion-section-active [data-motion-nav].active'));
+    if (name === 'civitai') window.MorphorumCivitai?.activate?.();
     if (name === 'loras') window.MorphorumLoras?.refreshRuntime?.();
     try { history.replaceState(null, '', `#${name}`); } catch (_) {}
   }
@@ -308,7 +311,7 @@
     }
   }
   function selectSettingsTab(tab, { persist = true } = {}) {
-    if (!['appearance','generation','paths','storage'].includes(tab)) return;
+    if (!['appearance','generation','paths','storage','civitai'].includes(tab)) return;
     state.settingsTab = tab;
     qsa('#settings-internal-tabs button[data-settings-tab]').forEach(button => {
       const selected = button.dataset.settingsTab === tab;
@@ -1098,6 +1101,162 @@
     return section;
   }
 
+  function createCivitaiSettingsCard() {
+    state.settings.civitai ||= {};
+    const cfg = state.settings.civitai;
+    const card = document.createElement('article');
+    card.className = 'card glass settings-preferences-card civitai-settings-card';
+    const heading = document.createElement('div');
+    heading.className = 'civitai-settings-heading';
+    const title = document.createElement('h2');
+    title.textContent = 'Civitai Hub';
+    const description = document.createElement('p');
+    description.className = 'muted';
+    description.textContent = 'Optional online model discovery. Local models and LoRA inspection remain available when disabled.';
+    heading.append(title, description);
+    card.append(heading);
+
+    const toggles = document.createElement('div');
+    toggles.className = 'civitai-settings-options';
+    const toggle = (label, key, fallback = false, hint = '') => {
+      const wrap = document.createElement('label');
+      wrap.className = 'civitai-settings-toggle';
+      const copy = document.createElement('span');
+      copy.className = 'civitai-settings-toggle-copy';
+      const strong = document.createElement('strong');
+      strong.textContent = label;
+      copy.append(strong);
+      if (hint) {
+        const small = document.createElement('small');
+        small.className = 'muted';
+        small.textContent = hint;
+        copy.append(small);
+      }
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = cfg[key] === undefined ? fallback : cfg[key] === true;
+      input.addEventListener('change', () => { cfg[key] = input.checked; markSettingsDirty(); });
+      wrap.append(copy, input);
+      toggles.append(wrap);
+    };
+    toggle('Enable Civitai Hub', 'enabled', false, 'Enable online discovery and Civitai connectivity.');
+    toggle('Allow mature previews', 'allow_mature');
+    toggle('Load model thumbnails', 'load_previews', true);
+    toggle('Check for updates automatically', 'auto_check_updates', false, 'Reserved for future update scanning.');
+    card.append(toggles);
+
+    const selects = document.createElement('div');
+    selects.className = 'civitai-settings-selects';
+    const selectField = (label, key, values, fallback) => {
+      const field = document.createElement('label');
+      field.className = 'civitai-settings-field';
+      const caption = document.createElement('span');
+      caption.textContent = label;
+      const select = document.createElement('select');
+      for (const [value, text] of values) {
+        const option = document.createElement('option');
+        option.value = String(value);
+        option.textContent = text;
+        select.append(option);
+      }
+      select.value = String(cfg[key] ?? fallback);
+      select.addEventListener('change', () => {
+        cfg[key] = key === 'concurrent_downloads' ? Number(select.value) : select.value;
+        markSettingsDirty();
+      });
+      field.append(caption, select);
+      selects.append(field);
+    };
+    selectField('Browsing layout', 'layout', [['grid', 'Thumbnail grid'], ['list', 'Compact list']], 'grid');
+    selectField('Concurrent downloads (future feature)', 'concurrent_downloads', [[1,'1'],[2,'2'],[3,'3']], 1);
+    card.append(selects);
+
+    const connection = document.createElement('section');
+    connection.className = 'civitai-settings-connection';
+    const connectionTitle = document.createElement('h3');
+    connectionTitle.textContent = 'Connection';
+    const notice = document.createElement('p');
+    notice.className = 'muted';
+    notice.textContent = 'Save a Civitai API key below, then Test Connection. CIVITAI_API_TOKEN environment variable takes precedence.';
+    const keyRow = document.createElement('div');
+    keyRow.className = 'civitai-key-controls';
+    const keyInput = document.createElement('input');
+    keyInput.type = 'password';
+    keyInput.autocomplete = 'new-password';
+    keyInput.placeholder = 'Paste Civitai API key';
+    keyInput.setAttribute('aria-label', 'Civitai API key');
+    const keyStatus = document.createElement('span');
+    keyStatus.className = 'muted';
+    keyStatus.textContent = 'Checking key status…';
+    const saveKey = makeButton('Save / Replace Key', 'secondary-button compact');
+    const clearKey = makeButton('Clear Key', 'secondary-button compact');
+    const refreshKey = async () => {
+      try {
+        const response = await api('/api/civitai/auth');
+        keyStatus.textContent = response.configured ? 'API key configured (' + response.source + ')' : 'No API key configured';
+        clearKey.disabled = response.source !== 'saved';
+      } catch (error) { keyStatus.textContent = 'Unable to read key status'; }
+    };
+    saveKey.addEventListener('click', async () => {
+      saveKey.disabled = true;
+      try {
+        await api('/api/civitai/auth', {method:'PUT', body:JSON.stringify({token:keyInput.value})});
+        keyInput.value = '';
+        toast('Civitai key saved', 'Key stored on Morphorum host. Test Connection to verify it.', 'success');
+        await refreshKey();
+      } catch (error) { toast('Cannot save API key', error.message, 'error'); }
+      finally { saveKey.disabled = false; }
+    });
+    clearKey.addEventListener('click', async () => {
+      clearKey.disabled = true;
+      try {
+        await api('/api/civitai/auth', {method:'DELETE'});
+        keyInput.value = '';
+        toast('Civitai key cleared', 'Stored API key removed.', 'success');
+        await refreshKey();
+      } catch (error) { toast('Cannot clear API key', error.message, 'error'); }
+    });
+    keyRow.append(keyInput, saveKey, clearKey, keyStatus);
+    connection.append(keyRow);
+    void refreshKey();
+    const test = document.createElement('button');
+    test.type = 'button';
+    test.className = 'secondary-button busy-button civitai-test-button';
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    const testLabel = document.createElement('span');
+    testLabel.textContent = 'Test Connection';
+    test.append(spinner, testLabel);
+    const status = document.createElement('span');
+    status.className = 'civitai-settings-sr-only';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    test.addEventListener('click', async () => {
+      test.disabled = true;
+      test.classList.add('busy');
+      testLabel.textContent = 'Testing connection…';
+      status.textContent = 'Testing Civitai connection';
+      try {
+        const result = await api('/api/civitai/test-connection', {method:'POST', body:'{}'});
+        const summary = result.message + (result.status ? ' HTTP ' + result.status : '') +
+          (result.authenticated ? ' (token configured)' : ' (public access)');
+        status.textContent = summary;
+        toast(result.ok ? 'Civitai connected' : 'Civitai connection failed', summary, result.ok ? 'success' : 'warning');
+      } catch (error) {
+        status.textContent = error.message;
+        toast('Civitai test failed', error.message, 'error');
+      } finally {
+        test.disabled = false;
+        test.classList.remove('busy');
+        testLabel.textContent = 'Test Connection';
+      }
+    });
+    connection.append(connectionTitle, notice, test, status);
+    card.append(connection);
+    return card;
+  }
+
   function renderSettings() {
     const container = qs('#model-path-cards');
     const loader = qs('#settings-loading');
@@ -1111,7 +1270,7 @@
     tabs.className = 'settings-internal-tabs';
     tabs.setAttribute('aria-label', 'Settings groups');
     const panes = {};
-    for (const [name,label] of [['appearance','Appearance'],['generation','Generation'],['paths','Model Paths'],['storage','Storage']]) {
+    for (const [name,label] of [['appearance','Appearance'],['generation','Generation'],['paths','Model Paths'],['storage','Storage'],['civitai','Civitai Hub']]) {
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.settingsTab = name;
@@ -1130,6 +1289,7 @@
     panes.generation.appendChild(createPreferencesCard());
     panes.storage.appendChild(createManagedModelsCard());
     panes.storage.appendChild(createFFmpegManagerCard());
+    panes.civitai.appendChild(createCivitaiSettingsCard());
     for (const [family, fallbackLabel, source, loraSource, supportsLoras] of FAMILY_DEFS) {
       if (source === 'managed' && !(supportsLoras && loraSource === 'external')) continue;
       const familyData = ensureFamily(family);
@@ -1204,6 +1364,7 @@
       applyAppearance(state.settings.ui);
       window.MorphorumHelp?.setEnabled(state.settings.ui.show_help_hints);
       renderSettings();
+      window.MorphorumCivitai?.settingsChanged?.(state.settings.civitai || {});
       setSettingsClean();
       void checkFFmpegSettings({quiet: true});
       window.dispatchEvent(new CustomEvent('morphorum:settings-changed', { detail: state.settings }));
@@ -1260,6 +1421,7 @@
         show_help_hints: state.settings.ui.show_help_hints !== false,
         image_preview_limit: Math.max(1, Math.min(50, Number(state.settings.ui.image_preview_limit) || 5)),
       },
+      civitai: state.settings.civitai || { enabled: false },
       performance: {
         unload_after_generation: Boolean(state.settings.performance.unload_after_generation),
         sdxl_vae_tiling: Boolean(state.settings.performance.sdxl_vae_tiling),
@@ -1682,13 +1844,28 @@
       switchView(button.dataset.view);
       if (button.dataset.view === 'animation') qs('#animation-tab-motion')?.click();
     }));
+    qs('#project-nav-toggle')?.addEventListener('click', () => {
+      const menu = qs('#project-nav-submenu');
+      if (!menu) return;
+      menu.hidden = !menu.hidden;
+      qs('#project-nav-toggle').setAttribute('aria-expanded', String(!menu.hidden));
+    });
+    qs('#motion-nav-toggle')?.addEventListener('click', () => {
+      const menu = qs('#motion-lab-sidebar');
+      menu.hidden = !menu.hidden;
+      qs('#motion-nav-toggle').setAttribute('aria-expanded', String(!menu.hidden));
+    });
     qsa('.main-nav [data-project-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
       qs('#animation-tab-' + button.dataset.projectNav)?.click();
+      qs('#project-nav-submenu').hidden = false;
+      qs('#project-nav-toggle').setAttribute('aria-expanded', 'true');
     }));
     qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
       qs('#animation-tab-' + button.dataset.motionNav)?.click();
+      qs('#motion-lab-sidebar').hidden = false;
+      qs('#motion-nav-toggle').setAttribute('aria-expanded', 'true');
     }));
     const moreToggle = qs('#nav-more-toggle');
     moreToggle?.addEventListener('click', () => {
@@ -1754,7 +1931,7 @@
     document.addEventListener('focusout', () => window.setTimeout(syncMobileViewport, 120));
     syncMobileViewport();
     const requested = location.hash.replace('#', '');
-    if (['image', 'animation', 'models', 'loras', 'settings', 'console'].includes(requested)) switchView(requested);
+    if (['image', 'animation', 'models', 'loras', 'civitai', 'settings', 'console'].includes(requested)) switchView(requested);
   }
 
   async function start() {

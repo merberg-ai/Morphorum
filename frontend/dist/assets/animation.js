@@ -11919,8 +11919,49 @@
     showAnimationTab('editor');
     return state.project?.id === projectId;
   }
+  function selectInstalledCivitaiCheckpoint(modelId) {
+    if (!state.project) return {ok:false, message:'Open or create an animation project first.'};
+    const model = state.models.find(item => item.id === modelId && item.kind === 'checkpoints');
+    if (!model) return {ok:false, message:'Checkpoint is missing from the indexed model library. Scan Models first.'};
+    const select = qs('#animation-model');
+    if (!select || ![...select.options].some(option => option.value === modelId))
+      return {ok:false, message:'Checkpoint not available in Project Editor.'};
+    select.value = modelId;
+    select.dispatchEvent(new Event('change', {bubbles:true}));
+    markDirty({validate:true});
+    return {ok:true, message:'Checkpoint selected in Project Editor. Save Project to persist.'};
+  }
+
+  function insertInstalledCivitaiLora({id, family, name, weight = 1, triggers = []} = {}) {
+    if (!state.project) return {ok:false, message:'Open or create an animation project first.'};
+    const modelId = qs('#animation-model')?.value || state.project.model?.model_id;
+    const model = modelById(modelId);
+    if (!model || model.kind !== 'checkpoints')
+      return {ok:false, message:'Choose an available project checkpoint first.'};
+    if (model.family !== family)
+      return {ok:false, message:'LoRA family does not match the selected project checkpoint.'};
+    const lora = state.models.find(item => item.id === id && item.kind === 'loras' && item.family === family);
+    if (!lora) return {ok:false, message:'LoRA is no longer indexed. Scan Models first.'};
+    const target = qs('.animation-prompt-row .animation-prompt-text');
+    if (!target) return {ok:false, message:'No editable animation prompt keyframe available.'};
+    const strength = Number(weight);
+    if (!Number.isFinite(strength) || strength < -4 || strength > 4)
+      return {ok:false, message:'Invalid LoRA strength.'};
+    if (!lora.name || /[:<>\\r\\n]/.test(lora.name))
+      return {ok:false, message:'LoRA name cannot form a valid prompt tag.'};
+    const words = Array.isArray(triggers)
+      ? [...new Set(triggers.filter(value => typeof value === 'string' && !/[<>\\r\\n]/.test(value))
+        .map(value => value.trim()).filter(Boolean))].slice(0,20) : [];
+    const tag = window.MorphorumPromptTags.lora({name:lora.name, weight:strength, triggers:words});
+    insertAtCursor(target, tag);
+    markDirty({validate:true});
+    return {ok:true, message:'LoRA inserted into the first prompt keyframe. Save Project to persist.'};
+  }
+
   window.MorphorumAnimation = {
     openSavedProjectFromSetup,
+    selectInstalledCivitaiCheckpoint,
+    insertInstalledCivitaiLora,
   };
 
   window.addEventListener('morphorum:settings-changed', () => {

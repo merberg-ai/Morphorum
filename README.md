@@ -2,12 +2,20 @@
 
 **Create AI images, build camera-driven animations, and export videos on your own computer.**
 
-Morphorum is an open-source, self-hosted image and animation studio with a browser interface. It supports **SDXL, FLUX, and Z-Image** models, a guided animation wizard, 2D/3D Motion Lab, and optional remote control through an authenticated backend API.
+Morphorum is an open-source, self-hosted image and animation studio with a browser interface. It supports **SDXL, FLUX, and Z-Image** models, a guided animation wizard, 2D/3D Motion Lab, an optional opt-in Civitai Hub for model discovery and downloads, and remote control through an authenticated backend API.
 
 **Version:** 0.1.0a1 (early alpha) · **License:** [The Unlicense](LICENSE) · **Platforms:** Windows 10/11 and 64-bit Linux
 
 > [!IMPORTANT]
 > Morphorum is early alpha software. It does not include AI model weights. A compatible NVIDIA GPU is strongly recommended, and you should keep backups of your projects and outputs.
+
+## Civitai Model Hub
+
+Enable **Civitai Hub** under **Settings** to search, inspect, and download compatible SDXL, FLUX, and Z-Image checkpoints and LoRAs directly in Morphorum. The Hub is disabled by default; optional API token authentication supports restricted downloads. Download destinations come from your configured model libraries. Model files are never silently replaced.
+
+You can identify installed files by exact SHA-256, check Civitai for newer versions, synchronize metadata/preview images and LoRA trigger words, and run bulk actions on selected models. Verified installed models can be selected for **Image** or the **Project Editor / Motion Lab**, and LoRAs can be inserted into prompts with synced trigger words. Network lookups and metadata synchronization require deliberate actions; no automatic model updates occur.
+
+See the [Civitai Hub guide](docs/CIVITAI_MODEL_HUB.md) for configuration, privacy, download resume, and limitations.
 
 ## Quick start
 

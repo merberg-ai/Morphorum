@@ -15,6 +15,8 @@
     downloadOperations: new Map(),
     downloadPendingChecks: new Map(),
     scanning: false,
+    bulkSelected: new Set(),
+    bulkBusy: false,
   };
   const qs = (selector, root = document) => root.querySelector(selector);
   const toast = (title, message, type = 'info', timeout) => {
@@ -384,6 +386,50 @@
 
   function copyText(text) { return window.MorphorumClipboard.writeText(text); }
 
+  function updateBulkControls() {
+    const count = state.bulkSelected.size;
+    for (const [id, label] of [['model-bulk-identify','Identify Selected'],['model-bulk-updates','Check Updates']]) {
+      const button = qs('#' + id);
+      if (button) { button.disabled = state.bulkBusy || !count; button.textContent = label + ' (' + count + ')'; }
+    }
+    for (const id of ['model-select-visible','model-clear-selected']) {
+      const button = qs('#' + id);
+      if (button) button.disabled = state.bulkBusy;
+    }
+    const status = qs('#model-bulk-status');
+    if (status && !state.bulkBusy) status.textContent = count + ' selected';
+  }
+  async function bulkCheck(mode) {
+    if (state.bulkBusy || !state.bulkSelected.size) return;
+    const selected = [...state.bulkSelected].filter(id => state.models.some(model => model.id === id));
+    state.bulkBusy = true;
+    updateBulkControls();
+    let matched = 0, unmatched = 0, failed = 0;
+    const errors = [];
+    try {
+      for (let index = 0; index < selected.length; index++) {
+        const id = selected[index];
+        const model = state.models.find(item => item.id === id);
+        qs('#model-bulk-status').textContent = (index + 1) + '/' + selected.length + ' · ' + (model?.name || id);
+        try {
+          const response = await api('/api/civitai/' + (mode === 'identify' ? 'identify/' : 'updates/') + encodeURIComponent(id), {method:'POST'});
+          if (mode === 'identify' ? response.found : response.status === 'newer_available') matched++;
+          else unmatched++;
+        } catch (error) {
+          failed++;
+          if (errors.length < 3) errors.push((model?.name || id) + ': ' + error.message);
+        }
+      }
+      toast('Bulk Civitai ' + (mode === 'identify' ? 'identification' : 'update check') + ' completed',
+        matched + ' matches/newer · ' + unmatched + ' no match/no newer · ' + failed + ' failed.' + (errors.length ? ' ' + errors.join(' | ') : ''),
+        failed ? 'warning' : 'success', 9000);
+    } finally {
+      state.bulkBusy = false;
+      updateBulkControls();
+      qs('#model-bulk-status').textContent = matched + ' found · ' + unmatched + ' unchanged/unmatched · ' + failed + ' errors';
+    }
+  }
+
   function modelRow(model) {
     const row = document.createElement('div');
     row.className = 'model-row';
@@ -441,7 +487,148 @@
       });
     }
 
-    row.append(nameWrap, family, kind, pathDetails, size, action);
+    const identify = document.createElement('button');
+    identify.type = 'button';
+    identify.className = 'secondary-button compact busy-button';
+    identify.textContent = 'Identify on Civitai';
+    identify.title = 'Explicit SHA-256 lookup; sends only the file hash to Civitai.';
+    const identityResult = document.createElement('div');
+    identityResult.className = 'model-civitai-identity';
+    nameWrap.append(identityResult);
+    identify.addEventListener('click', async () => {
+      identify.disabled = true;
+      identify.classList.add('busy');
+      identify.textContent = 'Identifying…';
+      try {
+        const response = await fetch('/api/civitai/identify/' + encodeURIComponent(model.id), {method: 'POST'});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Identification failed');
+        if (result.found) {
+          const link = document.createElement('a');
+          link.href = result.url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = 'Verified: ' + (result.name || 'Civitai model') + ' · ' + (result.version || 'version') + ' ↗';
+          identityResult.replaceChildren(link);
+          toast('Exact SHA-256 match', model.name + ' identified on Civitai.', 'success');
+        } else {
+          identityResult.replaceChildren();
+          toast('No verified Civitai match', result.message || model.name, 'info');
+        }
+      } catch (error) { toast('Civitai identification failed', error.message, 'error'); }
+      finally {
+        identify.disabled = false;
+        identify.classList.remove('busy');
+        identify.textContent = 'Identify on Civitai';
+      }
+    });
+    const update = document.createElement('button');
+    update.type = 'button';
+    update.className = 'secondary-button compact busy-button';
+    update.textContent = 'Check Updates';
+    update.title = 'Read-only Civitai version check. Does not download or replace files.';
+    const updateResult = document.createElement('div');
+    updateResult.className = 'model-civitai-identity';
+    nameWrap.append(updateResult);
+    update.addEventListener('click', async () => {
+      update.disabled = true;
+      update.classList.add('busy');
+      update.textContent = 'Checking…';
+      try {
+        const response = await fetch('/api/civitai/updates/' + encodeURIComponent(model.id), {method:'POST'});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Update check failed');
+        updateResult.replaceChildren();
+        if (result.status === 'newer_available') {
+          const heading = document.createElement('strong');
+          heading.textContent = result.candidates.length + ' newer version(s): ';
+          updateResult.append(heading);
+          result.candidates.slice(0, 3).forEach((candidate, index) => {
+            const link = document.createElement('a');
+            link.href = candidate.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = candidate.version + (candidate.potentially_compatible ? ' (same base)' : ' (verify compatibility)') + ' ↗';
+            if (index) updateResult.append(document.createTextNode(' · '));
+            updateResult.append(link);
+          });
+          toast('Civitai updates found', model.name + ': ' + result.candidates.length + ' newer versions.', 'info');
+        } else {
+          updateResult.textContent = result.message || 'No newer versions found.';
+          toast('Civitai update check', updateResult.textContent, 'info');
+        }
+      } catch (error) { toast('Update check failed', error.message, 'error'); }
+      finally { update.disabled = false; update.classList.remove('busy'); update.textContent = 'Check Updates'; }
+    });
+    const sync = document.createElement('button');
+    sync.type = 'button';
+    sync.className = 'secondary-button compact busy-button';
+    sync.textContent = 'Sync Civitai Info';
+    sync.title = 'Explicitly cache verified Civitai metadata and an optional preview.';
+    const metadataResult = document.createElement('div');
+    metadataResult.className = 'model-civitai-metadata';
+    nameWrap.append(metadataResult);
+    const showMetadata = data => {
+      metadataResult.replaceChildren();
+      if (!data?.synced) return;
+      const title = document.createElement('strong');
+      title.textContent = 'Cached: ' + (data.name || model.name) + ' · ' + (data.version || '');
+      metadataResult.append(title);
+      const line = document.createElement('div');
+      line.textContent = [data.creator, data.base_model, data.synced_at ? 'Synced ' + new Date(data.synced_at).toLocaleDateString() : ''].filter(Boolean).join(' · ');
+      metadataResult.append(line);
+      if (data.preview) {
+        const image = document.createElement('img');
+        image.className = 'model-civitai-thumbnail';
+        image.src = '/api/civitai/library/' + encodeURIComponent(model.id) + '/preview';
+        image.alt = 'Cached Civitai preview for ' + model.name;
+        image.loading = 'lazy';
+        metadataResult.append(image);
+      }
+      if (data.trained_words?.length) {
+        const words = document.createElement('div');
+        words.textContent = 'Triggers: ' + data.trained_words.slice(0, 8).join(', ');
+        metadataResult.append(words);
+      }
+    };
+    sync.addEventListener('click', async () => {
+      sync.disabled = true;
+      sync.classList.add('busy');
+      sync.textContent = 'Syncing…';
+      try {
+        const response = await fetch('/api/civitai/library/' + encodeURIComponent(model.id) + '/sync', {method:'POST'});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Metadata sync failed');
+        showMetadata(data);
+        toast('Civitai metadata cached', model.name + ' metadata saved to Morphorum cache.', 'success');
+      } catch (error) { toast('Metadata sync failed', error.message, 'error'); }
+      finally { sync.disabled = false; sync.classList.remove('busy'); sync.textContent = 'Sync Civitai Info'; }
+    });
+    const viewCache = document.createElement('button');
+    viewCache.type = 'button';
+    viewCache.className = 'secondary-button compact';
+    viewCache.textContent = 'View Cached Info';
+    viewCache.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/api/civitai/library/' + encodeURIComponent(model.id));
+        const data = await response.json();
+        if (!response.ok) throw Error(data.detail || 'Cache unavailable');
+        showMetadata(data);
+        if (!data.synced) toast('No cached metadata', 'Use Sync Civitai Info first.', 'info');
+      } catch (error) { toast('Cannot read Civitai cache', error.message, 'error'); }
+    });
+    const checked = document.createElement('input');
+    checked.type = 'checkbox';
+    checked.className = 'model-bulk-checkbox';
+    checked.checked = state.bulkSelected.has(model.id);
+    checked.disabled = state.bulkBusy;
+    checked.setAttribute('aria-label', 'Select ' + model.name + ' for bulk Civitai actions');
+    checked.addEventListener('change', () => {
+      if (checked.checked) state.bulkSelected.add(model.id);
+      else state.bulkSelected.delete(model.id);
+      updateBulkControls();
+    });
+    row.append(checked, nameWrap, family, kind, pathDetails, size, action, identify, update, sync, viewCache);
     return row;
   }
 
@@ -472,6 +659,7 @@
     note.className = 'model-count-note';
     note.textContent = `Showing ${models.length} of ${state.models.length} indexed file${state.models.length === 1 ? '' : 's'}.`;
     list.appendChild(note);
+    updateBulkControls();
   }
 
   function updateImageBadge() {
@@ -539,6 +727,8 @@
     try {
       const payload = await api('/api/models?limit=2000');
       state.models = Array.isArray(payload.models) ? payload.models : [];
+      const validIds = new Set(state.models.map(item => item.id));
+      for (const id of state.bulkSelected) if (!validIds.has(id)) state.bulkSelected.delete(id);
       window.dispatchEvent(new CustomEvent('morphorum:models-updated', {
         detail: { models: state.models, loaded: true },
       }));
@@ -566,7 +756,7 @@
   }
 
   async function scanModels() {
-    if (state.scanning) return;
+    if (state.scanning || state.bulkBusy) return;
     state.scanning = true;
     const button = qs('#scan-models');
     setBusy(button, true);
@@ -604,6 +794,13 @@
 
   function bind() {
     qs('#scan-models')?.addEventListener('click', scanModels);
+    qs('#model-select-visible')?.addEventListener('click', () => {
+      for (const item of currentFilteredModels()) state.bulkSelected.add(item.id);
+      renderModels();
+    });
+    qs('#model-clear-selected')?.addEventListener('click', () => { state.bulkSelected.clear(); renderModels(); });
+    qs('#model-bulk-identify')?.addEventListener('click', () => bulkCheck('identify'));
+    qs('#model-bulk-updates')?.addEventListener('click', () => bulkCheck('updates'));
     qs('#model-search')?.addEventListener('input', renderModels);
     qs('#model-family-filter')?.addEventListener('change', renderModels);
     qs('#model-kind-filter')?.addEventListener('change', renderModels);

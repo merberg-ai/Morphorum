@@ -110,6 +110,14 @@ from .deforum_import import (
 from .loras import LoRAError
 from .lora_inspector import LoRAInspectionError, inspect_lora
 from .civitai import CivitaiLookupError, lookup_civitai
+from .civitai_search import CivitaiSearchError, search_models
+from .civitai_detail import model_details
+from .civitai_download import start_download, list_jobs, cancel_download, resume_download, retry_download
+from .civitai_auth import get_token, token_status, store_token, clear_token
+from .civitai_identify import identify_model
+from .civitai_updates import check_model_update
+from .civitai_library import cached_metadata, sync_metadata, preview_path
+from .civitai_installed import installed_versions
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -433,6 +441,164 @@ def get_settings() -> dict[str, Any]:
         "validation": validate_model_paths(settings),
         "model_families": model_family_definitions(),
     }
+
+
+@app.get("/api/civitai/installed/{model_id}")
+def api_civitai_installed(model_id: int) -> dict[str, Any]:
+    try:
+        return installed_versions(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.get("/api/civitai/library/{model_id}")
+def api_civitai_cached_metadata(model_id: str) -> dict[str, Any]:
+    try:
+        return cached_metadata(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.post("/api/civitai/library/{model_id}/sync")
+def api_civitai_sync_metadata(model_id: str) -> dict[str, Any]:
+    try:
+        return sync_metadata(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.get("/api/civitai/library/{model_id}/preview")
+def api_civitai_cached_preview(model_id: str):
+    try:
+        path = preview_path(model_id)
+        return FileResponse(path)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.post("/api/civitai/updates/{model_id}")
+def api_civitai_check_update(model_id: str) -> dict[str, Any]:
+    try:
+        return check_model_update(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.post("/api/civitai/identify/{model_id}")
+def api_civitai_identify(model_id: str) -> dict[str, Any]:
+    try:
+        return identify_model(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.get("/api/civitai/models")
+def api_civitai_models(query: str = "", tag: str = "", username: str = "",
+                       model_type: str = "", base_model: str = "",
+                       sort: str = "Most Downloaded", period: str = "AllTime",
+                       cursor: str = "", limit: int = 20, allow_mature: bool = False) -> dict[str, Any]:
+    """Read-only, opt-in discovery API. Search credentials never leave the backend."""
+    try:
+        return search_models(query=query, tag=tag, username=username,
+                             model_type=model_type, base_model=base_model,
+                             sort=sort, period=period, cursor=cursor, limit=limit,
+                             allow_mature=allow_mature)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.get("/api/civitai/models/{model_id}")
+def api_civitai_model_details(model_id: int) -> dict[str, Any]:
+    try:
+        return model_details(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.get("/api/civitai/downloads")
+def api_civitai_downloads() -> dict[str, Any]:
+    if not load_settings().get("civitai", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Civitai Hub disabled.")
+    return {"jobs": list_jobs()}
+
+
+@app.post("/api/civitai/downloads", status_code=202)
+def api_civitai_create_download(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return start_download(int(payload["model_id"]), int(payload["version_id"]), str(payload["file_name"]))
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/civitai/downloads/{job_id}/cancel")
+def api_civitai_cancel_download(job_id: str) -> dict[str, Any]:
+    try:
+        return cancel_download(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Download not found.") from exc
+
+
+@app.post("/api/civitai/downloads/{job_id}/resume")
+def api_civitai_resume_download(job_id: str) -> dict[str, Any]:
+    if not load_settings().get("civitai", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Civitai Hub disabled.")
+    try:
+        return resume_download(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Download not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/civitai/auth")
+def api_civitai_auth() -> dict[str, Any]:
+    return token_status()
+
+
+@app.put("/api/civitai/auth")
+def api_civitai_auth_save(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return store_token(payload.get("token"))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.delete("/api/civitai/auth")
+def api_civitai_auth_clear() -> dict[str, Any]:
+    return clear_token()
+
+
+@app.post("/api/civitai/downloads/{job_id}/retry")
+def api_civitai_retry_download(job_id: str) -> dict[str, Any]:
+    if not load_settings().get("civitai", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Civitai Hub disabled.")
+    try:
+        return retry_download(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Download not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/civitai/test-connection")
+def api_civitai_test_connection() -> dict[str, Any]:
+    """Test authenticated account access, not merely public API reachability."""
+    import httpx
+    if not load_settings().get("civitai", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Enable and save Civitai Hub first.")
+    token = get_token()
+    if not token:
+        return {"ok": True, "authenticated": False, "message": "Public API access only. Add an API key to test authenticated downloads."}
+    try:
+        with httpx.Client(timeout=12, follow_redirects=False, trust_env=False) as client:
+            response = client.get("https://civitai.com/api/v1/me",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+        if response.status_code == 200:
+            return {"ok": True, "authenticated": True, "status": 200, "message": "API key verified with Civitai account endpoint."}
+        return {"ok": False, "authenticated": False, "status": response.status_code,
+                "message": "API key was rejected or account verification unavailable."}
+    except httpx.RequestError:
+        return {"ok": False, "authenticated": False, "message": "Unable to contact Civitai authentication service."}
 
 
 @app.get("/api/tools/ffmpeg/status")
