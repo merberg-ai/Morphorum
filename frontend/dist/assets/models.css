@@ -277,3 +277,12 @@
   margin:0 2px; padding:0; accent-color:var(--accent); cursor:pointer;
 }
 @media(max-width:600px) { .lora-bulk-toolbar { gap:6px; } .lora-bulk-toolbar button { font-size:.79rem; } }
+
+/* C4.3 compact batch library actions; never inherit full-sized checkbox styles. */
+.model-bulk-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:9px 0; }
+.model-bulk-toolbar .muted { font-size:.78rem; }
+.model-row > .model-bulk-checkbox {
+  appearance:auto; flex:0 0 17px; width:17px !important; height:17px !important;
+  min-width:17px !important; min-height:17px !important; max-width:17px; max-height:17px;
+  margin:0 4px 0 0; padding:0; accent-color:var(--accent); cursor:pointer;
+}
