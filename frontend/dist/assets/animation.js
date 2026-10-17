@@ -10279,7 +10279,10 @@
     // Single-Band Pulse card. Put it with the Analyze action instead.
     const liveStatus = qs('#animation-motion-lab-audio-info');
     if (liveStatus) {
+      // Keep the legacy status node for existing code/automation, but expose
+      // exactly ONE visible message through motion-studio-analysis-status.
       liveStatus.classList.add('motion-studio-analysis-result');
+      liveStatus.hidden = true;
       stages.analysis.appendChild(liveStatus);
     }
     const analysisHint = document.createElement('p');
