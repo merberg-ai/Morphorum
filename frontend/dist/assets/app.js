@@ -1675,6 +1675,10 @@
   function bindUi() {
     bindModelSetupHelp();
     qsa('.nav-button').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
+    qsa('.main-nav [data-project-nav]').forEach(button => button.addEventListener('click', () => {
+      switchView('animation');
+      qs('#animation-tab-' + button.dataset.projectNav)?.click();
+    }));
     qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
       qs('#animation-tab-' + button.dataset.motionNav)?.click();
