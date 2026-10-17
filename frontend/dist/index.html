@@ -108,8 +108,8 @@
         <button type="button" data-project-nav="editor">Project Editor</button>
       </div>
       <button class="nav-button" data-view="civitai" id="civitai-nav" hidden><span class="nav-icon">◈</span><span>Civitai Hub</span></button>
-      <button class="nav-button" data-view="animation" type="button"><span class="nav-icon">◈</span><span>Motion Lab</span></button>
-      <div class="motion-lab-sidebar" id="motion-lab-sidebar" role="group" aria-label="Motion Lab workspaces">
+      <button class="nav-button" data-view="animation" id="motion-nav-toggle" type="button" aria-expanded="false" aria-controls="motion-lab-sidebar"><span class="nav-icon">◈</span><span>Motion Lab</span><span class="project-nav-chevron">▾</span></button>
+      <div class="motion-lab-sidebar" id="motion-lab-sidebar" role="group" aria-label="Motion Lab workspaces" hidden>
         <button type="button" data-motion-nav="motion">Overview</button>
         <button type="button" data-motion-nav="audio">Motion Studio</button>
         <button type="button" data-motion-nav="composer">Camera Composer</button>
@@ -1322,6 +1322,7 @@
             <div class="civitai-detail-header"><h2 id="civitai-detail-title">Model details</h2><button id="civitai-detail-close" type="button" class="secondary-button compact">Close ✕</button></div>
             <div id="civitai-detail-content" role="status" aria-live="polite"></div>
           </dialog>
+          <section class="civitai-download-manager"><div class="civitai-download-heading"><h3>Download queue</h3><button type="button" id="civitai-refresh-downloads" class="secondary-button compact">Refresh</button></div><div id="civitai-download-jobs" role="status" aria-live="polite">No downloads queued.</div></section>
           <div class="civitai-pagination"><button id="civitai-previous" class="secondary-button compact" type="button" disabled>← Previous</button><button id="civitai-next" class="secondary-button compact" type="button" disabled>Next →</button></div>
         </article>
       </section>
