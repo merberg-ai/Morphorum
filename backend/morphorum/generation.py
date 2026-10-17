@@ -99,6 +99,8 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
             "options": [
                 {"id": "normal", "label": "Normal"},
                 {"id": "karras", "label": "Karras"},
+                {"id": "exponential", "label": "Exponential"},
+                {"id": "beta", "label": "Beta"},
             ],
         },
         "samplers": {
@@ -526,10 +528,12 @@ class GenerationManager:
                 raise GenerationError(
                     f"Schedule Type '{request.schedule_type}' is not supported for SDXL."
                 )
-            if request.schedule_type == "karras" and request.sampler == "ddim":
-                raise GenerationError(
-                    "Karras schedule is not supported with the DDIM sampler."
-                )
+            if request.schedule_type != "normal" and request.sampler == "ddim":
+                raise GenerationError("DDIM supports only Normal scheduling.")
+            if request.schedule_type in {"exponential", "beta"} and request.sampler not in {
+                "euler", "dpmpp_2m", "dpmpp_2m_sde", "unipc"
+            }:
+                raise GenerationError("Selected SDXL sampler does not support this schedule.")
 
         model_path = Path(model["path"])
         if family == "zimage":
@@ -2658,14 +2662,21 @@ class GenerationManager:
                 if spec is None:
                     raise GenerationError(f"Unknown sampler '{sampler}'.")
                 scheduler_class, scheduler_kwargs = spec
-                if schedule_type not in {"normal", "karras"}:
+                if schedule_type not in {"normal", "karras", "exponential", "beta"}:
                     raise GenerationError(f"Unknown SDXL schedule type '{schedule_type}'.")
-                if schedule_type == "karras":
-                    if sampler == "ddim":
-                        raise GenerationError(
-                            "Karras schedule is not supported with the DDIM sampler."
-                        )
-                    scheduler_kwargs = {**scheduler_kwargs, "use_karras_sigmas": True}
+                if sampler == "ddim" and schedule_type != "normal":
+                    raise GenerationError("DDIM supports only Normal scheduling.")
+                if schedule_type in {"exponential", "beta"} and sampler not in {
+                    "euler", "dpmpp_2m", "dpmpp_2m_sde", "unipc"
+                }:
+                    raise GenerationError("Selected SDXL sampler does not support this schedule.")
+                if schedule_type != "normal":
+                    sigma_key = {
+                        "karras": "use_karras_sigmas",
+                        "exponential": "use_exponential_sigmas",
+                        "beta": "use_beta_sigmas",
+                    }[schedule_type]
+                    scheduler_kwargs = {**scheduler_kwargs, sigma_key: True}
                 pipe.scheduler = scheduler_class.from_config(base_config, **scheduler_kwargs)
             else:
                 raise GenerationError(f"Sampler switching is not implemented for model family '{family}'.")
