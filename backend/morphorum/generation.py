@@ -2817,7 +2817,6 @@ class GenerationManager:
                 notices.append(
                     f"SDXL {info['encoder']} {info['field']} prompt: "
                     f"{info['tokens']} tokens exceeds {info['limit']}. "
-                     "
                     "Chunked conditioning will be selected when available."
                 )
 
