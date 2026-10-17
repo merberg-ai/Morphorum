@@ -286,11 +286,16 @@ def _prompt_conditioning_kwargs(
         if family == "sdxl":
             do_cfg = float(guidance_scale) > 1.0
             from .sdxl_prompt_chunks import plan_clip_chunks
+            tokenizers = (
+                getattr(pipe, "tokenizer", None),
+                getattr(pipe, "tokenizer_2", None),
+            )
+            have_tokenizers = all(item is not None for item in tokenizers)
             common_chunks = max(
                 len(plan_clip_chunks(tokenizer, value).chunks)
-                for tokenizer in (pipe.tokenizer, pipe.tokenizer_2)
+                for tokenizer in tokenizers
                 for value in (from_prompt, to_prompt, from_negative, to_negative)
-            )
+            ) if have_tokenizers else 1
 
             def sdxl_encoded(prompt_text: str, negative_text: str):
                 key = (
@@ -306,9 +311,9 @@ def _prompt_conditioning_kwargs(
                 from .sdxl_prompt_chunks import (
                     encode_sdxl_long_prompts, plan_clip_chunks,
                 )
-                overflow = any(
+                overflow = have_tokenizers and any(
                     plan_clip_chunks(tokenizer, value).overflow
-                    for tokenizer in (pipe.tokenizer, pipe.tokenizer_2)
+                    for tokenizer in tokenizers
                     for value in (prompt_text, negative_text)
                     if value
                 )
