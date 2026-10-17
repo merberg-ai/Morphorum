@@ -611,10 +611,10 @@
       return;
     }
     const animation = project.animation || {};
-    const frameCount = Number(animation.max_frames || 0);
-    const fps = Number(animation.fps || project.fps || 0);
-    const width = Number(animation.width || project.width || 0);
-    const height = Number(animation.height || project.height || 0);
+    const frameCount = Number(qs('#animation-max-frames')?.value || animation.max_frames || 0);
+    const fps = Number(qs('#animation-fps')?.value || animation.fps || project.fps || 0);
+    const width = Number(qs('#animation-width')?.value || animation.width || project.width || 0);
+    const height = Number(qs('#animation-height')?.value || animation.height || project.height || 0);
     const modelId = qs('#animation-model')?.value || project.model?.model_id || '';
     const model = state.models.find(item => item.id === modelId && item.kind === 'checkpoints');
     const audio = project.audio || animation.audio || {};
@@ -629,11 +629,11 @@
       field('Editor', state.dirty ? 'Unsaved changes' : 'No unsaved Editor changes'),
       field('Output', width > 0 && height > 0 ? width + ' × ' + height + ' px' : 'Not configured'),
       field('Timeline', frameCount > 0 ? frameCount + ' frames' + (fps > 0 ? ' · ' + fps + ' FPS · ' + (frameCount / fps).toFixed(2) + ' s' : '') : 'Not configured'),
-      field('Camera', String(animation.mode || animation.animation_mode || 'Not specified').toUpperCase()),
+      field('Camera', animationMode().toUpperCase()),
       field('Checkpoint', model?.name || (modelId ? 'Saved model unavailable in index' : 'Not selected')),
       field('Motion Lab draft', draftCount + ' unapplied layer' + (draftCount === 1 ? '' : 's')),
       field('Saved camera schedule', 'Separate from Motion Lab draft; inspect in Project Editor'),
-      field('Export soundtrack', soundtrackName || 'Not attached'),
+      field('Export soundtrack', soundtrackName && soundtrackName !== 'Not attached' ? soundtrackName : 'See Sources & Media (not verified here)'),
       field('Analysis audio', 'Separate from attached export soundtrack; inspect in Motion Studio')
     );
     summary.append(grid);
@@ -644,7 +644,7 @@
     const links = document.createElement('div');
     links.className = 'animation-p5-summary-links';
     for (const [name, selector] of [
-      ['Project Editor', '[data-view="animation-editor"]'],
+      ['Project Editor', '[data-project-nav="editor"]'],
       ['Motion Studio', '[data-motion-nav="audio"]'],
       ['Camera Preview', '[data-motion-nav="preview"]'],
       ['Render Monitor', '[data-motion-nav="monitor"]']
