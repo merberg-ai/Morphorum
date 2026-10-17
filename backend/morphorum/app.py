@@ -435,6 +435,33 @@ def get_settings() -> dict[str, Any]:
     }
 
 
+@app.post("/api/civitai/test-connection")
+def api_civitai_test_connection() -> dict[str, Any]:
+    """Explicit, opt-in reachability test. Never return credentials or upstream bodies."""
+    import os
+    import urllib.error
+    import urllib.request
+
+    cfg = load_settings().get("civitai", {})
+    if not cfg.get("enabled", False):
+        raise HTTPException(status_code=403, detail="Enable and save Civitai Hub before testing the connection.")
+    token = os.environ.get("CIVITAI_API_TOKEN", "").strip()
+    headers = {"Accept": "application/json", "User-Agent": "Morphorum-CivitaiHub/0.1"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request("https://civitai.com/api/v1/models?limit=1", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=12) as response:
+            return {"ok": True, "status": response.status, "authenticated": bool(token),
+                    "message": "Civitai API reachable."}
+    except urllib.error.HTTPError as exc:
+        return {"ok": False, "status": exc.code, "authenticated": bool(token),
+                "message": "Civitai rejected the request; check authentication or service access."}
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return {"ok": False, "status": None, "authenticated": bool(token),
+                "message": "Civitai could not be reached. Check network connectivity."}
+
+
 @app.get("/api/tools/ffmpeg/status")
 def api_ffmpeg_status() -> dict[str, Any]:
     return ffmpeg_status()
