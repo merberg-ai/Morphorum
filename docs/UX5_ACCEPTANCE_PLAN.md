@@ -8,6 +8,14 @@ This is a development-only checklist. Do not merge to main before user acceptanc
 - Installer checks: PASS at UX4.2 head.
 - No full browser or GPU CI confirmation; pending.
 
+## UX5 CI cleanup checkpoint (2026-10-16)
+
+- Updated previously stale frontend navigation assertions to reflect three project destinations in the primary menu, not the Motion Lab sidebar.
+- Updated the WAV analyzer and project media restoration test harnesses to include new soundtrack/selection state.
+- At commit `25eafd2`, GitHub **Syntax checks PASS** (including all frontend Node regressions) and **Installer checks PASS**.
+- Backend tests are still running at the time of this checkpoint; consult GitHub Actions before signoff.
+- The prior backend regression from clipping a manually authored camera keyframe was fixed and had a confirmed passing backend workflow at commit `51294fc`.
+
 ## Windows and mobile owner acceptance
 - Primary project destinations each open correct workspace and contextual heading, Motion Lab opens Overview, Motion Studio appears immediately after Overview. Test 360px phone, 720px tablet, desktop, 200% zoom.
 - Project Manager search/sort, Select All Visible, Clear Selection, one selected project triggers exact-name verification, two selected trigger one batch confirmation, failure reports remain distinct. Use disposable projects; confirm trash is recoverable without erasing outputs.
