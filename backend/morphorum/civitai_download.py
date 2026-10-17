@@ -21,7 +21,9 @@ _WORKER: threading.Thread | None = None
 MAX_BYTES = 40 * 1024 ** 3
 
 def _safe_file(filename: str) -> str:
-    name = Path(filename.replace("\\", "/")).name
+    if "/" in filename or "\\" in filename or filename != filename.strip():
+        raise ValueError("Model filename must not include directories.")
+    name = Path(filename).name
     if not re.fullmatch(r"[\w .()\[\]+-]{1,180}", name, re.UNICODE) or name in (".", ".."):
         raise ValueError("Unsafe model filename.")
     if Path(name).suffix.lower() != ".safetensors":
