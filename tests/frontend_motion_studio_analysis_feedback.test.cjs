@@ -119,6 +119,46 @@ test('UX2.1 envelope diagnostics give a reason before analysis and on misalignme
   assert.match(status.textContent,/frame alignment changed/);
 });
 
+test('UX2.1 aligned audio renders the envelope graph and reports readiness',()=>{
+  const diagnostics={textContent:''};
+  const graph={
+    children:[],
+    replaceChildren(){this.children=[];},
+    appendChild(node){this.children.push(node);},
+  };
+  const pane={hidden:true};
+  const summary={textContent:''};
+  const prediction={textContent:''};
+  const aligned={values:[.1,.4,.6,.3],fps:4};
+  const nodes={
+    '#animation-motion-lab-audio-preview':pane,
+    '#animation-motion-lab-audio-plot':graph,
+    '#motion-studio-envelope-message':diagnostics,
+    '#animation-motion-lab-audio-threshold':{value:'0.12'},
+    '#animation-motion-lab-audio-attack':{value:'1'},
+    '#animation-motion-lab-audio-release':{value:'3'},
+    '#animation-motion-lab-audio-summary':summary,
+    '#animation-motion-lab-audio-prediction':prediction,
+    '#animation-motion-lab-audio-band':{value:'fullband'},
+    '#animation-motion-lab-audio-detection':{value:'transient'},
+  };
+  const ctx={
+    qs:s=>nodes[s]||null,
+    state:{project:{id:'p1',animation:{fps:4,max_frames:4}}},
+    motionLabAudioProjectId:'p1',motionLabAudioAnalysis:aligned,
+    motionLabAudioSignal:()=>aligned.values,
+    document:{createElementNS:(_ns,tag)=>({
+      tag,setAttribute(){},appendChild(){},
+    })},
+  };
+  vm.runInNewContext(preview,ctx);
+  ctx.motionLabAudioPreview();
+  assert.equal(pane.hidden,false);
+  assert.ok(graph.children.length>1,'envelope path and guide should render');
+  assert.match(diagnostics.textContent,/Analyzed envelope ready/);
+  assert.match(summary.textContent,/4 frames/);
+});
+
 test('UX2.1 original Analyze button and status are both in visible Stage 2',()=>{
   assert.match(js,/stages\.analysis\.appendChild\(liveStatus\)/);
   assert.match(js,/stages\.analysis\.insertBefore\(row, analysis\)/);
