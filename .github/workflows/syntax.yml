@@ -2,7 +2,7 @@ name: Syntax checks
 
 on:
   push:
-    branches: [main, dev-ui, dev-webui]
+    branches: [main, dev-ui, dev-webui, feature/civitai-model-hub]
   pull_request:
 
 jobs:
@@ -35,6 +35,7 @@ jobs:
           node --check frontend/dist/assets/ui-services.js
           node --check frontend/dist/assets/app.js
           node --check frontend/dist/assets/first-run-setup.js
+          node --check frontend/dist/assets/civitai.js
           node --check frontend/dist/assets/models.js
           node --check frontend/dist/assets/image.js
           node --check frontend/dist/assets/loras.js
