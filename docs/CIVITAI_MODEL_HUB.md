@@ -134,3 +134,19 @@ Settings → Civitai Hub now has a masked key field and **Save/Replace Key** / *
 5. Refresh Settings: the token itself must never reappear in the input or any API JSON, only the configured status.
 
 Do not merge until Windows testing; no automated execution was performed in this chat.
+
+## C3.1: Manual installed-file identification (awaiting Windows verification)
+
+The **Models** manager now offers **Identify on Civitai** on each indexed model and LoRA row. A deliberate click hashes the selected file locally with SHA-256, caches the digest using the indexed model ID and size/mtime, and looks up the exact hash on Civitai. On a verified result the row displays a direct version link and a success toast; unmatched hashes are explicitly identified as unverified. No local model directory, filename, raw file bytes or prompts are transmitted.
+
+`POST /api/civitai/identify/{model_id}` uses the server-side Civitai credential, requires the Hub to be enabled, handles disabled/missing/mature/no-match cases, and returns a bounded normalized result. The existing LoRA-specific sidecar fallback endpoint is unchanged; C3.1 reports **exact file hashes only**, never guesses from names or sidecars. Automatic scans and persistent identification badges are later stages.
+
+### Windows physical test
+
+1. Enable Civitai Hub. Open Models; click **Identify on Civitai** for an installed LoRA known to be downloaded from Civitai.
+2. Confirm a verified Civitai version link appears, and opens the matching model/version.
+3. Try a locally created model or file with no Civitai entry; verify the no-match toast.
+4. Disable the Hub and confirm the lookup returns a guarded error. Existing generation and model scans must continue normally.
+5. Re-identify a previously hashed file; verify the cached digest behavior without uploading weights.
+
+**Implementation committed. Regression tests added but not executed; physical Windows test still required.**
