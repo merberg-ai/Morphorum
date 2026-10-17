@@ -6361,6 +6361,8 @@
     ['reveal_drift','Reveal Drift'],['fly_through','Fly-through'],
   ];
   let motionDirectorBulkUndo = null;
+  const motionDirectorDeleteSelection = new Set();
+  let motionDirectorDeleteUndo = null;
   let motionDirectorPreviewMatches = false;
   function motionDirectorFindCandidates() {
     const panel = qs('#animation-audio-motion-director');
@@ -6487,7 +6489,12 @@
         '<option value="ease_in">Ease in</option><option value="ease_out">Ease out</option></select></label>' +
         '<label class="animation-audio-director-enabled"><input data-cue-enabled type="checkbox"> Enabled</label></div>' +
         '<div class="animation-audio-director-actions"><button type="button" data-cue-update>Update selected</button>' +
-        '<button type="button" data-cue-delete>Delete selected</button></div>' +
+        '<button type="button" data-cue-delete>Delete selected</button>' +
+        '<button type="button" data-cue-select-all>Select all cues</button>' +
+        '<button type="button" data-cue-clear-selection>Clear selection</button>' +
+        '<button type="button" data-cue-delete-all>Clear all cues</button>' +
+        '<button type="button" data-cue-delete-undo>Undo delete</button>' +
+        '<span data-cue-selection-count aria-live="polite"></span></div>' +
         '<div data-cue-list class="animation-audio-director-list"></div>' +
         '<details class="animation-audio-find-beats" open><summary>Assign detected beats to camera movements</summary>' +
         '<div class="animation-audio-beat-grid">' +
@@ -6564,9 +6571,46 @@
           enabled:panel.querySelector('[data-cue-enabled]').checked});
         motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
       });
+      const removeCues = async (ids) => {
+        if (!ids.length) return;
+        if (ids.length > 1) {
+          const approved = await window.MorphorumDialog.confirm({
+            title: 'Delete ' + ids.length + ' camera cues?',
+            message: 'Remove these cue assignments from the current draft? The saved cue document will not change until you choose Save cues.',
+            confirmText: 'Delete ' + ids.length + ' Cues', cancelText: 'Keep Cues',
+            variant: 'danger',
+          });
+          if (!approved) return;
+        }
+        motionDirectorDeleteUndo = motionDirectorCues.map(c=>({...c}));
+        const selected = new Set(ids);
+        motionDirectorCues = motionDirectorCues.filter(c=>!selected.has(c.id));
+        if (selected.has(motionDirectorSelected)) motionDirectorSelected=null;
+        motionDirectorDeleteSelection.clear();
+        motionDirectorDirty=true;
+        motionDirectorPanel(); motionLabStereoWaveform();
+      };
       panel.querySelector('[data-cue-delete]').addEventListener('click', () => {
-        motionDirectorCues=motionDirectorCues.filter(c=>c.id!==motionDirectorSelected);
-        motionDirectorSelected=null;motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
+        const ids = motionDirectorDeleteSelection.size
+          ? [...motionDirectorDeleteSelection]
+          : motionDirectorSelected ? [motionDirectorSelected] : [];
+        void removeCues(ids);
+      });
+      panel.querySelector('[data-cue-select-all]').addEventListener('click', () => {
+        for (const cue of motionDirectorCues) motionDirectorDeleteSelection.add(cue.id);
+        motionDirectorPanel();
+      });
+      panel.querySelector('[data-cue-clear-selection]').addEventListener('click', () => {
+        motionDirectorDeleteSelection.clear(); motionDirectorPanel();
+      });
+      panel.querySelector('[data-cue-delete-all]').addEventListener('click', () =>
+        void removeCues(motionDirectorCues.map(c=>c.id)));
+      panel.querySelector('[data-cue-delete-undo]').addEventListener('click', () => {
+        if (!motionDirectorDeleteUndo) return;
+        motionDirectorCues=motionDirectorDeleteUndo;
+        motionDirectorDeleteUndo=null;
+        motionDirectorDeleteSelection.clear();
+        motionDirectorDirty=true; motionDirectorPanel(); motionLabStereoWaveform();
       });
       const stageCues = (apply) => {
         const project=state.project;
@@ -6626,7 +6670,15 @@
         } catch(error) {motionLabNotify('Cue save failed: '+(error?.message||error));}
         finally {save.disabled=false;motionDirectorPanel();}
       });
+      panel.querySelector('[data-cue-list]').addEventListener('change', event => {
+        const check=event.target.closest('[data-cue-select-id]');
+        if (!check) return;
+        if (check.checked) motionDirectorDeleteSelection.add(check.dataset.cueSelectId);
+        else motionDirectorDeleteSelection.delete(check.dataset.cueSelectId);
+        motionDirectorPanel();
+      });
       panel.querySelector('[data-cue-list]').addEventListener('click', event => {
+        if (event.target.closest('[data-cue-select-id]')) return;
         const button=event.target.closest('[data-cue-id]');
         if (!button) return;
         motionDirectorSelected=button.dataset.cueId;
@@ -6667,6 +6719,19 @@
     status.textContent=motionDirectorCues.length+' cues'+(motionDirectorDirty?' · Unsaved':' · Saved');
     for (const kind of ['data-cue-preview','data-cue-apply'])
       panel.querySelector('['+kind+']').disabled=motionDirectorDirty || !motionDirectorCues.length || motionLabBusy;
+    const existingIds = new Set(motionDirectorCues.map(c=>c.id));
+    for (const id of motionDirectorDeleteSelection) if (!existingIds.has(id)) motionDirectorDeleteSelection.delete(id);
+    const selectionCount=panel.querySelector('[data-cue-selection-count]');
+    if (selectionCount) selectionCount.textContent=motionDirectorDeleteSelection.size+' selected';
+    const deleteButton=panel.querySelector('[data-cue-delete]');
+    if (deleteButton) {
+      deleteButton.textContent=motionDirectorDeleteSelection.size > 1
+        ? 'Delete '+motionDirectorDeleteSelection.size+' selected'
+        : 'Delete selected';
+      deleteButton.disabled=!motionDirectorDeleteSelection.size && !motionDirectorSelected;
+    }
+    panel.querySelector('[data-cue-delete-all]').disabled=!motionDirectorCues.length;
+    panel.querySelector('[data-cue-delete-undo]').disabled=!motionDirectorDeleteUndo;
     const list=panel.querySelector('[data-cue-list]');list.replaceChildren();
     for (const cue of [...motionDirectorCues].sort((a,b)=>a.time_seconds-b.time_seconds)) {
       const button=document.createElement('button');button.type='button';
@@ -6675,7 +6740,15 @@
       button.textContent=cue.time_seconds.toFixed(3)+'s · '+
         (MOTION_DIRECTOR_PRESETS.find(p=>p[0]===cue.preset)?.[1]||cue.preset)+
         (cue.enabled?'':' (disabled)');
-      list.appendChild(button);
+      const row=document.createElement('div');
+      row.className='animation-audio-cue-select-row';
+      const check=document.createElement('input');
+      check.type='checkbox';
+      check.dataset.cueSelectId=cue.id;
+      check.checked=motionDirectorDeleteSelection.has(cue.id);
+      check.setAttribute('aria-label','Select cue at '+cue.time_seconds.toFixed(3)+' seconds');
+      row.append(check,button);
+      list.appendChild(row);
     }
   }
   function motionLabStereoWaveform() {
