@@ -323,7 +323,8 @@
     const sampler = qs('#image-sampler')?.value;
     const previous = select.value;
     for (const option of options) {
-      if (sampler === 'ddim' && option.id === 'karras') continue;
+      if (sampler === 'ddim' && option.id !== 'normal') continue;
+      if (['exponential', 'beta'].includes(option.id) && !['euler', 'dpmpp_2m', 'dpmpp_2m_sde', 'unipc'].includes(sampler)) continue;
       select.add(new Option(option.label || option.id, option.id));
     }
     select.value = [...select.options].some(option => option.value === previous)
