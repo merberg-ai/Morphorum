@@ -457,6 +457,8 @@ def test_sdxl_schedule_types_defaults_and_validation(tmp_path, monkeypatch) -> N
         "options": [
             {"id": "normal", "label": "Normal"},
             {"id": "karras", "label": "Karras"},
+            {"id": "exponential", "label": "Exponential"},
+            {"id": "beta", "label": "Beta"},
         ],
     }
     legacy = GenerationRequest.from_payload({"model_id": "model-1", "prompt": "test"})
