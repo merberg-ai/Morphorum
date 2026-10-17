@@ -262,3 +262,6 @@
 .lora-exact-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
 .lora-exact-identity a { overflow-wrap: anywhere; font-size: .86rem; }
 .lora-exact-identity p { margin: 0; }
+
+.model-civitai-metadata, .lora-civitai-cached { display:flex; flex-direction:column; align-items:flex-start; gap:6px; max-width:420px; margin-top:8px; font-size:.79rem; overflow-wrap:anywhere; }
+.model-civitai-thumbnail { display:block; width:104px; max-height:150px; object-fit:cover; border-radius:9px; border:1px solid var(--border); }
