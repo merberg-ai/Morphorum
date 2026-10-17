@@ -139,10 +139,14 @@ def check_animation_render_preflight(
                 add("error", "generation.schedule_type",
                     f"Schedule Type '{schedule_type}' is unavailable for SDXL. "
                     "Choose a supported schedule in Generation State.")
-            elif sampler == "ddim" and schedule_type == "karras":
+            elif sampler == "ddim" and schedule_type != "normal":
                 add("error", "generation.schedule_type",
-                    "DDIM does not support Karras scheduling. "
-                    "Choose Normal or change the sampler.")
+                    "DDIM supports only Normal scheduling. Change the schedule or sampler.")
+            elif schedule_type in {"exponential", "beta"} and sampler not in {
+                "euler", "dpmpp_2m", "dpmpp_2m_sde", "unipc"
+            }:
+                add("error", "generation.schedule_type",
+                    "The selected SDXL sampler does not support this schedule.")
 
     checked_frames = 0
     if schedules_valid and 1 <= total <= MAX_RENDER_FRAMES:
