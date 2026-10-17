@@ -223,3 +223,24 @@ This follow-up is committed to `feature/civitai-model-hub` but requires Windows 
 6. Confirm non-installed models offer no Use actions, and that disabling the Hub prevents Civitai actions.
 
 Automated regression coverage is committed but has not been executed on the Windows host.
+
+## C4.2: Project Editor and Motion Lab integration (awaiting Windows verification)
+
+Verified installed checkpoint and LoRA entries in the Civitai Hub now offer **Use in Project** and **Add to Project Prompt** alongside the C4.1 Image actions. They invoke the existing Motion Lab/Project Editor controller rather than creating a second project-saving mechanism.
+
+- **Use in Project** selects an indexed checkpoint in the existing animation model field. It requires an open project, marks the project dirty, and does not start a render.
+- **Add to Project Prompt** validates that the LoRA is indexed and matches the current project's checkpoint family, then inserts its standard Morphorum LoRA tag (weight 1) plus any synchronized trigger words into the **first prompt keyframe**. Existing project prompts and other keyframes are preserved. It marks the project dirty.
+- Neither action automatically saves: use **Save Project** explicitly in Project Editor. Saved projects retain the existing checkpoint ID and prompt syntax, compatible with existing project loading and rendering.
+- A missing checkpoint in the project's saved state continues to show the Project Editor's existing **Missing indexed model** option; the Civitai actions reject missing indexed entries instead of silently substituting another model.
+- Selecting models and LoRAs from Hub does not start any download or model-weight load. Motion Lab uses its existing compatibility and render preflight checks.
+
+### Windows acceptance
+
+1. Open an existing animation project, find an installed verified Civitai checkpoint and click **Use in Project**. Confirm model selector changes, project is marked unsaved, and no render begins.
+2. Save and reload the project. Confirm the checkpoint choice survives.
+3. Select an installed same-family LoRA in Hub, choose **Add to Project Prompt**, and verify its tag and synchronized triggers appear at the first prompt keyframe.
+4. Save/reload the project; verify other keyframes and motion tracks remain unchanged.
+5. Try a different-family LoRA and a project with no checkpoint; confirm refusal.
+6. Remove a test checkpoint from the index and reopen its project to confirm the existing missing-model warning rather than a silent replacement.
+
+Code committed; automated tests and Windows physical verification remain pending. Do not merge to main without acceptance.
