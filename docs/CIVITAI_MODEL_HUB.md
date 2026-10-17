@@ -204,3 +204,22 @@ Automated regression tests were added, but not executed from this chat. C3.3 req
 - On Windows, verify selection with multiple families, filter changes, partial failures, and prompt tag trigger-word inclusion/exclusion after both single and bulk sync. No automatic bulk sync is scheduled.
 
 This follow-up is committed to `feature/civitai-model-hub` but requires Windows UI acceptance.
+
+## C4.1: Use installed verified Civitai models in Image (Windows acceptance pending)
+
+- The Civitai gallery and model detail dialog now query local installed versions by **verified C3.3 cached metadata**, not by guessing filenames. `GET /api/civitai/installed/{model_id}` is offline, requires the Hub enabled, and returns only indexed identifiers, kinds, base families, versions, and synchronized trigger words.
+- For verified installed checkpoints, **Use in Image** chooses that model in the existing Image selector without automatically running generation or downloading weights.
+- For verified installed LoRAs, **Add to Image Prompt** first refreshes available Image LoRAs, verifies the currently selected checkpoint has the same family, then uses the existing `MorphorumImage.insertFromManager` method, with default strength 1 and cached trigger words. The Image subsystem performs its own final validations.
+- The dedicated LoRA Manager now **automatically loads cached synchronized Civitai trigger words** when selecting a LoRA. No online lookup occurs; Quick Use, Copy Prompt Tag, and Add to Image Prompt can use them immediately. Unsynced local trigger words remain as fallback.
+- No background model downloads, no substitution of incompatible checkpoint families, and no overwriting model files.
+
+### Windows acceptance test
+
+1. In Models or LoRAs, synchronize a known Civitai model, then open that model in the Civitai Hub gallery. Confirm an installed badge/action appears.
+2. Choose an installed checkpoint's **Use in Image**, confirm the Image model selector changes but no generation starts.
+3. Choose a compatible installed LoRA and **Add to Image Prompt**. Verify its tag and synchronized triggers appear in Image.
+4. Select a checkpoint from a different family and verify the LoRA action refuses to insert it.
+5. Select an already-synced LoRA in LoRA Manager without clicking View Cached Info and verify recorded Civitai trigger words appear in Quick Use when the trigger checkbox is on.
+6. Confirm non-installed models offer no Use actions, and that disabling the Hub prevents Civitai actions.
+
+Automated regression coverage is committed but has not been executed on the Windows host.
