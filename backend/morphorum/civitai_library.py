@@ -36,6 +36,8 @@ def _read(model_id: str):
         return {"synced": False, "model_id": model_id}
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"synced": False, "model_id": model_id}
         stat = Path(record["path"]).stat()
         if data.get("size") != stat.st_size or data.get("mtime_ns") != stat.st_mtime_ns:
             return {"synced": False, "model_id": model_id, "stale": True}
@@ -106,17 +108,35 @@ def sync_metadata(model_id: str, *, client: httpx.Client | None = None):
                                 raise CivitaiSearchError("Preview exceeds 4 MiB limit.", 502)
                             chunks.append(chunk)
                         data = b"".join(chunks)
-                        ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[response.headers["content-type"].lower().split(";")[0]]
-                        directory = _directory(model_id)
-                        directory.mkdir(parents=True, exist_ok=True)
-                        preview = directory / ("preview" + ext)
-                        with preview.open("wb") as output: output.write(data)
-                        result["preview"] = preview.name
-                        result["preview_allowed_mature"] = bool(cfg.get("allow_mature", False))
+                        media_type = response.headers["content-type"].lower().split(";")[0]
+                        valid_image = (
+                            (media_type == "image/jpeg" and data.startswith(b"\\xff\\xd8\\xff")) or
+                            (media_type == "image/png" and data.startswith(b"\\x89PNG\\r\\n\\x1a\\n")) or
+                            (media_type == "image/webp" and data.startswith(b"RIFF") and data[8:12] == b"WEBP")
+                        )
+                        if not valid_image:
+                            result["preview_warning"] = "Civitai returned an invalid preview image."
+                        else:
+                            ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[media_type]
+                            directory = _directory(model_id)
+                            directory.mkdir(parents=True, exist_ok=True)
+                            preview = directory / ("preview" + ext)
+                            fd, temporary = tempfile.mkstemp(prefix=".preview-", dir=str(directory))
+                            try:
+                                with os.fdopen(fd, "wb") as output:
+                                    output.write(data)
+                                os.replace(temporary, preview)
+                            finally:
+                                Path(temporary).unlink(missing_ok=True)
+                            result["preview"] = preview.name
+                            result["preview_allowed_mature"] = bool(cfg.get("allow_mature", False))
             except httpx.RequestError:
                 result["preview_warning"] = "Preview download unavailable."
             finally:
                 if owned: client.close()
+    latest = Path(record["path"]).stat()
+    if latest.st_size != stat.st_size or latest.st_mtime_ns != stat.st_mtime_ns:
+        raise CivitaiSearchError("Model file changed during synchronization; cache not committed.", 409)
     _atomic_json(_directory(model_id) / "metadata.json", result)
     return {k: v for k, v in result.items() if k not in ("size", "mtime_ns")}
 
