@@ -8655,11 +8655,54 @@
       motionLabStereoWaveform();
       motionDirectorPanel();
       motionLabAudioPreview();
+      // The motion-analysis WAV and the export soundtrack are separate assets.
+      // Attach the selected WAV so future render snapshots contain the audio.
+      // Never silently replace a different existing project soundtrack.
+      let attachmentMessage = '';
+      const existingSoundtrack = projectMediaAssets('soundtrack')[0];
+      const existingSha = projectMedia.soundtrack?.sha256 || existingSoundtrack?.sha256 || '';
+      const analyzedSha = analysis.source_sha256 || '';
+      const sameSoundtrack = Boolean(existingSha && analyzedSha && existingSha === analyzedSha);
+      let shouldAttach = !sameSoundtrack;
+      if (existingSoundtrack && !sameSoundtrack) {
+        shouldAttach = await window.MorphorumDialog.confirm({
+          title: 'Replace project export soundtrack?',
+          message: 'The analyzed WAV is different from the saved soundtrack. Replace the single active export soundtrack with ' +
+            file.name + '? Existing rendered videos are unchanged; only future renders use the new audio.',
+          confirmText: 'Replace Soundtrack', cancelText: 'Keep Existing Soundtrack',
+          variant: 'warning',
+        });
+      }
+      if (shouldAttach && state.project?.id === projectId &&
+          projectAudioRestoreGeneration === uploadToken) {
+        try {
+          const response = await fetch('/api/animation/projects/' + encodeURIComponent(projectId) +
+            '/motion-import/soundtrack', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/octet-stream',
+              'X-Audio-Filename': encodeURIComponent(file.name),
+              'X-Audio-Offset-Seconds': '0'},
+            body: file,
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(typeof result.detail === 'string'
+            ? result.detail : 'Soundtrack attachment failed (HTTP ' + response.status + ')');
+          attachmentMessage = ' Attached as the project export soundtrack for future renders.';
+        } catch (error) {
+          attachmentMessage = ' WARNING: audio motion was analyzed but export soundtrack attachment failed: ' +
+            (error?.message || String(error)) + '.';
+          toast('Export soundtrack not attached', attachmentMessage, 'warning', 8000);
+        }
+      } else if (sameSoundtrack) {
+        attachmentMessage = ' Project export soundtrack already matches.';
+      } else {
+        attachmentMessage = ' Existing export soundtrack preserved; new WAV is for motion analysis only.';
+      }
       report('Analyzed ' + file.name + ': ' + analysis.values.length +
         ' frames · ' + analysis.duration_seconds.toFixed(2) + ' seconds · ' +
         (analysis.events?.events?.length || 0) +
         ' beat candidate(s). Choose View Detected Beats to inspect or edit them.' +
-        (lengthNotice ? ' ' + lengthNotice : ''));
+        (lengthNotice ? ' ' + lengthNotice : '') + attachmentMessage);
       const badge = qs('#animation-motion-lab-audio-status');
       if (badge) badge.textContent = 'WAV ready';
       void restoreProjectMedia();
