@@ -58,6 +58,7 @@ def plan_clip_chunks(tokenizer: Any, text: str, *, max_chunks: int = 16) -> Clip
 def encode_sdxl_long_prompts(
     pipe: Any, prompt: str, negative_prompt: str = "",
     *, do_classifier_free_guidance: bool = True, max_chunks: int = 16,
+    min_chunks: int = 1,
 ) -> tuple[Any, Any | None, Any, Any | None]:
     """Encode both SDXL CLIP towers without silently truncating prompt content.
 
@@ -79,9 +80,12 @@ def encode_sdxl_long_prompts(
         for tok, _ in towers
     ] if do_classifier_free_guidance else []
     chunk_count = max(
+        min_chunks,
         *(len(plan.chunks) for plan in positive_plans),
         *(len(plan.chunks) for plan in negative_plans),
     )
+    if chunk_count > max_chunks:
+        raise ValueError("SDXL prompt chunk alignment exceeds the safety limit.")
     empty_chunks = [
         plan_clip_chunks(tok, "", max_chunks=max_chunks).chunks[0]
         for tok, _ in towers
