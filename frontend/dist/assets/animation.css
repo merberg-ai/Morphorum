@@ -4022,3 +4022,23 @@ dialog#animation-deforum-dialog {
   .animation-project-manager-bulk-actions > button { flex: 1 1 auto; }
   .animation-project-manager-bulk-actions #animation-project-manager-bulk-trash { flex-basis: 100%; }
 }
+
+/* UX3: focused Project Editor sections, retaining real form controls. */
+#animation-editor-group-nav {
+  display:flex; flex-wrap:wrap; gap:.55rem; margin:1rem 0;
+}
+#animation-editor-group-nav .animation-editor-group-button {min-width:0; white-space:normal;}
+#animation-editor-group-nav .animation-editor-group-button.active {
+  outline:2px solid var(--accent, #39bff5); outline-offset:1px;
+}
+#animation-panel-editor .animation-editor-group[hidden] {display:none !important;}
+#animation-panel-editor .animation-editor-group {min-width:0; width:100%;}
+#animation-panel-editor .animation-editor-group-heading {margin:1rem 0 .75rem;}
+#animation-panel-editor .animation-editor-group-heading h2 {margin:0;}
+#animation-panel-editor .animation-editor-group-heading p {margin:.35rem 0 0;}
+#animation-panel-editor .animation-editor-group-cards {min-width:0; width:100%;}
+#animation-panel-editor .animation-editor-group-cards > * {min-width:0;}
+@media (max-width:600px) {
+  #animation-editor-group-nav {display:grid; grid-template-columns:repeat(2,minmax(0,1fr));}
+  #animation-editor-group-nav .animation-editor-group-button {width:100%;}
+}
