@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from .civitai_auth import get_token
 from typing import Any
 
 import httpx
@@ -55,7 +56,7 @@ def search_models(
                        ("types", model_type), ("baseModels", base_model), ("cursor", cursor)):
         if value:
             params[key] = value
-    token = os.environ.get("CIVITAI_API_TOKEN", "").strip()
+    token = get_token()
     headers = {"Accept": "application/json", "User-Agent": "Morphorum/0.1 (optional model discovery)"}
     if token:
         headers["Authorization"] = "Bearer " + token
