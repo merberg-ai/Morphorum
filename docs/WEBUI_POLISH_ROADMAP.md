@@ -59,6 +59,7 @@ separate, explicit authorization.** Next development phase: P4.
   when aligned, while the empty preview placeholder is explicitly hidden
   after analysis. Added simulated success/failure/no-source and SVG regression
   tests. **Owner must retest before closing UX1/UX2.**
+- [x] **UX2.2 owner screenshot follow-up (2026-10-16):** owner reported analysis was blocked with one existing draft layer when the optional Match project length checkbox was selected, a duplicated/oversized status column squeezed the waveform, and Preview Matches always displayed zero. Source fixes on dev-webui: analysis now skips blocked optional resizing while retaining the existing layer and old analyzed state until a valid replacement; only one status message is visible; Analyze step uses full-width vertical flow; matching falls back to analyzed events when no marker override exists, diagnoses excluded hits and resets obsolete time range on WAV change. Added scenario-based regression tests. **Physical Windows retest is required.**
 - [ ] **Owner Windows physical acceptance:** fresh WAV Analyze, saved-project
   soundtrack restoration, waveform Seek/Zoom/Play, marker drag/add/save,
   cue editing/Find Beats/save, independent channels, continuous preset without
