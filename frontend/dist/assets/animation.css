@@ -4069,3 +4069,18 @@ dialog#animation-deforum-dialog {
   min-width: 0;
   box-sizing: border-box;
 }
+
+/* UX4.1: a compact, always-visible project identity and save-state indicator. */
+#animation-editor-context {
+ display:flex; align-items:center; flex-wrap:wrap; gap:.7rem;
+ min-width:0; padding:.8rem 1rem; margin:.8rem 0;
+ border:1px solid var(--border); border-radius:12px;
+}
+#animation-editor-current-project {min-width:0;overflow-wrap:anywhere;}
+#animation-editor-save-state {margin-left:auto;font-size:.84rem;white-space:nowrap;}
+#animation-editor-save-state[data-save-state="dirty"] {font-weight:700;color:var(--warning, #f8bd69);}
+#animation-editor-save-state[data-save-state="saved"] {color:var(--success, #6bd9ac);}
+@media (max-width:600px) {
+ #animation-editor-context {align-items:flex-start;flex-direction:column;}
+ #animation-editor-save-state {margin-left:0;}
+}
