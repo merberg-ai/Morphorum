@@ -2274,6 +2274,16 @@ class GenerationManager:
                     f"SDXL LoRA {adapter_name} loaded no verifiable "
                     f"{component_name} parameters after normalization."
                 )
+            if component_name in source_counts:
+                expected_tensors = int(source_counts[component_name])
+                if observed["tensors"] != expected_tensors:
+                    raise GenerationError(
+                        f"SDXL LoRA {adapter_name} incomplete on {component_name}: "
+                        f"checkpoint has {expected_tensors} adapter tensors, "
+                        f"but PEFT registered {observed['tensors']}."
+                    )
+                observed["checkpoint_tensors"] = expected_tensors
+                observed["coverage_verified"] = True
             diagnostics["components"][component_name] = observed
         return diagnostics
 
