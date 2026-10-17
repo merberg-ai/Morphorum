@@ -42,3 +42,26 @@ def test_preview_policy_applies_after_caching(monkeypatch, tmp_path):
 def test_invalid_id_rejected(tmp_path):
     with pytest.raises(CivitaiSearchError):
         lib._directory("../outside")
+
+def test_invalid_cache_shape_ignored(monkeypatch, tmp_path):
+    model = tmp_path / "weights.safetensors"
+    model.write_bytes(b"weights")
+    monkeypatch.setattr(lib, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(lib, "get_model", lambda _: {"path": str(model)})
+    directory = lib._directory("abc")
+    directory.mkdir(parents=True)
+    (directory / "metadata.json").write_text('[]', encoding="utf-8")
+    assert not lib._read("abc")["synced"]
+
+def test_missing_cached_image_is_not_served(monkeypatch, tmp_path):
+    model = tmp_path / "weights.safetensors"
+    model.write_bytes(b"weights")
+    monkeypatch.setattr(lib, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(lib, "get_model", lambda _: {"path": str(model)})
+    monkeypatch.setattr(lib, "load_settings", lambda: {"civitai": {"enabled": True, "load_previews": True}})
+    stat = model.stat()
+    lib._atomic_json(lib._directory("abc") / "metadata.json", {
+        "synced": True, "model_id": "abc", "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns, "preview": "preview.jpg"})
+    with pytest.raises(CivitaiSearchError):
+        lib.preview_path("abc")
