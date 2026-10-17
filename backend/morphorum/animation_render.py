@@ -285,6 +285,12 @@ def _prompt_conditioning_kwargs(
     try:
         if family == "sdxl":
             do_cfg = float(guidance_scale) > 1.0
+            from .sdxl_prompt_chunks import plan_clip_chunks
+            common_chunks = max(
+                len(plan_clip_chunks(tokenizer, value).chunks)
+                for tokenizer in (pipe.tokenizer, pipe.tokenizer_2)
+                for value in (from_prompt, to_prompt, from_negative, to_negative)
+            )
 
             def sdxl_encoded(prompt_text: str, negative_text: str):
                 key = (
@@ -293,6 +299,7 @@ def _prompt_conditioning_kwargs(
                     negative_text,
                     bool(do_cfg),
                     tuple(lora_signature),
+                    common_chunks,
                 )
                 if conditioning_cache is not None and key in conditioning_cache:
                     return conditioning_cache[key]
@@ -305,12 +312,13 @@ def _prompt_conditioning_kwargs(
                     for value in (prompt_text, negative_text)
                     if value
                 )
-                if overflow:
+                if overflow or common_chunks > 1:
                     import torch
                     with torch.no_grad():
                         encoded = encode_sdxl_long_prompts(
                             pipe, prompt_text, negative_text,
                             do_classifier_free_guidance=do_cfg,
+                            min_chunks=common_chunks,
                         )
                 else:
                     encoded = pipe.encode_prompt(
