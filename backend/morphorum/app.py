@@ -112,7 +112,7 @@ from .lora_inspector import LoRAInspectionError, inspect_lora
 from .civitai import CivitaiLookupError, lookup_civitai
 from .civitai_search import CivitaiSearchError, search_models
 from .civitai_detail import model_details
-from .civitai_download import start_download, list_jobs, cancel_download
+from .civitai_download import start_download, list_jobs, cancel_download, resume_download
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -482,6 +482,18 @@ def api_civitai_cancel_download(job_id: str) -> dict[str, Any]:
         return cancel_download(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Download not found.") from exc
+
+
+@app.post("/api/civitai/downloads/{job_id}/resume")
+def api_civitai_resume_download(job_id: str) -> dict[str, Any]:
+    if not load_settings().get("civitai", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Civitai Hub disabled.")
+    try:
+        return resume_download(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Download not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/api/civitai/test-connection")
