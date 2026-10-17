@@ -120,3 +120,11 @@ test('UX3 editor groups preserve existing form cards and provide section navigat
   assert.match(animation,/morphorum\.editor\.group\.v1/);
   assert.match(animation,/\['#animation-2d-motion-card','#animation-3d-camera-card'\]/);
 });
+
+test('UX3 layout regression: Editor section wrappers and cards remain full width',()=>{
+  const css=fs.readFileSync(path.join(root,'assets','animation.css'),'utf8');
+  assert.match(css,/#animation-panel-editor > \.animation-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(css,/#animation-panel-editor \.animation-layout > \.animation-editor-group\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
+  assert.match(css,/#animation-panel-editor \.animation-editor-group-cards\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(css,/#animation-panel-editor \.animation-editor-group-cards > article\.card\s*\{[^}]*width:\s*100%/);
+});
