@@ -459,6 +459,7 @@ def test_sdxl_schedule_types_defaults_and_validation(tmp_path, monkeypatch) -> N
             {"id": "karras", "label": "Karras"},
             {"id": "exponential", "label": "Exponential"},
             {"id": "beta", "label": "Beta"},
+            {"id": "trailing", "label": "Trailing (Diffusers)"},
         ],
     }
     legacy = GenerationRequest.from_payload({"model_id": "model-1", "prompt": "test"})
@@ -2124,3 +2125,18 @@ def test_zimage_generation_rejects_missing_shard_even_with_complete_marker(
         GenerationManager()._validate_request(
             GenerationRequest(model_id="model-1", prompt="a cat", sampler="flowmatch_euler")
         )
+
+
+
+def test_sdxl_trailing_scheduler_uses_diffusers_timestep_spacing() -> None:
+    from diffusers import EulerDiscreteScheduler
+    class FakePipe:
+        def __init__(self):
+            self.scheduler = EulerDiscreteScheduler()
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    manager._configure_sampler(pipe, "sdxl", "euler", "trailing")
+    assert pipe.scheduler.config.timestep_spacing == "trailing"
+    manager._configure_sampler(pipe, "sdxl", "euler", "normal")
+    assert pipe.scheduler.config.timestep_spacing != "trailing"
