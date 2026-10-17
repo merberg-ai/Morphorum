@@ -10716,6 +10716,74 @@
     nav.addEventListener('keydown', updateFooter);
   }
 
+  const PROJECT_EDITOR_GROUPS = [
+    ['setup','Setup','Project identity, dimensions, model and animation mode.',
+      ['.animation-project-card']],
+    ['sources','Sources & Media','Starting frame, imported media and source/depth preparation.',
+      ['.animation-start-card','.animation-project-media-card','.animation-depth-card']],
+    ['timeline','Timeline & Prompts','Visual timeline, prompt keyframes and transitions.',
+      ['.animation-timeline-card','.animation-prompts-card']],
+    ['camera','Camera & Motion','2D schedules and 3D camera settings.',
+      ['#animation-2d-motion-card','#animation-3d-camera-card']],
+    ['generation','Generation Settings','Diffusion cadence, sampling and render parameters.',
+      ['#animation-cadence-card','.animation-generation-state-card']],
+  ];
+  function setupProjectEditorGroups(layout, panel) {
+    const nav = document.createElement('nav');
+    nav.id = 'animation-editor-group-nav';
+    nav.className = 'animation-editor-group-nav';
+    nav.setAttribute('aria-label','Project Editor sections');
+    const buttons = new Map();
+    const groups = new Map();
+    for (const [key,title,description,selectors] of PROJECT_EDITOR_GROUPS) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'secondary-button compact animation-editor-group-button';
+      button.textContent = title;
+      button.dataset.editorGroup = key;
+      button.setAttribute('aria-controls','animation-editor-group-' + key);
+      const group = document.createElement('section');
+      group.id = 'animation-editor-group-' + key;
+      group.className = 'animation-editor-group';
+      group.setAttribute('aria-label',title);
+      const heading = document.createElement('div');
+      heading.className = 'animation-editor-group-heading';
+      const h = document.createElement('h2');
+      h.textContent = title;
+      const p = document.createElement('p');
+      p.className = 'muted';
+      p.textContent = description;
+      heading.append(h,p);
+      group.appendChild(heading);
+      const cards = document.createElement('div');
+      cards.className = 'grid animation-editor-group-cards';
+      group.appendChild(cards);
+      for (const selector of selectors) {
+        const card = layout.querySelector(selector);
+        if (card) cards.appendChild(card);
+      }
+      layout.appendChild(group);
+      nav.appendChild(button);
+      buttons.set(key,button);
+      groups.set(key,group);
+    }
+    panel.insertBefore(nav,layout);
+    const choose = (key, {persist=true}={}) => {
+      if (!groups.has(key)) key='setup';
+      for (const [name,group] of groups) {
+        const active = name===key;
+        group.hidden=!active;
+        buttons.get(name).classList.toggle('active',active);
+        buttons.get(name).setAttribute('aria-current',active?'true':'false');
+      }
+      if (persist) try {localStorage.setItem('morphorum.editor.group.v1',key);} catch (_) {}
+    };
+    for (const [key,button] of buttons) button.addEventListener('click',()=>choose(key));
+    let saved='setup';
+    try {saved=localStorage.getItem('morphorum.editor.group.v1')||'setup';}catch(_){}
+    choose(saved,{persist:false});
+  }
+
   function setupAnimationWorkspaceTabs() {
     const layout = qs('#view-animation .animation-layout');
     const root = qs('#view-animation');
@@ -10812,6 +10880,8 @@
       const card = qs(selector);
       if (card) panels[name].appendChild(card);
     }
+
+    setupProjectEditorGroups(layout, panels.editor);
 
     // The landing page is a concise tool selector. Original controls live in
     // exactly one dedicated panel, never copied or recreated.
