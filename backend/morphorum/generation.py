@@ -2733,6 +2733,57 @@ class GenerationManager:
         except Exception:
             pass
 
+    @staticmethod
+    def _sdxl_prompt_token_diagnostics(pipe: Any, request: GenerationRequest) -> list[dict[str, Any]]:
+        """Count SDXL CLIP tokens without changing inference conditioning."""
+        diagnostics: list[dict[str, Any]] = []
+        for encoder_name, tokenizer_name in (
+            ("CLIP-L", "tokenizer"), ("CLIP-G", "tokenizer_2")
+        ):
+            tokenizer = getattr(pipe, tokenizer_name, None)
+            if tokenizer is None:
+                continue
+            maximum = int(getattr(tokenizer, "model_max_length", 77))
+            if not 1 <= maximum <= 4096:
+                continue
+            for field_name, prompt in (
+                ("positive", request.prompt), ("negative", request.negative_prompt)
+            ):
+                if not prompt:
+                    continue
+                try:
+                    tokens = tokenizer(
+                        prompt, add_special_tokens=True, truncation=False
+                    )["input_ids"]
+                    count = len(tokens[0]) if tokens and isinstance(tokens[0], list) else len(tokens)
+                except Exception as exc:
+                    emit_console(
+                        "warning", "generation",
+                        f"Could not measure SDXL {encoder_name} {field_name} tokens: {exc}",
+                    )
+                    continue
+                diagnostics.append({
+                    "encoder": encoder_name,
+                    "field": field_name,
+                    "tokens": count,
+                    "limit": maximum,
+                    "truncated": count > maximum,
+                })
+        return diagnostics
+
+    @classmethod
+    def _warn_sdxl_prompt_truncation(cls, pipe: Any, request: GenerationRequest) -> None:
+        for info in cls._sdxl_prompt_token_diagnostics(pipe, request):
+            if info["truncated"]:
+                emit_console(
+                    "warning", "generation",
+                    f"SDXL {info['encoder']} {info['field']} prompt: "
+                    f"{info['tokens']} tokens exceeds {info['limit']}. "
+                    "Standard CLIP encoding truncates excess tokens; "
+                    "move important details to the beginning. Long-prompt "
+                    "conditioning is not enabled yet.",
+                )
+
     def _build_call_args(
         self,
         job: GenerationJob,
@@ -2772,6 +2823,8 @@ class GenerationManager:
             pipe, job.model["family"], job.request.sampler, job.request.schedule_type
         )
         self.configure_loras(pipe, job.model, job.request.loras)
+        if job.model["family"] == "sdxl":
+            self._warn_sdxl_prompt_truncation(pipe, job.request)
         job.model_load_seconds = max(0.0, time.monotonic() - load_started)
         job._started_monotonic = time.monotonic()
         job._last_step_monotonic = None
