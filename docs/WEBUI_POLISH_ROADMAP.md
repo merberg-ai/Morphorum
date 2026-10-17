@@ -118,6 +118,8 @@ separate, explicit authorization.** Next development phase: P4.
 
 **UX5 CI remediation verified (2026-10-16):** Fixed stale primary-navigation tests and browser VM harnesses for Motion Studio soundtrack attachment and cue-selection restoration. At source commit `25eafd2`, GitHub Actions **Syntax checks PASS**, **Backend tests PASS**, **Installer checks PASS**. UX5 still needs physical Windows/mobile/GPU regression acceptance and final public-doc review before release. See `docs/UX5_ACCEPTANCE_PLAN.md`.
 
+**UX5 owner acceptance (2026-10-16): Windows PASS.** User reports successful combined test and supplied an exported H.264 832×1216 24-fps MP4 containing AAC audio (9.875 seconds). Frontend, Backend and Installer CI passed at `25eafd2`. Dedicated physical mobile acceptance and final public docs review are not yet independently verified. Continue planning P5 on `dev-webui`; no main merge authorized.
+
 ### UX3 implementation checkpoint (2026-10-16)
 
 - [x] Add five directly navigable Project Editor sections: **Setup**, **Sources & Media**, **Timeline & Prompts**, **Camera & Motion**, **Generation Settings**.
