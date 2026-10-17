@@ -120,6 +120,8 @@ def test_g5_release_guides_distinguish_ci_from_windows_acceptance() -> None:
     assert "G5_RELEASE_ACCEPTANCE.md" in index
     assert "NOT TESTED" in acceptance
     assert "Explicit owner approval" in acceptance
-    assert "do not merge" in acceptance.lower()
+    assert "explicitly approved merging" in acceptance.lower()
+    assert "not provided separately" in acceptance.lower()
+    assert "Not individually recorded" in acceptance
     for feature in ("CLIP-L", "CLIP-G", "Karras", "UNet-only"):
         assert feature in sdxl
