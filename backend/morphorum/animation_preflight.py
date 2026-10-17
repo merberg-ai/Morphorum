@@ -142,6 +142,11 @@ def check_animation_render_preflight(
             elif sampler == "ddim" and schedule_type != "normal":
                 add("error", "generation.schedule_type",
                     "DDIM supports only Normal scheduling. Change the schedule or sampler.")
+            elif schedule_type == "trailing" and sampler not in {
+                "euler", "euler_a", "dpmpp_2m", "dpmpp_2m_sde", "lms", "heun", "unipc"
+            }:
+                add("error", "generation.schedule_type",
+                    "Trailing spacing is not supported for this SDXL sampler.")
             elif schedule_type in {"exponential", "beta"} and sampler not in {
                 "euler", "dpmpp_2m", "dpmpp_2m_sde", "unipc"
             }:
