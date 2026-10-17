@@ -31,3 +31,24 @@
 }
 
 #civitai-nav[hidden] { display: none !important; }
+
+/* C1.3 version inspector */
+.civitai-detail-dialog { width: min(920px, calc(100vw - 26px)); max-height: min(90vh, 1100px); overflow: auto; background: var(--panel-strong, #151923); color: var(--text, #eee); border: 1px solid var(--border, #38404d); border-radius: 18px; padding: 22px; box-shadow: 0 24px 90px rgba(0,0,0,.75); }
+.civitai-detail-dialog::backdrop { background: rgba(0,0,0,.75); }
+.civitai-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.civitai-detail-header h2 { margin: 0; overflow-wrap: anywhere; }
+.civitai-detail-description { line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.civitai-detail-version-label { display: flex; flex-direction: column; gap: 8px; margin: 20px 0; max-width: 420px; }
+.civitai-detail-version-label select { width: 100%; }
+.civitai-detail-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px,1fr)); gap: 12px; }
+.civitai-detail-images img { width: 100%; max-height: 310px; object-fit: contain; background: #10131b; border-radius: 10px; }
+.civitai-detail-compatibility { color: var(--accent); font-weight: 700; }
+.civitai-detail-files p { overflow-wrap: anywhere; }
+.civitai-detail-external { display: inline-flex; margin-top: 18px; }
+.civitai-detail-open { margin-top: 7px; align-self: flex-start; }
+.project-nav-submenu { display: flex; flex-direction: column; margin: -2px 0 4px 15px; padding-left: 13px; border-left: 1px solid var(--border, #38404d); gap: 3px; }
+.project-nav-submenu[hidden] { display: none !important; }
+.project-nav-submenu button { background: transparent; border: 0; border-radius: 9px; color: var(--muted); text-align: left; padding: 10px 12px; cursor: pointer; font: inherit; }
+.project-nav-submenu button:hover, .project-nav-submenu button.active { background: rgba(65,217,255,.11); color: var(--text); }
+.project-nav-chevron { margin-left: auto; }
+@media(max-width: 640px) { .civitai-detail-dialog { padding: 14px; } .civitai-detail-images { grid-template-columns: repeat(2,minmax(0,1fr)); } }
