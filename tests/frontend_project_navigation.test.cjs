@@ -106,3 +106,17 @@ test('UX2.5 one trash button routes multi-checkbox to batch and retains single c
   assert.match(single,/projectManagerState\.bulkIds\.delete\(item\.id\)/);
   assert.doesNotMatch(animation,/id="animation-project-manager-bulk-trash"/);
 });
+
+test('UX3 editor groups preserve existing form cards and provide section navigation',()=>{
+  for(const [key,title] of [['setup','Setup'],['sources','Sources & Media'],
+    ['timeline','Timeline & Prompts'],['camera','Camera & Motion'],
+    ['generation','Generation Settings']]){
+    assert.ok(animation.includes("['"+key+"','"+title+"'"));
+  }
+  assert.match(animation,/function setupProjectEditorGroups\(layout, panel\)/);
+  assert.match(animation,/cards\.appendChild\(card\)/);
+  assert.match(animation,/setupProjectEditorGroups\(layout, panels\.editor\)/);
+  assert.match(animation,/group\.hidden=!active/);
+  assert.match(animation,/morphorum\.editor\.group\.v1/);
+  assert.match(animation,/\['#animation-2d-motion-card','#animation-3d-camera-card'\]/);
+});
