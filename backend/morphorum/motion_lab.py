@@ -681,6 +681,12 @@ def compile_motion_lab(
     # displacement introduced by this compilation.
     generated_safety_limited: dict[str, int] = {}
     for axis in ("translation_x", "translation_y", "translation_z"):
+        # Explicit authored keyframes and recorded motion must retain their precise values.
+        if any(layer["enabled"] and layer["type"] in ("keyframes", "recording") and
+               (layer["type"] == "recording" and axis in layer["axes"] or
+                layer["type"] == "keyframes" and layer["axis"] == axis)
+               for layer in lab["layers"]):
+            continue
         safe_limit = 0.08  # native scene units per rendered frame
         samples = signals[axis]
         baseline = base_signals[axis]
