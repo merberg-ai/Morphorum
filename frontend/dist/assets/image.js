@@ -542,6 +542,19 @@
     return `ETA ${hours}h ${minutes % 60}m`;
   }
 
+  function previewImagePromptLength() {
+    const node = qs('#image-prompt-token-warning');
+    if (!node || !state.model || state.model.family !== 'sdxl') return;
+    const inputs = [qs('#image-prompt')?.value || '', qs('#image-negative-prompt')?.value || ''];
+    const likelyLong = inputs.some(value => value.length >= 250);
+    if (!likelyLong) {
+      node.hidden = true;
+      return;
+    }
+    node.hidden = false;
+    node.textContent = 'Long SDXL prompt detected. Each CLIP encoder accepts 77 tokens. This is a character-length advisory, not an exact count; exact overflow warnings appear when generating.';
+  }
+
   function showImagePromptWarnings(job) {
     const node = qs('#image-prompt-token-warning');
     if (!node) return;
@@ -899,6 +912,9 @@
 
   function bind() {
     qs('#image-model-select')?.addEventListener('change', configureModel);
+    for (const id of ['#image-prompt', '#image-negative-prompt']) {
+      qs(id)?.addEventListener('input', previewImagePromptLength);
+    }
     qs('#image-sampler')?.addEventListener('change', () => {
       if (state.model?.family === 'sdxl') {
         populateScheduleTypes(effectiveCapability(state.model));
