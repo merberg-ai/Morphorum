@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from .civitai_auth import get_token
 from typing import Any
 import httpx
 
@@ -38,7 +39,7 @@ def model_details(model_id: int, *, client: httpx.Client | None = None) -> dict[
     if not isinstance(model_id, int) or not 0 < model_id <= 2_147_483_647:
         raise CivitaiSearchError("Invalid Civitai model ID.", 422)
     headers = {"Accept": "application/json", "User-Agent": "Morphorum/0.1 (model details)"}
-    token = os.environ.get("CIVITAI_API_TOKEN", "").strip()
+    token = get_token()
     if token:
         headers["Authorization"] = "Bearer " + token
     owned = client is None
