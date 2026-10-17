@@ -1,7 +1,7 @@
 """Explicit check for newer Civitai versions of an exactly matched local file."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from .civitai_identify import identify_model
 from .civitai_detail import model_details
 from .civitai_search import CivitaiSearchError
@@ -11,7 +11,8 @@ def _date(value):
     if not isinstance(value, str) or not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return result.replace(tzinfo=timezone.utc) if result.tzinfo is None else result
     except ValueError:
         return None
 
