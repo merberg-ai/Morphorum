@@ -31,6 +31,9 @@ function mockAnalyzer({file={name:'drums.wav',size:8192}, project=true, http=200
     events:{events:[{id:'beat-1'},{id:'beat-2'}]},
   };
   const ctx={
+    projectMedia:{soundtrack:null},
+    projectMediaAssets:()=>[],
+    toast:()=>{},
     state:{project:project?{id:'p1',animation:{max_frames:4,fps:4},
       motion_lab:{layers:storedLayers}}:null},
     window:{MorphorumDialog:{confirm:async()=>false}},
@@ -53,9 +56,9 @@ function mockAnalyzer({file={name:'drums.wav',size:8192}, project=true, http=200
     motionLabAudioSignal:()=>analysis.values,
     URL:{createObjectURL:()=>'/test-audio'},
     Audio:class {load(){}},
-    fetch:async()=>({
+    fetch:async url=>({
       ok:http===200,status:http,
-      json:async()=>http===200?{analysis}:{detail:'This is not PCM WAV.'},
+      json:async()=>http===200?(url.endsWith('/motion-import/soundtrack')?{soundtrack:{filename:'drums.wav'}}:{analysis}):{detail:'This is not PCM WAV.'},
     }),
   };
   vm.runInNewContext(analyzer,ctx);
