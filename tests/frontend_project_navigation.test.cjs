@@ -24,7 +24,9 @@ test('UX2.4 primary nav reuses project panels and existing workspace navigation'
   assert.match(app,/button\.dataset\.projectNav/);
   assert.match(animation,/qs\('#animation-tab-' \+ name\)/);
   assert.match(animation,/panels\.editor\.appendChild\(layout\)/);
-  assert.match(animation,/if \(!\['wizard','projects','editor'\]\.includes\(name\)\) nav\.appendChild\(button\)/);
+  assert.match(animation,/button\.hidden = true/);
+  assert.match(animation,/button\.style\.display = 'none'/);
+  assert.match(animation,/nav\.appendChild\(button\)/);
   assert.match(animation,/if \(name === 'wizard'\) void projectWizard\?\.open\(\)/);
 });
 
@@ -32,4 +34,13 @@ test('UX2.4 Motion Lab entry opens overview and project links preserve selection
   assert.match(app,/button\.dataset\.view === 'animation'/);
   assert.match(app,/qs\('#animation-tab-motion'\)\?\.click\(\)/);
   assert.match(animation,/button\.dataset\.projectNav === name/);
+});
+
+test('UX2.4 main-menu project targets have DOM-backed click destinations',()=>{
+  for (const name of ['wizard','projects','editor']) {
+    assert.match(app,/qs\('#animation-tab-' \+ button\.dataset\.projectNav\)\?\.click\(\)/);
+    assert.match(animation,/button\.id = 'animation-tab-' \+ name/);
+  }
+  assert.match(animation,/button\.hidden = true/);
+  assert.match(animation,/nav\.appendChild\(button\)/);
 });
