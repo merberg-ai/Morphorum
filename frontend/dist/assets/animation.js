@@ -1085,6 +1085,37 @@
       : 'Compatible samplers';
   }
 
+  function populateAnimationScheduleTypes(preferred = '') {
+    const field = qs('#animation-schedule-type-field');
+    const select = qs('#animation-schedule-type');
+    if (!field || !select) return;
+    const model = modelById(qs('#animation-model')?.value || '');
+    const isSdxl = model?.family === 'sdxl';
+    field.hidden = !isSdxl;
+    select.replaceChildren();
+    if (!isSdxl) {
+      select.add(new Option('Normal', 'normal'));
+      select.disabled = true;
+      return;
+    }
+    const config = effectiveCapability(model).schedule_types || {};
+    const selectedSampler = qs('#animation-sampler')?.value;
+    const previous = preferred || state.project?.generation?.schedule_type || 'normal';
+    const options = Array.isArray(config.options) ? config.options : [];
+    for (const option of options) {
+      if (selectedSampler === 'ddim' && option.id === 'karras') continue;
+      select.add(new Option(option.label || option.id, option.id));
+    }
+    if (options.length) {
+      if (![...select.options].some(option => option.value === previous)) {
+        const unsupported = new Option('Unsupported schedule · ' + previous, previous);
+        select.add(unsupported);
+      }
+      select.value = previous;
+    }
+    select.disabled = !options.length;
+  }
+
   function repairConstantGuidanceForSelectedModel({ announce = false } = {}) {
     const input = qs('#animation-guidance');
     const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
@@ -1160,6 +1191,7 @@
       preserveSelection ? previousSampler : (state.project?.generation?.sampler || ''),
       { preserveUnsupported: true }
     );
+    populateAnimationScheduleTypes();
     populateResolutionPresets();
     renderEditorGuidance();
   }
@@ -2341,6 +2373,7 @@
 
       populateModelSelect();
       populateSamplerSelect(project.generation?.sampler || '', { preserveUnsupported: true });
+      populateAnimationScheduleTypes(project.generation?.schedule_type || 'normal');
       const repairedGuidance = repairConstantGuidanceForSelectedModel();
       renderPromptRows();
       syncAnimationModeUi();
@@ -2434,6 +2467,7 @@
         steps: qs('#animation-steps')?.value || '0:(20)',
         guidance: qs('#animation-guidance')?.value || '0:(0)',
         sampler: qs('#animation-sampler')?.value || 'flowmatch_euler',
+        schedule_type: qs('#animation-schedule-type')?.value || 'normal',
         seed: Number(qs('#animation-seed')?.value ?? -1),
         seed_behavior: qs('#animation-seed-behavior')?.value || 'fixed',
         seed_increment: Number(qs('#animation-seed-increment')?.value || 1),
@@ -4634,6 +4668,7 @@
     'animation.start_mode': '#animation-start-mode',
     'animation.source_image': '#animation-source-file',
     'generation.sampler': '#animation-sampler',
+    'generation.schedule_type': '#animation-schedule-type',
     'generation.steps': '#animation-steps',
     'generation.guidance': '#animation-guidance',
     'hybrid.composite_opacity': '#animation-hybrid-composite-opacity',
@@ -11672,6 +11707,7 @@
 
     qs('#animation-model')?.addEventListener('change', () => {
       populateSamplerSelect('');
+      populateAnimationScheduleTypes('normal');
       populateResolutionPresets();
       const repairedGuidance = repairConstantGuidanceForSelectedModel({ announce: true });
       renderPromptRows();
@@ -11680,7 +11716,10 @@
       renderSourceState();
     });
 
-    qs('#animation-sampler')?.addEventListener('change', renderAnimationModelCompatibility);
+    qs('#animation-sampler')?.addEventListener('change', () => {
+      populateAnimationScheduleTypes(qs('#animation-schedule-type')?.value || 'normal');
+      renderAnimationModelCompatibility();
+    });
     qs('#animation-compatibility-action')?.addEventListener('click', () => {
       const action = qs('#animation-compatibility-action')?.dataset.compatibilityAction;
       if (action === 'models') {
