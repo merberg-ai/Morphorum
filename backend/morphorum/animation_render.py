@@ -296,12 +296,29 @@ def _prompt_conditioning_kwargs(
                 )
                 if conditioning_cache is not None and key in conditioning_cache:
                     return conditioning_cache[key]
-                encoded = pipe.encode_prompt(
-                    prompt=prompt_text,
-                    negative_prompt=negative_text or None,
-                    num_images_per_prompt=1,
-                    do_classifier_free_guidance=do_cfg,
+                from .sdxl_prompt_chunks import (
+                    encode_sdxl_long_prompts, plan_clip_chunks,
                 )
+                overflow = any(
+                    plan_clip_chunks(tokenizer, value).overflow
+                    for tokenizer in (pipe.tokenizer, pipe.tokenizer_2)
+                    for value in (prompt_text, negative_text)
+                    if value
+                )
+                if overflow:
+                    import torch
+                    with torch.no_grad():
+                        encoded = encode_sdxl_long_prompts(
+                            pipe, prompt_text, negative_text,
+                            do_classifier_free_guidance=do_cfg,
+                        )
+                else:
+                    encoded = pipe.encode_prompt(
+                        prompt=prompt_text,
+                        negative_prompt=negative_text or None,
+                        num_images_per_prompt=1,
+                        do_classifier_free_guidance=do_cfg,
+                    )
                 _cache_conditioning_value(conditioning_cache, key, encoded)
                 return encoded
 
