@@ -175,3 +175,23 @@ The checks are initiated only by user action. No automatic network traffic, loca
 5. Disable Hub and verify the update endpoint refuses requests without affecting local generation.
 
 **Committed, but automated execution and physical Windows tests are still pending.**
+
+## C3.3: Local model metadata and preview synchronization (pending Windows verification)
+
+- **Models** and **LoRAs** now offer explicit **Sync Civitai Info** and **View Cached Info** actions.
+- Synchronization first requires an exact SHA-256 identity from C3.1; it never relies on a filename or an unverified sidecar. It caches normalized model/version name, creator, base model, trained words, descriptive text, verified Civitai link, and sync timestamp.
+- Metadata and optional thumbnail are stored only beneath `cache/civitai-library/<indexed_model_id>/`. No checkpoint/LoRA files or original model folders are modified.
+- Image retrieval happens only on a user-triggered sync, only for `https` Civitai image hosts, with a 4 MiB cap and supported JPEG/PNG/WebP types. It respects the existing thumbnail and mature-content settings, including on later cache reads.
+- Cache records are invalidated when the indexed local file's size or modification time changes. **View Cached Info** makes no external network requests.
+- The new endpoints are `GET /api/civitai/library/{model_id}`, `POST /api/civitai/library/{model_id}/sync`, and `GET /api/civitai/library/{model_id}/preview`. Access requires the Civitai Hub to be enabled; model weights never leave the system.
+- No automated metadata sync, no model replacements, and no modifying existing preview sidecars during C3.3.
+
+### Physical Windows acceptance
+
+1. Open **Models** or **LoRAs**, select an installed, identifiable Civitai model, and use **Sync Civitai Info**. Confirm a readable summary and optional small preview.
+2. Refresh the page and click **View Cached Info**. Confirm the summary is available without an online lookup.
+3. Disable thumbnail previews and verify cached thumbnails no longer display. Restore the setting and retest.
+4. Replace or modify a test file and re-scan; confirm old metadata is reported stale rather than matched to the changed file.
+5. Confirm unrelated model files, folders, and locally generated outputs remain unchanged.
+
+Automated regression tests were added, but not executed from this chat. C3.3 requires physical Windows acceptance before merge.
