@@ -10890,7 +10890,8 @@
         const active = name===key;
         group.hidden=!active;
         buttons.get(name).classList.toggle('active',active);
-        buttons.get(name).setAttribute('aria-current',active?'page':null);
+        if (active) buttons.get(name).setAttribute('aria-current','page');
+        else buttons.get(name).removeAttribute('aria-current');
         buttons.get(name).setAttribute('aria-pressed',String(active));
       }
       mobilePicker.value = key;
