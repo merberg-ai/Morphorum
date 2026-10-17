@@ -1,19 +1,19 @@
-# G5 release acceptance: SDXL integration (dev-webui)
+# G5 SDXL integration: acceptance record and regression checklist
 
-**Status: preparation only.** The automated test suite is useful evidence, but it cannot replace Windows NVIDIA GPU rendering. Do not merge `dev-webui` to `main` until the owner records physical acceptance and explicitly approves the merge.
+**Release decision (2026-10-17):** The owner reported **G5.5 PASS** on Windows and explicitly approved merging the G1–G5 SDXL changes from `dev-webui` to `main`. The release candidate's Backend, Syntax, and Installer GitHub Actions checks passed. This document preserves a reusable test matrix; individual W1–W11 results were **not provided separately**, so no row is retroactively marked as independently verified. Physical mobile/Linux coverage remains separate from this SDXL Windows acceptance.
 
 ## Scope and ground rules
 
 This is the final gate for the SDXL G1–G5 development work: sampler and schedule selection, dual-CLIP chunked prompts, image/animation conditioning, LoRA compatibility/verification, cache efficiency, and accurate diagnostics.
 
-- **Test branch:** `dev-webui`. **Release branch:** `main`; do not switch it during acceptance.
+- **Original test branch:** `dev-webui`. **Release branch:** `main`. Use the released `main` branch for normal installations; use `dev-webui` only when intentionally testing ongoing development.
 - Test on the existing Windows NVIDIA GPU, with the actual SDXL checkpoint and LoRA files the owner uses. Record the GPU, driver, VRAM, model/LoRA names, and exact commit.
 - Keep prompts, seed, resolution, steps, and LoRA weights identical for a meaningful before/after performance comparison.
 - Never run destructive cleanup on valuable checkpoints, user projects, outputs, or settings. Back up anything irreplaceable before an update.
-- Record **PASS**, **FAIL**, **BLOCKED**, or **NOT TESTED** for each applicable row. No test below should be pre-marked as passed just because automated CI is green.
+- For future regression tests, record **PASS**, **FAIL**, **BLOCKED**, or **NOT TESTED** per row. The owner accepted the overall G5.5 milestone; the original per-row outcomes were not submitted.
 - Separate release-blocking regressions from optional or previously deferred hardware/mobile coverage. Report any exceptions explicitly.
 
-## Update the Windows test installation
+## Update a Windows development test installation (historical commands)
 
 Stop active Morphorum generation jobs and close the application server. Open PowerShell in the **existing Morphorum installation folder**:
 
@@ -31,19 +31,19 @@ For a genuinely clean-install rehearsal, use a **new empty disposable folder**, 
 
 ## Acceptance matrix
 
-| ID | Windows physical check | Expected observable result | Status |
+| ID | Windows physical check | Expected observable result | Original row-level record |
 | --- | --- | --- | --- |
-| W1 | Start Morphorum on `dev-webui`, verify model folders and Settings; open Image Generation | Correct existing project/settings paths; usable responsive controls and model selection | NOT TESTED |
-| W2 | SDXL **short** positive/negative prompts, fixed seed, 1 image, no LoRA | Image finishes; **STANDARD** conditioning; no false long-prompt warning | NOT TESTED |
-| W3 | SDXL **long** positive prompt and long negative prompt, same settings | Image finishes; **CHUNKED** conditioning with actual CLIP-L/G chunk counts and aligned negative embeddings, when CFG is active | NOT TESTED |
-| W4 | SDXL 1–2 LoRAs (prefer previously validated real files), with a long prompt | Image finishes; each adapter is clearly reported as matched, active-not-compared, or UNet-only; no silent checkpoint-value mismatch | NOT TESTED |
-| W5 | SDXL sample sampler/schedule combinations: Euler/Normal, DPM++ 2M/Karras, Euler/Trailing; test incompatible DDIM/Karras selection | Supported combinations render; unsupported combination is rejected or prevented, not silently changed | NOT TESTED |
-| W6 | SDXL 24–48-frame animation, unchanged long prompt and constant LoRA strengths | Render completes; conditioning remains consistent; later diffusion anchors show cache **hits**; no sustained unexpected VRAM growth | NOT TESTED |
-| W7 | SDXL short-to-long prompt keyframe transition with different negative prompts and LoRA strength keyframes | Blend completes with compatible embeddings; prompt/negative telemetry follows frame resolution; cache changes when LoRA settings change | NOT TESTED |
-| W8 | Export the saved animation to MP4 with FFmpeg, including audio where available | Export completes; resulting video opens and audio matches the saved soundtrack, if attached | NOT TESTED |
-| W9 | Quick FLUX and Z-Image single-image smoke tests **if checkpoints are installed** | Existing non-SDXL workflows still render; no SDXL-specific controls or conditioning injected | NOT TESTED |
-| W10 | Inspect Console and the terminal after the LoRA renders | PEFT startup warnings are explained by the subsequent verification result; any actual load failure is visible and actionable | NOT TESTED |
-| W11 | Reopen project, reload render history, examine exported performance report | No lost project settings; saved results and render telemetry available after restart | NOT TESTED |
+| W1 | Start Morphorum on `dev-webui`, verify model folders and Settings; open Image Generation | Correct existing project/settings paths; usable responsive controls and model selection | Not individually recorded |
+| W2 | SDXL **short** positive/negative prompts, fixed seed, 1 image, no LoRA | Image finishes; **STANDARD** conditioning; no false long-prompt warning | Not individually recorded |
+| W3 | SDXL **long** positive prompt and long negative prompt, same settings | Image finishes; **CHUNKED** conditioning with actual CLIP-L/G chunk counts and aligned negative embeddings, when CFG is active | Not individually recorded |
+| W4 | SDXL 1–2 LoRAs (prefer previously validated real files), with a long prompt | Image finishes; each adapter is clearly reported as matched, active-not-compared, or UNet-only; no silent checkpoint-value mismatch | Not individually recorded |
+| W5 | SDXL sample sampler/schedule combinations: Euler/Normal, DPM++ 2M/Karras, Euler/Trailing; test incompatible DDIM/Karras selection | Supported combinations render; unsupported combination is rejected or prevented, not silently changed | Not individually recorded |
+| W6 | SDXL 24–48-frame animation, unchanged long prompt and constant LoRA strengths | Render completes; conditioning remains consistent; later diffusion anchors show cache **hits**; no sustained unexpected VRAM growth | Not individually recorded |
+| W7 | SDXL short-to-long prompt keyframe transition with different negative prompts and LoRA strength keyframes | Blend completes with compatible embeddings; prompt/negative telemetry follows frame resolution; cache changes when LoRA settings change | Not individually recorded |
+| W8 | Export the saved animation to MP4 with FFmpeg, including audio where available | Export completes; resulting video opens and audio matches the saved soundtrack, if attached | Not individually recorded |
+| W9 | Quick FLUX and Z-Image single-image smoke tests **if checkpoints are installed** | Existing non-SDXL workflows still render; no SDXL-specific controls or conditioning injected | Not individually recorded |
+| W10 | Inspect Console and the terminal after the LoRA renders | PEFT startup warnings are explained by the subsequent verification result; any actual load failure is visible and actionable | Not individually recorded |
+| W11 | Reopen project, reload render history, examine exported performance report | No lost project settings; saved results and render telemetry available after restart | Not individually recorded |
 
 A short test is sufficient for an initial check; no need to run a multi-minute animation to exercise every case. For performance comparisons, the render must use identical relevant generation settings.
 
@@ -62,9 +62,9 @@ Before requesting a merge, verify GitHub Actions against the *final candidate co
 
 The CPU-based test suite cannot prove GPU speed or image quality. Capture the physical render's settings, exact SHA, errors, and optionally its `performance.jsonl` file for any surprising memory or timing behavior.
 
-## Final approval and merge gate
+## Future release approval and merge gate
 
-Leave the PR **draft** while acceptance is ongoing. To make it merge-ready, require all of the following:
+For future candidate PRs, leave the PR **draft** while acceptance is ongoing. Before making a future candidate merge-ready, require all of the following:
 
 1. A documented result for every required W1–W11 case; applicable failures fixed and retested, unavailable models clearly marked **BLOCKED**.
 2. Confirmed final CI status for the candidate SHA and public-facing docs, including installation/update instructions, SDXL features, and troubleshooting.
@@ -72,6 +72,6 @@ Leave the PR **draft** while acceptance is ongoing. To make it merge-ready, requ
 4. Any deferred mobile/Linux testing, known alpha limits, and remaining risks stated openly.
 5. **Explicit owner approval to merge into `main`.** A green CI run or the creation of a draft PR is not that approval.
 
-After approval, finish review and merge through the verified PR; then check `main` Actions again, verify the deployed README/installation docs, and recheck the upgrade path on a disposable installation. Do not change production installation branches automatically.
+For the G5 release, the explicit owner approval was received on 2026-10-17. The associated review was [PR #43](https://github.com/merberg-ai/Morphorum/pull/43). After every future merge, check `main` Actions, verify the deployed README and installation docs, and recheck the upgrade path on a disposable installation. Do not change production installation branches automatically.
 
 See [SDXL generation guide](SDXL_GENERATION.md), [Testing](TESTING.md), [Installation](INSTALLATION.md), and [Troubleshooting](TROUBLESHOOTING.md).
