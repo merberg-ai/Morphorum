@@ -289,3 +289,89 @@ def test_g51_non_sdxl_call_builders_never_inject_sdxl_conditioning(family):
         assert "prompt_embeds" not in args
         assert "negative_prompt_embeds" not in args
         assert "negative_prompt" not in args
+
+
+def test_g52_repeated_static_long_sdxl_animation_prompt_reuses_clip_embeddings():
+    pipe = TinySDXLPipeline()
+    cache = {}
+    stats = {"hits": 0, "misses": 0}
+    positive = _window("1 2 3 4 5 6", "1 2 3 4 5 6")
+    negative = _window("8 9 10", "8 9 10")
+    kwargs = dict(
+        guidance_scale=7.0, conditioning_cache=cache,
+        cache_stats=stats, lora_signature=(("style", 0.55),),
+    )
+    with torch.enable_grad():
+        first = _prompt_conditioning_kwargs(pipe, "sdxl", positive, negative, **kwargs)
+        calls = len(pipe.text_encoder.calls) + len(pipe.text_encoder_2.calls)
+        assert calls == 12  # Three chunks per tower for positive and negative.
+        assert first["prompt"] is None
+        assert first["prompt_embeds"].shape == (1, 21, 8)
+        assert first["negative_prompt_embeds"].shape == first["prompt_embeds"].shape
+        assert not first["prompt_embeds"].requires_grad
+        for _ in range(30):
+            second = _prompt_conditioning_kwargs(pipe, "sdxl", positive, negative, **kwargs)
+            assert second["prompt_embeds"] is first["prompt_embeds"]
+            assert second["negative_prompt_embeds"] is first["negative_prompt_embeds"]
+        assert len(pipe.text_encoder.calls) + len(pipe.text_encoder_2.calls) == calls
+    assert stats == {"hits": 30, "misses": 1}
+    assert len(cache) == 1
+
+
+def test_g52_static_long_sdxl_cache_invalidates_when_lora_strength_changes():
+    pipe = TinySDXLPipeline()
+    cache = {}
+    stats = {"hits": 0, "misses": 0}
+    positive = _window("1 2 3 4 5 6", "1 2 3 4 5 6")
+    for frame in range(12):
+        kwargs = dict(
+            guidance_scale=7.0, conditioning_cache=cache,
+            cache_stats=stats, lora_signature=(("style", frame / 10),),
+        )
+        result = _prompt_conditioning_kwargs(pipe, "sdxl", positive, {}, **kwargs)
+        assert result["prompt_embeds"].shape == (1, 21, 8)
+        assert len(cache) <= MAX_CONDITIONING_CACHE_ENTRIES
+    assert stats == {"hits": 0, "misses": 12}
+    assert len(cache) == MAX_CONDITIONING_CACHE_ENTRIES
+    repeated = _prompt_conditioning_kwargs(
+        pipe, "sdxl", positive, {},
+        guidance_scale=7.0, conditioning_cache=cache,
+        cache_stats=stats, lora_signature=(("style", 11 / 10),),
+    )
+    assert repeated["prompt_embeds"].shape == (1, 21, 8)
+    assert stats["hits"] == 1
+
+
+def test_g52_static_long_sdxl_uses_shared_blend_cache_when_keys_match():
+    pipe = TinySDXLPipeline()
+    cache = {}
+    positive = _window("1 2 3 4 5 6", "1 2 3 4 5 6")
+    static = _prompt_conditioning_kwargs(
+        pipe, "sdxl", positive, {}, guidance_scale=7.0,
+        conditioning_cache=cache, lora_signature=(("style", 0.5),),
+    )
+    initial = len(pipe.text_encoder.calls)
+    blended = _prompt_conditioning_kwargs(
+        pipe, "sdxl",
+        _window("1 2 3 4 5 6", "1 2", 0.5),
+        _window("2", "3", 0.5),
+        guidance_scale=7.0, conditioning_cache=cache,
+        lora_signature=(("style", 0.5),),
+    )
+    assert blended["prompt_embeds"].shape == static["prompt_embeds"].shape
+    # The initial long prompt is identical and should be recovered from cache;
+    # only the second blending endpoint requires new CLIP inference.
+    assert len(pipe.text_encoder.calls) == initial + 6
+
+
+def test_g52_static_short_sdxl_keeps_native_prompt_without_using_cache():
+    pipe = TinySDXLPipeline()
+    cache = {}
+    stats = {"hits": 0, "misses": 0}
+    result = _prompt_conditioning_kwargs(
+        pipe, "sdxl", _window("1 2", "1 2"), {},
+        guidance_scale=7.0, conditioning_cache=cache, cache_stats=stats,
+    )
+    assert result == {"prompt": "1 2", "negative_prompt": None}
+    assert len(cache) == 0
+    assert stats == {"hits": 0, "misses": 0}
