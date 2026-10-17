@@ -101,6 +101,7 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
                 {"id": "karras", "label": "Karras"},
                 {"id": "exponential", "label": "Exponential"},
                 {"id": "beta", "label": "Beta"},
+                {"id": "trailing", "label": "Trailing (Diffusers)"},
             ],
         },
         "samplers": {
@@ -530,6 +531,10 @@ class GenerationManager:
                 )
             if request.schedule_type != "normal" and request.sampler == "ddim":
                 raise GenerationError("DDIM supports only Normal scheduling.")
+            if request.schedule_type == "trailing" and request.sampler not in {
+                "euler", "euler_a", "dpmpp_2m", "dpmpp_2m_sde", "lms", "heun", "unipc"
+            }:
+                raise GenerationError("Trailing spacing is not supported for this sampler.")
             if request.schedule_type in {"exponential", "beta"} and request.sampler not in {
                 "euler", "dpmpp_2m", "dpmpp_2m_sde", "unipc"
             }:
@@ -2662,15 +2667,21 @@ class GenerationManager:
                 if spec is None:
                     raise GenerationError(f"Unknown sampler '{sampler}'.")
                 scheduler_class, scheduler_kwargs = spec
-                if schedule_type not in {"normal", "karras", "exponential", "beta"}:
+                if schedule_type not in {"normal", "karras", "exponential", "beta", "trailing"}:
                     raise GenerationError(f"Unknown SDXL schedule type '{schedule_type}'.")
                 if sampler == "ddim" and schedule_type != "normal":
                     raise GenerationError("DDIM supports only Normal scheduling.")
+                if schedule_type == "trailing" and sampler not in {
+                    "euler", "euler_a", "dpmpp_2m", "dpmpp_2m_sde", "lms", "heun", "unipc"
+                }:
+                    raise GenerationError("Trailing spacing is not supported for this sampler.")
                 if schedule_type in {"exponential", "beta"} and sampler not in {
                     "euler", "dpmpp_2m", "dpmpp_2m_sde", "unipc"
                 }:
                     raise GenerationError("Selected SDXL sampler does not support this schedule.")
-                if schedule_type != "normal":
+                if schedule_type == "trailing":
+                    scheduler_kwargs = {**scheduler_kwargs, "timestep_spacing": "trailing"}
+                elif schedule_type != "normal":
                     sigma_key = {
                         "karras": "use_karras_sigmas",
                         "exponential": "use_exponential_sigmas",
