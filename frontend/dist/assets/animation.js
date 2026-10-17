@@ -6350,7 +6350,7 @@
         '<div class="animation-audio-director-actions"><button type="button" data-cue-update>Update selected</button>' +
         '<button type="button" data-cue-delete>Delete selected</button></div>' +
         '<div data-cue-list class="animation-audio-director-list"></div>' +
-        '<details class="animation-audio-find-beats"><summary>Find Beats · Optional batch cues</summary>' +
+        '<details class="animation-audio-find-beats" open><summary>Assign detected beats to camera movements</summary>' +
         '<div class="animation-audio-beat-grid">' +
         '<label>Find<select data-beat-kind><option value="kick">Kick</option><option value="snare">Snare</option><option value="highs">Highs</option></select></label>' +
         '<label>Minimum strength<input data-beat-strength type="number" min="0" max="1" step=".05" value=".35"></label>' +
@@ -6361,11 +6361,11 @@
         '<label>Motion preset<select data-beat-preset></select></label>' +
         '<label class="animation-audio-beat-check"><input data-beat-alternate type="checkbox"> Alternate right/left rolls</label></div>' +
         '<div class="animation-audio-director-actions"><button type="button" data-beat-preview>Preview matches</button>' +
-        '<button type="button" data-beat-assign>Assign cues to matches</button>' +
+        '<button type="button" data-beat-assign>Assign All Matching Beats</button>' +
         '<button type="button" data-beat-undo disabled>Undo batch</button></div>' +
         '<p data-beat-summary class="muted">Review candidate hits before assigning.</p></details>' +
         '<p class="muted">Cues save with this WAV. Save cues, then Preview camera cues or Apply camera cues. Existing Motion Lab layers remain additive.</p>';
-      const cueStage = qs('#motion-studio-composer-cues');
+      const cueStage = qs('#motion-studio-stage-assign');
       if (cueStage) cueStage.appendChild(panel);
       else waveform.after(panel);
       const options = panel.querySelector('[data-cue-preset]');
@@ -10140,6 +10140,7 @@
     ['source', 'Load Audio', 'Select a WAV or reuse the saved project soundtrack.'],
     ['analysis', 'Analyze WAV', 'Analyze audio and inspect its waveform and playback.'],
     ['detect', 'Detect Beats', 'Tune detection and correct the detected markers.'],
+    ['assign', 'Assign Motion to Beats', 'Choose kick, snare or highs, preview matches and assign camera movements.'],
     ['compose', 'Create Motion', 'Choose beat cues, sound channels or continuous motion.'],
     ['review', 'Preview & Apply', 'Check draft layers and apply to the animation when ready.'],
   ];
@@ -10154,8 +10155,8 @@
     const waveform = qs('#animation-audio-stereo-timeline');
     if (!waveform) return;
     const analysis = qs('#animation-audio-analysis-workspace');
-    const destination = motionStudioStage === 'detect'
-      ? qs('#motion-studio-stage-detect')
+    const destination = motionStudioStage === 'detect' || motionStudioStage === 'assign'
+      ? qs('#motion-studio-stage-' + motionStudioStage)
       : motionStudioStage === 'compose'
         ? qs('#motion-studio-composer-waveform') : analysis;
     if (!destination) return;
@@ -10165,7 +10166,7 @@
       else analysis.appendChild(waveform);
     } else if (waveform.parentElement !== destination) {
       // Keep the step title above the waveform, not below it.
-      if (destination.id === 'motion-studio-stage-detect') {
+      if (destination.id === 'motion-studio-stage-detect' || destination.id === 'motion-studio-stage-assign') {
         const heading = destination.querySelector('.motion-studio-stage-heading');
         if (heading) heading.after(waveform);
         else destination.prepend(waveform);
@@ -10184,6 +10185,7 @@
       selectedFile ? 'Selected WAV' : analysis ? 'WAV loaded' : 'Choose audio',
       analysis ? 'Analyzed' : 'Not analyzed',
       analysis ? count + ' markers' : 'Analyze first',
+      analysis ? motionDirectorCues.length + ' camera cues' : 'Analyze first',
       motionLabDraftLayers.length + ' draft layers',
       motionLabDraftLayers.length ? 'Draft ready' : 'No draft layers',
     ];
@@ -10234,7 +10236,7 @@
       }
     }
     motionStudioDockWaveform();
-    if (motionLabAudioAnalysis && (name === 'analysis' || name === 'detect')) {
+    if (motionLabAudioAnalysis && (name === 'analysis' || name === 'detect' || name === 'assign')) {
       motionLabStereoWaveform();
       motionLabAudioPreview();
     }
@@ -10455,10 +10457,17 @@
       stages.compose.appendChild(area);
       modeAreas[name] = area;
     });
-    modeAreas.cues.innerHTML = '<p class="muted">Place camera cues on beats or at the playhead. Analyze a WAV to enable this editor.</p>';
-    const cueSlot = document.createElement('div');
-    cueSlot.id = 'motion-studio-composer-cues';
-    modeAreas.cues.appendChild(cueSlot);
+    modeAreas.cues.innerHTML = '<p class="muted">Beat assignments and manual camera cues are now in Step 4: Assign Motion to Beats. Select that step to edit, preview or apply cues.</p>';
+    const assignHelp = document.createElement('p');
+    assignHelp.className = 'muted';
+    assignHelp.textContent = 'Select Kick, Snare or Highs, choose a Motion preset, preview matching beats, then Assign All Matching Beats. Save cues to keep the assignments. Manual camera cues are also available below.';
+    stages.assign.appendChild(assignHelp);
+    const cueShortcut = document.createElement('button');
+    cueShortcut.type = 'button';
+    cueShortcut.className = 'secondary-button compact';
+    cueShortcut.textContent = 'Go to beat assignments';
+    cueShortcut.addEventListener('click', () => motionStudioSelectStage('assign'));
+    modeAreas.cues.appendChild(cueShortcut);
     if (channels) modeAreas.channels.appendChild(channels);
     if (continuous) modeAreas.continuous.appendChild(continuous);
     if (audioCard) modeAreas.pulse.appendChild(audioCard);
