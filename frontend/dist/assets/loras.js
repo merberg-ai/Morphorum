@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const state = { records: [], selected: null, detail: null, civitai: null, identity: null, identifying: false, request: 0 };
+  const state = { records: [], selected: null, detail: null, civitai: null, identity: null, identifying: false, updateCheck: null, updateBusy: false, request: 0 };
   const qs = selector => document.querySelector(selector);
   const toast = (title, message, type = 'info') => window.MorphorumToast?.(title, message, type, 6000);
   const api = async (url, options = {}) => {
@@ -95,6 +95,27 @@
     identify.title = 'Opt-in exact SHA-256 file match on Civitai';
     identify.addEventListener('click', identifySelectedLora);
     identityPanel.append(identify);
+    const check = text('button', state.updateBusy ? 'Checking…' : 'Check Updates');
+    check.type = 'button';
+    check.className = 'secondary-button compact busy-button';
+    check.disabled = state.updateBusy;
+    check.classList.toggle('busy', state.updateBusy);
+    check.addEventListener('click', checkSelectedLoraUpdates);
+    identityPanel.append(check);
+    if (state.updateCheck) {
+      const result = document.createElement('div');
+      result.className = 'lora-update-results';
+      result.append(text('p', state.updateCheck.message || 'Update check completed.', 'muted'));
+      for (const candidate of (state.updateCheck.candidates || []).slice(0, 5)) {
+        const link = document.createElement('a');
+        link.href = candidate.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = candidate.version + (candidate.potentially_compatible ? ' · same base model' : ' · compatibility unverified') + ' ↗';
+        result.append(link);
+      }
+      identityPanel.append(result);
+    }
     if (state.identity?.found) {
       const link = document.createElement('a');
       link.href = state.identity.url;
@@ -178,6 +199,24 @@
     }
   }
 
+  async function checkSelectedLoraUpdates() {
+    const selected = state.selected;
+    if (!selected || state.updateBusy) return;
+    const request = state.request;
+    state.updateBusy = true;
+    renderDetail();
+    try {
+      const result = await api('/api/civitai/updates/' + encodeURIComponent(selected.id), {method:'POST', body:'{}'});
+      if (request !== state.request) return;
+      state.updateCheck = result;
+      toast('Civitai update check', result.message || 'Checked versions.', 'info');
+    } catch (error) {
+      if (request === state.request) toast('Update check failed', error.message, 'error');
+    } finally {
+      if (request === state.request) { state.updateBusy = false; renderDetail(); }
+    }
+  }
+
   async function identifySelectedLora() {
     const selected = state.selected;
     if (!selected || state.identifying) return;
@@ -207,6 +246,8 @@
     state.civitai = null;
     state.identity = null;
     state.identifying = false;
+    state.updateCheck = null;
+    state.updateBusy = false;
     const request = ++state.request;
     renderLibrary();
     renderDetail();
@@ -230,7 +271,7 @@
       const result = await api('/api/loras');
       state.records = result.loras || [];
       const selected = state.records.find(item => item.id === state.selected?.id);
-      if (!selected) { state.selected = null; state.detail = null; state.civitai = null; state.identity = null; state.identifying = false; ++state.request; }
+      if (!selected) { state.selected = null; state.detail = null; state.civitai = null; state.identity = null; state.identifying = false; state.updateCheck = null; state.updateBusy = false; ++state.request; }
       renderLibrary();
       if (selected) await selectLora(selected);
       else renderDetail();
