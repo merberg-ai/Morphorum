@@ -31,6 +31,9 @@ function makeContext(project, api) {
     motionLabAudioSyncStatus() {},
   };
   const program = `
+    let motionDirectorDeleteSelection = new Set(), motionDirectorDeleteUndo = null;
+    let animationTab = 'editor';
+    async function motionLabUseProjectSoundtrack() {}
     let motionLabAudioAnalysis = null, motionLabAudioProjectId = null;
     let motionLabAudioElement = null, motionLabAudioUrl = null;
     async function motionStudioHydrateEdits() { return true; }

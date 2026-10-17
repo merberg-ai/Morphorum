@@ -186,3 +186,27 @@ def test_ml1_full_frame_series_matches_native_resolved_tracks():
     # The opt-in data series is omitted from regular saved Apply payloads.
     _applied, default_diag = compile_motion_lab(p, layers=layers)
     assert "series" not in default_diag
+
+
+def test_generated_motion_respects_render_translation_safety_even_with_raised_limits():
+    p = project()
+    for axis in ("translation_x", "translation_y", "translation_z"):
+        p["motion_lab"]["limits"][axis] = 3.0
+    many = [layer("wave", id=f"wave-{i}", fade_seconds=0) for i in range(12)]
+    rendered, diagnostic = compile_motion_lab(p, layers=many, include_series=True)
+    assert diagnostic["generated_safety_limited"]["translation_x"] > 0
+    for axis in ("translation_x", "translation_y", "translation_z"):
+        assert max(abs(x) for x in diagnostic["series"][axis]) <= .080000001
+    assert p["camera_3d"]["translation_x"] == "0:(0)"
+
+
+def test_generated_motion_does_not_rewrite_unsafe_manual_base_schedule():
+    p = project()
+    p["motion_lab"]["limits"]["translation_x"] = 3.0
+    p["tracks"]["camera_3d"]["translation_x"]["schedule"] = "0:(0.8)"
+    p["camera_3d"]["translation_x"] = "0:(0.8)"
+    rendered, diagnostic = compile_motion_lab(p, layers=[
+        layer("push-in", fade_seconds=0),
+    ], include_series=True)
+    assert diagnostic["series"]["translation_x"][6] == pytest.approx(0.8)
+    assert p["camera_3d"]["translation_x"] == "0:(0.8)"

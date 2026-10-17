@@ -3797,3 +3797,332 @@ dialog#animation-deforum-dialog {
     .animation-motion-lab-curve-actions button
   ) {scroll-behavior:auto;}
 }
+
+
+/* UX1/UX2: a focused five-stage Motion Studio instead of a long card stack. */
+#animation-panel-audio .motion-studio-stage-nav {
+  position:sticky;top:8px;z-index:16;display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;
+  padding:9px;border:1px solid var(--border-strong,var(--border));
+  border-radius:14px;background:var(--panel);
+  box-shadow:var(--shadow);
+  margin:0 0 16px;max-width:100%;min-width:0;
+}
+#animation-panel-audio .motion-studio-stage-button {
+  display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;
+  gap:3px 7px;min-width:0;min-height:60px;padding:8px 10px;
+  border:1px solid transparent;border-radius:10px;text-align:left;
+  color:var(--text);background:transparent;cursor:pointer;
+}
+#animation-panel-audio .motion-studio-stage-button.active {
+  border-color:var(--accent);background:color-mix(in srgb,var(--accent) 11%,var(--panel));
+}
+#animation-panel-audio .motion-studio-stage-button:focus-visible,
+#animation-panel-audio .motion-studio-mode-button:focus-visible {
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+#animation-panel-audio .motion-studio-stage-number {
+  display:grid;place-items:center;grid-row:1/3;
+  width:30px;height:30px;border-radius:9px;
+  font-size:.84rem;font-weight:800;background:var(--surface,rgba(127,127,127,.1));
+  border:1px solid var(--border);
+}
+#animation-panel-audio .motion-studio-stage-button.active .motion-studio-stage-number {
+  background:var(--accent);color:var(--panel);
+}
+#animation-panel-audio .motion-studio-stage-label {
+  font-size:.83rem;font-weight:750;line-height:1.25;white-space:normal;
+}
+#animation-panel-audio .motion-studio-stage-status {
+  grid-column:2;font-size:.72rem;color:var(--muted);line-height:1.25;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#animation-panel-audio .motion-studio-stage[hidden],
+#animation-panel-audio .motion-studio-author-panel[hidden] {display:none!important;}
+#animation-panel-audio .motion-studio-stage {
+  min-width:0;width:100%;display:grid;gap:14px;align-content:start;
+}
+#animation-panel-audio .motion-studio-stage-heading {
+  padding:0 2px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+}
+#animation-panel-audio .motion-studio-stage-heading h3 {font-size:1.1rem;margin:3px 0 5px;}
+#animation-panel-audio .motion-studio-stage-heading p {margin:0;}
+#animation-panel-audio .motion-studio-stage-heading .eyebrow {font-size:.69rem;}
+#animation-panel-audio .motion-studio-step-actions,
+#animation-panel-audio .motion-studio-stage-footer {
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+}
+#animation-panel-audio .motion-studio-stage-footer {
+  justify-content:space-between;margin-top:8px;
+  padding:12px 0;border-top:1px solid var(--border);
+}
+#animation-panel-audio .motion-studio-mode-nav {
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;
+  background:var(--panel);border:1px solid var(--border);
+  padding:7px;border-radius:12px;min-width:0;
+}
+#animation-panel-audio .motion-studio-mode-button {
+  min-width:0;min-height:44px;padding:10px 8px;border:1px solid transparent;
+  color:var(--text);background:transparent;cursor:pointer;border-radius:8px;
+  font-size:.85rem;font-weight:650;white-space:normal;
+}
+#animation-panel-audio .motion-studio-mode-button.active {
+  border-color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,var(--panel));
+}
+#animation-panel-audio .motion-studio-author-panel {
+  display:grid;gap:12px;min-width:0;max-width:100%;
+}
+#animation-panel-audio #motion-studio-composer-waveform:empty {display:none;}
+#animation-panel-audio .motion-studio-author-panel > .card,
+#animation-panel-audio .motion-studio-stage > .card,
+#animation-panel-audio .motion-studio-stage > article.card {
+  margin:0;min-width:0;max-width:100%;width:100%;
+}
+#animation-panel-audio #motion-studio-composer-waveform,
+#animation-panel-audio #motion-studio-stage-detect > #animation-audio-stereo-timeline {
+  min-width:0;width:100%;
+}
+#animation-panel-audio #motion-studio-stage-detect .animation-audio-config-group {
+  border:1px solid var(--border);border-radius:11px;padding:12px;
+  background:var(--panel);
+}
+#animation-panel-audio #motion-studio-stage-detect .animation-audio-config-group[open] {
+  width:100%;
+}
+#animation-panel-audio #motion-studio-stage-review > .animation-audio-workspace-actions {
+  margin-top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+}
+#animation-panel-audio .motion-studio-stage-footer button:disabled {opacity:.55;cursor:not-allowed;}
+@media(max-width:950px) {
+  #animation-panel-audio .motion-studio-stage-nav {
+    grid-template-columns:repeat(5,minmax(132px,1fr));
+    overflow-x:auto;overscroll-behavior-x:contain;
+    scrollbar-width:thin;
+  }
+  #animation-panel-audio .motion-studio-mode-nav {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:640px) {
+  #animation-panel-audio .motion-studio-stage-nav {top:4px;padding:6px;gap:4px;}
+  #animation-panel-audio .motion-studio-stage-button {
+    min-height:54px;padding:7px 8px;grid-template-columns:auto 1fr;
+  }
+  #animation-panel-audio .motion-studio-stage-label {font-size:.76rem;}
+  #animation-panel-audio .motion-studio-stage-status {font-size:.67rem;}
+  #animation-panel-audio .motion-studio-stage {gap:10px;}
+  #animation-panel-audio .motion-studio-step-actions > button,
+  #animation-panel-audio .motion-studio-stage-footer > button {
+    min-height:44px;flex:1 1 auto;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  #animation-panel-audio .motion-studio-stage-nav {scroll-behavior:auto;}
+}
+
+
+/* UX2.1: Analysis and diagnostic feedback must stay visible after reparenting. */
+#animation-panel-audio .animation-audio-preview-placeholder[hidden] {
+  display:none!important;
+}
+#animation-panel-audio .motion-studio-analysis-result,
+#animation-panel-audio .motion-studio-analysis-status {
+  display:block;margin:0;padding:10px 13px;border:1px solid var(--border);
+  border-radius:9px;line-height:1.5;overflow-wrap:anywhere;
+}
+#animation-panel-audio .motion-studio-analysis-status {
+  background:color-mix(in srgb,var(--accent) 7%,transparent);
+}
+#animation-panel-audio .motion-studio-analysis-status[data-busy="true"] {
+  border-color:var(--accent);
+}
+#animation-panel-audio #motion-studio-envelope-message {
+  margin:10px 0;line-height:1.5;
+}
+#animation-panel-audio #animation-audio-analysis-workspace > .animation-audio-legacy-envelope {
+  width:100%;min-width:0;
+}
+#animation-panel-audio #motion-studio-stage-analysis .motion-studio-step-actions,
+#animation-panel-audio #motion-studio-stage-detect .motion-studio-step-actions {
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+}
+@media(max-width:640px) {
+  #animation-panel-audio #motion-studio-stage-analysis .motion-studio-step-actions button,
+  #animation-panel-audio #motion-studio-stage-detect .motion-studio-step-actions button {
+    min-height:44px;
+  }
+}
+
+/* UX2.2: Screenshot regression. A step is ONE vertical workflow, not a
+   two-column stretched CSS grid. Never turn status text into a giant card. */
+#animation-panel-audio .motion-studio-stage {
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  gap:12px;
+  scroll-margin-top:160px;
+}
+#animation-panel-audio .motion-studio-stage > * {
+  flex:0 0 auto;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+#animation-panel-audio #motion-studio-stage-analysis .motion-studio-analysis-status {
+  min-height:0;
+  height:auto;
+  align-self:stretch;
+  width:100%;
+}
+#animation-panel-audio .motion-studio-analysis-result[hidden] {
+  display:none!important;
+}
+#animation-panel-audio #animation-audio-analysis-workspace {
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  width:100%;
+  max-width:100%;
+  align-self:stretch;
+}
+#animation-panel-audio #animation-audio-analysis-workspace > * {
+  min-width:0;
+  max-width:100%;
+}
+#animation-panel-audio .motion-studio-stage-nav {
+  scroll-margin-top:155px;
+}
+@media(max-width:720px) {
+  #animation-panel-audio .motion-studio-stage {scroll-margin-top:110px;}
+  #animation-panel-audio .motion-studio-stage-nav {scroll-margin-top:110px;}
+}
+
+/* UX2.5: bulk selection must remain usable on narrow and enlarged displays. */
+.animation-project-manager-bulk-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; margin: .7rem 0;
+}
+.animation-project-manager-select-row {
+  display: flex; align-items: stretch; min-width: 0; gap: .5rem;
+}
+.animation-project-manager-select-label {
+  display: flex; align-items: center; justify-content: center; flex: 0 0 2.3rem;
+  cursor: pointer;
+}
+.animation-project-manager-select-label input[type="checkbox"] {
+  width: 1.1rem; height: 1.1rem; cursor: pointer;
+}
+.animation-project-manager-select-row > .animation-project-manager-item {
+  flex: 1 1 0; min-width: 0; text-align: left;
+}
+@media (max-width: 560px) {
+  .animation-project-manager-bulk-actions > button { flex: 1 1 auto; }
+  .animation-project-manager-bulk-actions #animation-project-manager-bulk-trash { flex-basis: 100%; }
+}
+
+/* UX3: focused Project Editor sections, retaining real form controls. */
+#animation-editor-group-nav {
+  display:flex; flex-wrap:wrap; gap:.55rem; margin:1rem 0;
+}
+#animation-editor-group-nav .animation-editor-group-button {min-width:0; white-space:normal;}
+#animation-editor-group-nav .animation-editor-group-button.active {
+  outline:2px solid var(--accent, #39bff5); outline-offset:1px;
+}
+#animation-panel-editor .animation-editor-group[hidden] {display:none !important;}
+#animation-panel-editor .animation-editor-group {min-width:0; width:100%;}
+#animation-panel-editor .animation-editor-group-heading {margin:1rem 0 .75rem;}
+#animation-panel-editor .animation-editor-group-heading h2 {margin:0;}
+#animation-panel-editor .animation-editor-group-heading p {margin:.35rem 0 0;}
+#animation-panel-editor .animation-editor-group-cards {min-width:0; width:100%;}
+#animation-panel-editor .animation-editor-group-cards > * {min-width:0;}
+@media (max-width:600px) {
+  #animation-editor-group-nav {display:grid; grid-template-columns:repeat(2,minmax(0,1fr));}
+  #animation-editor-group-nav .animation-editor-group-button {width:100%;}
+}
+
+/* UX3 hotfix: the original Editor layout is a two-column grid. Section
+   wrappers must occupy its full track or each card collapses to min-content. */
+#animation-panel-editor > .animation-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+}
+#animation-panel-editor .animation-layout > .animation-editor-group {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+#animation-panel-editor .animation-editor-group-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+#animation-panel-editor .animation-editor-group-cards > article.card {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* UX4.1: a compact, always-visible project identity and save-state indicator. */
+#animation-editor-context {
+ display:flex; align-items:center; flex-wrap:wrap; gap:.7rem;
+ min-width:0; padding:.8rem 1rem; margin:.8rem 0;
+ border:1px solid var(--border); border-radius:12px;
+}
+#animation-editor-current-project {min-width:0;overflow-wrap:anywhere;}
+#animation-editor-save-state {margin-left:auto;font-size:.84rem;white-space:nowrap;}
+#animation-editor-save-state[data-save-state="dirty"] {font-weight:700;color:var(--warning, #f8bd69);}
+#animation-editor-save-state[data-save-state="saved"] {color:var(--success, #6bd9ac);}
+@media (max-width:600px) {
+ #animation-editor-context {align-items:flex-start;flex-direction:column;}
+ #animation-editor-save-state {margin-left:0;}
+}
+
+/* Motion Studio bulk cue assignment cleanup. */
+.animation-audio-cue-select-row {display:flex;align-items:center;gap:.35rem;min-width:0;}
+.animation-audio-cue-select-row > input[type="checkbox"] {flex:0 0 auto;width:1rem;height:1rem;cursor:pointer;}
+.animation-audio-cue-select-row > .animation-audio-cue-item {min-width:0;max-width:100%;overflow-wrap:anywhere;}
+.animation-audio-director-actions [data-cue-selection-count] {white-space:nowrap;font-size:.8rem;}
+@media(max-width:600px) {.animation-audio-cue-select-row > .animation-audio-cue-item {white-space:normal;}}
+
+/* UX4.2: compact section navigation at phone widths and high zoom. */
+#animation-panel-editor .animation-editor-mobile-section {display:none;}
+#animation-panel-editor .animation-editor-group-button:focus-visible,
+#animation-panel-editor .animation-editor-mobile-section:focus-visible {
+  outline:3px solid var(--accent,#39bff5);outline-offset:2px;
+}
+#animation-panel-editor .animation-editor-group-button[aria-pressed="true"] {
+  font-weight:700;
+}
+@media (max-width:600px) {
+  #animation-panel-editor #animation-editor-group-nav {display:none;}
+  #animation-panel-editor .animation-editor-mobile-section {
+    display:block;width:100%;max-width:100%;min-width:0;
+    margin:.7rem 0 1rem;min-height:44px;
+  }
+}
+
+/* P5.1: read-only Motion Lab overview, responsive without affecting editing cards. */
+.animation-p5-project-summary { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border-color, rgba(180,190,210,.24)); border-radius: 12px; }
+.animation-p5-summary-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,210px),1fr)); gap: .75rem 1rem; }
+.animation-p5-summary-grid > div { min-width: 0; display: flex; flex-direction: column; gap: .2rem; overflow-wrap: anywhere; }
+.animation-p5-summary-grid strong { font-size: .8rem; opacity: .8; }
+.animation-p5-summary-grid span { line-height: 1.4; }
+.animation-p5-summary-links { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+.animation-p5-project-summary > p { margin: .85rem 0 0; }
+
+/* P5.2 overview workflow: navigation only, no duplicate action controls. */
+.animation-p52-workflow { border-top: 1px solid var(--border-color, rgba(180,190,210,.2)); margin-top: 1rem; padding-top: 1rem; }
+.animation-p52-workflow h3 { margin: 0 0 .6rem; }
+.animation-p52-notice { padding: .75rem; border: 1px solid var(--border-color, rgba(180,190,210,.25)); border-radius: 8px; line-height: 1.45; }
+.animation-p52-steps { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); gap: .75rem; }
+.animation-p52-steps > div { min-width: 0; padding: .75rem; border: 1px solid var(--border-color,rgba(180,190,210,.2)); border-radius: 8px; }
+.animation-p52-steps button { max-width: 100%; white-space: normal; text-align: left; }
+.animation-p52-steps p { margin: .5rem 0 0; font-size: .88rem; line-height: 1.45; overflow-wrap: anywhere; }

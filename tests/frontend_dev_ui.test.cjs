@@ -80,7 +80,7 @@ test('Desktop has a separate Motion Lab sidebar, while mobile keeps its bottom n
   assert.match(animationCss, /#view-animation \.animation-workspace-nav\s*\{\s*display:flex/);
   assert.match(animationCss, /overflow-x:auto/);
   assert.match(mobile, /\.main-nav\s*\{\s*position: fixed/);
-  for (const name of ['motion','editor','composer','recording','curves','preview','motion-import','monitor','outputs']) {
+  for (const name of ['motion','composer','recording','curves','preview','motion-import','audio','monitor','outputs']) {
     assert.match(html, new RegExp('data-motion-nav="' + name + '"'));
   }
 });

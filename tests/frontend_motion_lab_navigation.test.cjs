@@ -23,7 +23,7 @@ test('Motion Lab includes Project Manager, New Project Wizard and eleven shared-
   assert.match(js, /mediaVault\.inert = true/);
   assert.match(css, /#animation-media-vault\s*\{display:none!important;\}/);
   assert.match(html, /data-view="animation"[^>]*>[^<]*<span class="nav-icon">[^<]*<\/span><span>Motion Lab<\/span>/);
-  for (const name of names) assert.match(html, new RegExp('data-motion-nav="' + name + '"'));
+  for (const name of names) assert.match(html, new RegExp((['wizard','projects','editor'].includes(name) ? 'data-project-nav="' : 'data-motion-nav="') + name + '"'));
 });
 
 test('Tool switching highlights the desktop sidebar, preserves selections, and safely stops recording', () => {
@@ -46,6 +46,7 @@ test('Tool switching highlights the desktop sidebar, preserves selections, and s
     motionFramePlayer:{pause(){previewPaused++;}},
     motionLabRecorder:{active:false},
     motionLabStopRecording:reason=>{stopReason=reason;},
+    syncProjectWorkspaceStatus(){},
   };
   vm.runInNewContext(js.slice(start,end)+'\nthis.selectTab=showAnimationTab;',context);
   context.selectTab('curves');
@@ -355,7 +356,7 @@ test('Preview and render locks include pending API requests and active operation
 });
 
 test('Project Manager uses saved metadata and protects deletion', () => {
-  assert.match(html, /data-motion-nav="projects">Project Manager/);
+  assert.match(html, /data-project-nav="projects" type="button"/);
   assert.match(js, /projects: 'Project Manager'/);
   assert.match(js, /setupProjectManager\(panels\.projects\)/);
   assert.match(js, /function renderProjectManager\(\)/);

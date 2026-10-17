@@ -581,8 +581,136 @@
     button.disabled = busy;
   }
 
+  // P5.1: read-only overview. This never applies drafts or saves projects.
+  function renderMotionProjectSummary() {
+    const intro = qs('#animation-motion-lab-intro');
+    if (!intro) return;
+    let summary = qs('#animation-p5-project-summary');
+    if (!summary) {
+      summary = document.createElement('section');
+      summary.id = 'animation-p5-project-summary';
+      summary.className = 'animation-p5-project-summary';
+      summary.setAttribute('aria-label', 'Current project and motion status');
+      const heading = intro.querySelector('.animation-motion-lab-heading');
+      if (heading) heading.insertAdjacentElement('afterend', summary);
+      else intro.prepend(summary);
+    }
+    const project = state.project;
+    const field = (label, value) => {
+      const el = document.createElement('div');
+      const term = document.createElement('strong');
+      const detail = document.createElement('span');
+      term.textContent = label;
+      detail.textContent = value;
+      el.append(term, detail);
+      return el;
+    };
+    summary.replaceChildren();
+    if (!project) {
+      summary.append(field('Project', 'No project open. Open or create a project to view its motion status.'));
+      return;
+    }
+    const animation = project.animation || {};
+    const frameCount = Number(qs('#animation-max-frames')?.value || animation.max_frames || 0);
+    const fps = Number(qs('#animation-fps')?.value || animation.fps || project.fps || 0);
+    const width = Number(qs('#animation-width')?.value || animation.width || project.width || 0);
+    const height = Number(qs('#animation-height')?.value || animation.height || project.height || 0);
+    const modelId = qs('#animation-model')?.value || project.model?.model_id || '';
+    const model = state.models.find(item => item.id === modelId && item.kind === 'checkpoints');
+    const audio = project.audio || animation.audio || {};
+    const soundtrack = audio.soundtrack || audio.source || animation.soundtrack || '';
+    const soundtrackName = typeof soundtrack === 'string' ? soundtrack.split(/[\\/]/).pop() :
+      (soundtrack?.filename || soundtrack?.name || 'Not attached');
+    const appliedLayers = Array.isArray(project.motion_lab?.layers) ? project.motion_lab.layers : [];
+    const draftCount = Array.isArray(motionLabDraftLayers) ? motionLabDraftLayers.length : 0;
+    const unappliedCount = motionLabProjectId === project.id &&
+      JSON.stringify(motionLabDraftLayers) !== JSON.stringify(appliedLayers) ? draftCount : 0;
+    const motionStatus = unappliedCount ? unappliedCount + ' draft layer(s) differ from the last applied camera schedule' :
+      draftCount ? draftCount + ' layer(s) match the last applied Motion Lab state' : 'No Motion Lab draft layers';
+    const grid = document.createElement('div');
+    grid.className = 'animation-p5-summary-grid';
+    grid.append(
+      field('Project', qs('#animation-name')?.value?.trim() || project.name || 'Untitled Animation'),
+      field('Editor', state.dirty ? 'Unsaved changes' : 'No unsaved Editor changes'),
+      field('Output', width > 0 && height > 0 ? width + ' × ' + height + ' px' : 'Not configured'),
+      field('Timeline', frameCount > 0 ? frameCount + ' frames' + (fps > 0 ? ' · ' + fps + ' FPS · ' + (frameCount / fps).toFixed(2) + ' s' : '') : 'Not configured'),
+      field('Camera', animationMode().toUpperCase()),
+      field('Checkpoint', model?.name || (modelId ? 'Saved model unavailable in index' : 'Not selected')),
+      field('Motion Lab draft', motionStatus),
+      field('Saved camera schedule', 'Separate from Motion Lab draft; inspect in Project Editor'),
+      field('Export soundtrack', soundtrackName && soundtrackName !== 'Not attached' ? soundtrackName : 'See Sources & Media (not verified here)'),
+      field('Analysis audio', 'Separate from attached export soundtrack; inspect in Motion Studio')
+    );
+    summary.append(grid);
+    const help = document.createElement('p');
+    help.className = 'muted';
+    help.textContent = 'Read-only overview. Preview does not apply motion, Apply does not save the project, and Render uses the project schedule.';
+    summary.append(help);
+    const links = document.createElement('div');
+    links.className = 'animation-p5-summary-links';
+    for (const [name, selector] of [
+      ['Project Editor', '[data-project-nav="editor"]'],
+      ['Motion Studio', '[data-motion-nav="audio"]'],
+      ['Camera Preview', '[data-motion-nav="preview"]'],
+      ['Render Monitor', '[data-motion-nav="monitor"]']
+    ]) {
+      const target = qs(selector);
+      if (!target) continue;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'secondary-button compact';
+      button.textContent = name;
+      button.addEventListener('click', () => target.click());
+      links.append(button);
+    }
+    summary.append(links);
+    // P5.2 action map: route to the original control, never duplicate its handler.
+    const workflow = document.createElement('section');
+    workflow.className = 'animation-p52-workflow';
+    workflow.setAttribute('aria-label', 'Preview apply save render and export workflow');
+    const title = document.createElement('h3');
+    title.textContent = 'From draft to finished video';
+    workflow.append(title);
+    const notice = document.createElement('p');
+    notice.className = 'animation-p52-notice';
+    notice.setAttribute('role', 'status');
+    notice.textContent = (unappliedCount
+      ? unappliedCount + ' draft motion layer(s) differ from the applied camera schedule. Apply before rendering to include these changes. '
+      : 'No unapplied Motion Lab changes detected. ') +
+      (state.dirty ? 'Project Editor has unsaved changes. Review and save before rendering.' :
+        'Project Editor reports no unsaved changes.');
+    workflow.append(notice);
+    const steps = document.createElement('div');
+    steps.className = 'animation-p52-steps';
+    const actions = [
+      ['1. Preview draft', 'Inspect camera motion temporarily. Does not update the project.', '[data-motion-nav="preview"]'],
+      ['2. Apply motion', 'Apply draft layers to the animation camera tracks. Review the resulting schedules before saving.', '[data-motion-nav="composer"]'],
+      ['3. Save project', 'Save current Editor changes directly. A preview alone is never saved.', '#animation-save'],
+      ['4. Render animation', 'Generate frames using the project camera schedule, not unapplied drafts.', '[data-motion-nav="monitor"]'],
+      ['5. Export video', 'Encode completed render frames as video. Audio inclusion depends on that render’s soundtrack snapshot.', '[data-motion-nav="outputs"]']
+    ];
+    for (const [label, explanation, selector] of actions) {
+      const item = document.createElement('div');
+      const action = document.createElement('button');
+      const destination = qs(selector);
+      action.type = 'button';
+      action.className = 'secondary-button compact';
+      action.textContent = label;
+      action.disabled = !destination || (selector === '#animation-save' && (destination.disabled || !state.project || state.loading));
+      action.title = destination ? 'Open existing controls' : 'Workspace unavailable';
+      action.addEventListener('click', () => { if (!destination) return; if (selector === '#animation-save' && (destination.disabled || !state.project || state.loading)) return; destination.click(); });
+      const detail = document.createElement('p');
+      detail.textContent = explanation;
+      item.append(action, detail);
+      steps.append(item);
+    }
+    workflow.append(steps);
+    summary.append(workflow);
+  }
+
   // P1: explain why the editor is locked without changing saved settings.
   function renderEditorGuidance() {
+    renderMotionProjectSummary();
     const project = state.project;
     syncMotionWorkflowGuide();
     const panel = qs('#animation-editor-guidance');
@@ -676,17 +804,35 @@
     }
   }
 
+  function syncProjectWorkspaceStatus() {
+    const nodes = [
+      qs('#animation-workspace-save-state'),
+      qs('#animation-editor-save-state'),
+    ];
+    const label = !state.project ? 'No project open'
+      : (state.dirty ? 'Unsaved changes' : 'Saved');
+    for (const node of nodes) {
+      if (!node) continue;
+      node.textContent = label;
+      node.dataset.saveState = !state.project ? 'empty' : state.dirty ? 'dirty' : 'saved';
+    }
+    const projectName = qs('#animation-editor-current-project');
+    if (projectName) projectName.textContent = state.project?.name || 'No project selected';
+  }
+
   function markDirty({ validate = false } = {}) {
     if (!state.project || state.loading) return;
     state.dirty = true;
     resetRenderPreflight();
     setStatus('Unsaved changes', 'dirty');
+    syncProjectWorkspaceStatus();
     scheduleInspectorRefresh({ validate });
   }
 
   function clearDirty() {
     state.dirty = false;
     setStatus(state.project ? 'Saved' : 'No project loaded', state.project ? 'saved' : '');
+    syncProjectWorkspaceStatus();
   }
 
   function modelById(modelId) {
@@ -2791,6 +2937,8 @@
       motionLabSelectedEvent = null;
       motionDirectorCues = [];
       motionDirectorSelected = null;
+      motionDirectorDeleteSelection.clear();
+      motionDirectorDeleteUndo = null;
       motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
       ++motionStudioSpectrumToken;
       motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
@@ -2844,6 +2992,13 @@
       if (chosen && (resetAudio || motionLabAudioProjectId !== id ||
           motionLabAudioAnalysis?.source_sha256 !== chosen)) {
         await restoreSavedMotionWav(chosen);
+      }
+      // When entering Motion Studio with only an attached soundtrack,
+      // automatically create/restore its analyzed WAV. Keep existing manual
+      // WAV selections and edits intact.
+      if (!chosen && soundtrackAsset && animationTab === 'audio' &&
+          !motionLabSoundtrackBusy && animationMode() === '3d') {
+        await motionLabUseProjectSoundtrack();
       }
     } catch (error) {
       if (token !== projectMediaGeneration || state.project?.id !== id) return;
@@ -5096,7 +5251,7 @@
   }
 
 
-  const projectManagerState = { selectedId: '', busy: false };
+  const projectManagerState = { selectedId: '', bulkIds: new Set(), busy: false };
   function projectManagerDate(value) {
     const date = new Date(value || '');
     return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
@@ -5140,6 +5295,14 @@
       projectManagerState.selectedId =
         state.projects.find(p => p.id === state.project?.id)?.id || state.projects[0]?.id || '';
     }
+    const validIds = new Set(state.projects.map(p => p.id));
+    for (const id of projectManagerState.bulkIds) if (!validIds.has(id)) projectManagerState.bulkIds.delete(id);
+    const bulkCount = qs('#animation-project-manager-bulk-count');
+    if (bulkCount) bulkCount.textContent = projectManagerState.bulkIds.size + ' selected';
+    const selectVisible = qs('#animation-project-manager-select-visible');
+    if (selectVisible) selectVisible.disabled = projectManagerState.busy || !filtered.length;
+    const clearBulk = qs('#animation-project-manager-clear-selection');
+    if (clearBulk) clearBulk.disabled = projectManagerState.busy || !projectManagerState.bulkIds.size;
     list.replaceChildren();
     if (!filtered.length) {
       const empty = document.createElement('p');
@@ -5166,14 +5329,34 @@
         projectManagerState.selectedId = project.id;
         renderProjectManager();
       });
-      list.appendChild(button);
+      const row = document.createElement('div');
+      row.className = 'animation-project-manager-select-row';
+      const label = document.createElement('label');
+      label.className = 'animation-project-manager-select-label';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = projectManagerState.bulkIds.has(project.id);
+      checkbox.disabled = projectManagerState.busy;
+      checkbox.setAttribute('aria-label', 'Select ' + project.name + ' for bulk trash');
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) projectManagerState.bulkIds.add(project.id);
+        else projectManagerState.bulkIds.delete(project.id);
+        renderProjectManager();
+      });
+      label.appendChild(checkbox);
+      row.append(label, button);
+      list.appendChild(row);
     }
     details.replaceChildren();
     const selected = state.projects.find(p => p.id === projectManagerState.selectedId);
     for (const id of ['open', 'rename', 'trash']) {
       const button = qs('#animation-project-manager-' + id);
-      if (button) button.disabled = !selected || projectManagerState.busy;
+      if (button) button.disabled = projectManagerState.busy ||
+        (id === 'trash' ? !selected && !projectManagerState.bulkIds.size : !selected);
     }
+    const trashButton = qs('#animation-project-manager-trash');
+    if (trashButton) trashButton.textContent = projectManagerState.bulkIds.size > 1
+      ? 'Move ' + projectManagerState.bulkIds.size + ' Selected to Trash' : 'Move to Trash';
     if (!selected) {
       const empty = document.createElement('p');
       empty.className = 'muted';
@@ -5266,7 +5449,13 @@
     }
   }
   async function projectManagerTrash() {
-    const item = state.projects.find(p => p.id === projectManagerState.selectedId);
+    if (projectManagerState.bulkIds.size > 1) {
+      await projectManagerBulkTrash();
+      return;
+    }
+    const targetId = projectManagerState.bulkIds.size === 1
+      ? [...projectManagerState.bulkIds][0] : projectManagerState.selectedId;
+    const item = state.projects.find(p => p.id === targetId);
     if (!item || projectManagerState.busy) return;
     if (item.id === state.project?.id && (
       state.dirty || motionLabRecorder?.active || motionLabBusy ||
@@ -5305,6 +5494,7 @@
         fillForm();
       }
       projectManagerState.selectedId = '';
+      projectManagerState.bulkIds.delete(item.id);
       await loadProjectList();
       forgetAnimationProject(item.id);
       toast('Project moved to Trash',
@@ -5312,6 +5502,71 @@
         'success', 6500);
     } catch (error) {
       toast('Could not move project to Trash', error.message, 'error', 7500);
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
+  async function projectManagerBulkTrash() {
+    if (projectManagerState.busy || !projectManagerState.bulkIds.size) return;
+    const chosen = state.projects.filter(p => projectManagerState.bulkIds.has(p.id));
+    const active = chosen.find(p => p.id === state.project?.id);
+    const unsafe = Boolean(state.dirty || motionLabRecorder?.active || motionLabBusy ||
+      state.motionJobId || motionPreviewStarting || renderIsActive() || animationRenderStarting);
+    if (active && unsafe) {
+      toast('Cannot trash the active project',
+        'Save editor changes and finish active recording, preview or render jobs first.',
+        'warning', 7500);
+      return;
+    }
+    const preview = chosen.slice(0, 8).map(p => p.name).join(', ');
+    const confirmed = await window.MorphorumDialog.confirm({
+      title: 'Move ' + chosen.length + ' projects to Trash?',
+      message: 'Move these projects into the managed .trash folder: ' + preview +
+        (chosen.length > 8 ? ' and ' + (chosen.length - 8) + ' more' : '') +
+        '. Rendered animations and exported videos are NOT deleted.',
+      confirmText: 'Move ' + chosen.length + ' to Trash',
+      cancelText: 'Keep Projects',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    projectManagerState.busy = true;
+    renderProjectManager();
+    let succeeded = 0;
+    const failed = [];
+    let trashedActive = false;
+    try {
+      for (const item of chosen) {
+        try {
+          await api('/api/animation/projects/' + encodeURIComponent(item.id), {method: 'DELETE'});
+          projectManagerState.bulkIds.delete(item.id);
+          forgetAnimationProject(item.id);
+          succeeded++;
+          if (state.project?.id === item.id) trashedActive = true;
+        } catch (error) {
+          failed.push(item.name + ': ' + error.message);
+        }
+      }
+      if (trashedActive) {
+        clearMotionPreviewResult();
+        resetRenderUi();
+        state.project = null;
+        state.path = '';
+        state.timeline = null;
+        state.timelineSelection = null;
+        state.depthPreview = null;
+        resetHybridForProject();
+        fillForm();
+      }
+      if (succeeded) projectManagerState.selectedId = '';
+      await loadProjectList();
+      toast(failed.length ? 'Bulk trash partially completed' : 'Projects moved to Trash',
+        succeeded + ' moved to Trash; ' + failed.length + ' failed.' +
+        (failed.length ? ' ' + failed.slice(0, 3).join('; ') : '') +
+        ' Rendered videos and exports remain intact.',
+        failed.length ? 'warning' : 'success', 8500);
+    } catch (error) {
+      toast('Could not refresh Project Manager', error.message, 'error', 8000);
     } finally {
       projectManagerState.busy = false;
       renderProjectManager();
@@ -5333,6 +5588,11 @@
       '<div class="animation-project-manager-count-row"><strong>Projects</strong>',
       '<span id="animation-project-manager-count" class="muted"></span>',
       '<button type="button" id="animation-project-manager-refresh" class="secondary-button compact">Refresh</button></div>',
+      '<div class="animation-project-manager-bulk-actions">',
+      '<button type="button" class="secondary-button compact" id="animation-project-manager-select-visible">Select All Visible</button>',
+      '<button type="button" class="secondary-button compact" id="animation-project-manager-clear-selection">Clear Selection</button>',
+      '<span id="animation-project-manager-bulk-count" aria-live="polite">0 selected</span>',
+      '</div>',
       '<div class="animation-project-manager-list" id="animation-project-manager-list" aria-label="Animation projects"></div>',
       '</section><section class="card glass animation-project-manager-info" aria-label="Project details">',
       '<div class="card-header"><div><h2>Project Details</h2>',
@@ -5345,6 +5605,15 @@
       '</div><p class="muted animation-project-manager-help">Trash keeps the managed project folder for manual recovery.',
       ' Rendered frames and video exports live separately and are not removed.</p></section></div>',
     ].join('');
+    qs('#animation-project-manager-select-visible')?.addEventListener('click', () => {
+      const query = String(qs('#animation-project-manager-search')?.value || '').trim().toLowerCase();
+      for (const item of state.projects) if ([item.name,item.model_id,item.id,item.model_family].some(v =>
+        String(v || '').toLowerCase().includes(query))) projectManagerState.bulkIds.add(item.id);
+      renderProjectManager();
+    });
+    qs('#animation-project-manager-clear-selection')?.addEventListener('click', () => {
+      projectManagerState.bulkIds.clear(); renderProjectManager();
+    });
     qs('#animation-project-manager-search')?.addEventListener('input', renderProjectManager);
     qs('#animation-project-manager-sort')?.addEventListener('change', renderProjectManager);
     qs('#animation-project-manager-refresh')?.addEventListener('click', async () => {
@@ -5906,7 +6175,7 @@
       motionLabDraftLayers.length + ' draft layer(s)';
     const audioStatus = qs('#animation-audio-workspace-status');
     if (audioStatus) audioStatus.textContent = !state.project ? 'Open a project in Editor first.' :
-      motionLabDraftLayers.length + ' Motion Lab draft layer(s) · Add audio, review, then apply.';
+      motionLabDraftLayers.length + ' Motion Lab draft layer(s) · Review curves, then apply when ready.';
   }
   function motionLabSetupQuickActions(panel) {
     const dock = document.createElement('div');
@@ -6222,6 +6491,8 @@
     ['reveal_drift','Reveal Drift'],['fly_through','Fly-through'],
   ];
   let motionDirectorBulkUndo = null;
+  const motionDirectorDeleteSelection = new Set();
+  let motionDirectorDeleteUndo = null;
   let motionDirectorPreviewMatches = false;
   function motionDirectorFindCandidates() {
     const panel = qs('#animation-audio-motion-director');
@@ -6239,7 +6510,10 @@
         !Number.isInteger(every) || every<1 || every>16) return [];
     let last = -Infinity;
     const candidates = [];
-    for (const event of motionLabEditedEvents || []) {
+    // Analyzed candidates remain available even when no saved marker-edit
+    // document exists yet. An intentionally empty edited array stays empty.
+    const eventSource = motionLabEditedEvents ?? analysis.events?.events ?? [];
+    for (const event of eventSource) {
       if (event.enabled === false || event.kind !== kind ||
           Number(event.strength ?? 1)<minStrength ||
           event.time_seconds<start || event.time_seconds>=end ||
@@ -6254,7 +6528,38 @@
     if (!panel) return;
     const status=panel.querySelector('[data-beat-summary]');
     const candidates=motionDirectorFindCandidates();
-    if (status) status.textContent=candidates.length+' eligible detected or manually corrected hit(s). Review before assigning.';
+    if (status) {
+      const analysis = motionLabAudioAnalysis;
+      const events = motionLabEditedEvents ?? analysis?.events?.events ?? [];
+      const kind = panel.querySelector('[data-beat-kind]')?.value || 'kick';
+      const minimum = Number(panel.querySelector('[data-beat-strength]')?.value ?? .35);
+      const start = Number(panel.querySelector('[data-beat-start]')?.value ?? 0);
+      const end = Number(panel.querySelector('[data-beat-end]')?.value ?? analysis?.duration_seconds);
+      const enabled = events.filter(e=>e.enabled!==false);
+      const sameKind = enabled.filter(e=>e.kind===kind);
+      const inRange = sameKind.filter(e=>e.time_seconds>=start && e.time_seconds<end);
+      const strong = inRange.filter(e=>Number(e.strength??1)>=minimum);
+      const count = candidates.length;
+      status.textContent = !analysis
+        ? 'Analyze or restore a WAV before previewing beat matches.'
+        : !enabled.length
+          ? 'No enabled markers are available. Return to Detect Beats to review or reset markers.'
+          : !sameKind.length
+            ? 'No '+kind+' markers in '+enabled.length+' analyzed hit(s). Choose a different Find band.'
+            : !(start>=0 && end>start && end<=analysis.duration_seconds+.001)
+              ? 'Invalid beat range. Set From/To within the WAV duration ('+
+                Number(analysis.duration_seconds).toFixed(2)+' seconds).'
+              : !inRange.length
+                ? 'No '+kind+' hits between '+start.toFixed(2)+'s and '+end.toFixed(2)+
+                  's. Widen the From/To range.'
+                : !strong.length
+                  ? '0 matches: '+inRange.length+' '+kind+' hits are below Minimum strength '+
+                    minimum.toFixed(2)+'. Lower that filter to preview them.'
+                  : count
+                    ? count+' matching '+kind+' hit(s) of '+enabled.length+
+                      ' enabled marker(s) highlighted on the waveform. Assign cues to matches when ready.'
+                    : '0 after gap/Every Nth filters. Reduce Min gap or Every Nth hit.';
+    }
     const undo=panel.querySelector('[data-beat-undo]');
     if (undo) undo.disabled=!motionDirectorBulkUndo;
   }
@@ -6314,9 +6619,14 @@
         '<option value="ease_in">Ease in</option><option value="ease_out">Ease out</option></select></label>' +
         '<label class="animation-audio-director-enabled"><input data-cue-enabled type="checkbox"> Enabled</label></div>' +
         '<div class="animation-audio-director-actions"><button type="button" data-cue-update>Update selected</button>' +
-        '<button type="button" data-cue-delete>Delete selected</button></div>' +
+        '<button type="button" data-cue-delete>Delete selected</button>' +
+        '<button type="button" data-cue-select-all>Select all cues</button>' +
+        '<button type="button" data-cue-clear-selection>Clear selection</button>' +
+        '<button type="button" data-cue-delete-all>Clear all cues</button>' +
+        '<button type="button" data-cue-delete-undo>Undo delete</button>' +
+        '<span data-cue-selection-count aria-live="polite"></span></div>' +
         '<div data-cue-list class="animation-audio-director-list"></div>' +
-        '<details class="animation-audio-find-beats"><summary>Find Beats · Optional batch cues</summary>' +
+        '<details class="animation-audio-find-beats" open><summary>Assign detected beats to camera movements</summary>' +
         '<div class="animation-audio-beat-grid">' +
         '<label>Find<select data-beat-kind><option value="kick">Kick</option><option value="snare">Snare</option><option value="highs">Highs</option></select></label>' +
         '<label>Minimum strength<input data-beat-strength type="number" min="0" max="1" step=".05" value=".35"></label>' +
@@ -6327,11 +6637,13 @@
         '<label>Motion preset<select data-beat-preset></select></label>' +
         '<label class="animation-audio-beat-check"><input data-beat-alternate type="checkbox"> Alternate right/left rolls</label></div>' +
         '<div class="animation-audio-director-actions"><button type="button" data-beat-preview>Preview matches</button>' +
-        '<button type="button" data-beat-assign>Assign cues to matches</button>' +
+        '<button type="button" data-beat-assign>Assign All Matching Beats</button>' +
         '<button type="button" data-beat-undo disabled>Undo batch</button></div>' +
         '<p data-beat-summary class="muted">Review candidate hits before assigning.</p></details>' +
         '<p class="muted">Cues save with this WAV. Save cues, then Preview camera cues or Apply camera cues. Existing Motion Lab layers remain additive.</p>';
-      waveform.after(panel);
+      const cueStage = qs('#motion-studio-stage-assign');
+      if (cueStage) cueStage.appendChild(panel);
+      else waveform.after(panel);
       const options = panel.querySelector('[data-cue-preset]');
       for (const [key,label] of MOTION_DIRECTOR_PRESETS) {
         const option = document.createElement('option');
@@ -6343,8 +6655,20 @@
         option.textContent=label;beatOptions.appendChild(option);
       }
       panel.querySelector('[data-beat-preview]').addEventListener('click',()=>{
-        motionDirectorPreviewMatches=true;motionDirectorFindStatus();motionLabStereoWaveform();
+        motionDirectorPreviewMatches=true;
+        motionDirectorFindStatus();
+        motionLabStereoWaveform();
       });
+      for (const field of panel.querySelectorAll(
+        '[data-beat-kind],[data-beat-strength],[data-beat-gap],' +
+        '[data-beat-start],[data-beat-end],[data-beat-every]')) {
+        const update = () => {
+          motionDirectorFindStatus();
+          if (motionDirectorPreviewMatches) motionLabStereoWaveform();
+        };
+        field.addEventListener('input',update);
+        field.addEventListener('change',update);
+      }
       panel.querySelector('[data-beat-assign]').addEventListener('click',motionDirectorAssignBeats);
       panel.querySelector('[data-beat-undo]').addEventListener('click',()=>{
         if (!motionDirectorBulkUndo) return;
@@ -6377,9 +6701,46 @@
           enabled:panel.querySelector('[data-cue-enabled]').checked});
         motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
       });
+      const removeCues = async (ids) => {
+        if (!ids.length) return;
+        if (ids.length > 1) {
+          const approved = await window.MorphorumDialog.confirm({
+            title: 'Delete ' + ids.length + ' camera cues?',
+            message: 'Remove these cue assignments from the current draft? The saved cue document will not change until you choose Save cues.',
+            confirmText: 'Delete ' + ids.length + ' Cues', cancelText: 'Keep Cues',
+            variant: 'danger',
+          });
+          if (!approved) return;
+        }
+        motionDirectorDeleteUndo = motionDirectorCues.map(c=>({...c}));
+        const selected = new Set(ids);
+        motionDirectorCues = motionDirectorCues.filter(c=>!selected.has(c.id));
+        if (selected.has(motionDirectorSelected)) motionDirectorSelected=null;
+        motionDirectorDeleteSelection.clear();
+        motionDirectorDirty=true;
+        motionDirectorPanel(); motionLabStereoWaveform();
+      };
       panel.querySelector('[data-cue-delete]').addEventListener('click', () => {
-        motionDirectorCues=motionDirectorCues.filter(c=>c.id!==motionDirectorSelected);
-        motionDirectorSelected=null;motionDirectorDirty=true;motionDirectorPanel();motionLabStereoWaveform();
+        const ids = motionDirectorDeleteSelection.size
+          ? [...motionDirectorDeleteSelection]
+          : motionDirectorSelected ? [motionDirectorSelected] : [];
+        void removeCues(ids);
+      });
+      panel.querySelector('[data-cue-select-all]').addEventListener('click', () => {
+        for (const cue of motionDirectorCues) motionDirectorDeleteSelection.add(cue.id);
+        motionDirectorPanel();
+      });
+      panel.querySelector('[data-cue-clear-selection]').addEventListener('click', () => {
+        motionDirectorDeleteSelection.clear(); motionDirectorPanel();
+      });
+      panel.querySelector('[data-cue-delete-all]').addEventListener('click', () =>
+        void removeCues(motionDirectorCues.map(c=>c.id)));
+      panel.querySelector('[data-cue-delete-undo]').addEventListener('click', () => {
+        if (!motionDirectorDeleteUndo) return;
+        motionDirectorCues=motionDirectorDeleteUndo;
+        motionDirectorDeleteUndo=null;
+        motionDirectorDeleteSelection.clear();
+        motionDirectorDirty=true; motionDirectorPanel(); motionLabStereoWaveform();
       });
       const stageCues = (apply) => {
         const project=state.project;
@@ -6439,7 +6800,15 @@
         } catch(error) {motionLabNotify('Cue save failed: '+(error?.message||error));}
         finally {save.disabled=false;motionDirectorPanel();}
       });
+      panel.querySelector('[data-cue-list]').addEventListener('change', event => {
+        const check=event.target.closest('[data-cue-select-id]');
+        if (!check) return;
+        if (check.checked) motionDirectorDeleteSelection.add(check.dataset.cueSelectId);
+        else motionDirectorDeleteSelection.delete(check.dataset.cueSelectId);
+        motionDirectorPanel();
+      });
       panel.querySelector('[data-cue-list]').addEventListener('click', event => {
+        if (event.target.closest('[data-cue-select-id]')) return;
         const button=event.target.closest('[data-cue-id]');
         if (!button) return;
         motionDirectorSelected=button.dataset.cueId;
@@ -6448,8 +6817,21 @@
         motionDirectorPanel();
       });
     }
-    const beatEnd=panel.querySelector('[data-beat-end]');
-    if (beatEnd && !beatEnd.value) beatEnd.value=motionLabAudioAnalysis.duration_seconds.toFixed(3);
+    // The preview's end time belongs to the current WAV, not to the last
+    // previously selected audio source. A stale 12s range on a shorter file
+    // used to silently yield zero matches despite visible markers.
+    const currentWav = String(motionLabAudioAnalysis.source_sha256 || '');
+    if (panel.dataset.beatSourceSha !== currentWav) {
+      panel.dataset.beatSourceSha = currentWav;
+      const begin = panel.querySelector('[data-beat-start]');
+      if (begin) begin.value='0';
+      const end = panel.querySelector('[data-beat-end]');
+      if (end) end.value=motionLabAudioAnalysis.duration_seconds.toFixed(3);
+      motionDirectorPreviewMatches=false;
+    } else {
+      const end = panel.querySelector('[data-beat-end]');
+      if (end && !end.value) end.value=motionLabAudioAnalysis.duration_seconds.toFixed(3);
+    }
     motionDirectorFindStatus();
     const selected=motionDirectorCues.find(c=>c.id===motionDirectorSelected);
     for (const [attr,key] of [['data-cue-preset','preset'],['data-cue-time','time_seconds'],
@@ -6467,6 +6849,19 @@
     status.textContent=motionDirectorCues.length+' cues'+(motionDirectorDirty?' · Unsaved':' · Saved');
     for (const kind of ['data-cue-preview','data-cue-apply'])
       panel.querySelector('['+kind+']').disabled=motionDirectorDirty || !motionDirectorCues.length || motionLabBusy;
+    const existingIds = new Set(motionDirectorCues.map(c=>c.id));
+    for (const id of motionDirectorDeleteSelection) if (!existingIds.has(id)) motionDirectorDeleteSelection.delete(id);
+    const selectionCount=panel.querySelector('[data-cue-selection-count]');
+    if (selectionCount) selectionCount.textContent=motionDirectorDeleteSelection.size+' selected';
+    const deleteButton=panel.querySelector('[data-cue-delete]');
+    if (deleteButton) {
+      deleteButton.textContent=motionDirectorDeleteSelection.size > 1
+        ? 'Delete '+motionDirectorDeleteSelection.size+' selected'
+        : 'Delete selected';
+      deleteButton.disabled=!motionDirectorDeleteSelection.size && !motionDirectorSelected;
+    }
+    panel.querySelector('[data-cue-delete-all]').disabled=!motionDirectorCues.length;
+    panel.querySelector('[data-cue-delete-undo]').disabled=!motionDirectorDeleteUndo;
     const list=panel.querySelector('[data-cue-list]');list.replaceChildren();
     for (const cue of [...motionDirectorCues].sort((a,b)=>a.time_seconds-b.time_seconds)) {
       const button=document.createElement('button');button.type='button';
@@ -6475,7 +6870,15 @@
       button.textContent=cue.time_seconds.toFixed(3)+'s · '+
         (MOTION_DIRECTOR_PRESETS.find(p=>p[0]===cue.preset)?.[1]||cue.preset)+
         (cue.enabled?'':' (disabled)');
-      list.appendChild(button);
+      const row=document.createElement('div');
+      row.className='animation-audio-cue-select-row';
+      const check=document.createElement('input');
+      check.type='checkbox';
+      check.dataset.cueSelectId=cue.id;
+      check.checked=motionDirectorDeleteSelection.has(cue.id);
+      check.setAttribute('aria-label','Select cue at '+cue.time_seconds.toFixed(3)+' seconds');
+      row.append(check,button);
+      list.appendChild(row);
     }
   }
   function motionLabStereoWaveform() {
@@ -6534,8 +6937,10 @@
         '<button type="button" data-event-reset>Reset detections</button>' +
         '<button type="button" data-event-clear-detected>Clear all detected markers</button>' +
         '<button type="button" data-event-persist>Save marker edits</button></div>' +
-        '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera motion until a later phase.</p>';
-      section.after(editor);
+        '<p data-event-count></p><p class="muted">Marker edits are stored with this WAV in the project. They do not change camera schedules until you apply motion.</p>';
+      const detectStage = qs('#motion-studio-stage-detect');
+      if (detectStage) detectStage.appendChild(editor);
+      else section.after(editor);
       editor.querySelector('[data-event-persist]')?.addEventListener('click', () => void motionLabSaveMarkers());
       editor.querySelector('[data-event-undo]')?.addEventListener('click', () => motionLabMarkerHistory(false));
       editor.querySelector('[data-event-redo]')?.addEventListener('click', () => motionLabMarkerHistory(true));
@@ -6813,6 +7218,7 @@
       visibility:'hidden','data-wave-playhead':''});
     motionLabWavePlayhead();
     motionLabEventEditor();
+    motionStudioDockWaveform();
     const desc = section.querySelector('[data-wave-description]');
     if (desc) desc.textContent = (mode === 'envelope'?'Frame-aligned energy envelope':
       mode === 'both'?'Envelope over separate L/R channels':
@@ -8155,16 +8561,30 @@
     const plot = qs('#animation-motion-lab-audio-plot');
     const analysis = motionLabAudioAnalysis;
     if (!preview || !plot) return;
-    if (!analysis || motionLabAudioProjectId !== state.project?.id ||
-        Number(analysis.fps) !== Number(state.project?.animation?.fps) ||
-        analysis.values.length !== Number(state.project?.animation?.max_frames)) {
+    const diagnostics = qs('#motion-studio-envelope-message');
+    const aligned = Boolean(analysis && motionLabAudioProjectId === state.project?.id &&
+      Number(analysis.fps) === Number(state.project?.animation?.fps) &&
+      Array.isArray(analysis.values) &&
+      analysis.values.length === Number(state.project?.animation?.max_frames));
+    if (!aligned) {
       preview.hidden = true;
       plot.replaceChildren();
+      if (diagnostics) diagnostics.textContent = analysis
+        ? 'Audio frame alignment changed. Re-analyze the WAV to refresh the envelope.'
+        : 'No envelope available yet. Select a WAV and choose Analyze WAV first.';
+      return;
+    }
+    const values = motionLabAudioSignal();
+    if (!values.length) {
+      preview.hidden = true;
+      plot.replaceChildren();
+      if (diagnostics) diagnostics.textContent =
+        'This frequency band has no usable signal. Choose Full mix or another band.';
       return;
     }
     preview.hidden = false;
-    const values = motionLabAudioSignal();
-    if (!values.length) { preview.hidden = true; return; }
+    if (diagnostics) diagnostics.textContent =
+      'Analyzed envelope ready · ' + values.length + ' frames. Adjust detection settings to update this graph.';
     const threshold = Number(qs('#animation-motion-lab-audio-threshold')?.value);
     const gate = Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : .1;
     const attack = Number(qs('#animation-motion-lab-audio-attack')?.value);
@@ -8226,7 +8646,8 @@
     const ready = Boolean(state.project?.id && animationMode() === '3d' && !motionLabBusy);
     const analyze = qs('#animation-motion-lab-analyze-audio');
     const add = qs('#animation-motion-lab-add-audio');
-    if (analyze) analyze.disabled = !ready;
+    if (analyze) analyze.disabled = !ready ||
+      qs('#motion-studio-analysis-status')?.dataset.busy === 'true';
     const attached = qs('#animation-motion-lab-use-soundtrack');
     if (attached) attached.disabled = !ready || motionLabSoundtrackBusy ||
       !projectMediaAssets('soundtrack').length;
@@ -8234,6 +8655,7 @@
       !motionLabAudioAnalysis || motionLabAudioProjectId !== state.project?.id ||
       Number(motionLabAudioAnalysis.fps) !== Number(state.project?.animation?.fps);
     motionStudioUpdateChannelButtons();
+    motionStudioRefreshStageStatus();
   }
   async function motionLabUseProjectSoundtrack() {
     const projectId = state.project?.id;
@@ -8277,7 +8699,11 @@
       toast('Project soundtrack unavailable', error?.message || String(error), 'error');
     } finally {
       motionLabSoundtrackBusy = false;
-      if (state.project?.id === projectId) renderProjectMedia();
+      if (state.project?.id === projectId) {
+        renderProjectMedia();
+        if (typeof motionStudioRefreshStageStatus === 'function')
+          motionStudioRefreshStageStatus();
+      }
     }
   }
 
@@ -8285,29 +8711,37 @@
     const file = qs('#animation-motion-lab-audio-file')?.files?.[0];
     const projectId = state.project?.id;
     const status = qs('#animation-motion-lab-audio-info');
-    if (!projectId || animationMode() !== '3d' || !file) {
-      motionLabNotify('Choose a 3D project and PCM WAV audio file.');
+    const stageStatus = qs('#motion-studio-analysis-status');
+    const report = message => {
+      if (status) status.textContent = message;
+      if (stageStatus) stageStatus.textContent = message;
+    };
+    if (!projectId || animationMode() !== '3d') {
+      const message = 'Open a 3D project in Project Editor before analyzing audio.';
+      report(message);
+      motionLabNotify(message);
+      return;
+    }
+    if (!file) {
+      if (motionLabAudioProjectId === projectId && motionLabAudioAnalysis) {
+        report('Project WAV is already analyzed. Choose View Detected Beats to inspect its markers.');
+      } else {
+        report('No local WAV selected. Choose a PCM WAV in Step 1 or use the saved project soundtrack.');
+      }
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
-      motionLabNotify('WAV exceeds 20 MiB.');
+      report('WAV exceeds the 20 MiB analysis limit. Select a smaller PCM WAV.');
       return;
     }
     // A manual selection wins over any in-flight automatic project restore.
+    // Keep the previous analyzed WAV, markers, cues and draft layers intact
+    // until the new result is validated. Rejected duration matching must not
+    // discard audio editing state as a side effect.
     const uploadToken = ++projectAudioRestoreGeneration;
-    motionLabEditedEvents = null;
-    motionDirectorCues = [];
-    motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
-    ++motionStudioSpectrumToken;
-    motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
-    motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
-    motionStudioSelectedChannel = '';
-    motionStudioRenderChannels();
-    motionLabAudioAnalysis = null;
-    motionLabAudioProjectId = null;
-    motionLabReleaseAudio();
-    motionLabAudioPreview();
-    if (status) status.textContent = 'Analyzing WAV on host…';
+    let lengthNotice = '';
+    report('Analyzing ' + file.name + ' on the Morphorum host…');
+    if (stageStatus) stageStatus.dataset.busy = 'true';
     motionLabAudioUi();
     try {
       const response = await fetch('/api/animation/projects/' + encodeURIComponent(projectId) +
@@ -8331,21 +8765,29 @@
         const fps = Number(state.project.animation.fps);
         const targetFrames = Math.ceil(Number(analysis.duration_seconds) * fps - 1e-9);
         if (!Number.isInteger(targetFrames) || targetFrames < 1 || targetFrames > 3000) {
-          throw new Error('Audio needs ' + targetFrames +
-            ' frames at ' + fps + ' FPS. Motion Lab supports at most 3000 frames; choose a shorter WAV or lower FPS manually.');
+          lengthNotice = 'Audio needs ' + targetFrames + ' frames at ' + fps +
+            ' FPS, exceeding Motion Lab\'s 3000-frame limit. Project length remains unchanged; ' +
+            'WAV analysis and beat editing remain available.';
+          matchLength.checked = false;
+          if (lengthStatus) lengthStatus.textContent = lengthNotice;
         }
         if (targetFrames !== Number(state.project.animation.max_frames)) {
           // The UI reports DRAFT layers. Saved Motion Lab authoring metadata
           // can still exist after all visible draft layers were cleared.
           // Never discard that invisible saved history without explicit consent.
           if (motionLabDraftLayers.length) {
-            throw new Error('Cannot resize with ' + motionLabDraftLayers.length +
-              ' draft Motion Lab layer(s). Clear the draft first. No settings were changed.');
+            // A length-matching request is OPTIONAL. Never turn an audio
+            // analysis into a demand to delete the user's existing draft.
+            lengthNotice = 'Project duration unchanged: ' + motionLabDraftLayers.length +
+              ' existing draft Motion Lab layer(s) prevent automatic resizing. ' +
+              'Audio analysis and beat editing remain available.';
+            matchLength.checked = false;
+            if (lengthStatus) lengthStatus.textContent = lengthNotice;
           }
           const storedLayerCount = Array.isArray(state.project.motion_lab?.layers)
             ? state.project.motion_lab.layers.length : 0;
           let discardStoredMotionLab = false;
-          if (storedLayerCount) {
+          if (storedLayerCount && !lengthNotice) {
             discardStoredMotionLab = await window.MorphorumDialog.confirm({
               title: 'Clear saved Motion Lab history?',
               message: 'The composer shows 0 draft layers, but this project still has ' +
@@ -8357,12 +8799,13 @@
               variant: 'danger',
             });
             if (!discardStoredMotionLab) {
-              if (lengthStatus) lengthStatus.textContent =
-                'Duration unchanged. Saved Motion Lab layers preserved.';
-              return;
+              lengthNotice = 'Project duration unchanged. Saved Motion Lab layers preserved; ' +
+                'WAV analysis and beat editing remain available.';
+              matchLength.checked = false;
+              if (lengthStatus) lengthStatus.textContent = lengthNotice;
             }
           }
-          const approved = await window.MorphorumDialog.confirm({
+          const approved = !lengthNotice && await window.MorphorumDialog.confirm({
             title: 'Match project length to WAV?',
             message: 'Audio ' + Number(analysis.duration_seconds).toFixed(2) + 's. ' +
               'Change project from ' + state.project.animation.max_frames + ' to ' +
@@ -8372,7 +8815,8 @@
             cancelText: 'Keep Duration',
           });
           if (!approved) {
-            if (lengthStatus) lengthStatus.textContent = 'Length matching canceled. Project unchanged.';
+            if (lengthStatus && !lengthNotice) lengthStatus.textContent =
+              'Length matching canceled. Project unchanged; WAV analysis continues.';
           } else {
             const editorFrames = qs('#animation-max-frames');
             if (!editorFrames) throw new Error('Cannot locate the Editor frame-count field.');
@@ -8415,11 +8859,21 @@
           Number(analysis.fps) !== Number(state.project.animation.fps)) {
         throw new Error('Audio frame alignment changed; analyze again.');
       }
+      if (state.project?.id !== projectId || projectAudioRestoreGeneration !== uploadToken) return;
+      // Commit only after a validated response and successful length decision.
+      // Hydration replaces event/cue overrides for the new SHA.
       if (!(await motionStudioHydrateEdits(projectId, analysis, () =>
         projectAudioRestoreGeneration === uploadToken))) return;
+      motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
+      ++motionStudioSpectrumToken;
+      motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
+      motionStudioBandPreview = {projectId:'',sha:'',fps:0,frames:0,ranges:'',bands:null};
+      motionStudioSelectedChannel = '';
+      motionLabReleaseAudio();
       motionLabAudioAnalysis = analysis;
       motionLabAudioProjectId = projectId;
       motionStudioRestoreChannels(projectId, analysis);
+      motionStudioRenderChannels();
       motionLabAudioUrl = URL.createObjectURL(file);
       motionLabAudioElement = new Audio(motionLabAudioUrl);
       motionLabAudioElement.preload = 'auto';
@@ -8436,18 +8890,67 @@
       motionLabStereoWaveform();
       motionDirectorPanel();
       motionLabAudioPreview();
-      if (status) status.textContent = 'Analyzed ' + file.name + ': ' +
-        analysis.values.length + ' frames · ' + analysis.duration_seconds.toFixed(2) +
-        ' seconds · frame-aligned full-band RMS.';
+      // The motion-analysis WAV and the export soundtrack are separate assets.
+      // Attach the selected WAV so future render snapshots contain the audio.
+      // Never silently replace a different existing project soundtrack.
+      let attachmentMessage = '';
+      const existingSoundtrack = projectMediaAssets('soundtrack')[0];
+      const existingSha = projectMedia.soundtrack?.sha256 || existingSoundtrack?.sha256 || '';
+      const analyzedSha = analysis.source_sha256 || '';
+      const sameSoundtrack = Boolean(existingSha && analyzedSha && existingSha === analyzedSha);
+      let shouldAttach = !sameSoundtrack;
+      if (existingSoundtrack && !sameSoundtrack) {
+        shouldAttach = await window.MorphorumDialog.confirm({
+          title: 'Replace project export soundtrack?',
+          message: 'The analyzed WAV is different from the saved soundtrack. Replace the single active export soundtrack with ' +
+            file.name + '? Existing rendered videos are unchanged; only future renders use the new audio.',
+          confirmText: 'Replace Soundtrack', cancelText: 'Keep Existing Soundtrack',
+          variant: 'warning',
+        });
+      }
+      if (shouldAttach && state.project?.id === projectId &&
+          projectAudioRestoreGeneration === uploadToken) {
+        try {
+          const response = await fetch('/api/animation/projects/' + encodeURIComponent(projectId) +
+            '/motion-import/soundtrack', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/octet-stream',
+              'X-Audio-Filename': encodeURIComponent(file.name),
+              'X-Audio-Offset-Seconds': '0'},
+            body: file,
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(typeof result.detail === 'string'
+            ? result.detail : 'Soundtrack attachment failed (HTTP ' + response.status + ')');
+          attachmentMessage = ' Attached as the project export soundtrack for future renders.';
+        } catch (error) {
+          attachmentMessage = ' WARNING: audio motion was analyzed but export soundtrack attachment failed: ' +
+            (error?.message || String(error)) + '.';
+          toast('Export soundtrack not attached', attachmentMessage, 'warning', 8000);
+        }
+      } else if (sameSoundtrack) {
+        attachmentMessage = ' Project export soundtrack already matches.';
+      } else {
+        attachmentMessage = ' Existing export soundtrack preserved; new WAV is for motion analysis only.';
+      }
+      report('Analyzed ' + file.name + ': ' + analysis.values.length +
+        ' frames · ' + analysis.duration_seconds.toFixed(2) + ' seconds · ' +
+        (analysis.events?.events?.length || 0) +
+        ' beat candidate(s). Choose View Detected Beats to inspect or edit them.' +
+        (lengthNotice ? ' ' + lengthNotice : '') + attachmentMessage);
       const badge = qs('#animation-motion-lab-audio-status');
       if (badge) badge.textContent = 'WAV ready';
       void restoreProjectMedia();
     } catch (error) {
-      if (status) status.textContent = 'Audio import failed: ' + (error?.message || error);
-      motionLabNotify('Audio import failed: ' + (error?.message || error));
+      const message = 'Audio import failed: ' + (error?.message || error);
+      report(message);
+      motionLabNotify(message);
+    } finally {
+      if (stageStatus) delete stageStatus.dataset.busy;
+      motionLabAudioUi();
+      motionLabAudioPreview();
+      motionStudioRefreshStageStatus();
     }
-    motionLabAudioUi();
-    motionLabAudioPreview();
   }
   function motionLabAddAudio() {
     const analysis = motionLabAudioAnalysis;
@@ -8844,6 +9347,7 @@
     renderMotionLabDraft();
   }
   function renderMotionLabDraft() {
+    renderMotionProjectSummary();
     motionReviewRefreshTakes();
     const project = state.project;
     const is3d = animationMode() === '3d';
@@ -9571,7 +10075,7 @@
 
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
   const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'];
-  const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview', 'audio']);
+  const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview']);
   let animationTab = 'motion';
   let projectWizard = null;
   function showAnimationTab(name, { persist = true } = {}) {
@@ -9580,6 +10084,26 @@
     if (name !== 'preview') motionFramePlayer?.pause();
     if (name !== 'recording' && motionLabRecorder?.active) motionLabStopRecording('tab-change');
     animationTab = name;
+    syncProjectWorkspaceStatus();
+    const pageHeading = {
+      projects: ['PROJECTS / LIBRARY', 'Project Manager', 'Browse, organize, open and manage your animation projects.'],
+      wizard: ['PROJECTS / CREATE', 'New Project Wizard', 'Create a new animation project with guided setup and sensible defaults.'],
+      editor: ['PROJECTS / EDIT', 'Project Editor', 'Configure the selected project, prompts, generation settings and animation timeline.'],
+    }[name] || ['MOTION LAB / IMAGE ANIMATION', 'Motion Lab',
+      'Compose camera movement, edit curves, preview animation and monitor renders in focused workspaces.'];
+    const eyebrow = qs('#animation-page-eyebrow');
+    const title = qs('#animation-page-title');
+    const description = qs('#animation-page-description');
+    if (eyebrow) eyebrow.textContent = pageHeading[0];
+    if (title) title.textContent = pageHeading[1];
+    if (description) description.textContent = pageHeading[2];
+    if (name === 'audio' && state.project?.id &&
+        projectMedia.projectId === state.project.id && !projectMedia.loading &&
+        projectMediaAssets('soundtrack').length &&
+        !projectMediaAssets('motion_lab_wav').length &&
+        !motionLabAudioAnalysis && !motionLabSoundtrackBusy) {
+      void motionLabUseProjectSoundtrack();
+    }
     if (name === 'wizard') void projectWizard?.open();
     qsa('#animation-workspace-nav [data-animation-tab]').forEach(button => {
       const selected = button.dataset.animationTab === name;
@@ -9591,6 +10115,14 @@
       const selected = panel.dataset.animationPanel === name;
       panel.hidden = !selected;
       panel.classList.toggle('active', selected);
+    });
+    const projectDestination = ['wizard','projects','editor'].includes(name);
+    qs('.main-nav .nav-button[data-view="animation"]')?.classList.toggle('active', !projectDestination);
+    qsa('.main-nav [data-project-nav]').forEach(button => {
+      const selected = button.dataset.projectNav === name;
+      button.classList.toggle('active', selected);
+      if (selected) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
     });
     qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => {
       const selected = button.dataset.motionNav === name;
@@ -10013,6 +10545,506 @@
     });
   }
 
+  // UX1/UX2: stage navigation contains the ORIGINAL Motion Studio controls.
+  // Nothing is cloned or serialized on stage changes. In particular, waveform
+  // playback, unsaved markers/cues, in-flight analysis and draft layers survive.
+  const MOTION_STUDIO_STAGE_KEY = 'morphorum.motionStudio.stage.v1';
+  const MOTION_STUDIO_MODE_KEY = 'morphorum.motionStudio.authorMode.v1';
+  const MOTION_STUDIO_STAGES = [
+    ['source', 'Load Audio', 'Select a WAV or reuse the saved project soundtrack.'],
+    ['analysis', 'Analyze WAV', 'Analyze audio and inspect its waveform and playback.'],
+    ['detect', 'Detect Beats', 'Tune detection and correct the detected markers.'],
+    ['assign', 'Assign Motion to Beats', 'Choose kick, snare or highs, preview matches and assign camera movements.'],
+    ['compose', 'Create Motion', 'Choose beat cues, sound channels or continuous motion.'],
+    ['review', 'Preview & Apply', 'Check draft layers and apply to the animation when ready.'],
+  ];
+  const MOTION_STUDIO_AUTHOR_MODES = [
+    ['cues', 'Beat Cues'], ['channels', 'Sound Channels'],
+    ['continuous', 'Continuous Motion'], ['pulse', 'Single-Band Pulse'],
+  ];
+  let motionStudioStage = 'source';
+  let motionStudioAuthorMode = 'cues';
+
+  function motionStudioDockWaveform() {
+    const waveform = qs('#animation-audio-stereo-timeline');
+    if (!waveform) return;
+    const analysis = qs('#animation-audio-analysis-workspace');
+    const destination = motionStudioStage === 'detect' || motionStudioStage === 'assign'
+      ? qs('#motion-studio-stage-' + motionStudioStage)
+      : motionStudioStage === 'compose'
+        ? qs('#motion-studio-composer-waveform') : analysis;
+    if (!destination) return;
+    if (destination === analysis) {
+      const diagnostics = analysis.querySelector('.animation-audio-legacy-envelope');
+      if (diagnostics) diagnostics.before(waveform);
+      else analysis.appendChild(waveform);
+    } else if (waveform.parentElement !== destination) {
+      // Keep the step title above the waveform, not below it.
+      if (destination.id === 'motion-studio-stage-detect' || destination.id === 'motion-studio-stage-assign') {
+        const heading = destination.querySelector('.motion-studio-stage-heading');
+        if (heading) heading.after(waveform);
+        else destination.prepend(waveform);
+      } else destination.prepend(waveform);
+    }
+  }
+
+  function motionStudioRefreshStageStatus() {
+    const panel = qs('#animation-panel-audio');
+    if (!panel) return;
+    const analysis = motionLabAudioProjectId === state.project?.id
+      ? motionLabAudioAnalysis : null;
+    const selectedFile = qs('#animation-motion-lab-audio-file')?.files?.[0];
+    const count = analysis ? (motionLabEditedEvents || analysis.events?.events || []).length : 0;
+    const badges = [
+      selectedFile ? 'Selected WAV' : analysis ? 'WAV loaded' : 'Choose audio',
+      analysis ? 'Analyzed' : 'Not analyzed',
+      analysis ? count + ' markers' : 'Analyze first',
+      analysis ? motionDirectorCues.length + ' camera cues' : 'Analyze first',
+      motionLabDraftLayers.length + ' draft layers',
+      motionLabDraftLayers.length ? 'Draft ready' : 'No draft layers',
+    ];
+    MOTION_STUDIO_STAGES.forEach(([key], index) => {
+      const badge = panel.querySelector('[data-motion-studio-stage-status="' + key + '"]');
+      if (badge) badge.textContent = badges[index];
+    });
+    const analysisHint = qs('#motion-studio-analysis-hint');
+    if (analysisHint) analysisHint.textContent = !state.project?.id
+      ? 'Open an animation project before analyzing audio.'
+      : animationMode() !== '3d'
+        ? 'This project is in 2D mode. Choose 3D in Project Editor before analyzing audio for camera motion.'
+        : selectedFile
+          ? 'Selected: ' + selectedFile.name + ' · ' +
+            (selectedFile.size / 1048576).toFixed(2) + ' MiB. Choose Analyze WAV below.'
+          : analysis
+            ? 'The project WAV is already analyzed. Review the waveform or go to Detect Beats.'
+            : 'Choose a WAV in Step 1 or use the saved project soundtrack, then analyze it here.';
+    const showBeats = qs('#motion-studio-show-detected');
+    if (showBeats) showBeats.disabled = !analysis;
+    const detectionStatus = qs('#motion-studio-detection-info');
+    if (detectionStatus) detectionStatus.textContent = analysis
+      ? count + ' detected or edited beat marker(s). Select a marker to edit it, then Save marker edits.'
+      : 'No beat markers yet. Analyze a WAV in Step 2 to detect candidate beats automatically.';
+    const placeholder = qs('.animation-audio-preview-placeholder');
+    if (placeholder) placeholder.hidden = Boolean(analysis);
+    const summary = qs('#motion-studio-review-summary');
+    if (summary) summary.textContent = !state.project?.id
+      ? 'Open a 3D project in Project Editor first.'
+      : !motionLabDraftLayers.length
+        ? 'No Motion Lab draft layers are staged yet. Create motion, then return here to preview or apply.'
+        : motionLabDraftLayers.length + ' draft layer(s) staged. Review motion curves before applying them to saved animation schedules.';
+  }
+
+  function motionStudioSelectStage(name, {persist = true, focus = false, navigate = true} = {}) {
+    if (!MOTION_STUDIO_STAGES.some(([key]) => key === name)) name = 'source';
+    motionStudioStage = name;
+    for (const [key] of MOTION_STUDIO_STAGES) {
+      const active = key === name;
+      const button = qs('#motion-studio-tab-' + key);
+      const stage = qs('#motion-studio-stage-' + key);
+      if (stage) stage.hidden = !active;
+      if (button) {
+        button.setAttribute('aria-selected', String(active));
+        button.classList.toggle('active', active);
+        button.tabIndex = active ? 0 : -1;
+        if (active && focus) button.focus();
+      }
+    }
+    motionStudioDockWaveform();
+    if (motionLabAudioAnalysis && (name === 'analysis' || name === 'detect' || name === 'assign')) {
+      motionLabStereoWaveform();
+      motionLabAudioPreview();
+    }
+    motionStudioRefreshStageStatus();
+    if (navigate) {
+      const target = qs('#motion-studio-stage-' + name);
+      // A long source/detection stage may have left the viewport near its
+      // bottom. Bring the next step into view when navigating via buttons.
+      target?.scrollIntoView?.({behavior:'auto', block:'start'});
+    }
+    if (persist) try { localStorage.setItem(MOTION_STUDIO_STAGE_KEY, name); } catch (_) {}
+  }
+
+  function motionStudioSelectAuthorMode(name, {persist = true} = {}) {
+    if (!MOTION_STUDIO_AUTHOR_MODES.some(([key]) => key === name)) name = 'cues';
+    motionStudioAuthorMode = name;
+    for (const [key] of MOTION_STUDIO_AUTHOR_MODES) {
+      const active = key === name;
+      const button = qs('#motion-studio-mode-' + key);
+      const area = qs('#motion-studio-composer-' + key);
+      if (area) area.hidden = !active;
+      if (button) {
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', String(active));
+        button.tabIndex = active ? 0 : -1;
+      }
+    }
+    const hint = qs('#motion-studio-author-hint');
+    if (hint) hint.textContent = name === 'continuous'
+      ? 'Continuous movement can be staged without a WAV. No audio file is required.'
+      : !motionLabAudioAnalysis
+        ? 'Choose and analyze a WAV before creating audio-reactive motion.'
+        : 'Audio edits stay in the draft until you explicitly apply them.';
+    if (persist) try { localStorage.setItem(MOTION_STUDIO_MODE_KEY, name); } catch (_) {}
+  }
+
+  function setupMotionStudioStages(panel, audioIntro) {
+    const nav = document.createElement('nav');
+    nav.id = 'motion-studio-stage-nav';
+    nav.className = 'motion-studio-stage-nav';
+    nav.setAttribute('aria-label', 'Motion Studio workflow');
+    nav.setAttribute('role', 'tablist');
+    const stages = {};
+    MOTION_STUDIO_STAGES.forEach(([name, label, description], index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.id = 'motion-studio-tab-' + name;
+      button.className = 'motion-studio-stage-button';
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-controls', 'motion-studio-stage-' + name);
+      button.innerHTML = '<span class="motion-studio-stage-number">' +
+        (index + 1) + '</span><span class="motion-studio-stage-label"></span>' +
+        '<span class="motion-studio-stage-status" data-motion-studio-stage-status="' +
+        name + '"></span>';
+      button.querySelector('.motion-studio-stage-label').textContent = label;
+      button.addEventListener('click', () => motionStudioSelectStage(name));
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End'
+          ? MOTION_STUDIO_STAGES.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 :
+              MOTION_STUDIO_STAGES.length - 1)) % MOTION_STUDIO_STAGES.length;
+        motionStudioSelectStage(MOTION_STUDIO_STAGES[next][0], {focus: true});
+      });
+      nav.appendChild(button);
+      const stage = document.createElement('section');
+      stage.id = 'motion-studio-stage-' + name;
+      stage.className = 'motion-studio-stage';
+      stage.setAttribute('role', 'tabpanel');
+      stage.setAttribute('aria-labelledby', button.id);
+      stage.innerHTML = '<div class="motion-studio-stage-heading">' +
+        '<div><p class="eyebrow">STEP ' + (index + 1) + ' OF 5</p>' +
+        '<h3></h3><p class="muted"></p></div></div>';
+      stage.querySelector('h3').textContent = label;
+      stage.querySelector('.muted').textContent = description;
+      stage.hidden = index !== 0;
+      stages[name] = stage;
+    });
+    audioIntro.after(nav);
+    let previous = nav;
+    for (const [key] of MOTION_STUDIO_STAGES) {
+      previous.after(stages[key]);
+      previous = stages[key];
+    }
+    const sourceDock = qs('#animation-audio-source-dock');
+    const analysis = qs('#animation-audio-analysis-workspace');
+    const audioCard = qs('#animation-motion-lab-audio');
+    const channels = qs('#animation-motion-studio-channels');
+    const continuous = qs('#animation-motion-studio-arrangement');
+    const introActions = audioIntro.querySelector('.animation-audio-workspace-actions');
+    if (sourceDock) stages.source.appendChild(sourceDock);
+    const proceed = document.createElement('button');
+    proceed.type = 'button';
+    proceed.className = 'primary-button compact';
+    proceed.id = 'motion-studio-go-analyze';
+    proceed.textContent = 'Continue to Analyze WAV →';
+    proceed.addEventListener('click', () => motionStudioSelectStage('analysis'));
+    const proceedRow = document.createElement('div');
+    proceedRow.className = 'motion-studio-step-actions';
+    proceedRow.appendChild(proceed);
+    stages.source.appendChild(proceedRow);
+    if (analysis) stages.analysis.appendChild(analysis);
+    // This existing live message was accidentally left inside the hidden
+    // Single-Band Pulse card. Put it with the Analyze action instead.
+    const liveStatus = qs('#animation-motion-lab-audio-info');
+    if (liveStatus) {
+      // Keep the legacy status node for existing code/automation, but expose
+      // exactly ONE visible message through motion-studio-analysis-status.
+      liveStatus.classList.add('motion-studio-analysis-result');
+      liveStatus.hidden = true;
+      stages.analysis.appendChild(liveStatus);
+    }
+    const analysisHint = document.createElement('p');
+    analysisHint.id = 'motion-studio-analysis-hint';
+    analysisHint.className = 'muted';
+    analysisHint.setAttribute('role', 'status');
+    stages.analysis.insertBefore(analysisHint, analysis);
+    const analysisStatus = document.createElement('p');
+    analysisStatus.id = 'motion-studio-analysis-status';
+    analysisStatus.className = 'motion-studio-analysis-status';
+    analysisStatus.setAttribute('role','status');
+    analysisStatus.setAttribute('aria-live','polite');
+    analysisStatus.textContent = 'Choose a WAV to analyze, or reuse an analyzed project soundtrack.';
+    stages.analysis.insertBefore(analysisStatus, analysis);
+    // The Analyze button is useful next to the analysis display, not between
+    // the file picker and unrelated motion controls.
+    const actions = sourceDock?.querySelector('.animation-motion-recording-actions');
+    const analyze = qs('#animation-motion-lab-analyze-audio');
+    if (analyze) {
+      const row = document.createElement('div');
+      row.className = 'motion-studio-step-actions';
+      row.appendChild(analyze);
+      const beatsLink = document.createElement('button');
+      beatsLink.type = 'button';
+      beatsLink.className = 'secondary-button compact';
+      beatsLink.id = 'motion-studio-show-detected';
+      beatsLink.textContent = 'View Detected Beats →';
+      beatsLink.disabled = true;
+      beatsLink.addEventListener('click', () => motionStudioSelectStage('detect'));
+      row.appendChild(beatsLink);
+      stages.analysis.insertBefore(row, analysisStatus);
+    }
+    const detection = [...(audioCard?.querySelectorAll('.animation-audio-config-group') || [])]
+      .find(group => group.querySelector('summary')?.textContent === 'Beat detection');
+    if (detection) {
+      detection.open = true; // Detection controls are now the only form in this step.
+      stages.detect.appendChild(detection);
+    }
+    const detectHelp = document.createElement('p');
+    detectHelp.className = 'muted';
+    detectHelp.textContent = 'Analysis finds beat candidates automatically. Adjust the detection settings, use the waveform to move or add markers, then Save marker edits.';
+    stages.detect.appendChild(detectHelp);
+    const detectedActions = document.createElement('div');
+    detectedActions.className = 'motion-studio-step-actions';
+    const showMarkers = document.createElement('button');
+    showMarkers.type = 'button';
+    showMarkers.id = 'motion-studio-refresh-beats';
+    showMarkers.className = 'secondary-button compact';
+    showMarkers.textContent = 'Show Detected Beats';
+    showMarkers.addEventListener('click', () => {
+      if (motionLabAudioProjectId !== state.project?.id || !motionLabAudioAnalysis) {
+        const message = qs('#motion-studio-detection-info');
+        if (message) message.textContent = 'Load and analyze a WAV in Steps 1–2 before showing beats.';
+        return;
+      }
+      motionLabStereoWaveform();
+      motionStudioDockWaveform();
+      const timeline = qs('#animation-audio-stereo-timeline');
+      if (timeline) timeline.hidden = false;
+      timeline?.scrollIntoView?.({behavior:'auto',block:'nearest'});
+    });
+    detectedActions.appendChild(showMarkers);
+    const detectStatus = document.createElement('p');
+    detectStatus.id = 'motion-studio-detection-info';
+    detectStatus.className = 'muted';
+    detectStatus.setAttribute('role','status');
+    stages.detect.append(detectedActions, detectStatus);
+    const modes = document.createElement('nav');
+    modes.className = 'motion-studio-mode-nav';
+    modes.setAttribute('role', 'tablist');
+    modes.setAttribute('aria-label', 'Camera motion creation methods');
+    stages.compose.appendChild(modes);
+    const hint = document.createElement('p');
+    hint.id = 'motion-studio-author-hint';
+    hint.className = 'muted';
+    stages.compose.appendChild(hint);
+    const waveSlot = document.createElement('div');
+    waveSlot.id = 'motion-studio-composer-waveform';
+    stages.compose.appendChild(waveSlot);
+    const modeAreas = {};
+    MOTION_STUDIO_AUTHOR_MODES.forEach(([name,label],index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.id = 'motion-studio-mode-' + name;
+      button.className = 'motion-studio-mode-button';
+      button.textContent = label;
+      button.setAttribute('role','tab');
+      button.setAttribute('aria-controls','motion-studio-composer-' + name);
+      button.addEventListener('click', () => motionStudioSelectAuthorMode(name));
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End'
+          ? MOTION_STUDIO_AUTHOR_MODES.length-1
+          : (index + (event.key === 'ArrowRight' ? 1 :
+              MOTION_STUDIO_AUTHOR_MODES.length-1)) % MOTION_STUDIO_AUTHOR_MODES.length;
+        const key = MOTION_STUDIO_AUTHOR_MODES[next][0];
+        motionStudioSelectAuthorMode(key);
+        qs('#motion-studio-mode-' + key)?.focus();
+      });
+      modes.appendChild(button);
+      const area = document.createElement('section');
+      area.id = 'motion-studio-composer-' + name;
+      area.className = 'motion-studio-author-panel';
+      area.setAttribute('role','tabpanel');
+      area.setAttribute('aria-labelledby', button.id);
+      stages.compose.appendChild(area);
+      modeAreas[name] = area;
+    });
+    modeAreas.cues.innerHTML = '<p class="muted">Beat assignments and manual camera cues are now in Step 4: Assign Motion to Beats. Select that step to edit, preview or apply cues.</p>';
+    const assignHelp = document.createElement('p');
+    assignHelp.className = 'muted';
+    assignHelp.textContent = 'Select Kick, Snare or Highs, choose a Motion preset, preview matching beats, then Assign All Matching Beats. Save cues to keep the assignments. Manual camera cues are also available below.';
+    stages.assign.appendChild(assignHelp);
+    const cueShortcut = document.createElement('button');
+    cueShortcut.type = 'button';
+    cueShortcut.className = 'secondary-button compact';
+    cueShortcut.textContent = 'Go to beat assignments';
+    cueShortcut.addEventListener('click', () => motionStudioSelectStage('assign'));
+    modeAreas.cues.appendChild(cueShortcut);
+    if (channels) modeAreas.channels.appendChild(channels);
+    if (continuous) modeAreas.continuous.appendChild(continuous);
+    if (audioCard) modeAreas.pulse.appendChild(audioCard);
+    if (actions) modeAreas.pulse.appendChild(actions);
+    const review = document.createElement('p');
+    review.id = 'motion-studio-review-summary';
+    review.className = 'muted';
+    review.setAttribute('role','status');
+    stages.review.appendChild(review);
+    if (introActions) stages.review.appendChild(introActions);
+    const preview = document.createElement('button');
+    preview.type = 'button';
+    preview.className = 'secondary-button compact';
+    preview.textContent = 'Open Camera Preview';
+    preview.addEventListener('click', () => showAnimationTab('preview'));
+    const shortcuts = document.createElement('div');
+    shortcuts.className = 'motion-studio-step-actions';
+    shortcuts.appendChild(preview);
+    stages.review.appendChild(shortcuts);
+    const footer = document.createElement('div');
+    footer.className = 'motion-studio-stage-footer';
+    const back = document.createElement('button');
+    const forward = document.createElement('button');
+    back.type = 'button';
+    forward.type = 'button';
+    back.className = 'secondary-button compact';
+    forward.className = 'secondary-button compact';
+    back.textContent = '← Previous step';
+    forward.textContent = 'Next step →';
+    const updateFooter = () => {
+      const index = MOTION_STUDIO_STAGES.findIndex(([key]) => key === motionStudioStage);
+      back.disabled = index <= 0;
+      forward.disabled = index >= MOTION_STUDIO_STAGES.length-1;
+    };
+    back.addEventListener('click', () => {
+      const index = MOTION_STUDIO_STAGES.findIndex(([key]) => key === motionStudioStage);
+      motionStudioSelectStage(MOTION_STUDIO_STAGES[Math.max(0,index-1)][0]);
+      updateFooter();
+    });
+    forward.addEventListener('click', () => {
+      const index = MOTION_STUDIO_STAGES.findIndex(([key]) => key === motionStudioStage);
+      motionStudioSelectStage(MOTION_STUDIO_STAGES[Math.min(MOTION_STUDIO_STAGES.length-1,index+1)][0]);
+      updateFooter();
+    });
+    footer.append(back,forward);
+    panel.appendChild(footer);
+    // Last chosen page is a local UI preference only. It never alters audio,
+    // saved project data, marker edits or the current draft.
+    try { motionStudioStage = localStorage.getItem(MOTION_STUDIO_STAGE_KEY) || 'source'; } catch (_) {}
+    try { motionStudioAuthorMode = localStorage.getItem(MOTION_STUDIO_MODE_KEY) || 'cues'; } catch (_) {}
+    motionStudioSelectAuthorMode(motionStudioAuthorMode, {persist:false});
+    motionStudioSelectStage(motionStudioStage, {persist:false, navigate:false});
+    updateFooter();
+    nav.addEventListener('click', updateFooter);
+    nav.addEventListener('keydown', updateFooter);
+  }
+
+  const PROJECT_EDITOR_GROUPS = [
+    ['setup','Setup','Project identity, dimensions, model and animation mode.',
+      ['.animation-project-card']],
+    ['sources','Sources & Media','Starting frame, imported media and source/depth preparation.',
+      ['.animation-start-card','.animation-project-media-card','.animation-depth-card']],
+    ['timeline','Timeline & Prompts','Visual timeline, prompt keyframes and transitions.',
+      ['.animation-timeline-card','.animation-prompts-card']],
+    ['camera','Camera & Motion','2D schedules and 3D camera settings.',
+      ['#animation-2d-motion-card','#animation-3d-camera-card']],
+    ['generation','Generation Settings','Diffusion cadence, sampling and render parameters.',
+      ['#animation-cadence-card','.animation-generation-state-card']],
+  ];
+  function setupProjectEditorGroups(layout, panel) {
+    const nav = document.createElement('nav');
+    nav.id = 'animation-editor-group-nav';
+    nav.className = 'animation-editor-group-nav';
+    nav.setAttribute('aria-label','Project Editor sections');
+    const buttons = new Map();
+    const groups = new Map();
+    for (const [key,title,description,selectors] of PROJECT_EDITOR_GROUPS) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'secondary-button compact animation-editor-group-button';
+      button.textContent = title;
+      button.dataset.editorGroup = key;
+      button.setAttribute('aria-controls','animation-editor-group-' + key);
+      const group = document.createElement('section');
+      group.id = 'animation-editor-group-' + key;
+      group.className = 'animation-editor-group';
+      group.setAttribute('aria-label',title);
+      const heading = document.createElement('div');
+      heading.className = 'animation-editor-group-heading';
+      const h = document.createElement('h2');
+      h.textContent = title;
+      const p = document.createElement('p');
+      p.className = 'muted';
+      p.textContent = description;
+      heading.append(h,p);
+      group.appendChild(heading);
+      const cards = document.createElement('div');
+      cards.className = 'grid animation-editor-group-cards';
+      group.appendChild(cards);
+      for (const selector of selectors) {
+        const card = layout.querySelector(selector);
+        if (card) cards.appendChild(card);
+      }
+      layout.appendChild(group);
+      nav.appendChild(button);
+      buttons.set(key,button);
+      groups.set(key,group);
+    }
+    const context = document.createElement('div');
+    context.id = 'animation-editor-context';
+    context.className = 'animation-editor-context';
+    context.setAttribute('role','status');
+    const currentProject = document.createElement('strong');
+    currentProject.id = 'animation-editor-current-project';
+    const saveState = document.createElement('span');
+    saveState.id = 'animation-editor-save-state';
+    context.append(currentProject,saveState);
+    panel.insertBefore(context,layout);
+    panel.insertBefore(nav,layout);
+    const mobilePicker = document.createElement('select');
+    mobilePicker.id = 'animation-editor-mobile-section';
+    mobilePicker.className = 'animation-editor-mobile-section';
+    mobilePicker.setAttribute('aria-label','Project Editor section');
+    for (const [key,title] of PROJECT_EDITOR_GROUPS) {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = title;
+      mobilePicker.appendChild(option);
+    }
+    panel.insertBefore(mobilePicker,layout);
+    syncProjectWorkspaceStatus();
+    const choose = (key, {persist=true}={}) => {
+      if (!groups.has(key)) key='setup';
+      for (const [name,group] of groups) {
+        const active = name===key;
+        group.hidden=!active;
+        buttons.get(name).classList.toggle('active',active);
+        if (active) buttons.get(name).setAttribute('aria-current','page');
+        else buttons.get(name).removeAttribute('aria-current');
+        buttons.get(name).setAttribute('aria-pressed',String(active));
+      }
+      mobilePicker.value = key;
+      if (persist) try {localStorage.setItem('morphorum.editor.group.v1',key);} catch (_) {}
+    };
+    const sectionKeys = [...buttons.keys()];
+    for (const [key,button] of buttons) {
+      button.addEventListener('click',()=>choose(key));
+      button.addEventListener('keydown',event=>{
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const index=sectionKeys.indexOf(key);
+        const next=event.key==='Home' ? 0 : event.key==='End' ? sectionKeys.length-1
+          : (index+(event.key==='ArrowRight'?1:sectionKeys.length-1))%sectionKeys.length;
+        choose(sectionKeys[next]);
+        buttons.get(sectionKeys[next]).focus();
+      });
+    }
+    mobilePicker.addEventListener('change',()=>choose(mobilePicker.value));
+    let saved='setup';
+    try {saved=localStorage.getItem('morphorum.editor.group.v1')||'setup';}catch(_){}
+    choose(saved,{persist:false});
+  }
+
   function setupAnimationWorkspaceTabs() {
     const layout = qs('#view-animation .animation-layout');
     const root = qs('#view-animation');
@@ -10021,7 +11053,7 @@
     const nav = document.createElement('nav');
     nav.id = 'animation-workspace-nav';
     nav.className = 'animation-workspace-nav';
-    nav.setAttribute('aria-label', 'Motion Lab workspaces');
+    nav.setAttribute('aria-label', 'Project and Motion Lab workspaces');
     nav.setAttribute('role', 'tablist');
     const panels = {};
     const names = {
@@ -10048,6 +11080,13 @@
         qs('#animation-tab-' + keys[next])?.focus();
         showAnimationTab(keys[next]);
       });
+      // Retain programmatic workspace targets for primary-nav routing and older shortcuts.
+      // The visible navigation for these three destinations lives in the main menu.
+      if (['wizard','projects','editor'].includes(name)) {
+        button.hidden = true;
+        button.style.display = 'none';
+        button.tabIndex = -1;
+      }
       nav.appendChild(button);
       const panel = document.createElement('section');
       panel.className = 'animation-workspace-panel';
@@ -10103,12 +11142,13 @@
       if (card) panels[name].appendChild(card);
     }
 
+    setupProjectEditorGroups(layout, panels.editor);
+
     // The landing page is a concise tool selector. Original controls live in
     // exactly one dedicated panel, never copied or recreated.
     const toolGrid = document.createElement('div');
     toolGrid.className = 'motion-lab-tool-grid';
     const toolCards = [
-      ['wizard', 'New Project Wizard', 'Create a project step by step, with guided defaults and explanations.'],
       ['composer', 'Camera Motion Composer', 'Layer motion presets, timing, and blend settings.'],
       ['recording', 'Live Motion Recording', 'Perform and edit a six-axis camera take.'],
       ['curves', 'Motion Curves & Camera Path', 'Edit frame-aligned keyframes using the full-width plots.'],
@@ -10116,8 +11156,6 @@
       ['motion-import', 'Import Motion Settings', 'Preview Deforum Motion Studio schedules and align soundtrack audio.'],
       ['audio', 'Motion Studio', 'Compose manual camera cues against music, edit beats and preview or apply motion to this project.'],
       ['monitor', 'Render Monitor', 'Watch progress, frame previews, and job diagnostics.'],
-      ['projects', 'Project Manager', 'Search, review, rename, and safely archive your animation projects.'],
-      ['editor', 'Project Editor', 'Configure projects, prompts, resolution, and timelines.'],
       ['outputs', 'Outputs', 'Review completed animations and export videos.'],
     ];
     for (const [name, title, description] of toolCards) {
@@ -10210,9 +11248,11 @@
           id="animation-audio-back-motion">← Motion Lab</button>
       </div>
       <div class="animation-audio-workflow">
-        <span><strong>1</strong> Choose WAV and analyze</span>
-        <span><strong>2</strong> Adjust beats and add a layer</span>
-        <span><strong>3</strong> Review curves and apply motion</span>
+        <span><strong>1</strong> Load audio</span>
+        <span><strong>2</strong> Analyze WAV</span>
+        <span><strong>3</strong> Edit beat markers</span>
+        <span><strong>4</strong> Create motion</span>
+        <span><strong>5</strong> Preview and apply</span>
       </div>
       <div class="animation-audio-workspace-actions">
         <button class="secondary-button compact" type="button"
@@ -10243,6 +11283,12 @@
       const legacyDetails = document.createElement('details');
       legacyDetails.className = 'animation-audio-legacy-envelope';
       legacyDetails.innerHTML = '<summary>Additional envelope diagnostics</summary>';
+      const diagnosticMessage = document.createElement('p');
+      diagnosticMessage.id = 'motion-studio-envelope-message';
+      diagnosticMessage.className = 'muted';
+      diagnosticMessage.setAttribute('role','status');
+      diagnosticMessage.textContent = 'No envelope available yet. Choose Analyze WAV first.';
+      legacyDetails.appendChild(diagnosticMessage);
       legacyDetails.appendChild(audioPreview);
       analysisWorkspace.appendChild(legacyDetails);
     }
@@ -10266,11 +11312,28 @@
     const audioCard = qs('#animation-motion-lab-audio');
     const controls = audioCard?.querySelector('.animation-motion-audio-controls');
     if (controls) {
-      const fields = Array.from(controls.children);
+      // Group by control identity, never by numeric child position: the
+      // length toggle and newer detector fields would otherwise shift the
+      // indices, misplacing Threshold/Release (or leaving them orphaned).
+      const labelOf = id => qs('#' + id)?.closest('label');
       const sections = [
-        ['Choose audio', fields.slice(0,2), true],
-        ['Beat detection', [fields[2],fields[3],fields[4],fields[6]], false],
-        ['Camera response', [fields[5],fields[7],fields[8],fields[9]], false],
+        ['Choose audio', [
+          labelOf('animation-motion-lab-audio-file'),
+          qs('.animation-motion-saved-soundtrack', controls),
+          qs('.animation-motion-audio-length', controls),
+        ], true],
+        ['Beat detection', [
+          labelOf('animation-motion-lab-audio-band'),
+          labelOf('animation-motion-lab-audio-detection'),
+          labelOf('animation-motion-lab-audio-sensitivity'),
+          labelOf('animation-motion-lab-audio-threshold'),
+        ], true],
+        ['Camera response', [
+          labelOf('animation-motion-lab-audio-axis'),
+          labelOf('animation-motion-lab-audio-distance'),
+          labelOf('animation-motion-lab-audio-attack'),
+          labelOf('animation-motion-lab-audio-release'),
+        ], true],
       ];
       for (const [label, elements, opened] of sections) {
         const details = document.createElement('details');
@@ -10304,7 +11367,7 @@
       const apply = qs('#animation-motion-lab-apply');
       if (apply && !apply.disabled) apply.click();
     });
-
+    setupMotionStudioStages(panels.audio, audioIntro);
 
     setupDeforumMotionImport(panels['motion-import']);
     motionLabSetupQuickActions(panels.motion);
@@ -10472,6 +11535,15 @@
     });
     qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
     qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
+    qs('#animation-motion-lab-audio-file')?.addEventListener('change', event => {
+      const file = event.target.files?.[0];
+      if (file) {
+        const status = qs('#motion-studio-analysis-status');
+        if (status) status.textContent = 'WAV selected: ' + file.name +
+          '. Continue to Step 2 and choose Analyze WAV.';
+      }
+      motionStudioRefreshStageStatus();
+    });
     qs('#animation-motion-lab-analyze-audio')?.addEventListener('click', () => void motionLabAnalyzeAudio());
     qs('#animation-motion-lab-use-soundtrack')?.addEventListener('click',
       () => void motionLabUseProjectSoundtrack());

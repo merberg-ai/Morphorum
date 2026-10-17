@@ -10,9 +10,11 @@ Welcome! You do not need to know Python or Git to use Morphorum. Start with the 
 | **[Getting started](GETTING_STARTED.md)** | Download/select a model, generate an image, create an animation, export video |
 | **[First-Run Setup](GETTING_STARTED.md#first-run-setup-wizard)** | Initial seven-step setup, checkpoint folders, optional managed-model download and 3D starter projects |
 | **[New Project Wizard](NEW_PROJECT_WIZARD.md)** | Guided animation setup and explanations of the seven wizard steps |
-| **[Motion Studio](MOTION_STUDIO.md)** | Synchronize soundtrack beats, frequency channels, continuous camera motion and native 3D project tracks |
+| **[Motion Studio](MOTION_STUDIO.md)** | Six-stage WAV workflow, beat assignment and cleanup, frequency channels, continuous motion and project camera tracks |
 | **[FFmpeg Manager](FFMPEG_MANAGER.md)** | Auto-detect, custom paths, verified local install, update/removal, media acceptance test and GPL terms |
 | **[Troubleshooting](TROUBLESHOOTING.md)** | Fix browser, installer, model, CUDA, LAN, project and video problems |
+
+Project Manager, New Project Wizard and Project Editor are direct main-menu destinations. Motion Lab Overview provides a read-only project summary and guided Preview → Apply → Save → Render → Export navigation. Older renders do not automatically acquire newly attached audio. See [current features and limitations](CURRENT_STATUS.md) for testing boundaries.
 
 ## Other workflows
 
