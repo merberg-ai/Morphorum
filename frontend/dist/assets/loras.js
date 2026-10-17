@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const state = { records: [], selected: null, detail: null, civitai: null, identity: null, identifying: false, updateCheck: null, updateBusy: false, cached: null, syncing: false, request: 0 };
+  const state = { records: [], selected: null, detail: null, civitai: null, identity: null, identifying: false, updateCheck: null, updateBusy: false, cached: null, syncing: false, bulkSelected: new Set(), bulkBusy: false, request: 0 };
   const qs = selector => document.querySelector(selector);
   const toast = (title, message, type = 'info') => window.MorphorumToast?.(title, message, type, 6000);
   const api = async (url, options = {}) => {
@@ -202,14 +202,72 @@
     advanced.appendChild(more);
   }
 
+  function bulkVisible() {
+    const family = qs('#lora-manager-family')?.value || 'sdxl';
+    const search = (qs('#lora-manager-search')?.value || '').trim().toLowerCase();
+    return state.records.filter(record => record.family === family &&
+      (!search || [record.name, record.filename].some(value => String(value || '').toLowerCase().includes(search))));
+  }
+  function updateBulkToolbar() {
+    const count = state.bulkSelected.size;
+    const button = qs('#lora-sync-selected');
+    if (button) {
+      button.disabled = state.bulkBusy || count === 0;
+      button.classList.toggle('busy', state.bulkBusy);
+      const label = button.querySelector('.button-label');
+      if (label) label.textContent = state.bulkBusy ? 'Syncing…' : 'Sync Selected (' + count + ')';
+    }
+    const status = qs('#lora-bulk-status');
+    if (status && !state.bulkBusy) status.textContent = count + ' selected';
+    for (const id of ['lora-select-visible', 'lora-clear-selected']) {
+      const control = qs('#' + id);
+      if (control) control.disabled = state.bulkBusy;
+    }
+  }
+  async function syncBulkSelected() {
+    if (state.bulkBusy || !state.bulkSelected.size) return;
+    const ids = [...state.bulkSelected].filter(id => state.records.some(record => record.id === id));
+    state.bulkBusy = true;
+    updateBulkToolbar();
+    let success = 0, failed = 0;
+    const errors = [];
+    try {
+      for (let index = 0; index < ids.length; index++) {
+        const id = ids[index];
+        const record = state.records.find(item => item.id === id);
+        const status = qs('#lora-bulk-status');
+        if (status) status.textContent = 'Syncing ' + (index + 1) + ' / ' + ids.length + ': ' + (record?.name || id);
+        try {
+          const result = await api('/api/civitai/library/' + encodeURIComponent(id) + '/sync',
+            {method: 'POST', body: '{}'});
+          if (!result.synced) throw Error('No verified metadata returned');
+          success++;
+          if (state.selected?.id === id) {
+            state.cached = result;
+            updatePromptSnippet();
+            renderDetail();
+          }
+        } catch (error) {
+          failed++;
+          if (errors.length < 3) errors.push((record?.name || id) + ': ' + error.message);
+        }
+      }
+      toast(failed ? 'LoRA sync finished with errors' : 'LoRA sync complete',
+        success + ' succeeded, ' + failed + ' failed.' + (errors.length ? ' ' + errors.join(' | ') : ''),
+        failed ? 'warning' : 'success');
+    } finally {
+      state.bulkBusy = false;
+      updateBulkToolbar();
+      const status = qs('#lora-bulk-status');
+      if (status) status.textContent = success + ' synced, ' + failed + ' failed · ' + state.bulkSelected.size + ' selected';
+    }
+  }
+
   function renderLibrary() {
     const target = qs('#lora-manager-list');
     const family = qs('#lora-manager-family')?.value || 'sdxl';
     const search = (qs('#lora-manager-search')?.value || '').trim().toLowerCase();
-    const shown = state.records.filter(record =>
-      record.family === family &&
-      (!search || [record.name, record.filename].some(value => String(value || '').toLowerCase().includes(search)))
-    );
+    const shown = bulkVisible();
     qs('#lora-manager-count').textContent = shown.length + ' matching / ' + state.records.filter(r => r.family === family).length + ' indexed';
     target.replaceChildren();
     if (!shown.length) {
@@ -224,8 +282,23 @@
       button.setAttribute('aria-selected', state.selected?.id === record.id ? 'true' : 'false');
       button.append(text('strong', record.name), text('small', record.filename));
       button.addEventListener('click', () => selectLora(record));
-      target.append(button);
+      const row = document.createElement('div');
+      row.className = 'lora-manager-select-row';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'lora-bulk-checkbox';
+      checkbox.checked = state.bulkSelected.has(record.id);
+      checkbox.disabled = state.bulkBusy;
+      checkbox.setAttribute('aria-label', 'Select ' + record.name + ' for Civitai sync');
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) state.bulkSelected.add(record.id);
+        else state.bulkSelected.delete(record.id);
+        updateBulkToolbar();
+      });
+      row.append(checkbox, button);
+      target.append(row);
     }
+    updateBulkToolbar();
   }
 
   async function syncSelectedLora(write) {
@@ -239,6 +312,7 @@
       const result = await api(url, write ? {method:'POST', body:'{}'} : {});
       if (request !== state.request) return;
       state.cached = result.synced ? result : null;
+      if (state.cached?.trained_words?.length) updatePromptSnippet();
       toast(write ? 'Civitai metadata cached' : 'Civitai cache',
             result.synced ? 'Verified metadata available locally.' : 'No valid cached metadata. Sync first.',
             result.synced ? 'success' : 'info');
@@ -322,6 +396,8 @@
     try {
       const result = await api('/api/loras');
       state.records = result.loras || [];
+      const valid = new Set(state.records.map(item => item.id));
+      for (const id of state.bulkSelected) if (!valid.has(id)) state.bulkSelected.delete(id);
       const selected = state.records.find(item => item.id === state.selected?.id);
       if (!selected) { state.selected = null; state.detail = null; state.civitai = null; state.identity = null; state.identifying = false; state.updateCheck = null; state.updateBusy = false; state.cached = null; state.syncing = false; ++state.request; }
       renderLibrary();
@@ -451,7 +527,7 @@
       id: detail.id, family: detail.family, name: detail.name,
       weight: Number(qs('#lora-manager-weight').value),
       triggers: qs('#lora-manager-add-triggers').checked
-        ? ((detail.trigger_words || []).length ? detail.trigger_words : state.civitai?.trained_words || [])
+        ? ((state.cached?.trained_words || []).length ? state.cached.trained_words : (detail.trigger_words || []).length ? detail.trigger_words : state.civitai?.trained_words || [])
         : [],
     };
   }
@@ -496,6 +572,15 @@
     });
     qs('#lora-manager-search')?.addEventListener('input', renderLibrary);
     qs('#lora-manager-scan')?.addEventListener('click', scan);
+    qs('#lora-select-visible')?.addEventListener('click', () => {
+      for (const item of bulkVisible()) state.bulkSelected.add(item.id);
+      renderLibrary();
+    });
+    qs('#lora-clear-selected')?.addEventListener('click', () => {
+      state.bulkSelected.clear();
+      renderLibrary();
+    });
+    qs('#lora-sync-selected')?.addEventListener('click', syncBulkSelected);
     qs('#lora-manager-civitai')?.addEventListener('click', lookupCivitai);
     qs('#lora-manager-refresh-runtime')?.addEventListener('click', refreshRuntime);
     qs('#lora-manager-insert')?.addEventListener('click', insertIntoImage);
