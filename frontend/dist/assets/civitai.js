@@ -160,6 +160,26 @@
           finally { use.disabled = false; }
         });
         wrap.append(use);
+        const project = elt('button', 'secondary-button compact',
+          match.kind === 'checkpoints' ? 'Use in Project' : 'Add to Project Prompt');
+        project.type = 'button';
+        project.addEventListener('click', () => {
+          const animation = window.MorphorumAnimation;
+          const result = match.kind === 'checkpoints'
+            ? animation?.selectInstalledCivitaiCheckpoint?.(match.id)
+            : animation?.insertInstalledCivitaiLora?.({
+                id:match.id, family:match.family, name:match.name,
+                weight:1, triggers:match.trained_words || []
+              });
+          if (!result?.ok) {
+            toast('Project integration unavailable', result?.message || 'Open a project and check the model library.', 'warning');
+            return;
+          }
+          document.querySelector('.nav-button[data-view="animation"]')?.click();
+          document.querySelector('[data-project-nav="editor"]')?.click();
+          toast('Project updated', result.message, 'success');
+        });
+        wrap.append(project);
         host.append(wrap);
       }
     } catch (error) { host.replaceChildren(elt('span', 'muted', error.message)); }
