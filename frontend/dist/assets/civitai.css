@@ -64,3 +64,9 @@
 .civitai-detail-description { max-width:72ch; line-height:1.7; padding:14px 16px; background:rgba(255,255,255,.035); border-left:3px solid var(--accent); border-radius:8px; white-space:normal; }
 
 .civitai-description-panel { white-space: pre-line; line-height: 1.75; max-width: 75ch; background: rgba(255,255,255,.035); border-left: 3px solid var(--accent); padding: 14px 18px; border-radius: 9px; overflow-wrap: anywhere; margin: 14px 0; }
+
+/* C4.1 installed version actions */
+.civitai-installed-actions { display:flex; flex-direction:column; gap:8px; margin:10px 0; padding:10px; border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,.025); }
+.civitai-installed-list, .civitai-installed-match { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.civitai-installed-match { padding:4px 0; }
+.civitai-installed-actions .muted { font-size:.78rem; }
