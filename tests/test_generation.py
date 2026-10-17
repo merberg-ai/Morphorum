@@ -2194,3 +2194,41 @@ def test_repeated_clip_warning_filter_preserves_first_and_lora_reports() -> None
         (), None,
     )
     assert guard.filter(different_overflow)
+
+
+def test_sdxl_long_prompt_hook_keeps_short_prompt_and_uses_embeds_for_overflow(monkeypatch):
+    import morphorum.sdxl_prompt_chunks as chunks
+
+    class Tokenizer:
+        model_max_length = 7
+        bos_token_id = 1
+        eos_token_id = 2
+        pad_token_id = 2
+
+        def __call__(self, text, **kwargs):
+            return {"input_ids": [3] * len(text.split())}
+
+    class Pipe:
+        tokenizer = Tokenizer()
+        tokenizer_2 = Tokenizer()
+        text_encoder = object()
+        text_encoder_2 = object()
+
+    plain = {"prompt": "one two", "negative_prompt": None, "guidance_scale": 7.0}
+    assert GenerationManager.apply_sdxl_long_prompt_conditioning(Pipe(), plain) is plain
+
+    observed = []
+    def fake_encode(pipe, prompt, negative, **kwargs):
+        observed.append((prompt, negative, kwargs))
+        return "positive", "negative", "pooled", "negative_pooled"
+
+    monkeypatch.setattr(chunks, "encode_sdxl_long_prompts", fake_encode)
+    long = {"prompt": "one two three four five six", "negative_prompt": "", "guidance_scale": 7.0}
+    result = GenerationManager.apply_sdxl_long_prompt_conditioning(Pipe(), long)
+    assert result["prompt"] is None
+    assert result["prompt_embeds"] == "positive"
+    assert result["negative_prompt_embeds"] == "negative"
+    assert result["pooled_prompt_embeds"] == "pooled"
+    assert result["negative_pooled_prompt_embeds"] == "negative_pooled"
+    assert len(observed) == 1
+    assert long["prompt"] == "one two three four five six"
