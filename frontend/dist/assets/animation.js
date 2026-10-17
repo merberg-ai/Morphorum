@@ -10152,6 +10152,10 @@
       }
     }
     motionStudioDockWaveform();
+    if (motionLabAudioAnalysis && (name === 'analysis' || name === 'detect')) {
+      motionLabStereoWaveform();
+      motionLabAudioPreview();
+    }
     motionStudioRefreshStageStatus();
     if (navigate) {
       const target = qs('#motion-studio-stage-' + name);
@@ -10242,6 +10246,25 @@
     const introActions = audioIntro.querySelector('.animation-audio-workspace-actions');
     if (sourceDock) stages.source.appendChild(sourceDock);
     if (analysis) stages.analysis.appendChild(analysis);
+    // This existing live message was accidentally left inside the hidden
+    // Single-Band Pulse card. Put it with the Analyze action instead.
+    const liveStatus = qs('#animation-motion-lab-audio-info');
+    if (liveStatus) {
+      liveStatus.classList.add('motion-studio-analysis-result');
+      stages.analysis.appendChild(liveStatus);
+    }
+    const analysisHint = document.createElement('p');
+    analysisHint.id = 'motion-studio-analysis-hint';
+    analysisHint.className = 'muted';
+    analysisHint.setAttribute('role', 'status');
+    stages.analysis.appendChild(analysisHint);
+    const analysisStatus = document.createElement('p');
+    analysisStatus.id = 'motion-studio-analysis-status';
+    analysisStatus.className = 'motion-studio-analysis-status';
+    analysisStatus.setAttribute('role','status');
+    analysisStatus.setAttribute('aria-live','polite');
+    analysisStatus.textContent = 'Choose a WAV to analyze, or reuse an analyzed project soundtrack.';
+    stages.analysis.appendChild(analysisStatus);
     // The Analyze button is useful next to the analysis display, not between
     // the file picker and unrelated motion controls.
     const actions = sourceDock?.querySelector('.animation-motion-recording-actions');
@@ -10250,6 +10273,14 @@
       const row = document.createElement('div');
       row.className = 'motion-studio-step-actions';
       row.appendChild(analyze);
+      const beatsLink = document.createElement('button');
+      beatsLink.type = 'button';
+      beatsLink.className = 'secondary-button compact';
+      beatsLink.id = 'motion-studio-show-detected';
+      beatsLink.textContent = 'View Detected Beats →';
+      beatsLink.disabled = true;
+      beatsLink.addEventListener('click', () => motionStudioSelectStage('detect'));
+      row.appendChild(beatsLink);
       stages.analysis.insertBefore(row, analysis);
     }
     const detection = [...(audioCard?.querySelectorAll('.animation-audio-config-group') || [])]
@@ -10262,6 +10293,31 @@
     detectHelp.className = 'muted';
     detectHelp.textContent = 'Analysis finds beat candidates automatically. Adjust the detection settings, use the waveform to move or add markers, then Save marker edits.';
     stages.detect.appendChild(detectHelp);
+    const detectedActions = document.createElement('div');
+    detectedActions.className = 'motion-studio-step-actions';
+    const showMarkers = document.createElement('button');
+    showMarkers.type = 'button';
+    showMarkers.id = 'motion-studio-refresh-beats';
+    showMarkers.className = 'secondary-button compact';
+    showMarkers.textContent = 'Show Detected Beats';
+    showMarkers.addEventListener('click', () => {
+      if (motionLabAudioProjectId !== state.project?.id || !motionLabAudioAnalysis) {
+        const message = qs('#motion-studio-detection-info');
+        if (message) message.textContent = 'Load and analyze a WAV in Steps 1–2 before showing beats.';
+        return;
+      }
+      motionLabStereoWaveform();
+      motionStudioDockWaveform();
+      const timeline = qs('#animation-audio-stereo-timeline');
+      if (timeline) timeline.hidden = false;
+      timeline?.scrollIntoView?.({behavior:'auto',block:'nearest'});
+    });
+    detectedActions.appendChild(showMarkers);
+    const detectStatus = document.createElement('p');
+    detectStatus.id = 'motion-studio-detection-info';
+    detectStatus.className = 'muted';
+    detectStatus.setAttribute('role','status');
+    stages.detect.append(detectedActions, detectStatus);
     const modes = document.createElement('nav');
     modes.className = 'motion-studio-mode-nav';
     modes.setAttribute('role', 'tablist');
@@ -10597,6 +10653,12 @@
       const legacyDetails = document.createElement('details');
       legacyDetails.className = 'animation-audio-legacy-envelope';
       legacyDetails.innerHTML = '<summary>Additional envelope diagnostics</summary>';
+      const diagnosticMessage = document.createElement('p');
+      diagnosticMessage.id = 'motion-studio-envelope-message';
+      diagnosticMessage.className = 'muted';
+      diagnosticMessage.setAttribute('role','status');
+      diagnosticMessage.textContent = 'No envelope available yet. Choose Analyze WAV first.';
+      legacyDetails.appendChild(diagnosticMessage);
       legacyDetails.appendChild(audioPreview);
       analysisWorkspace.appendChild(legacyDetails);
     }
