@@ -104,6 +104,8 @@ separate, explicit authorization.** Next development phase: P4.
 - [ ] **UX5:** Combined regression tests, updated public docs and user
   acceptance before any release PR merge.
 
+**UX3 layout hotfix:** First owner Windows screenshot exposed a severe collapsed single-column card caused by nesting new section wrappers inside the pre-existing two-column Editor grid. Patched the Editor layout to use a full-width single-track outer grid and full-width cards, with CSS sizing regression assertions. Commit `467b980`; browser acceptance remains pending. No saved project data was changed.
+
 ### UX3 implementation checkpoint (2026-10-16)
 
 - [x] Add five directly navigable Project Editor sections: **Setup**, **Sources & Media**, **Timeline & Prompts**, **Camera & Motion**, **Generation Settings**.
