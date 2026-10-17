@@ -10872,6 +10872,17 @@
     context.append(currentProject,saveState);
     panel.insertBefore(context,layout);
     panel.insertBefore(nav,layout);
+    const mobilePicker = document.createElement('select');
+    mobilePicker.id = 'animation-editor-mobile-section';
+    mobilePicker.className = 'animation-editor-mobile-section';
+    mobilePicker.setAttribute('aria-label','Project Editor section');
+    for (const [key,title] of PROJECT_EDITOR_GROUPS) {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = title;
+      mobilePicker.appendChild(option);
+    }
+    panel.insertBefore(mobilePicker,layout);
     syncProjectWorkspaceStatus();
     const choose = (key, {persist=true}={}) => {
       if (!groups.has(key)) key='setup';
@@ -10879,11 +10890,26 @@
         const active = name===key;
         group.hidden=!active;
         buttons.get(name).classList.toggle('active',active);
-        buttons.get(name).setAttribute('aria-current',active?'true':'false');
+        buttons.get(name).setAttribute('aria-current',active?'page':null);
+        buttons.get(name).setAttribute('aria-pressed',String(active));
       }
+      mobilePicker.value = key;
       if (persist) try {localStorage.setItem('morphorum.editor.group.v1',key);} catch (_) {}
     };
-    for (const [key,button] of buttons) button.addEventListener('click',()=>choose(key));
+    const sectionKeys = [...buttons.keys()];
+    for (const [key,button] of buttons) {
+      button.addEventListener('click',()=>choose(key));
+      button.addEventListener('keydown',event=>{
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const index=sectionKeys.indexOf(key);
+        const next=event.key==='Home' ? 0 : event.key==='End' ? sectionKeys.length-1
+          : (index+(event.key==='ArrowRight'?1:sectionKeys.length-1))%sectionKeys.length;
+        choose(sectionKeys[next]);
+        buttons.get(sectionKeys[next]).focus();
+      });
+    }
+    mobilePicker.addEventListener('change',()=>choose(mobilePicker.value));
     let saved='setup';
     try {saved=localStorage.getItem('morphorum.editor.group.v1')||'setup';}catch(_){}
     choose(saved,{persist:false});
