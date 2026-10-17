@@ -44,3 +44,12 @@ test('UX2.4 main-menu project targets have DOM-backed click destinations',()=>{
   assert.match(animation,/button\.hidden = true/);
   assert.match(animation,/nav\.appendChild\(button\)/);
 });
+
+test('UX2.4 global page heading follows project destination',()=>{
+  for(const id of ['animation-page-eyebrow','animation-page-title','animation-page-description'])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  for(const title of ['Project Manager','New Project Wizard','Project Editor'])
+    assert.ok(animation.includes("'"+title+"'"));
+  assert.match(animation,/if \(title\) title\.textContent = pageHeading\[1\]/);
+  assert.match(animation,/if \(description\) description\.textContent = pageHeading\[2\]/);
+});
