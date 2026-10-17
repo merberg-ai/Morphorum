@@ -1121,3 +1121,7 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
   .civitai-settings-selects { grid-template-columns: minmax(0, 1fr); }
   .civitai-settings-field select { max-width: 100%; }
 }
+
+.civitai-key-controls {display:flex; flex-wrap:wrap; align-items:center; gap:10px; width:100%;}
+.civitai-key-controls input {flex:1 1 250px; max-width:460px; min-width:0;}
+.civitai-key-controls .muted {flex-basis:100%;}
