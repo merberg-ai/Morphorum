@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const state = { records: [], selected: null, detail: null, civitai: null, identity: null, identifying: false, updateCheck: null, updateBusy: false, request: 0 };
+  const state = { records: [], selected: null, detail: null, civitai: null, identity: null, identifying: false, updateCheck: null, updateBusy: false, cached: null, syncing: false, request: 0 };
   const qs = selector => document.querySelector(selector);
   const toast = (title, message, type = 'info') => window.MorphorumToast?.(title, message, type, 6000);
   const api = async (url, options = {}) => {
@@ -102,6 +102,35 @@
     check.classList.toggle('busy', state.updateBusy);
     check.addEventListener('click', checkSelectedLoraUpdates);
     identityPanel.append(check);
+    const sync = text('button', state.syncing ? 'Syncing…' : 'Sync Civitai Info');
+    sync.type = 'button';
+    sync.className = 'secondary-button compact busy-button';
+    sync.disabled = state.syncing;
+    sync.classList.toggle('busy', state.syncing);
+    sync.addEventListener('click', () => syncSelectedLora(true));
+    identityPanel.append(sync);
+    const view = text('button', 'View Cached Info');
+    view.type = 'button';
+    view.className = 'secondary-button compact';
+    view.addEventListener('click', () => syncSelectedLora(false));
+    identityPanel.append(view);
+    if (state.cached?.synced) {
+      const cached = document.createElement('div');
+      cached.className = 'lora-civitai-cached';
+      cached.append(text('strong', 'Cached: ' + (state.cached.name || '') + ' · ' + (state.cached.version || '')));
+      cached.append(text('p', [state.cached.creator, state.cached.base_model].filter(Boolean).join(' · '), 'muted'));
+      if (state.cached.preview) {
+        const img = document.createElement('img');
+        img.className = 'model-civitai-thumbnail';
+        img.alt = 'Cached Civitai model preview';
+        img.loading = 'lazy';
+        img.src = '/api/civitai/library/' + encodeURIComponent(state.selected.id) + '/preview';
+        cached.append(img);
+      }
+      if (state.cached.trained_words?.length) cached.append(text('p', 'Triggers: ' + state.cached.trained_words.slice(0, 16).join(', '), 'muted'));
+      if (state.cached.description) cached.append(text('p', state.cached.description.slice(0, 650), 'muted'));
+      identityPanel.append(cached);
+    }
     if (state.updateCheck) {
       const result = document.createElement('div');
       result.className = 'lora-update-results';
@@ -199,6 +228,27 @@
     }
   }
 
+  async function syncSelectedLora(write) {
+    const selected = state.selected;
+    if (!selected || state.syncing) return;
+    const request = state.request;
+    state.syncing = true;
+    renderDetail();
+    try {
+      const url = '/api/civitai/library/' + encodeURIComponent(selected.id) + (write ? '/sync' : '');
+      const result = await api(url, write ? {method:'POST', body:'{}'} : {});
+      if (request !== state.request) return;
+      state.cached = result.synced ? result : null;
+      toast(write ? 'Civitai metadata cached' : 'Civitai cache',
+            result.synced ? 'Verified metadata available locally.' : 'No valid cached metadata. Sync first.',
+            result.synced ? 'success' : 'info');
+    } catch (error) {
+      if (request === state.request) toast('Civitai metadata failed', error.message, 'error');
+    } finally {
+      if (request === state.request) { state.syncing = false; renderDetail(); }
+    }
+  }
+
   async function checkSelectedLoraUpdates() {
     const selected = state.selected;
     if (!selected || state.updateBusy) return;
@@ -248,6 +298,8 @@
     state.identifying = false;
     state.updateCheck = null;
     state.updateBusy = false;
+    state.cached = null;
+    state.syncing = false;
     const request = ++state.request;
     renderLibrary();
     renderDetail();
@@ -271,7 +323,7 @@
       const result = await api('/api/loras');
       state.records = result.loras || [];
       const selected = state.records.find(item => item.id === state.selected?.id);
-      if (!selected) { state.selected = null; state.detail = null; state.civitai = null; state.identity = null; state.identifying = false; state.updateCheck = null; state.updateBusy = false; ++state.request; }
+      if (!selected) { state.selected = null; state.detail = null; state.civitai = null; state.identity = null; state.identifying = false; state.updateCheck = null; state.updateBusy = false; state.cached = null; state.syncing = false; ++state.request; }
       renderLibrary();
       if (selected) await selectLora(selected);
       else renderDetail();
