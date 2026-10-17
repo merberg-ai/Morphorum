@@ -4108,3 +4108,12 @@ dialog#animation-deforum-dialog {
     margin:.7rem 0 1rem;min-height:44px;
   }
 }
+
+/* P5.1: read-only Motion Lab overview, responsive without affecting editing cards. */
+.animation-p5-project-summary { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border-color, rgba(180,190,210,.24)); border-radius: 12px; }
+.animation-p5-summary-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,210px),1fr)); gap: .75rem 1rem; }
+.animation-p5-summary-grid > div { min-width: 0; display: flex; flex-direction: column; gap: .2rem; overflow-wrap: anywhere; }
+.animation-p5-summary-grid strong { font-size: .8rem; opacity: .8; }
+.animation-p5-summary-grid span { line-height: 1.4; }
+.animation-p5-summary-links { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+.animation-p5-project-summary > p { margin: .85rem 0 0; }
