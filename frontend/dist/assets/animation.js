@@ -6239,7 +6239,10 @@
         !Number.isInteger(every) || every<1 || every>16) return [];
     let last = -Infinity;
     const candidates = [];
-    for (const event of motionLabEditedEvents || []) {
+    // Analyzed candidates remain available even when no saved marker-edit
+    // document exists yet. An intentionally empty edited array stays empty.
+    const eventSource = motionLabEditedEvents ?? analysis.events?.events ?? [];
+    for (const event of eventSource) {
       if (event.enabled === false || event.kind !== kind ||
           Number(event.strength ?? 1)<minStrength ||
           event.time_seconds<start || event.time_seconds>=end ||
@@ -6254,7 +6257,38 @@
     if (!panel) return;
     const status=panel.querySelector('[data-beat-summary]');
     const candidates=motionDirectorFindCandidates();
-    if (status) status.textContent=candidates.length+' eligible detected or manually corrected hit(s). Review before assigning.';
+    if (status) {
+      const analysis = motionLabAudioAnalysis;
+      const events = motionLabEditedEvents ?? analysis?.events?.events ?? [];
+      const kind = panel.querySelector('[data-beat-kind]')?.value || 'kick';
+      const minimum = Number(panel.querySelector('[data-beat-strength]')?.value ?? .35);
+      const start = Number(panel.querySelector('[data-beat-start]')?.value ?? 0);
+      const end = Number(panel.querySelector('[data-beat-end]')?.value ?? analysis?.duration_seconds);
+      const enabled = events.filter(e=>e.enabled!==false);
+      const sameKind = enabled.filter(e=>e.kind===kind);
+      const inRange = sameKind.filter(e=>e.time_seconds>=start && e.time_seconds<end);
+      const strong = inRange.filter(e=>Number(e.strength??1)>=minimum);
+      const count = candidates.length;
+      status.textContent = !analysis
+        ? 'Analyze or restore a WAV before previewing beat matches.'
+        : !enabled.length
+          ? 'No enabled markers are available. Return to Detect Beats to review or reset markers.'
+          : !sameKind.length
+            ? 'No '+kind+' markers in '+enabled.length+' analyzed hit(s). Choose a different Find band.'
+            : !(start>=0 && end>start && end<=analysis.duration_seconds+.001)
+              ? 'Invalid beat range. Set From/To within the WAV duration ('+
+                Number(analysis.duration_seconds).toFixed(2)+' seconds).'
+              : !inRange.length
+                ? 'No '+kind+' hits between '+start.toFixed(2)+'s and '+end.toFixed(2)+
+                  's. Widen the From/To range.'
+                : !strong.length
+                  ? '0 matches: '+inRange.length+' '+kind+' hits are below Minimum strength '+
+                    minimum.toFixed(2)+'. Lower that filter to preview them.'
+                  : count
+                    ? count+' matching '+kind+' hit(s) of '+enabled.length+
+                      ' enabled marker(s) highlighted on the waveform. Assign cues to matches when ready.'
+                    : '0 after gap/Every Nth filters. Reduce Min gap or Every Nth hit.';
+    }
     const undo=panel.querySelector('[data-beat-undo]');
     if (undo) undo.disabled=!motionDirectorBulkUndo;
   }
@@ -6345,8 +6379,20 @@
         option.textContent=label;beatOptions.appendChild(option);
       }
       panel.querySelector('[data-beat-preview]').addEventListener('click',()=>{
-        motionDirectorPreviewMatches=true;motionDirectorFindStatus();motionLabStereoWaveform();
+        motionDirectorPreviewMatches=true;
+        motionDirectorFindStatus();
+        motionLabStereoWaveform();
       });
+      for (const field of panel.querySelectorAll(
+        '[data-beat-kind],[data-beat-strength],[data-beat-gap],' +
+        '[data-beat-start],[data-beat-end],[data-beat-every]')) {
+        const update = () => {
+          motionDirectorFindStatus();
+          if (motionDirectorPreviewMatches) motionLabStereoWaveform();
+        };
+        field.addEventListener('input',update);
+        field.addEventListener('change',update);
+      }
       panel.querySelector('[data-beat-assign]').addEventListener('click',motionDirectorAssignBeats);
       panel.querySelector('[data-beat-undo]').addEventListener('click',()=>{
         if (!motionDirectorBulkUndo) return;
@@ -6450,8 +6496,21 @@
         motionDirectorPanel();
       });
     }
-    const beatEnd=panel.querySelector('[data-beat-end]');
-    if (beatEnd && !beatEnd.value) beatEnd.value=motionLabAudioAnalysis.duration_seconds.toFixed(3);
+    // The preview's end time belongs to the current WAV, not to the last
+    // previously selected audio source. A stale 12s range on a shorter file
+    // used to silently yield zero matches despite visible markers.
+    const currentWav = String(motionLabAudioAnalysis.source_sha256 || '');
+    if (panel.dataset.beatSourceSha !== currentWav) {
+      panel.dataset.beatSourceSha = currentWav;
+      const begin = panel.querySelector('[data-beat-start]');
+      if (begin) begin.value='0';
+      const end = panel.querySelector('[data-beat-end]');
+      if (end) end.value=motionLabAudioAnalysis.duration_seconds.toFixed(3);
+      motionDirectorPreviewMatches=false;
+    } else {
+      const end = panel.querySelector('[data-beat-end]');
+      if (end && !end.value) end.value=motionLabAudioAnalysis.duration_seconds.toFixed(3);
+    }
     motionDirectorFindStatus();
     const selected=motionDirectorCues.find(c=>c.id===motionDirectorSelected);
     for (const [attr,key] of [['data-cue-preset','preset'],['data-cue-time','time_seconds'],
