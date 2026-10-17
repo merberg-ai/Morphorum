@@ -161,8 +161,8 @@ test('UX2.1 aligned audio renders the envelope graph and reports readiness',()=>
 
 test('UX2.1 original Analyze button and status are both in visible Stage 2',()=>{
   assert.match(js,/stages\.analysis\.appendChild\(liveStatus\)/);
-  assert.match(js,/stages\.analysis\.insertBefore\(row, analysis\)/);
-  assert.match(js,/stages\.analysis\.appendChild\(analysisStatus\)/);
+  assert.match(js,/stages\.analysis\.insertBefore\(row, analysisStatus\)/);
+  assert.match(js,/stages\.analysis\.insertBefore\(analysisStatus, analysis\)/);
   assert.match(js,/legacyDetails\.appendChild\(diagnosticMessage\)/);
   assert.match(js,/showMarkers\.textContent = 'Show Detected Beats'/);
   assert.match(js,/beatsLink\.textContent = 'View Detected Beats/);
