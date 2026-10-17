@@ -116,6 +116,7 @@ from .civitai_download import start_download, list_jobs, cancel_download, resume
 from .civitai_auth import get_token, token_status, store_token, clear_token
 from .civitai_identify import identify_model
 from .civitai_updates import check_model_update
+from .civitai_library import cached_metadata, sync_metadata, preview_path
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -439,6 +440,31 @@ def get_settings() -> dict[str, Any]:
         "validation": validate_model_paths(settings),
         "model_families": model_family_definitions(),
     }
+
+
+@app.get("/api/civitai/library/{model_id}")
+def api_civitai_cached_metadata(model_id: str) -> dict[str, Any]:
+    try:
+        return cached_metadata(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.post("/api/civitai/library/{model_id}/sync")
+def api_civitai_sync_metadata(model_id: str) -> dict[str, Any]:
+    try:
+        return sync_metadata(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.get("/api/civitai/library/{model_id}/preview")
+def api_civitai_cached_preview(model_id: str):
+    try:
+        path = preview_path(model_id)
+        return FileResponse(path)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
 
 @app.post("/api/civitai/updates/{model_id}")
