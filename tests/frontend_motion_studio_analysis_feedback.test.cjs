@@ -18,20 +18,23 @@ function grab(start,end) {
 const analyzer=grab('async function motionLabAnalyzeAudio() {','function motionLabAddAudio() {');
 const preview=grab('function motionLabAudioPreview() {','function motionLabAudioUi() {');
 
-function mockAnalyzer({file={name:'drums.wav',size:8192}, project=true, http=200}={}) {
+function mockAnalyzer({file={name:'drums.wav',size:8192}, project=true, http=200,
+  matchLength=false, duration=1, draftLayers=[], previousAudio=null}={}) {
   const elements={};
   const get=id=>elements[id] ||= {textContent:'',value:'.1',disabled:false,dataset:{},checked:false};
   get('#animation-motion-lab-audio-file').files=file?[file]:[];
-  get('#animation-motion-lab-audio-match-length').checked=false;
+  get('#animation-motion-lab-audio-match-length').checked=matchLength;
   const cues=[];
   const analysis={
-    values:[.2,.4,.7,.3],duration_seconds:1,fps:4,
+    values:[.2,.4,.7,.3],duration_seconds:duration,fps:4,
     filename:'drums.wav',source_sha256:'a'.repeat(64),
     events:{events:[{id:'beat-1'},{id:'beat-2'}]},
   };
   const ctx={
     state:{project:project?{id:'p1',animation:{max_frames:4,fps:4}}:null},
-    motionLabAudioProjectId:null,motionLabAudioAnalysis:null,
+    motionLabDraftLayers:draftLayers,
+    motionLabAudioProjectId:previousAudio?'p1':null,
+    motionLabAudioAnalysis:previousAudio,
     projectAudioRestoreGeneration:0,motionLabEditedEvents:null,motionDirectorCues:[],
     motionStudioChannelState:null,motionStudioSpectrumToken:0,
     motionStudioSpectrum:null,motionStudioBandPreview:null,
@@ -119,6 +122,31 @@ test('UX2.1 envelope diagnostics give a reason before analysis and on misalignme
   assert.match(status.textContent,/frame alignment changed/);
 });
 
+test('UX2.2 optional audio-length matching does not block analysis with existing draft',async()=>{
+  const layers=[{id:'keep-camera-layer'}];
+  const f=mockAnalyzer({matchLength:true,duration:2,draftLayers:layers});
+  await f.ctx.motionLabAnalyzeAudio();
+  assert.equal(f.ctx.motionLabAudioProjectId,'p1');
+  assert.equal(f.ctx.motionLabAudioAnalysis,f.analysis);
+  assert.strictEqual(f.ctx.motionLabDraftLayers,layers);
+  assert.equal(layers[0].id,'keep-camera-layer');
+  assert.equal(f.get('#animation-motion-lab-audio-match-length').checked,false);
+  assert.match(f.get('#animation-motion-lab-audio-length-status').textContent,/duration unchanged/i);
+  assert.match(f.get('#motion-studio-analysis-status').textContent,/existing draft Motion Lab layer/i);
+  assert.match(f.get('#motion-studio-analysis-status').textContent,/Analyzed drums.wav/);
+});
+
+test('UX2.2 failed WAV analysis does not clear the existing analysis and drafts',async()=>{
+  const old={source_sha256:'b'.repeat(64),values:[1,2,3,4],fps:4};
+  const drafts=[{id:'retain-layer'}];
+  const f=mockAnalyzer({http:400,previousAudio:old,draftLayers:drafts});
+  await f.ctx.motionLabAnalyzeAudio();
+  assert.strictEqual(f.ctx.motionLabAudioAnalysis,old);
+  assert.strictEqual(f.ctx.motionLabDraftLayers,drafts);
+  assert.equal(f.ctx.motionLabAudioProjectId,'p1');
+  assert.match(f.get('#motion-studio-analysis-status').textContent,/not PCM WAV/);
+});
+
 test('UX2.1 aligned audio renders the envelope graph and reports readiness',()=>{
   const diagnostics={textContent:''};
   const graph={
@@ -160,6 +188,7 @@ test('UX2.1 aligned audio renders the envelope graph and reports readiness',()=>
 });
 
 test('UX2.1 original Analyze button and status are both in visible Stage 2',()=>{
+  assert.match(js,/liveStatus\.hidden = true/);
   assert.match(js,/stages\.analysis\.appendChild\(liveStatus\)/);
   assert.match(js,/stages\.analysis\.insertBefore\(row, analysisStatus\)/);
   assert.match(js,/stages\.analysis\.insertBefore\(analysisStatus, analysis\)/);
@@ -168,4 +197,6 @@ test('UX2.1 original Analyze button and status are both in visible Stage 2',()=>
   assert.match(js,/beatsLink\.textContent = 'View Detected Beats/);
   assert.match(js,/stages\.source\.appendChild\(proceedRow\)/);
   assert.match(css,/#animation-panel-audio \.animation-audio-preview-placeholder\[hidden\]/);
+  assert.match(css,/#animation-panel-audio \.motion-studio-stage \{\s*display:flex;\s*flex-direction:column/);
+  assert.match(css,/#animation-panel-audio \.motion-studio-analysis-result\[hidden\]/);
 });
