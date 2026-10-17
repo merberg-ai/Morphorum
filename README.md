@@ -69,19 +69,19 @@ The main navigation offers **Project Manager**, **New Project**, and **Project E
 
 **Motion Lab → Motion Studio** guides you through **Load Audio → Analyze WAV → Detect Beats → Assign Motion to Beats → Create Motion → Preview & Apply**. Beat-cue selections support bulk cleanup and undo before saving cues. The active project soundtrack may be reused for analysis and attached to future renders, but old render soundtracks are not rewritten; a past silent render must be regenerated to include subsequently attached audio. See [Motion Studio](docs/MOTION_STUDIO.md) for details.
 
-**Release/testing note:** Windows owner testing has confirmed successful animation generation and an MP4 with audio. Dedicated physical mobile acceptance is deferred, and the remaining P5 soundtrack-provenance, operation-feedback, unit consistency and closeout phases are not yet complete. This remains alpha software.
+**Release/testing note (October 2026):** Windows owner testing has confirmed successful animation generation and an MP4 with audio, plus acceptance of the G5 SDXL integration milestone (samplers and schedules, chunked prompt conditioning, LoRA verification, and diagnostics). Dedicated physical mobile acceptance is deferred, and remaining P5 work is tracked separately. This remains alpha software. See [SDXL generation](docs/SDXL_GENERATION.md) and [testing history](docs/TESTING.md).
 
 ## What can Morphorum do?
 
 | Feature | What it provides |
 | --- | --- |
-| Image Generation | Text-to-image and supported image-to-image generation, model-aware presets, seeds, batches and progress |
-| Models & LoRAs | Managed Z-Image-Turbo installation, external SDXL/FLUX folders, model-aware LoRA discovery |
+| Image Generation | Text-to-image and supported image-to-image generation, model-aware presets, seeds, batches and progress; SDXL sampler/schedule controls, long positive/negative prompt chunking and conditioning diagnostics |
+| Models & LoRAs | Managed Z-Image-Turbo installation, external SDXL/FLUX folders, model-aware LoRA discovery, SDXL adapter integrity checks and verification status |
 | First-Run Setup Wizard | Seven guided installation checks, optional Z-Image download, and two short 3D starter projects |
 | New Project Wizard | Seven guided pages from naming and model selection to motion, prompts and saving |
 | Motion Lab | Camera authoring, read-only project overview, guided preview/apply/save/render/export flow, six-axis composer, live recording, curves and previews |
 | Motion Studio | Guided six-stage WAV workflow, beat detection, batch beat-cue assignments and cleanup, frequency channels, continuous presets, preview and apply |
-| Animation & Outputs | Frame rendering, progress monitoring, completed-frame previews, MP4/WebM export with FFmpeg |
+| Animation & Outputs | Frame rendering, progress monitoring, SDXL long-prompt blending/cache telemetry, completed-frame previews, MP4/WebM export with FFmpeg |
 | FFmpeg Manager | Auto-detect host FFmpeg/FFprobe, choose a custom executable, or opt in to a verified local managed download, update and removal |
 | Import Motion Settings | Compatible Deforum Motion Studio camera schedules, optional soundtrack attachment |
 | Interface | Responsive browser layout, built-in console and telemetry, themes: **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite** |
