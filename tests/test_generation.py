@@ -495,6 +495,27 @@ def test_sdxl_karras_scheduler_configuration() -> None:
     assert pipe.scheduler.config.use_karras_sigmas is False
 
 
+def test_sdxl_exponential_and_beta_scheduler_configurations() -> None:
+    from diffusers import EulerDiscreteScheduler
+
+    class FakePipe:
+        def __init__(self) -> None:
+            self.scheduler = EulerDiscreteScheduler()
+
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    for schedule, flag in (
+        ("exponential", "use_exponential_sigmas"),
+        ("beta", "use_beta_sigmas"),
+    ):
+        manager._configure_sampler(pipe, "sdxl", "euler", schedule)
+        assert getattr(pipe.scheduler.config, flag) is True
+    manager._configure_sampler(pipe, "sdxl", "euler", "normal")
+    assert pipe.scheduler.config.use_exponential_sigmas is False
+    assert pipe.scheduler.config.use_beta_sigmas is False
+
+
 def test_non_sdxl_schedule_setting_does_not_change_flowmatch_scheduler() -> None:
     from diffusers import FlowMatchEulerDiscreteScheduler
 
