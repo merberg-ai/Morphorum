@@ -1368,6 +1368,13 @@
             </select>
             <button class="secondary-button compact" type="button" id="model-filters-clear">Clear Filters</button>
           </div>
+          <div class="model-bulk-toolbar">
+            <button type="button" class="secondary-button compact" id="model-select-visible">Select visible</button>
+            <button type="button" class="secondary-button compact" id="model-clear-selected">Clear selection</button>
+            <button type="button" class="secondary-button compact busy-button" id="model-bulk-identify" disabled>Identify Selected (0)</button>
+            <button type="button" class="secondary-button compact busy-button" id="model-bulk-updates" disabled>Check Updates (0)</button>
+            <span id="model-bulk-status" role="status" aria-live="polite" class="muted">0 selected</span>
+          </div>
           <div id="model-list" class="model-list">
             <div class="model-empty"><span class="large-spinner"></span><span>Loading model index…</span></div>
           </div>
