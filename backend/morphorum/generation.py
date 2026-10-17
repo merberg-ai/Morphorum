@@ -2287,6 +2287,12 @@ class GenerationManager:
         # The normal loader may have injected the UNet and/or first text
         # encoder before the rank error. Remove that partial adapter first.
         cls._delete_pipeline_adapter(pipe, adapter_name)
+        remaining = cls._pipeline_adapter_names(pipe)
+        if remaining is not None and adapter_name in remaining:
+            raise GenerationError(
+                f"SDXL adapter {adapter_name} was still registered after cleanup; "
+                "refusing to inject new weights into stale PEFT state."
+            )
         if unet_state:
             kwargs = {
                 "state_dict": state_dict,
@@ -2554,6 +2560,11 @@ class GenerationManager:
                             pipe, path, adapter_name
                         )
                     except Exception as full_exc:
+                        if "checkpoint value mismatch" in str(full_exc) or "checkpoint tensor" in str(full_exc):
+                            raise GenerationError(
+                                f"SDXL LoRA '{path.name}' failed strict checkpoint "
+                                f"verification: {full_exc}"
+                            ) from full_exc
                         try:
                             diagnostics = self._load_sdxl_unet_only_adapter(
                                 pipe, path, adapter_name
