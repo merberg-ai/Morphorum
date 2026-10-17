@@ -621,7 +621,12 @@
     const soundtrack = audio.soundtrack || audio.source || animation.soundtrack || '';
     const soundtrackName = typeof soundtrack === 'string' ? soundtrack.split(/[\\/]/).pop() :
       (soundtrack?.filename || soundtrack?.name || 'Not attached');
+    const appliedLayers = Array.isArray(project.motion_lab?.layers) ? project.motion_lab.layers : [];
     const draftCount = Array.isArray(motionLabDraftLayers) ? motionLabDraftLayers.length : 0;
+    const unappliedCount = motionLabProjectId === project.id &&
+      JSON.stringify(motionLabDraftLayers) !== JSON.stringify(appliedLayers) ? draftCount : 0;
+    const motionStatus = unappliedCount ? unappliedCount + ' draft layer(s) differ from the last applied camera schedule' :
+      draftCount ? draftCount + ' layer(s) match the last applied Motion Lab state' : 'No Motion Lab draft layers';
     const grid = document.createElement('div');
     grid.className = 'animation-p5-summary-grid';
     grid.append(
@@ -631,7 +636,7 @@
       field('Timeline', frameCount > 0 ? frameCount + ' frames' + (fps > 0 ? ' · ' + fps + ' FPS · ' + (frameCount / fps).toFixed(2) + ' s' : '') : 'Not configured'),
       field('Camera', animationMode().toUpperCase()),
       field('Checkpoint', model?.name || (modelId ? 'Saved model unavailable in index' : 'Not selected')),
-      field('Motion Lab draft', draftCount + ' unapplied layer' + (draftCount === 1 ? '' : 's')),
+      field('Motion Lab draft', motionStatus),
       field('Saved camera schedule', 'Separate from Motion Lab draft; inspect in Project Editor'),
       field('Export soundtrack', soundtrackName && soundtrackName !== 'Not attached' ? soundtrackName : 'See Sources & Media (not verified here)'),
       field('Analysis audio', 'Separate from attached export soundtrack; inspect in Motion Studio')
@@ -669,9 +674,9 @@
     const notice = document.createElement('p');
     notice.className = 'animation-p52-notice';
     notice.setAttribute('role', 'status');
-    notice.textContent = (draftCount
-      ? draftCount + ' unapplied motion layer(s). Rendering does not include these drafts until Apply to Animation. '
-      : 'No unapplied Motion Lab layers are currently listed. ') +
+    notice.textContent = (unappliedCount
+      ? unappliedCount + ' draft motion layer(s) differ from the applied camera schedule. Apply before rendering to include these changes. '
+      : 'No unapplied Motion Lab changes detected. ') +
       (state.dirty ? 'Project Editor has unsaved changes. Review and save before rendering.' :
         'Project Editor reports no unsaved changes.');
     workflow.append(notice);
@@ -680,7 +685,7 @@
     const actions = [
       ['1. Preview draft', 'Inspect camera motion temporarily. Does not update the project.', '[data-motion-nav="preview"]'],
       ['2. Apply motion', 'Apply draft layers to the animation camera tracks. Review the resulting schedules before saving.', '[data-motion-nav="composer"]'],
-      ['3. Save project', 'Persist your current Editor changes. A preview alone is never saved.', '[data-project-nav="editor"]'],
+      ['3. Save project', 'Save current Editor changes directly. A preview alone is never saved.', '#animation-save'],
       ['4. Render animation', 'Generate frames using the project camera schedule, not unapplied drafts.', '[data-motion-nav="monitor"]'],
       ['5. Export video', 'Encode completed render frames as video. Audio inclusion depends on that render’s soundtrack snapshot.', '[data-motion-nav="outputs"]']
     ];
@@ -691,9 +696,9 @@
       action.type = 'button';
       action.className = 'secondary-button compact';
       action.textContent = label;
-      action.disabled = !destination;
+      action.disabled = !destination || (selector === '#animation-save' && (destination.disabled || !state.project || state.loading));
       action.title = destination ? 'Open existing controls' : 'Workspace unavailable';
-      action.addEventListener('click', () => destination?.click());
+      action.addEventListener('click', () => { if (!destination) return; if (selector === '#animation-save' && (destination.disabled || !state.project || state.loading)) return; destination.click(); });
       const detail = document.createElement('p');
       detail.textContent = explanation;
       item.append(action, detail);
