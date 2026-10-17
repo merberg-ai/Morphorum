@@ -1531,6 +1531,7 @@ class AnimationRenderManager:
         pipe = None
         generator_device = "cpu"
         conditioning_cache: dict[tuple[Any, ...], Any] = {}
+        conditioning_cache_stats: dict[str, int] = {"hits": 0, "misses": 0}
         lora_records: list[dict[str, Any]] | None = None
         positive_prompts = project.get("prompts", {})
         if any(
@@ -1755,6 +1756,7 @@ class AnimationRenderManager:
                         }
                     ),
                     lora_signature=_resolved_lora_signature(resolved),
+                    cache_stats=conditioning_cache_stats if family == "sdxl" else None,
                 )
                 call_args.update(conditioning)
                 if family == "sdxl":
@@ -1864,6 +1866,8 @@ class AnimationRenderManager:
                 return
 
             frame_started = time.monotonic()
+            cache_hits_before = conditioning_cache_stats["hits"]
+            cache_misses_before = conditioning_cache_stats["misses"]
             timings: dict[str, float] = {}
             resolve_started = time.monotonic()
             resolved = resolve_project_frame(project, frame, lora_records=lora_records)
@@ -2164,6 +2168,7 @@ class AnimationRenderManager:
                         }
                     ),
                     lora_signature=_resolved_lora_signature(resolved),
+                    cache_stats=conditioning_cache_stats if family == "sdxl" else None,
                 )
                 timings["conditioning"] = max(
                     0.0,
@@ -2331,6 +2336,8 @@ class AnimationRenderManager:
                 cuda_after=memory,
                 model_status=pipeline_status,
                 conditioning_cache_entries=len(conditioning_cache),
+                conditioning_cache_hits=conditioning_cache_stats["hits"] - cache_hits_before,
+                conditioning_cache_misses=conditioning_cache_stats["misses"] - cache_misses_before,
                 phase_memory=phase_memory,
             )
             performance_tracker.observe(record)
