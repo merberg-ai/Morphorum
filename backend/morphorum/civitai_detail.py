@@ -63,7 +63,7 @@ def model_details(model_id: int, *, client: httpx.Client | None = None) -> dict[
                 if not isinstance(file, dict):
                     continue
                 hashes = file.get("hashes") if isinstance(file.get("hashes"), dict) else {}
-                files.append({"name": str(file.get("name") or "")[:180], "size_kb": file.get("sizeKB"),
+                files.append({"id": file.get("id"), "name": str(file.get("name") or "")[:180], "size_kb": file.get("sizeKB"),
                               "format": str((file.get("metadata") or {}).get("format") or "")[:40] if isinstance(file.get("metadata"), dict) else "",
                               "sha256": str(hashes.get("SHA256") or "")[:64]})
             base = str(version.get("baseModel") or "")[:100]
