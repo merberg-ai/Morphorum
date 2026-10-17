@@ -69,6 +69,22 @@ separate, explicit authorization.** Next development phase: P4.
 - [ ] **CI verification:** syntax/frontend and backend workflows on current
   dev head; do not equate a source-level test with physical browser acceptance.
 
+### UX2.4 · Promote project workspaces to main navigation
+
+- [ ] Move **Project Manager**, **New Project Wizard**, and **Project Editor** out of the Motion Lab submenu and expose them as first-class main-menu destinations. Leave Motion Lab / Motion Studio focused on camera motion and audio-driven animation.
+- [ ] Retain the existing project selection, unsaved-edit prompts, wizard progress, project restore, deep links, back navigation, keyboard/phone access, and setup shortcuts. Move/reparent existing workspaces instead of cloning form controls or modifying project data.
+- [ ] Update labels, wayfinding and documentation so users can go directly to project creation and management without entering Motion Lab. Regression-check open projects, draft edits, active renders, and navigation on desktop and mobile.
+
+### UX2.5 · Safe bulk project trash (Project Manager)
+
+- [ ] Add accessible multi-select (checkboxes), **Select All Visible**, **Clear Selection**, and a selected-count action bar with **Move Selected to Trash**. Filters/search/pagination must not silently include hidden projects; use stable project IDs rather than row positions.
+- [ ] Reuse existing single-project trash semantics and backend safeguards. Batch operation must **move to trash, not permanently delete**. Clearly distinguish active/current projects, in-progress renders, unsaved edits and already-trashed items; exclude or explain blocked selections.
+- [ ] Show one confirmation with exact selected count and names (or a concise preview for large batches). Display per-project success/failure, partial results and updated selection. Do not claim all succeeded when any failed.
+- [ ] Provide trash restore via the existing workflow where supported. Define atomicity/rate limits and safe retry/idempotency before implementation; never delete on selection alone.
+- [ ] Test filtered and paginated selections, mixed permitted/blocked items, failed requests, network interruption, active project, keyboard/mobile layout, and restore. No permanent-delete endpoint may be invoked by the bulk action.
+
+**Sequencing:** implement UX2.4 navigation and UX2.5 bulk trash before UX3 Editor grouping; then complete UX4/UX5 and resume P5. These are roadmap additions only, not implemented or accepted.
+
 ### UX3–UX5 · next after acceptance
 
 - [ ] **UX3:** Split Project Editor into Setup, Sources & Media,
