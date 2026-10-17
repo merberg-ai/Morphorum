@@ -47,6 +47,18 @@ separate, explicit authorization.** Next development phase: P4.
   persistent browser-only stage/mode preferences, current-stage statuses,
   Previous/Next controls and responsive compact/mobile styling.
 - [x] Add frontend regression tests and update Motion Studio documentation.
+- [x] **UX2.1 Windows feedback regression fix (2026-10-16):** owner confirmed
+  overall stage layout is better, but reported Analyze WAV appeared inert,
+  no beat-action button was visible, and Additional envelope diagnostics was
+  blank. Moved live analysis feedback out of hidden Single-Band Pulse panel,
+  added explicit progress/errors/blocked-state hints near Analyze, a
+  **View Detected Beats** action in Step 2, **Show Detected Beats** in Step 3,
+  and a Continue-to-Analyze action in Step 1. The analyzer already produces
+  event candidates; viewing them does not re-run a destructive detector.
+  Envelope diagnostics now explain missing/misaligned data and show the graph
+  when aligned, while the empty preview placeholder is explicitly hidden
+  after analysis. Added simulated success/failure/no-source and SVG regression
+  tests. **Owner must retest before closing UX1/UX2.**
 - [ ] **Owner Windows physical acceptance:** fresh WAV Analyze, saved-project
   soundtrack restoration, waveform Seek/Zoom/Play, marker drag/add/save,
   cue editing/Find Beats/save, independent channels, continuous preset without
