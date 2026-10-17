@@ -52,3 +52,13 @@
 .project-nav-submenu button:hover, .project-nav-submenu button.active { background: rgba(65,217,255,.11); color: var(--text); }
 .project-nav-chevron { margin-left: auto; }
 @media(max-width: 640px) { .civitai-detail-dialog { padding: 14px; } .civitai-detail-images { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+#motion-lab-sidebar[hidden] { display: none !important; }
+.civitai-download-manager { margin: 24px 0; border: 1px solid var(--border); border-radius: 13px; padding: 14px; background: rgba(255,255,255,.025); }
+.civitai-download-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.civitai-download-heading h3 { margin:0; }
+.civitai-download-job { display:flex; flex-wrap:wrap; align-items:center; gap:12px; border-top:1px solid var(--border); padding:12px 0; }
+.civitai-download-job strong { overflow-wrap:anywhere; flex:1 1 220px; }
+.civitai-download-progress { width:100%; height:8px; appearance:none; }
+.civitai-detail-files button { margin:5px 0 12px; }
+.civitai-detail-description { max-width:72ch; line-height:1.7; padding:14px 16px; background:rgba(255,255,255,.035); border-left:3px solid var(--accent); border-radius:8px; white-space:normal; }
