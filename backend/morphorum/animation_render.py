@@ -40,7 +40,7 @@ from .animation_performance import (
 )
 from .imported_soundtrack import ImportedSoundtrackError, freeze_soundtrack
 from .console import emit_console
-from .generation import GenerationError, GenerationRequest, generation_manager
+from .generation import GenerationError, GenerationRequest, GenerationManager, generation_manager
 from .loras import lora_catalog
 from .model_index import get_model
 from .paths import OUTPUTS_DIR
@@ -1700,7 +1700,7 @@ class AnimationRenderManager:
                 )
                 call_args.update(conditioning)
                 if family == "sdxl":
-                    call_args = generation_manager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
+                    call_args = GenerationManager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
                     if call_args.get("prompt_embeds") is not None:
                         shape = tuple(call_args["prompt_embeds"].shape)
                         mode = "CHUNKED / BLENDED" if shape[1] > 77 else "BLENDED / EMBEDDED"
@@ -2108,7 +2108,7 @@ class AnimationRenderManager:
                 phase_memory["post_conditioning"] = generation_manager.cuda_memory_status()
                 call_args.update(conditioning)
                 if family == "sdxl":
-                    call_args = generation_manager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
+                    call_args = GenerationManager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
                     if frame == 3 or (frame % 60 == 0):
                         shape = (
                             tuple(call_args["prompt_embeds"].shape)
