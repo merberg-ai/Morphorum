@@ -15,7 +15,7 @@ The repository runs four complementary checks:
 
 See the current results under [Actions](https://github.com/merberg-ai/Morphorum/actions). Passing CI does not replace physical GPU, browser, and remote-network testing for affected features.
 
-**SDXL G5 release gate:** follow the [Windows GPU acceptance matrix](G5_RELEASE_ACCEPTANCE.md). It specifies sampler/schedule combinations, long CLIP conditioning, LoRA loading, animation caching, FLUX/Z-Image smoke checks, and explicit owner approval before merge. The [SDXL user guide](SDXL_GENERATION.md) explains expected diagnostic messages. Installer checks run on pull requests, even when a source-only push to `dev-webui` did not trigger them.
+**SDXL G5 release history:** On 2026-10-17 the owner reported G5.5 Windows acceptance passed and explicitly approved merging the G1–G5 SDXL improvements. The release candidate's [draft PR #43](https://github.com/merberg-ai/Morphorum/pull/43) passed Backend, Syntax, and Installer checks; the final pre-promotion CI backend run had **848 passed, 1 skipped**. See the [acceptance matrix](G5_RELEASE_ACCEPTANCE.md) for repeatable test cases and known scope limits; individual W1–W11 outcomes were not supplied as separate test records. Passing CI does not prove GPU speed or pixel-level image quality. The [SDXL user guide](SDXL_GENERATION.md) explains expected diagnostics. Installer checks run on pull requests, even if a source-only `dev-webui` push does not trigger them.
 
 ## Run tests locally
 
