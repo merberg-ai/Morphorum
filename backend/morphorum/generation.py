@@ -281,6 +281,7 @@ class GenerationJob:
     average_step_seconds: float | None = None
     seeds: list[int] = field(default_factory=list)
     results: list[dict[str, Any]] = field(default_factory=list)
+    prompt_warnings: list[str] = field(default_factory=list)
     error: str | None = None
     cancel_requested: bool = False
     _started_monotonic: float | None = field(default=None, repr=False)
@@ -2772,17 +2773,21 @@ class GenerationManager:
         return diagnostics
 
     @classmethod
-    def _warn_sdxl_prompt_truncation(cls, pipe: Any, request: GenerationRequest) -> None:
+    def _warn_sdxl_prompt_truncation(cls, pipe: Any, request: GenerationRequest) -> list[str]:
+        notices: list[str] = []
         for info in cls._sdxl_prompt_token_diagnostics(pipe, request):
             if info["truncated"]:
-                emit_console(
-                    "warning", "generation",
+                notices.append(
                     f"SDXL {info['encoder']} {info['field']} prompt: "
                     f"{info['tokens']} tokens exceeds {info['limit']}. "
                     "Standard CLIP encoding truncates excess tokens; "
                     "move important details to the beginning. Long-prompt "
-                    "conditioning is not enabled yet.",
+                    "conditioning is not enabled yet."
                 )
+
+        for notice in notices:
+            emit_console("warning", "generation", notice)
+        return notices
 
     def _build_call_args(
         self,
@@ -2824,7 +2829,7 @@ class GenerationManager:
         )
         self.configure_loras(pipe, job.model, job.request.loras)
         if job.model["family"] == "sdxl":
-            self._warn_sdxl_prompt_truncation(pipe, job.request)
+            job.prompt_warnings = self._warn_sdxl_prompt_truncation(pipe, job.request)
         job.model_load_seconds = max(0.0, time.monotonic() - load_started)
         job._started_monotonic = time.monotonic()
         job._last_step_monotonic = None
