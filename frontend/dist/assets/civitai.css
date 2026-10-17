@@ -1,0 +1,31 @@
+/* C1.2 model discovery gallery */
+.civitai-browser { max-width: 1400px; margin-inline: auto; }
+.civitai-search-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.civitai-search-form label { display: flex; flex: 1 1 155px; flex-direction: column; gap: 6px; min-width: 0; font-size: .82rem; font-weight: 600; }
+.civitai-search-form .civitai-search-query { flex: 2 1 290px; }
+.civitai-search-form input, .civitai-search-form select { width: 100%; min-width: 0; max-width: 100%; height: 42px; }
+.civitai-search-action { display: flex; align-items: end; }
+.civitai-search-action button { min-height: 42px; }
+.civitai-result-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 24px 0 14px; color: var(--muted); }
+.civitai-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 225px), 1fr)); gap: 16px; }
+.civitai-model-card { min-width: 0; overflow: hidden; background: rgba(255,255,255,.035); border: 1px solid var(--border); border-radius: 15px; display: flex; flex-direction: column; }
+.civitai-model-preview { background: #161a23; aspect-ratio: 3/4; overflow: hidden; position: relative; }
+.civitai-model-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.civitai-preview-unavailable::after { content: 'No preview'; position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+.civitai-model-copy { padding: 14px; display: flex; flex: 1; flex-direction: column; gap: 7px; }
+.civitai-model-copy h3 { font-size: 1rem; line-height: 1.3; overflow-wrap: anywhere; margin: 0; }
+.civitai-model-copy p { margin: 0; font-size: .8rem; overflow-wrap: anywhere; }
+.civitai-type { color: var(--accent); text-transform: uppercase; font-size: .72rem; letter-spacing: .09em; font-weight: 700; }
+.civitai-view-link { align-self: flex-start; margin-top: auto; }
+.civitai-pagination { display: flex; justify-content: center; gap: 12px; padding-top: 22px; }
+.civitai-empty { grid-column: 1/-1; text-align: center; padding: 30px 12px; color: var(--muted); }
+.civitai-gallery.civitai-list { display: flex; flex-direction: column; }
+.civitai-list .civitai-model-card { flex-direction: row; }
+.civitai-list .civitai-model-preview { width: 140px; flex: 0 0 140px; aspect-ratio: 1; }
+@media(max-width: 640px) {
+  .civitai-search-form label, .civitai-search-form .civitai-search-query { flex-basis: 100%; }
+  .civitai-search-action, .civitai-search-action button { width: 100%; }
+  .civitai-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .civitai-model-copy { padding: 10px; }
+  .civitai-list .civitai-model-preview { width: 105px; flex-basis: 105px; }
+}
