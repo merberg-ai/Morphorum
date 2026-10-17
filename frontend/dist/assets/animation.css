@@ -4117,3 +4117,12 @@ dialog#animation-deforum-dialog {
 .animation-p5-summary-grid span { line-height: 1.4; }
 .animation-p5-summary-links { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
 .animation-p5-project-summary > p { margin: .85rem 0 0; }
+
+/* P5.2 overview workflow: navigation only, no duplicate action controls. */
+.animation-p52-workflow { border-top: 1px solid var(--border-color, rgba(180,190,210,.2)); margin-top: 1rem; padding-top: 1rem; }
+.animation-p52-workflow h3 { margin: 0 0 .6rem; }
+.animation-p52-notice { padding: .75rem; border: 1px solid var(--border-color, rgba(180,190,210,.25)); border-radius: 8px; line-height: 1.45; }
+.animation-p52-steps { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); gap: .75rem; }
+.animation-p52-steps > div { min-width: 0; padding: .75rem; border: 1px solid var(--border-color,rgba(180,190,210,.2)); border-radius: 8px; }
+.animation-p52-steps button { max-width: 100%; white-space: normal; text-align: left; }
+.animation-p52-steps p { margin: .5rem 0 0; font-size: .88rem; line-height: 1.45; overflow-wrap: anywhere; }
