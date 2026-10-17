@@ -542,10 +542,19 @@
     return `ETA ${hours}h ${minutes % 60}m`;
   }
 
+  function showImagePromptWarnings(job) {
+    const node = qs('#image-prompt-token-warning');
+    if (!node) return;
+    const warnings = Array.isArray(job.prompt_warnings) ? job.prompt_warnings : [];
+    node.hidden = !warnings.length;
+    node.textContent = warnings.join(' ');
+  }
+
   function updateProgress(job) {
     const panel = qs('#generation-progress');
     panel.hidden = false;
     const percent = Math.max(0, Math.min(100, Math.round((Number(job.progress) || 0) * 100)));
+    showImagePromptWarnings(job);
     qs('#generation-status').textContent = job.message || job.status;
     qs('#generation-percent').textContent = `${percent}%`;
     qs('#generation-progress-fill').style.width = `${percent}%`;
