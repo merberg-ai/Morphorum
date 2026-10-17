@@ -447,6 +447,66 @@ def test_sdxl_sampler_expansion_does_not_touch_flowmatch_families() -> None:
         }
 
 
+def test_sdxl_schedule_types_defaults_and_validation(tmp_path, monkeypatch) -> None:
+    checkpoint = tmp_path / "model.safetensors"
+    checkpoint.write_bytes(b"fake")
+    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint))
+    manager = GenerationManager()
+    assert manager.capabilities()["sdxl"]["schedule_types"] == {
+        "default": "normal",
+        "options": [
+            {"id": "normal", "label": "Normal"},
+            {"id": "karras", "label": "Karras"},
+        ],
+    }
+    legacy = GenerationRequest.from_payload({"model_id": "model-1", "prompt": "test"})
+    assert legacy.schedule_type == "normal"
+    manager._validate_request(legacy)
+    manager._validate_request(
+        GenerationRequest(model_id="model-1", prompt="test", schedule_type="karras")
+    )
+    with pytest.raises(GenerationError, match="Schedule Type"):
+        manager._validate_request(
+            GenerationRequest(model_id="model-1", prompt="test", schedule_type="unknown")
+        )
+    with pytest.raises(GenerationError, match="DDIM"):
+        manager._validate_request(
+            GenerationRequest(
+                model_id="model-1", prompt="test", sampler="ddim", schedule_type="karras"
+            )
+        )
+
+
+def test_sdxl_karras_scheduler_configuration() -> None:
+    from diffusers import EulerDiscreteScheduler
+
+    class FakePipe:
+        def __init__(self) -> None:
+            self.scheduler = EulerDiscreteScheduler()
+
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    manager._configure_sampler(pipe, "sdxl", "euler", "karras")
+    assert pipe.scheduler.config.use_karras_sigmas is True
+    manager._configure_sampler(pipe, "sdxl", "euler", "normal")
+    assert pipe.scheduler.config.use_karras_sigmas is False
+
+
+def test_non_sdxl_schedule_setting_does_not_change_flowmatch_scheduler() -> None:
+    from diffusers import FlowMatchEulerDiscreteScheduler
+
+    class FakePipe:
+        def __init__(self) -> None:
+            self.scheduler = FlowMatchEulerDiscreteScheduler()
+
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    manager._configure_sampler(pipe, "flux", "flowmatch_euler", "karras")
+    assert type(pipe.scheduler) is FlowMatchEulerDiscreteScheduler
+
+
 def test_flux_dev_and_schnell_capabilities_and_validation(tmp_path, monkeypatch) -> None:
     checkpoint = tmp_path / "flux1-dev.safetensors"
     checkpoint.write_bytes(b"fake")
