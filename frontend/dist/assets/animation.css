@@ -3953,3 +3953,50 @@ dialog#animation-deforum-dialog {
     min-height:44px;
   }
 }
+
+/* UX2.2: Screenshot regression. A step is ONE vertical workflow, not a
+   two-column stretched CSS grid. Never turn status text into a giant card. */
+#animation-panel-audio .motion-studio-stage {
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  gap:12px;
+  scroll-margin-top:160px;
+}
+#animation-panel-audio .motion-studio-stage > * {
+  flex:0 0 auto;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+#animation-panel-audio #motion-studio-stage-analysis .motion-studio-analysis-status {
+  min-height:0;
+  height:auto;
+  align-self:stretch;
+  width:100%;
+}
+#animation-panel-audio .motion-studio-analysis-result[hidden] {
+  display:none!important;
+}
+#animation-panel-audio #animation-audio-analysis-workspace {
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  width:100%;
+  max-width:100%;
+  align-self:stretch;
+}
+#animation-panel-audio #animation-audio-analysis-workspace > * {
+  min-width:0;
+  max-width:100%;
+}
+#animation-panel-audio .motion-studio-stage-nav {
+  scroll-margin-top:155px;
+}
+@media(max-width:720px) {
+  #animation-panel-audio .motion-studio-stage {scroll-margin-top:110px;}
+  #animation-panel-audio .motion-studio-stage-nav {scroll-margin-top:110px;}
+}
