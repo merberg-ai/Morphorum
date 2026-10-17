@@ -34,7 +34,7 @@ test('existing WAV, saved soundtrack and analyzer controls retain their IDs and 
   assert.match(js,/audioSourceDock\.appendChild\(details\)/);
   assert.match(js,/audioSourceDock\.appendChild\(audioActions\)/);
   assert.match(js,/modeAreas\.pulse\.appendChild\(actions\)/);
-  assert.match(js,/stages\.analysis\.insertBefore\(row, analysis\)/);
+  assert.match(js,/stages\.analysis\.insertBefore\(row, analysisStatus\)/);
   assert.match(js,/qs\('#animation-motion-lab-use-soundtrack'\)\?\.addEventListener/);
   assert.match(js,/qs\('#animation-motion-lab-analyze-audio'\)\?\.addEventListener/);
 });
