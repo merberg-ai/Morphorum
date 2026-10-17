@@ -1,7 +1,7 @@
 # P5 · Motion Lab Workflow Clarity
 
 **Branch:** `dev-webui`  
-**Status:** Planned, not yet implemented or accepted.  
+**Status:** P5.1 initial frontend implementation committed on `dev-webui`; Windows physical acceptance and CI pending. P5.2–P5.5 remain planned.  
 **Prerequisite:** UX5 Windows/GPU owner acceptance and green Syntax, Backend, Installer CI completed. Dedicated mobile physical testing explicitly deferred by owner and is not a P5 start blocker.  
 **Safety:** No merge to `main` without owner approval. Never silently save, overwrite, delete, or replace projects, original audio, generated PNGs, or exported videos.
 
@@ -57,3 +57,10 @@ Make the path from an opened project to camera preview, applied camera tracks, f
 ## Suggested sequence
 
 P5.1 → Windows checkpoint → P5.2 → Windows checkpoint → P5.3 → Windows checkpoint → P5.4 → combined P5.5 regression. Keep commits small and reversible; `main` remains unchanged.
+
+## P5.1 implementation checkpoint (2026-10-16)
+
+- Added a read-only Motion Lab Overview grid for current project, Editor save state, live dimensions/FPS/frames/duration, motion mode, checkpoint, and count of unapplied draft layers.
+- Added existing navigation shortcuts to Project Editor, Motion Studio, Camera Preview and Render Monitor. No project serialization, render API, applied schedules, or audio files were changed.
+- Soundtrack and analyzed WAV provenance are **not yet independently verified** by the overview. P5.3 will connect precise active-soundtrack and analyzed-WAV metadata rather than infer it from draft asset paths.
+- Browser/Windows, CI, keyboard, zoom and project-switch acceptance remain pending. Do not mark P5.1 accepted based on source changes alone.
