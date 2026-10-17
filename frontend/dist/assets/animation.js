@@ -1109,7 +1109,8 @@
     const previous = preferred || state.project?.generation?.schedule_type || 'normal';
     const options = Array.isArray(config.options) ? config.options : [];
     for (const option of options) {
-      if (selectedSampler === 'ddim' && option.id === 'karras') continue;
+      if (selectedSampler === 'ddim' && option.id !== 'normal') continue;
+      if (['exponential', 'beta'].includes(option.id) && !['euler', 'dpmpp_2m', 'dpmpp_2m_sde', 'unipc'].includes(selectedSampler)) continue;
       select.add(new Option(option.label || option.id, option.id));
     }
     if (options.length) {
