@@ -99,3 +99,23 @@ No downloads or model modifications occur in C1.3. Runtime/CI and physical Windo
 7. Disable Civitai Hub while a job is active; verify transfer stops and existing local models remain usable.
 
 **Implementation committed; automated execution and Windows physical tests not yet performed.** Do not merge before verifying C2.1.
+
+## C2.2: Resumable persistent download jobs (awaiting Windows testing)
+
+- Queue metadata is saved atomically under `data/civitai-downloads.json`; incomplete jobs become **interrupted** on process restart rather than restarting without user consent.
+- **Resume** is offered for failed and interrupted jobs. Partial bytes are preserved. The backend sends an HTTP Range request, insists on a matching 206 Content-Range, and refuses to append if a server ignores the range.
+- Download concurrency is bounded at **1–3** by Settings → Civitai Hub. Downloads are published only after the complete transfer and optional SHA-256 verification.
+- Disk space is checked before enqueue and when resuming, retaining a 256 MiB safety reserve. Jobs always use host-configured destination folders and never overwrite existing models.
+- Explicit **Cancel** removes partial data; disabling the Hub halts active transfers as chunks arrive. The queue is intentionally not auto-resumed on startup.
+- UI offers Resume, Cancel, a per-job progress bar, status and failure information; existing polling/toast behavior is retained.
+- Resume depends on Civitai/CDN byte-range support. When unsupported, the partial file is preserved with a useful error; a fresh-download reset mechanism is deferred.
+
+### C2.2 physical acceptance
+1. Set concurrency to 2, queue two small compatible LoRAs, and confirm simultaneous progress.
+2. Interrupt Morphorum during a download, restart, and confirm an **interrupted** job, preserved bytes, and an explicit Resume action.
+3. Verify a resumed download completes with the correct checksum and appears in Models/LoRAs.
+4. Test Cancel of a partial job and check the partial file is gone.
+5. Attempt a download with insufficient free disk space or an existing destination; confirm rejection.
+6. Disable the Hub during an active transfer, confirm it stops and local generation is unaffected.
+
+**Code committed, not yet runtime/Windows verified. Do not merge to main before acceptance.**
