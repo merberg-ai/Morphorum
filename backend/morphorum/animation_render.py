@@ -1686,6 +1686,8 @@ class AnimationRenderManager:
                     lora_signature=_resolved_lora_signature(resolved),
                 )
                 call_args.update(conditioning)
+                if family == "sdxl":
+                    call_args = generation_manager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
 
                 with torch.inference_mode():
                     result = pipe(**call_args)
@@ -2084,6 +2086,8 @@ class AnimationRenderManager:
                 )
                 phase_memory["post_conditioning"] = generation_manager.cuda_memory_status()
                 call_args.update(conditioning)
+                if family == "sdxl":
+                    call_args = generation_manager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
 
                 diffusion_started = time.monotonic()
                 with torch.inference_mode():
