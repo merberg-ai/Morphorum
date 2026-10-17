@@ -643,6 +643,7 @@ def compile_motion_lab(
             raise MotionLabError(f"Cannot resolve base camera {axis}: {exc}") from exc
         if not all(math.isfinite(x) for x in signals[axis]):
             raise MotionLabError(f"Base camera {axis} contains invalid values.")
+    base_signals = {axis: samples[:] for axis, samples in signals.items()}
     for layer in lab["layers"]:
         if not layer["enabled"]:
             continue
@@ -674,6 +675,31 @@ def compile_motion_lab(
         limit = lab["limits"][axis]
         limited[axis] = sum(1 for v in samples if abs(v) > limit)
         signals[axis] = [max(-limit, min(limit, v)) for v in samples]
+    # Generated Motion Lab layers must not create hazardous scene translation
+    # even if a project's configurable limits were raised. Protect any
+    # intentionally hand-edited base schedule: only constrain the additional
+    # displacement introduced by this compilation.
+    generated_safety_limited: dict[str, int] = {}
+    for axis in ("translation_x", "translation_y", "translation_z"):
+        safe_limit = 0.08  # native scene units per rendered frame
+        samples = signals[axis]
+        baseline = base_signals[axis]
+        adjusted = []
+        capped = 0
+        for value, original in zip(samples, baseline):
+            if abs(original) <= safe_limit:
+                safe_value = max(-safe_limit, min(safe_limit, value))
+            else:
+                # Preexisting risky camera tracks are not rewritten.
+                safe_value = max(min(value, abs(original)), -abs(original))
+                if value * original < 0:
+                    safe_value = 0.0
+            if abs(safe_value - value) > 1e-12:
+                capped += 1
+            adjusted.append(safe_value)
+        signals[axis] = adjusted
+        if capped:
+            generated_safety_limited[axis] = capped
     tracks = project["tracks"]["camera_3d"]
     applied = {}
     for axis, samples in signals.items():
@@ -690,6 +716,7 @@ def compile_motion_lab(
         "camera_changed": camera_changed,
         "rebased": camera_changed and conflict_policy == "use-current",
         "limited": {axis: count for axis, count in limited.items() if count},
+        "generated_safety_limited": generated_safety_limited,
         "samples": [
             {"frame": frame, **{axis: signals[axis][frame] for axis in AXES}}
             for frame in sorted(set([0, count - 1] + list(range(0, count, max(1, count // 36)))))
