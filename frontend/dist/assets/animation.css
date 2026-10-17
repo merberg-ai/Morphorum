@@ -4042,3 +4042,30 @@ dialog#animation-deforum-dialog {
   #animation-editor-group-nav {display:grid; grid-template-columns:repeat(2,minmax(0,1fr));}
   #animation-editor-group-nav .animation-editor-group-button {width:100%;}
 }
+
+/* UX3 hotfix: the original Editor layout is a two-column grid. Section
+   wrappers must occupy its full track or each card collapses to min-content. */
+#animation-panel-editor > .animation-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+}
+#animation-panel-editor .animation-layout > .animation-editor-group {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+#animation-panel-editor .animation-editor-group-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+#animation-panel-editor .animation-editor-group-cards > article.card {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
