@@ -4000,3 +4000,25 @@ dialog#animation-deforum-dialog {
   #animation-panel-audio .motion-studio-stage {scroll-margin-top:110px;}
   #animation-panel-audio .motion-studio-stage-nav {scroll-margin-top:110px;}
 }
+
+/* UX2.5: bulk selection must remain usable on narrow and enlarged displays. */
+.animation-project-manager-bulk-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; margin: .7rem 0;
+}
+.animation-project-manager-select-row {
+  display: flex; align-items: stretch; min-width: 0; gap: .5rem;
+}
+.animation-project-manager-select-label {
+  display: flex; align-items: center; justify-content: center; flex: 0 0 2.3rem;
+  cursor: pointer;
+}
+.animation-project-manager-select-label input[type="checkbox"] {
+  width: 1.1rem; height: 1.1rem; cursor: pointer;
+}
+.animation-project-manager-select-row > .animation-project-manager-item {
+  flex: 1 1 0; min-width: 0; text-align: left;
+}
+@media (max-width: 560px) {
+  .animation-project-manager-bulk-actions > button { flex: 1 1 auto; }
+  .animation-project-manager-bulk-actions #animation-project-manager-bulk-trash { flex-basis: 100%; }
+}
