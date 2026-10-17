@@ -514,7 +514,54 @@
       } catch (error) { toast('Update check failed', error.message, 'error'); }
       finally { update.disabled = false; update.classList.remove('busy'); update.textContent = 'Check Updates'; }
     });
-    row.append(nameWrap, family, kind, pathDetails, size, action, identify, update);
+    const sync = document.createElement('button');
+    sync.type = 'button';
+    sync.className = 'secondary-button compact busy-button';
+    sync.textContent = 'Sync Civitai Info';
+    sync.title = 'Explicitly cache verified Civitai metadata and an optional preview.';
+    const metadataResult = document.createElement('div');
+    metadataResult.className = 'model-civitai-metadata';
+    nameWrap.append(metadataResult);
+    const showMetadata = data => {
+      metadataResult.replaceChildren();
+      if (!data?.synced) return;
+      const title = document.createElement('strong');
+      title.textContent = 'Cached: ' + (data.name || model.name) + ' · ' + (data.version || '');
+      metadataResult.append(title);
+      const line = document.createElement('div');
+      line.textContent = [data.creator, data.base_model, data.synced_at ? 'Synced ' + new Date(data.synced_at).toLocaleDateString() : ''].filter(Boolean).join(' · ');
+      metadataResult.append(line);
+      if (data.preview) {
+        const image = document.createElement('img');
+        image.className = 'model-civitai-thumbnail';
+        image.src = '/api/civitai/library/' + encodeURIComponent(model.id) + '/preview';
+        image.alt = 'Cached Civitai preview for ' + model.name;
+        image.loading = 'lazy';
+        metadataResult.append(image);
+      }
+      if (data.trained_words?.length) {
+        const words = document.createElement('div');
+        words.textContent = 'Triggers: ' + data.trained_words.slice(0, 8).join(', ');
+        metadataResult.append(words);
+      }
+    };
+    sync.addEventListener('click', async () => {
+      sync.disabled = true;
+      sync.classList.add('busy');
+      sync.textContent = 'Syncing…';
+      try {
+        const response = await fetch('/api/civitai/library/' + encodeURIComponent(model.id) + '/sync', {method:'POST'});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Metadata sync failed');
+        showMetadata(data);
+        toast('Civitai metadata cached', model.name + ' metadata saved to Morphorum cache.', 'success');
+      } catch (error) { toast('Metadata sync failed', error.message, 'error'); }
+      finally { sync.disabled = false; sync.classList.remove('busy'); sync.textContent = 'Sync Civitai Info'; }
+    });
+    fetch('/api/civitai/library/' + encodeURIComponent(model.id))
+      .then(async response => response.ok ? response.json() : null)
+      .then(showMetadata).catch(() => {});
+    row.append(nameWrap, family, kind, pathDetails, size, action, identify, update, sync);
     return row;
   }
 
