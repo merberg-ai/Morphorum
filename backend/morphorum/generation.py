@@ -2825,6 +2825,45 @@ class GenerationManager:
             emit_console("warning", "generation", notice)
         return notices
 
+    @staticmethod
+    def apply_sdxl_long_prompt_conditioning(
+        pipe: Any, call_args: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Replace only overflowing SDXL string prompts with explicit CLIP embeddings."""
+        if call_args.get("prompt_embeds") is not None:
+            return call_args
+        if not all(
+            getattr(pipe, name, None) is not None
+            for name in ("tokenizer", "tokenizer_2", "text_encoder", "text_encoder_2")
+        ):
+            return call_args
+        from .sdxl_prompt_chunks import encode_sdxl_long_prompts, plan_clip_chunks
+
+        prompt = str(call_args.get("prompt") or "")
+        negative = str(call_args.get("negative_prompt") or "")
+        overflow = any(
+            plan_clip_chunks(tokenizer, value).overflow
+            for tokenizer in (pipe.tokenizer, pipe.tokenizer_2)
+            for value in (prompt, negative)
+            if value
+        )
+        if not overflow:
+            return call_args
+        do_cfg = float(call_args.get("guidance_scale", 7.5)) > 1.0
+        with __import__("torch").no_grad():
+            pos, neg, pooled, neg_pooled = encode_sdxl_long_prompts(
+                pipe, prompt, negative, do_classifier_free_guidance=do_cfg,
+            )
+        result = dict(call_args)
+        result["prompt"] = None
+        result["negative_prompt"] = None
+        result["prompt_embeds"] = pos
+        result["pooled_prompt_embeds"] = pooled
+        if do_cfg:
+            result["negative_prompt_embeds"] = neg
+            result["negative_pooled_prompt_embeds"] = neg_pooled
+        return result
+
     def _build_call_args(
         self,
         job: GenerationJob,
@@ -2933,6 +2972,8 @@ class GenerationManager:
                 return callback_kwargs
 
             call_args = self._build_call_args(job, generator, on_step_end)
+            if job.model["family"] == "sdxl":
+                call_args = self.apply_sdxl_long_prompt_conditioning(pipe, call_args)
 
             with torch.inference_mode():
                 result = pipe(**call_args)
