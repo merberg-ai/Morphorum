@@ -581,8 +581,89 @@
     button.disabled = busy;
   }
 
+  // P5.1: read-only overview. This never applies drafts or saves projects.
+  function renderMotionProjectSummary() {
+    const intro = qs('#animation-motion-lab-intro');
+    if (!intro) return;
+    let summary = qs('#animation-p5-project-summary');
+    if (!summary) {
+      summary = document.createElement('section');
+      summary.id = 'animation-p5-project-summary';
+      summary.className = 'animation-p5-project-summary';
+      summary.setAttribute('aria-label', 'Current project and motion status');
+      const heading = intro.querySelector('.animation-motion-lab-heading');
+      if (heading) heading.insertAdjacentElement('afterend', summary);
+      else intro.prepend(summary);
+    }
+    const project = state.project;
+    const field = (label, value) => {
+      const el = document.createElement('div');
+      const term = document.createElement('strong');
+      const detail = document.createElement('span');
+      term.textContent = label;
+      detail.textContent = value;
+      el.append(term, detail);
+      return el;
+    };
+    summary.replaceChildren();
+    if (!project) {
+      summary.append(field('Project', 'No project open. Open or create a project to view its motion status.'));
+      return;
+    }
+    const animation = project.animation || {};
+    const frameCount = Number(animation.max_frames || 0);
+    const fps = Number(animation.fps || project.fps || 0);
+    const width = Number(animation.width || project.width || 0);
+    const height = Number(animation.height || project.height || 0);
+    const modelId = qs('#animation-model')?.value || project.model?.model_id || '';
+    const model = state.models.find(item => item.id === modelId && item.kind === 'checkpoints');
+    const audio = project.audio || animation.audio || {};
+    const soundtrack = audio.soundtrack || audio.source || animation.soundtrack || '';
+    const soundtrackName = typeof soundtrack === 'string' ? soundtrack.split(/[\\/]/).pop() :
+      (soundtrack?.filename || soundtrack?.name || 'Not attached');
+    const draftCount = Array.isArray(motionLabDraftLayers) ? motionLabDraftLayers.length : 0;
+    const grid = document.createElement('div');
+    grid.className = 'animation-p5-summary-grid';
+    grid.append(
+      field('Project', qs('#animation-name')?.value?.trim() || project.name || 'Untitled Animation'),
+      field('Editor', state.dirty ? 'Unsaved changes' : 'No unsaved Editor changes'),
+      field('Output', width > 0 && height > 0 ? width + ' × ' + height + ' px' : 'Not configured'),
+      field('Timeline', frameCount > 0 ? frameCount + ' frames' + (fps > 0 ? ' · ' + fps + ' FPS · ' + (frameCount / fps).toFixed(2) + ' s' : '') : 'Not configured'),
+      field('Camera', String(animation.mode || animation.animation_mode || 'Not specified').toUpperCase()),
+      field('Checkpoint', model?.name || (modelId ? 'Saved model unavailable in index' : 'Not selected')),
+      field('Motion Lab draft', draftCount + ' unapplied layer' + (draftCount === 1 ? '' : 's')),
+      field('Saved camera schedule', 'Separate from Motion Lab draft; inspect in Project Editor'),
+      field('Export soundtrack', soundtrackName || 'Not attached'),
+      field('Analysis audio', 'Separate from attached export soundtrack; inspect in Motion Studio')
+    );
+    summary.append(grid);
+    const help = document.createElement('p');
+    help.className = 'muted';
+    help.textContent = 'Read-only overview. Preview does not apply motion, Apply does not save the project, and Render uses the project schedule.';
+    summary.append(help);
+    const links = document.createElement('div');
+    links.className = 'animation-p5-summary-links';
+    for (const [name, selector] of [
+      ['Project Editor', '[data-view="animation-editor"]'],
+      ['Motion Studio', '[data-motion-nav="audio"]'],
+      ['Camera Preview', '[data-motion-nav="preview"]'],
+      ['Render Monitor', '[data-motion-nav="monitor"]']
+    ]) {
+      const target = qs(selector);
+      if (!target) continue;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'secondary-button compact';
+      button.textContent = name;
+      button.addEventListener('click', () => target.click());
+      links.append(button);
+    }
+    summary.append(links);
+  }
+
   // P1: explain why the editor is locked without changing saved settings.
   function renderEditorGuidance() {
+    renderMotionProjectSummary();
     const project = state.project;
     syncMotionWorkflowGuide();
     const panel = qs('#animation-editor-guidance');
@@ -9219,6 +9300,7 @@
     renderMotionLabDraft();
   }
   function renderMotionLabDraft() {
+    renderMotionProjectSummary();
     motionReviewRefreshTakes();
     const project = state.project;
     const is3d = animationMode() === '3d';
