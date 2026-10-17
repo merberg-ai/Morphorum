@@ -13,7 +13,7 @@ This is a development-only checklist. Do not merge to main before user acceptanc
 - Updated previously stale frontend navigation assertions to reflect three project destinations in the primary menu, not the Motion Lab sidebar.
 - Updated the WAV analyzer and project media restoration test harnesses to include new soundtrack/selection state.
 - At commit `25eafd2`, GitHub **Syntax checks PASS** (including all frontend Node regressions) and **Installer checks PASS**.
-- Backend tests are still running at the time of this checkpoint; consult GitHub Actions before signoff.
+- **Backend tests PASS** at commit `25eafd2`, alongside Syntax checks and Installer checks. All three required CI workflows completed successfully.
 - The prior backend regression from clipping a manually authored camera keyframe was fixed and had a confirmed passing backend workflow at commit `51294fc`.
 
 ## Windows and mobile owner acceptance
