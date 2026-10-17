@@ -1089,8 +1089,14 @@
     const field = qs('#animation-schedule-type-field');
     const select = qs('#animation-schedule-type');
     if (!field || !select) return;
-    const model = modelById(qs('#animation-model')?.value || '');
-    const isSdxl = model?.family === 'sdxl';
+    const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
+    const model = modelById(modelId);
+    // A saved project may load before its checkpoint is indexed. Retain its
+    // SDXL-only controls instead of silently hiding a persisted schedule.
+    const family = String(model?.family || (
+      modelId === state.project?.model?.model_id ? state.project?.model?.family : ''
+    ) || '').toLowerCase();
+    const isSdxl = family === 'sdxl';
     field.hidden = !isSdxl;
     select.replaceChildren();
     if (!isSdxl) {
@@ -1098,7 +1104,7 @@
       select.disabled = true;
       return;
     }
-    const config = effectiveCapability(model).schedule_types || {};
+    const config = (model ? effectiveCapability(model) : state.capabilities.sdxl || {}).schedule_types || {};
     const selectedSampler = qs('#animation-sampler')?.value;
     const previous = preferred || state.project?.generation?.schedule_type || 'normal';
     const options = Array.isArray(config.options) ? config.options : [];
