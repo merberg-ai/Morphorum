@@ -2,7 +2,7 @@
 
 Morphorum supports SDXL image generation and animation with several sampler choices, noise schedules, longer prompts, and model-aware LoRA loading. This guide covers **SDXL only**. FLUX and Z-Image use their own sampler, prompt, guidance, and LoRA handling.
 
-> This documentation describes the features on the development branch while final Windows acceptance is in progress. Use the public `main` branch for a normal installation until the changes are released.
+> **Release status:** The G5 SDXL improvements have received owner Windows acceptance and are included in the public `main` branch. Morphorum remains early-alpha software; [testing history](TESTING.md) distinguishes CPU CI from physical GPU validation.
 
 ## Choose a sampler and schedule
 
