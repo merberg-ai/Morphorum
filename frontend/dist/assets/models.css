@@ -254,3 +254,11 @@
   #view-models .model-family-badge,
   #view-models .model-kind-badge {justify-self:start;}
 }
+
+/* C3.1 verified identity: keep one compact result instead of expanding the model row. */
+.model-civitai-identity { display: block; font-size: .78rem; line-height: 1.4; overflow-wrap: anywhere; }
+.model-civitai-identity:empty { display: none; }
+.model-civitai-identity a { display: inline-block; max-width: 100%; }
+.lora-exact-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.lora-exact-identity a { overflow-wrap: anywhere; font-size: .86rem; }
+.lora-exact-identity p { margin: 0; }
