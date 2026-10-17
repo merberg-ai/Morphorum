@@ -101,9 +101,13 @@
 
     <nav class="main-nav glass" aria-label="Primary">
       <button class="nav-button active" data-view="image"><span class="nav-icon">▣</span><span>Image</span></button>
-      <button class="nav-button" data-project-nav="projects" type="button"><span class="nav-icon">▤</span><span>Project Manager</span></button>
-      <button class="nav-button" data-project-nav="wizard" type="button"><span class="nav-icon">＋</span><span>New Project</span></button>
-      <button class="nav-button" data-project-nav="editor" type="button"><span class="nav-icon">▧</span><span>Project Editor</span></button>
+      <button class="nav-button" id="project-nav-toggle" type="button" aria-expanded="false" aria-controls="project-nav-submenu"><span class="nav-icon">▤</span><span>Project</span><span class="project-nav-chevron">▾</span></button>
+      <div class="project-nav-submenu" id="project-nav-submenu" hidden>
+        <button type="button" data-project-nav="projects">Project Manager</button>
+        <button type="button" data-project-nav="wizard">New Project</button>
+        <button type="button" data-project-nav="editor">Project Editor</button>
+      </div>
+      <button class="nav-button" data-view="civitai" id="civitai-nav" hidden><span class="nav-icon">◈</span><span>Civitai Hub</span></button>
       <button class="nav-button" data-view="animation" type="button"><span class="nav-icon">◈</span><span>Motion Lab</span></button>
       <div class="motion-lab-sidebar" id="motion-lab-sidebar" role="group" aria-label="Motion Lab workspaces">
         <button type="button" data-motion-nav="motion">Overview</button>
@@ -117,7 +121,6 @@
         <button type="button" data-motion-nav="outputs">Outputs</button>
       </div>
       <button class="nav-button" data-view="models"><span class="nav-icon">◫</span><span>Models</span></button>
-      <button class="nav-button" data-view="civitai" id="civitai-nav" hidden><span class="nav-icon">◈</span><span>Civitai Hub</span></button>
       <button class="nav-button" data-view="loras"><span class="nav-icon">◇</span><span>LoRAs</span></button>
       <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
       <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
@@ -1315,6 +1318,10 @@
           </form>
           <div class="civitai-result-toolbar"><span id="civitai-result-status" role="status" aria-live="polite">Search Civitai to discover models.</span><span class="badge" id="civitai-result-page">Page 1</span></div>
           <div class="civitai-gallery" id="civitai-results"></div>
+          <dialog id="civitai-detail-dialog" class="civitai-detail-dialog" aria-labelledby="civitai-detail-title">
+            <div class="civitai-detail-header"><h2 id="civitai-detail-title">Model details</h2><button id="civitai-detail-close" type="button" class="secondary-button compact">Close ✕</button></div>
+            <div id="civitai-detail-content" role="status" aria-live="polite"></div>
+          </dialog>
           <div class="civitai-pagination"><button id="civitai-previous" class="secondary-button compact" type="button" disabled>← Previous</button><button id="civitai-next" class="secondary-button compact" type="button" disabled>Next →</button></div>
         </article>
       </section>
