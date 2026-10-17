@@ -177,6 +177,8 @@
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
     refreshNavMore(name);
     if (name === 'console') renderConsole();
+    const projectToggle = qs('#project-nav-toggle');
+    if (projectToggle) projectToggle.classList.toggle('active', name === 'animation' && !qs('.main-nav.motion-section-active [data-motion-nav].active'));
     if (name === 'civitai') window.MorphorumCivitai?.activate?.();
     if (name === 'loras') window.MorphorumLoras?.refreshRuntime?.();
     try { history.replaceState(null, '', `#${name}`); } catch (_) {}
@@ -1801,9 +1803,17 @@
       switchView(button.dataset.view);
       if (button.dataset.view === 'animation') qs('#animation-tab-motion')?.click();
     }));
+    qs('#project-nav-toggle')?.addEventListener('click', () => {
+      const menu = qs('#project-nav-submenu');
+      if (!menu) return;
+      menu.hidden = !menu.hidden;
+      qs('#project-nav-toggle').setAttribute('aria-expanded', String(!menu.hidden));
+    });
     qsa('.main-nav [data-project-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
       qs('#animation-tab-' + button.dataset.projectNav)?.click();
+      qs('#project-nav-submenu').hidden = false;
+      qs('#project-nav-toggle').setAttribute('aria-expanded', 'true');
     }));
     qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
