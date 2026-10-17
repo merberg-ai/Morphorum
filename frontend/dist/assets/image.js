@@ -544,7 +544,12 @@
 
   function previewImagePromptLength() {
     const node = qs('#image-prompt-token-warning');
-    if (!node || !state.model || state.model.family !== 'sdxl') return;
+    if (!node) return;
+    if (!state.model || state.model.family !== 'sdxl') {
+      node.hidden = true;
+      node.textContent = '';
+      return;
+    }
     const inputs = [qs('#image-prompt')?.value || '', qs('#image-negative-prompt')?.value || ''];
     const likelyLong = inputs.some(value => value.length >= 250);
     if (!likelyLong) {
@@ -552,7 +557,7 @@
       return;
     }
     node.hidden = false;
-    node.textContent = 'Long SDXL prompt detected. Each CLIP encoder accepts 77 tokens. This is a character-length advisory, not an exact count; exact overflow warnings appear when generating.';
+    node.textContent = 'Long SDXL prompt likely. This is a character-length estimate, not a token count. During rendering, Morphorum will report whether chunked CLIP conditioning was actually used.';
   }
 
   function showImagePromptWarnings(job) {
@@ -600,16 +605,24 @@
     const percent = Math.max(0, Math.min(100, Math.round((Number(job.progress) || 0) * 100)));
     showImagePromptWarnings(job);
     renderImageLoraVerification(job);
+    const node = qs('#image-conditioning-diagnostic');
     const diag = job.conditioning_diagnostic;
-    if (diag && qs('#image-prompt-token-warning')) {
-      const summary = ['SDXL conditioning: ' + String(diag.mode || 'unknown').toUpperCase()];
-      for (const [label, key] of [['CLIP-L', 'clip_l'], ['CLIP-G', 'clip_g']]) {
-        if (diag[key]) summary.push(label + ': ' + diag[key].tokens + ' tokens / ' + diag[key].chunks + ' chunks');
+    if (node) {
+      node.hidden = !diag || !['standard', 'chunked', 'embedded'].includes(diag.mode);
+      if (node.hidden) {
+        node.textContent = '';
+      } else {
+        const summary = ['SDXL conditioning: ' + String(diag.mode).toUpperCase()];
+        for (const [label, key] of [
+          ['CLIP-L', 'clip_l'], ['CLIP-G', 'clip_g'],
+          ['CLIP-L negative', 'clip_l_negative'], ['CLIP-G negative', 'clip_g_negative'],
+        ]) {
+          if (diag[key]) summary.push(label + ': ' + diag[key].tokens + ' tokens / ' + diag[key].chunks + ' chunks');
+        }
+        if (diag.shape) summary.push('Embeddings: [' + diag.shape.join(', ') + ']');
+        if (diag.negative_aligned === true) summary.push('Negative conditioning aligned');
+        node.textContent = summary.join(' · ');
       }
-      if (diag.shape) summary.push('Embeddings: [' + diag.shape.join(', ') + ']');
-      const node = qs('#image-prompt-token-warning');
-      node.hidden = false;
-      node.textContent = summary.join(' · ');
     }
     qs('#generation-status').textContent = job.message || job.status;
     qs('#generation-percent').textContent = `${percent}%`;
@@ -885,6 +898,11 @@
     if (unloadButton) unloadButton.disabled = true;
     qs('#cancel-generation').hidden = false;
     qs('#generation-progress').hidden = false;
+    const previousConditioning = qs('#image-conditioning-diagnostic');
+    if (previousConditioning) {
+      previousConditioning.hidden = true;
+      previousConditioning.textContent = '';
+    }
     qs('#generation-status').textContent = 'Submitting generation job…';
     qs('#generation-progress-fill').style.width = '0%';
     try {
