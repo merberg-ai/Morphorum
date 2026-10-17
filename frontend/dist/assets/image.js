@@ -45,7 +45,7 @@
   const IMAGE_DRAFT_KEY = 'morphorum.image.form.v1';
   const DRAFT_FIELDS = [
     'image-prompt', 'image-negative-prompt', 'image-resolution-preset',
-    'image-width', 'image-height', 'image-steps', 'image-sampler', 'image-guidance',
+    'image-width', 'image-height', 'image-steps', 'image-sampler', 'image-schedule-type', 'image-guidance',
     'image-seed', 'image-seed-mode', 'image-seed-increment', 'image-count',
     'image-lora-select', 'image-lora-weight'
   ];
@@ -87,7 +87,7 @@
     const draft = state.draft;
     if (!draft || draft.modelId !== modelId || state.restoredModel === modelId) return;
     const values = draft.values;
-    const selectFields = ['image-sampler', 'image-seed-mode', 'image-lora-select'];
+    const selectFields = ['image-sampler', 'image-schedule-type', 'image-seed-mode', 'image-lora-select'];
     for (const id of selectFields) {
       const node = document.getElementById(id);
       const value = values[id];
@@ -254,7 +254,7 @@
   function setEnabled(enabled) {
     for (const id of [
       '#image-resolution-preset', '#image-width', '#image-height', '#swap-resolution',
-      '#image-steps', '#image-sampler', '#image-guidance', '#image-seed', '#random-seed',
+      '#image-steps', '#image-sampler', '#image-schedule-type', '#image-guidance', '#image-seed', '#random-seed',
       '#image-seed-mode', '#image-seed-increment', '#image-count'
     ]) {
       const element = qs(id);
@@ -303,6 +303,32 @@
       option.textContent = sampler.label || sampler.id;
       select.appendChild(option);
     }
+  }
+
+  function populateScheduleTypes(capability) {
+    const field = qs('#image-schedule-type-field');
+    const select = qs('#image-schedule-type');
+    if (!field || !select) return;
+    const isSdxl = state.model?.family === 'sdxl';
+    field.hidden = !isSdxl;
+    select.replaceChildren();
+    if (!isSdxl) {
+      select.add(new Option('Normal', 'normal'));
+      select.value = 'normal';
+      select.disabled = true;
+      return;
+    }
+    const settings = capability.schedule_types || {};
+    const options = Array.isArray(settings.options) ? settings.options : [];
+    const sampler = qs('#image-sampler')?.value;
+    const previous = select.value;
+    for (const option of options) {
+      if (sampler === 'ddim' && option.id === 'karras') continue;
+      select.add(new Option(option.label || option.id, option.id));
+    }
+    select.value = [...select.options].some(option => option.value === previous)
+      ? previous : (settings.default || 'normal');
+    select.disabled = !state.model || !options.length;
   }
 
   function applyModelDefaults(capability) {
@@ -484,6 +510,7 @@
       qs('#image-capability-note').textContent = `Ready for ${variantLabel} txt2img. Model defaults applied.`;
       populatePresets(capability);
       populateSamplers(capability);
+      populateScheduleTypes(capability);
       setEnabled(true);
       applyModelDefaults(capability);
       updateSeedMode();
@@ -771,6 +798,7 @@
       height: Number(qs('#image-height').value),
       steps: Number(qs('#image-steps').value),
       sampler: qs('#image-sampler').value,
+      ...(state.model?.family === 'sdxl' ? { schedule_type: qs('#image-schedule-type').value } : {}),
       guidance_scale: Number(qs('#image-guidance').value),
       seed: Number(qs('#image-seed').value),
       seed_mode: qs('#image-seed-mode').value,
