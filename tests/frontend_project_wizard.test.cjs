@@ -88,7 +88,7 @@ test('no-model warning responds only to completed scan and has actionable help',
   assert.match(desktopCss,/\.app-shell:has\(> \.model-setup-banner:not\(\[hidden\]\)\)/);
 });
 test('new project wizard has separate panel and all seven guided stages', () => {
-  assert.match(html,/data-project-nav="wizard" type="button"/);
+  assert.match(html,/type="button" data-project-nav="wizard"/);
   assert.match(anim,/wizard: 'New Project Wizard'/);
   assert.match(anim,/new window\.MorphorumProjectWizard/);
   assert.match(html,/project-wizard\.js.*animation\.js/s);
