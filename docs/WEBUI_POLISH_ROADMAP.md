@@ -104,6 +104,15 @@ separate, explicit authorization.** Next development phase: P4.
 - [ ] **UX5:** Combined regression tests, updated public docs and user
   acceptance before any release PR merge.
 
+### UX3 implementation checkpoint (2026-10-16)
+
+- [x] Add five directly navigable Project Editor sections: **Setup**, **Sources & Media**, **Timeline & Prompts**, **Camera & Motion**, **Generation Settings**.
+- [x] Reparent the original card elements and preserve control IDs, input state and existing event listeners; keep the separate Motion Lab workspaces unchanged.
+- [x] Remember section locally, provide mobile-friendly button wrapping and guard hidden groups in CSS.
+- [x] Add source-level regression assertions for navigation and card preservation.
+- [ ] Run frontend/backend CI on current `dev-webui` and physically test Windows and mobile/zoom layouts.
+- [ ] Verify live editor load/save, switching sections with unsaved edits, prompt timeline, 2D/3D camera controls, cadence and rendering. **Not yet owner-accepted.**
+
 ## P1 acceptance
 
 - [x] P1.1: Clear Project Editor empty state, Project Manager and wizard shortcuts.
