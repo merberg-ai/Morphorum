@@ -465,6 +465,7 @@ def normalize_animation_project(
     }.items():
         generation[key] = str(generation.get(key, default) or default).strip()
     generation["sampler"] = str(generation.get("sampler") or "flowmatch_euler").strip().lower()
+    generation["schedule_type"] = str(generation.get("schedule_type") or "normal").strip().lower()
     generation["seed"] = _safe_int(generation.get("seed"), -1, -1, 2**32 - 1)
     behavior = str(generation.get("seed_behavior") or "fixed").strip().lower()
     generation["seed_behavior"] = behavior if behavior in {"fixed", "increment", "random"} else "fixed"
