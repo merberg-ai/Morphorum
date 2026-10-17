@@ -78,3 +78,24 @@ When the Hub is disabled, its navigation is hidden, search is blocked in the UI 
 5. Test navigation with Civitai Hub disabled, and check sidebar and dialog responsiveness at narrow widths.
 
 No downloads or model modifications occur in C1.3. Runtime/CI and physical Windows tests have not been executed from this chat.
+
+## C2.1: Download queue MVP and navigation polish (pending physical tests)
+
+- Downloads are opt-in from a selected version's `.safetensors` file entry. The backend resolves the model/version/file ID again from Civitai and uses the exact file ID; it does not accept caller-supplied URLs or destination paths.
+- Models go to the **first** configured directory for that architecture and kind: SDXL/FLUX checkpoints or SDXL/FLUX/Z-Image LoRAs. A missing directory, unsupported family or existing destination is rejected. No overwrites.
+- A single worker processes queued downloads; status polling reports bytes, estimated file size, errors and completion. Cancel is supported. Completed downloads trigger a model scan.
+- Files are written as private `.part` files, SHA-256 checked when supplied by Civitai, then published without replacing existing files. Partial files are removed on failure/cancellation.
+- C2.2 remains responsible for robust resume, parallelism, disk-space preflight and recovery across restarts. Queue jobs in C2.1 are process-memory only.
+- Motion Lab sidebar is collapsible like Project. Model descriptions retain paragraph/list line breaks in a bounded, readable panel.
+
+### C2.1 acceptance tests
+
+1. Expand/collapse Motion Lab and Project independently; verify all destinations.
+2. Open Civitai detail, select a version and enqueue a small supported Safetensors LoRA.
+3. Confirm download queue progress, completion, and that Models / LoRAs scans discover the file.
+4. Queue the same file again: confirm safe rejection without overwrite.
+5. Test a deliberately unsupported model type and unconfigured destination; verify meaningful errors.
+6. Cancel a queued or active job; verify no final/partial model file remains.
+7. Disable Civitai Hub while a job is active; verify transfer stops and existing local models remain usable.
+
+**Implementation committed; automated execution and Windows physical tests not yet performed.** Do not merge before verifying C2.1.
