@@ -402,6 +402,10 @@ def test_sampler_capability_and_validation(tmp_path, monkeypatch) -> None:
         "lms",
         "heun",
         "unipc",
+        "dpm2",
+        "dpm2_a",
+        "deis",
+        "dpmpp_singlestep",
     ]
 
     request = GenerationRequest(model_id="model-1", prompt="test", sampler="dpmpp_2m")
@@ -431,6 +435,16 @@ def test_all_advertised_sdxl_samplers_construct_from_base_config() -> None:
         manager._configure_sampler(pipe, "sdxl", sampler)
         assert manager._pipeline_sampler == sampler
         assert pipe.scheduler is not None
+
+
+def test_sdxl_sampler_expansion_does_not_touch_flowmatch_families() -> None:
+    capabilities = GenerationManager().capabilities()
+    expected = [{"id": "flowmatch_euler", "label": "FlowMatch Euler"}]
+    for family in ("flux", "zimage"):
+        assert capabilities[family]["samplers"] == {
+            "default": "flowmatch_euler",
+            "options": expected,
+        }
 
 
 def test_flux_dev_and_schnell_capabilities_and_validation(tmp_path, monkeypatch) -> None:
