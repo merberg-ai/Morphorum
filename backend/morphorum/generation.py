@@ -105,6 +105,10 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
                 {"id": "lms", "label": "LMS"},
                 {"id": "heun", "label": "Heun"},
                 {"id": "unipc", "label": "UniPC"},
+                {"id": "dpm2", "label": "DPM2"},
+                {"id": "dpm2_a", "label": "DPM2 a"},
+                {"id": "deis", "label": "DEIS"},
+                {"id": "dpmpp_singlestep", "label": "DPM++ Single Step"},
             ],
         },
         "resolutions": [
@@ -2593,6 +2597,10 @@ class GenerationManager:
                     HeunDiscreteScheduler,
                     LMSDiscreteScheduler,
                     UniPCMultistepScheduler,
+                    KDPM2DiscreteScheduler,
+                    KDPM2AncestralDiscreteScheduler,
+                    DEISMultistepScheduler,
+                    DPMSolverSinglestepScheduler,
                 )
 
                 sampler_specs: dict[str, tuple[Any, dict[str, Any]]] = {
@@ -2610,6 +2618,13 @@ class GenerationManager:
                     "lms": (LMSDiscreteScheduler, {}),
                     "heun": (HeunDiscreteScheduler, {}),
                     "unipc": (UniPCMultistepScheduler, {}),
+                    "dpm2": (KDPM2DiscreteScheduler, {}),
+                    "dpm2_a": (KDPM2AncestralDiscreteScheduler, {}),
+                    "deis": (DEISMultistepScheduler, {}),
+                    "dpmpp_singlestep": (
+                        DPMSolverSinglestepScheduler,
+                        {"algorithm_type": "dpmsolver++"},
+                    ),
                 }
                 spec = sampler_specs.get(sampler)
                 if spec is None:
