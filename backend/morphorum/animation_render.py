@@ -256,6 +256,7 @@ def _prompt_conditioning_kwargs(
     conditioning_cache: dict[tuple[Any, ...], Any] | None = None,
     cache_zimage_on_cpu: bool = False,
     lora_signature: tuple[Any, ...] = (),
+    cache_stats: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     positive_to_weight = float(positive.get("to_weight") or 0.0)
     same_positive = (
@@ -277,6 +278,52 @@ def _prompt_conditioning_kwargs(
     to_negative = str(negative.get("to_text") or from_negative)
 
     if same_positive and (family != "sdxl" or same_negative):
+        # Stable long SDXL prompts previously re-encoded both CLIP towers on
+        # every diffusion anchor, because only blended prompts used the cache.
+        # Keep normal short prompts on Diffusers' native path.
+        if family == "sdxl":
+            from .sdxl_prompt_chunks import (
+                encode_sdxl_long_prompts, plan_clip_chunks,
+            )
+            tokenizers = (
+                getattr(pipe, "tokenizer", None),
+                getattr(pipe, "tokenizer_2", None),
+            )
+            if all(tokenizer is not None for tokenizer in tokenizers):
+                plans = [
+                    plan_clip_chunks(tokenizer, value)
+                    for tokenizer in tokenizers
+                    for value in (from_prompt, from_negative)
+                ]
+                if any(plan.overflow for plan in plans):
+                    do_cfg = float(guidance_scale) > 1.0
+                    chunk_count = max(len(plan.chunks) for plan in plans)
+                    key = (
+                        "sdxl", from_prompt, from_negative,
+                        do_cfg, tuple(lora_signature), chunk_count,
+                    )
+                    if conditioning_cache is not None and key in conditioning_cache:
+                        if cache_stats is not None:
+                            cache_stats["hits"] = cache_stats.get("hits", 0) + 1
+                        encoded = conditioning_cache[key]
+                    else:
+                        if cache_stats is not None:
+                            cache_stats["misses"] = cache_stats.get("misses", 0) + 1
+                        encoded = encode_sdxl_long_prompts(
+                            pipe, from_prompt, from_negative,
+                            do_classifier_free_guidance=do_cfg,
+                        )
+                        _cache_conditioning_value(conditioning_cache, key, encoded)
+                    result: dict[str, Any] = {
+                        "prompt": None,
+                        "negative_prompt": None,
+                        "prompt_embeds": encoded[0],
+                        "pooled_prompt_embeds": encoded[2],
+                    }
+                    if do_cfg:
+                        result["negative_prompt_embeds"] = encoded[1]
+                        result["negative_pooled_prompt_embeds"] = encoded[3]
+                    return result
         result: dict[str, Any] = {"prompt": from_prompt}
         if family == "sdxl":
             result["negative_prompt"] = from_negative or None
@@ -307,7 +354,11 @@ def _prompt_conditioning_kwargs(
                     common_chunks,
                 )
                 if conditioning_cache is not None and key in conditioning_cache:
+                    if cache_stats is not None:
+                        cache_stats["hits"] = cache_stats.get("hits", 0) + 1
                     return conditioning_cache[key]
+                if cache_stats is not None:
+                    cache_stats["misses"] = cache_stats.get("misses", 0) + 1
                 from .sdxl_prompt_chunks import (
                     encode_sdxl_long_prompts, plan_clip_chunks,
                 )
