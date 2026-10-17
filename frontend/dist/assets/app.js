@@ -1809,6 +1809,11 @@
       menu.hidden = !menu.hidden;
       qs('#project-nav-toggle').setAttribute('aria-expanded', String(!menu.hidden));
     });
+    qs('#motion-nav-toggle')?.addEventListener('click', () => {
+      const menu = qs('#motion-lab-sidebar');
+      menu.hidden = !menu.hidden;
+      qs('#motion-nav-toggle').setAttribute('aria-expanded', String(!menu.hidden));
+    });
     qsa('.main-nav [data-project-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
       qs('#animation-tab-' + button.dataset.projectNav)?.click();
@@ -1818,6 +1823,8 @@
     qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
       qs('#animation-tab-' + button.dataset.motionNav)?.click();
+      qs('#motion-lab-sidebar').hidden = false;
+      qs('#motion-nav-toggle').setAttribute('aria-expanded', 'true');
     }));
     const moreToggle = qs('#nav-more-toggle');
     moreToggle?.addEventListener('click', () => {
