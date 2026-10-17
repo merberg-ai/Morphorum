@@ -2809,6 +2809,8 @@
       motionLabSelectedEvent = null;
       motionDirectorCues = [];
       motionDirectorSelected = null;
+      motionDirectorDeleteSelection.clear();
+      motionDirectorDeleteUndo = null;
       motionStudioChannelState = {projectId: '', sha: '', channels: [], dirty: false};
       ++motionStudioSpectrumToken;
       motionStudioSpectrum = {projectId:'',sha:'',points:[],maxHz:20000,loading:false,error:''};
