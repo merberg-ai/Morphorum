@@ -35,6 +35,36 @@ class _KnownDiffusersNoiseFilter(logging.Filter):
         )
 
 
+class _RepeatedClipWarningFilter(logging.Filter):
+    """Keep first occurrence of identical CLIP overflow reports; never filter LoRA diagnostics."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._seen: set[str] = set()
+        self._lock = threading.Lock()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        known = (
+            "Token indices sequence length is longer than the specified maximum sequence length"
+            in message
+            or "The following part of your input was truncated because CLIP can only handle"
+            in message
+            or "Ignoring clean_up_tokenization_spaces=True for BPE tokenizer CLIPTokenizer"
+            in message
+        )
+        if not known:
+            return True
+        with self._lock:
+            if message in self._seen:
+                return False
+            self._seen.add(message)
+        return True
+
+
+_clip_noise_filter = _RepeatedClipWarningFilter()
+
+
 _runtime_noise_configured = False
 
 
@@ -75,6 +105,12 @@ def _configure_external_runtime_noise() -> None:
             handler.addFilter(filter_instance)
     except Exception:
         pass
+
+    # Transformers emits identical CLIP warnings on repeat calls. Preserve
+    # the first report and all unrelated warnings, including LoRA load reports.
+    transformers_logger = logging.getLogger("transformers")
+    transformers_logger.addFilter(_clip_noise_filter)
+    logging.getLogger("transformers.tokenization_utils_base").addFilter(_clip_noise_filter)
 
     _runtime_noise_configured = True
 
