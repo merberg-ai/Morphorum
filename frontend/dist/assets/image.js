@@ -888,6 +888,11 @@
 
   function bind() {
     qs('#image-model-select')?.addEventListener('change', configureModel);
+    qs('#image-sampler')?.addEventListener('change', () => {
+      if (state.model?.family === 'sdxl') {
+        populateScheduleTypes(effectiveCapability(state.model));
+      }
+    });
     qs('#image-insert-lora')?.addEventListener('click', insertSelectedLora);
     qs('#image-resolution-preset')?.addEventListener('change', event => {
       window.MorphorumResolution.apply(event.target,qs('#image-width'),qs('#image-height'));
