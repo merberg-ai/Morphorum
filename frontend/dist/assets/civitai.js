@@ -54,6 +54,20 @@
           });
           row.append(resume);
         }
+        if (['failed','interrupted'].includes(job.status)) {
+          const retry = elt('button', 'secondary-button compact', 'Retry from beginning');
+          retry.addEventListener('click', async () => {
+            retry.disabled = true;
+            try {
+              const response = await fetch('/api/civitai/downloads/' + encodeURIComponent(job.id) + '/retry', {method:'POST'});
+              const result = await response.json();
+              if (!response.ok) throw Error(result.detail || 'Retry failed');
+              toast('Download restarted', job.name, 'success');
+            } catch (error) { toast('Retry failed', error.message, 'error'); }
+            finally { void refreshDownloads(); }
+          });
+          row.append(retry);
+        }
         if (job.error) row.append(elt('p', 'muted', job.error));
         root.append(row);
       }
