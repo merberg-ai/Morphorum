@@ -676,17 +676,35 @@
     }
   }
 
+  function syncProjectWorkspaceStatus() {
+    const nodes = [
+      qs('#animation-workspace-save-state'),
+      qs('#animation-editor-save-state'),
+    ];
+    const label = !state.project ? 'No project open'
+      : (state.dirty ? 'Unsaved changes' : 'Saved');
+    for (const node of nodes) {
+      if (!node) continue;
+      node.textContent = label;
+      node.dataset.saveState = !state.project ? 'empty' : state.dirty ? 'dirty' : 'saved';
+    }
+    const projectName = qs('#animation-editor-current-project');
+    if (projectName) projectName.textContent = state.project?.name || 'No project selected';
+  }
+
   function markDirty({ validate = false } = {}) {
     if (!state.project || state.loading) return;
     state.dirty = true;
     resetRenderPreflight();
     setStatus('Unsaved changes', 'dirty');
+    syncProjectWorkspaceStatus();
     scheduleInspectorRefresh({ validate });
   }
 
   function clearDirty() {
     state.dirty = false;
     setStatus(state.project ? 'Saved' : 'No project loaded', state.project ? 'saved' : '');
+    syncProjectWorkspaceStatus();
   }
 
   function modelById(modelId) {
@@ -9862,6 +9880,7 @@
     if (name !== 'preview') motionFramePlayer?.pause();
     if (name !== 'recording' && motionLabRecorder?.active) motionLabStopRecording('tab-change');
     animationTab = name;
+    syncProjectWorkspaceStatus();
     const pageHeading = {
       projects: ['PROJECTS / LIBRARY', 'Project Manager', 'Browse, organize, open and manage your animation projects.'],
       wizard: ['PROJECTS / CREATE', 'New Project Wizard', 'Create a new animation project with guided setup and sensible defaults.'],
@@ -10767,7 +10786,18 @@
       buttons.set(key,button);
       groups.set(key,group);
     }
+    const context = document.createElement('div');
+    context.id = 'animation-editor-context';
+    context.className = 'animation-editor-context';
+    context.setAttribute('role','status');
+    const currentProject = document.createElement('strong');
+    currentProject.id = 'animation-editor-current-project';
+    const saveState = document.createElement('span');
+    saveState.id = 'animation-editor-save-state';
+    context.append(currentProject,saveState);
+    panel.insertBefore(context,layout);
     panel.insertBefore(nav,layout);
+    syncProjectWorkspaceStatus();
     const choose = (key, {persist=true}={}) => {
       if (!groups.has(key)) key='setup';
       for (const [name,group] of groups) {
