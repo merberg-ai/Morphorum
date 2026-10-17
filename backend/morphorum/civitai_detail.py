@@ -8,6 +8,28 @@ import httpx
 from .civitai_search import CivitaiSearchError, MAX_RESPONSE_BYTES
 from .settings import load_settings
 from .civitai import _plain_html
+from html.parser import HTMLParser
+
+class _ReadableHTML(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.hidden = 0
+    def handle_starttag(self, tag, attrs):
+        if tag in ('style', 'script'): self.hidden += 1
+        if tag in ('p', 'div', 'h1', 'h2', 'h3', 'li', 'br'): self.parts.append('\\n')
+        if tag == 'li': self.parts.append('• ')
+    def handle_endtag(self, tag):
+        if tag in ('style', 'script'): self.hidden = max(0, self.hidden - 1)
+        if tag in ('p', 'div', 'h1', 'h2', 'h3', 'li'): self.parts.append('\\n')
+    def handle_data(self, data):
+        if not self.hidden and sum(map(len,self.parts)) < 5000: self.parts.append(data)
+
+def _readable(text):
+    parser = _ReadableHTML()
+    parser.feed(str(text or '')[:30000])
+    return '\\n'.join(' '.join(line.split()) for line in ''.join(parser.parts).split('\\n') if line.strip())[:5000]
+
 
 def model_details(model_id: int, *, client: httpx.Client | None = None) -> dict[str, Any]:
     settings = load_settings().get("civitai", {})
@@ -71,13 +93,13 @@ def model_details(model_id: int, *, client: httpx.Client | None = None) -> dict[
             versions.append({"id": version["id"], "name": str(version.get("name") or "")[:150],
                              "base_model": base, "created_at": str(version.get("createdAt") or "")[:40],
                              "trained_words": [str(x)[:100] for x in (version.get("trainedWords") or [])[:32] if isinstance(x, str)],
-                             "description": _plain_html(version.get("description")),
+                             "description": _readable(version.get("description")),
                              "images": images, "files": files,
                              "compatibility": "Potentially compatible; verify file format and loader" if supported else "Not established for Morphorum"})
         return {"id": model_id, "name": str(data.get("name") or "")[:200],
                 "type": str(data.get("type") or "")[:60],
                 "creator": str(creator.get("username") or "")[:100],
-                "description": _plain_html(data.get("description")),
+                "description": _readable(data.get("description")),
                 "tags": [str(t)[:80] for t in (data.get("tags") or [])[:40] if isinstance(t, str)],
                 "url": f"https://civitai.com/models/{model_id}",
                 "versions": versions}
