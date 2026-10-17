@@ -5151,8 +5151,6 @@
     for (const id of projectManagerState.bulkIds) if (!validIds.has(id)) projectManagerState.bulkIds.delete(id);
     const bulkCount = qs('#animation-project-manager-bulk-count');
     if (bulkCount) bulkCount.textContent = projectManagerState.bulkIds.size + ' selected';
-    const bulkDelete = qs('#animation-project-manager-bulk-trash');
-    if (bulkDelete) bulkDelete.disabled = projectManagerState.busy || !projectManagerState.bulkIds.size;
     const selectVisible = qs('#animation-project-manager-select-visible');
     if (selectVisible) selectVisible.disabled = projectManagerState.busy || !filtered.length;
     const clearBulk = qs('#animation-project-manager-clear-selection');
@@ -5205,8 +5203,12 @@
     const selected = state.projects.find(p => p.id === projectManagerState.selectedId);
     for (const id of ['open', 'rename', 'trash']) {
       const button = qs('#animation-project-manager-' + id);
-      if (button) button.disabled = !selected || projectManagerState.busy;
+      if (button) button.disabled = projectManagerState.busy ||
+        (id === 'trash' ? !selected && !projectManagerState.bulkIds.size : !selected);
     }
+    const trashButton = qs('#animation-project-manager-trash');
+    if (trashButton) trashButton.textContent = projectManagerState.bulkIds.size > 1
+      ? 'Move ' + projectManagerState.bulkIds.size + ' Selected to Trash' : 'Move to Trash';
     if (!selected) {
       const empty = document.createElement('p');
       empty.className = 'muted';
@@ -5299,7 +5301,13 @@
     }
   }
   async function projectManagerTrash() {
-    const item = state.projects.find(p => p.id === projectManagerState.selectedId);
+    if (projectManagerState.bulkIds.size > 1) {
+      await projectManagerBulkTrash();
+      return;
+    }
+    const targetId = projectManagerState.bulkIds.size === 1
+      ? [...projectManagerState.bulkIds][0] : projectManagerState.selectedId;
+    const item = state.projects.find(p => p.id === targetId);
     if (!item || projectManagerState.busy) return;
     if (item.id === state.project?.id && (
       state.dirty || motionLabRecorder?.active || motionLabBusy ||
@@ -5338,6 +5346,7 @@
         fillForm();
       }
       projectManagerState.selectedId = '';
+      projectManagerState.bulkIds.delete(item.id);
       await loadProjectList();
       forgetAnimationProject(item.id);
       toast('Project moved to Trash',
@@ -5435,7 +5444,6 @@
       '<button type="button" class="secondary-button compact" id="animation-project-manager-select-visible">Select All Visible</button>',
       '<button type="button" class="secondary-button compact" id="animation-project-manager-clear-selection">Clear Selection</button>',
       '<span id="animation-project-manager-bulk-count" aria-live="polite">0 selected</span>',
-      '<button type="button" class="secondary-button compact animation-project-manager-danger" id="animation-project-manager-bulk-trash" disabled>Move Selected to Trash</button>',
       '</div>',
       '<div class="animation-project-manager-list" id="animation-project-manager-list" aria-label="Animation projects"></div>',
       '</section><section class="card glass animation-project-manager-info" aria-label="Project details">',
@@ -5458,7 +5466,6 @@
     qs('#animation-project-manager-clear-selection')?.addEventListener('click', () => {
       projectManagerState.bulkIds.clear(); renderProjectManager();
     });
-    qs('#animation-project-manager-bulk-trash')?.addEventListener('click', () => void projectManagerBulkTrash());
     qs('#animation-project-manager-search')?.addEventListener('input', renderProjectManager);
     qs('#animation-project-manager-sort')?.addEventListener('change', renderProjectManager);
     qs('#animation-project-manager-refresh')?.addEventListener('click', async () => {
