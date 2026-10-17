@@ -94,6 +94,13 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
         "guidance": {"key": "cfg_scale", "label": "CFG", "default": 6.0, "min": 1.0, "max": 30.0},
         "negative_prompt": True,
         "default_resolution": {"width": 1024, "height": 1024},
+        "schedule_types": {
+            "default": "normal",
+            "options": [
+                {"id": "normal", "label": "Normal"},
+                {"id": "karras", "label": "Karras"},
+            ],
+        },
         "samplers": {
             "default": "euler",
             "options": [
@@ -225,6 +232,7 @@ class GenerationRequest:
     steps: int = 25
     guidance_scale: float = 7.0
     sampler: str = "euler"
+    schedule_type: str = "normal"
     seed: int = -1
     seed_mode: str = "fixed"
     seed_increment: int = 1
@@ -242,6 +250,7 @@ class GenerationRequest:
             steps=_safe_int(payload.get("steps"), 25),
             guidance_scale=_safe_float(payload.get("guidance_scale"), 7.0),
             sampler=str(payload.get("sampler", "euler")).strip().lower(),
+            schedule_type=str(payload.get("schedule_type", "normal")).strip().lower(),
             seed=_safe_int(payload.get("seed"), -1),
             seed_mode=str(payload.get("seed_mode", "fixed")).strip().lower(),
             seed_increment=_safe_int(payload.get("seed_increment"), 1),
@@ -508,6 +517,19 @@ class GenerationManager:
             raise GenerationError(
                 f"Sampler '{request.sampler}' is not supported for {capability.get('label', family)}."
             )
+        if family == "sdxl":
+            schedule_ids = {
+                str(item.get("id"))
+                for item in capability["schedule_types"]["options"]
+            }
+            if request.schedule_type not in schedule_ids:
+                raise GenerationError(
+                    f"Schedule Type '{request.schedule_type}' is not supported for SDXL."
+                )
+            if request.schedule_type == "karras" and request.sampler == "ddim":
+                raise GenerationError(
+                    "Karras schedule is not supported with the DDIM sampler."
+                )
 
         model_path = Path(model["path"])
         if family == "zimage":
@@ -1650,7 +1672,9 @@ class GenerationManager:
             job,
             load_progress_callback,
         )
-        self._configure_sampler(pipe, model["family"], request.sampler)
+        self._configure_sampler(
+            pipe, model["family"], request.sampler, request.schedule_type
+        )
         self.configure_loras(pipe, model, request.loras)
         return pipe, generator_device, model
 
@@ -1686,7 +1710,9 @@ class GenerationManager:
             job,
             load_progress_callback,
         )
-        self._configure_sampler(pipe, model["family"], request.sampler)
+        self._configure_sampler(
+            pipe, model["family"], request.sampler, request.schedule_type
+        )
         if model["family"] == "sdxl":
             self._record_sdxl_transition_stage("after_sampler")
         self.configure_loras(pipe, model, request.loras)
@@ -2577,7 +2603,9 @@ class GenerationManager:
         return requested
 
 
-    def _configure_sampler(self, pipe: Any, family: str, sampler: str) -> None:
+    def _configure_sampler(
+        self, pipe: Any, family: str, sampler: str, schedule_type: str = "normal"
+    ) -> None:
         base_config = self._pipeline_scheduler_config or dict(pipe.scheduler.config)
 
         try:
@@ -2630,6 +2658,14 @@ class GenerationManager:
                 if spec is None:
                     raise GenerationError(f"Unknown sampler '{sampler}'.")
                 scheduler_class, scheduler_kwargs = spec
+                if schedule_type not in {"normal", "karras"}:
+                    raise GenerationError(f"Unknown SDXL schedule type '{schedule_type}'.")
+                if schedule_type == "karras":
+                    if sampler == "ddim":
+                        raise GenerationError(
+                            "Karras schedule is not supported with the DDIM sampler."
+                        )
+                    scheduler_kwargs = {**scheduler_kwargs, "use_karras_sigmas": True}
                 pipe.scheduler = scheduler_class.from_config(base_config, **scheduler_kwargs)
             else:
                 raise GenerationError(f"Sampler switching is not implemented for model family '{family}'.")
@@ -2710,7 +2746,9 @@ class GenerationManager:
         job.started_at = _utc_now()
         load_started = time.monotonic()
         pipe, device = self._load_pipeline(job)
-        self._configure_sampler(pipe, job.model["family"], job.request.sampler)
+        self._configure_sampler(
+            pipe, job.model["family"], job.request.sampler, job.request.schedule_type
+        )
         self.configure_loras(pipe, job.model, job.request.loras)
         job.model_load_seconds = max(0.0, time.monotonic() - load_started)
         job._started_monotonic = time.monotonic()
