@@ -17,18 +17,18 @@ class _ReadableHTML(HTMLParser):
         self.hidden = 0
     def handle_starttag(self, tag, attrs):
         if tag in ('style', 'script'): self.hidden += 1
-        if tag in ('p', 'div', 'h1', 'h2', 'h3', 'li', 'br'): self.parts.append('\\n')
+        if tag in ('p', 'div', 'h1', 'h2', 'h3', 'li', 'br'): self.parts.append('\n')
         if tag == 'li': self.parts.append('• ')
     def handle_endtag(self, tag):
         if tag in ('style', 'script'): self.hidden = max(0, self.hidden - 1)
-        if tag in ('p', 'div', 'h1', 'h2', 'h3', 'li'): self.parts.append('\\n')
+        if tag in ('p', 'div', 'h1', 'h2', 'h3', 'li'): self.parts.append('\n')
     def handle_data(self, data):
         if not self.hidden and sum(map(len,self.parts)) < 5000: self.parts.append(data)
 
 def _readable(text):
     parser = _ReadableHTML()
     parser.feed(str(text or '')[:30000])
-    return '\\n'.join(' '.join(line.split()) for line in ''.join(parser.parts).split('\\n') if line.strip())[:5000]
+    return '\n'.join(' '.join(line.split()) for line in ''.join(parser.parts).split('\n') if line.strip())[:5000]
 
 
 def model_details(model_id: int, *, client: httpx.Client | None = None) -> dict[str, Any]:
