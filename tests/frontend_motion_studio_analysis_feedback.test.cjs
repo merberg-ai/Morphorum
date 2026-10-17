@@ -214,3 +214,16 @@ test('UX2.1 original Analyze button and status are both in visible Stage 2',()=>
   assert.match(css,/#animation-panel-audio \.motion-studio-stage \{\s*display:flex;\s*flex-direction:column/);
   assert.match(css,/#animation-panel-audio \.motion-studio-analysis-result\[hidden\]/);
 });
+
+
+test('UX2.3 beat assignment is a visible dedicated step with preserved cue actions',()=>{
+  assert.match(js,/\['assign', 'Assign Motion to Beats'/);
+  assert.match(js,/const cueStage = qs\('#motion-studio-stage-assign'\)/);
+  assert.match(js,/<details class="animation-audio-find-beats" open>/);
+  assert.match(js,/Assign All Matching Beats/);
+  assert.match(js,/\[data-beat-preview\]/);
+  assert.match(js,/\[data-beat-assign\]/);
+  assert.match(js,/\[data-cue-save\]/);
+  assert.match(js,/\[data-cue-apply\]/);
+  assert.match(js,/stages\.assign\.appendChild\(assignHelp\)/);
+});
