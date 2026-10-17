@@ -262,3 +262,15 @@ The previously completed C4.1/C4.2 Hub gallery continues to show verified instal
 7. Disable Civitai Hub and ensure bulk operations report guarded failures instead of performing network requests.
 
 **C4.3 is staged on the feature branch only.** Automated tests and physical Windows validation are still pending. Final release hardening and merge belong to C5.
+
+## C5 release hardening: staged validation
+
+This pass is intentionally separate from release/merge acceptance. The feature branch remains isolated until physical Windows signoff.
+
+**Changes reviewed and corrected:** GitHub push CI now includes `feature/civitai-model-hub`; the frontend syntax job checks `civitai.js`; cached preview images are checked for a recognizable JPEG/PNG/WebP file signature before being stored, are published via atomic rename, and synchronized metadata is rejected if the underlying model file changes during the request. Invalid cache JSON object shapes are treated as misses. Additional tests cover malformed cached metadata and absent preview files. Older Project submenu test assertions were adjusted to the markup's actual attribute ordering (the UI was not changed).
+
+**Security/operation boundaries:** Hub disabled by default. Civitai auth keys are host-side and never returned in API responses; note that keys stored in `data/.civitai-token` are *not encrypted at rest*. All remote discovery/identification/sync/update requests require explicit user action and the Hub enabled. Download jobs retain partial files for user-triggered resume, do not overwrite model files, and verify SHA-256 when Civitai provides it. Civitai galleries and downloaded metadata remain untrusted, displayed as text or constrained local data, not executable HTML.
+
+**Release checklist:** Review the latest [Backend tests](https://github.com/merberg-ai/Morphorum/actions/workflows/backend-tests.yml) and [Syntax checks](https://github.com/merberg-ai/Morphorum/actions/workflows/syntax.yml) runs for this branch. Physically verify Windows install/updater, opt-in and token save/clear/test, protected downloads and resume, local metadata cache and previews, LoRA trigger restore, bulk library operations, Image integration, Motion Lab/Project Editor selection and save/reload, and narrow/mobile layouts. Run a smoke generation after a Civitai-sourced model selection. Confirm disabled mode retains completely local generation.
+
+**Merge gate:** Do not merge into `main` until both required CI checks pass on the final commit and Windows physical tests pass. No release/merge is implied by this hardening change.
