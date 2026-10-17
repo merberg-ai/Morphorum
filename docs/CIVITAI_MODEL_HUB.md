@@ -274,3 +274,9 @@ This pass is intentionally separate from release/merge acceptance. The feature b
 **Release checklist:** Review the latest [Backend tests](https://github.com/merberg-ai/Morphorum/actions/workflows/backend-tests.yml) and [Syntax checks](https://github.com/merberg-ai/Morphorum/actions/workflows/syntax.yml) runs for this branch. Physically verify Windows install/updater, opt-in and token save/clear/test, protected downloads and resume, local metadata cache and previews, LoRA trigger restore, bulk library operations, Image integration, Motion Lab/Project Editor selection and save/reload, and narrow/mobile layouts. Run a smoke generation after a Civitai-sourced model selection. Confirm disabled mode retains completely local generation.
 
 **Merge gate:** Do not merge into `main` until both required CI checks pass on the final commit and Windows physical tests pass. No release/merge is implied by this hardening change.
+
+## Download queue cleanup follow-up
+
+The Civitai queue supports **Remove** for completed, failed, interrupted and cancelled entries. Removal updates the persisted queue manifest and cleans partial `.part` files for unfinished jobs, but **never deletes installed `.safetensors` weights**. A queued or still-running job must first be cancelled, and removal waits for the worker to exit to avoid a race with the downloader. Interrupted jobs remain resumable until they are removed.
+
+The explicit `DELETE /api/civitai/downloads/{job_id}` endpoint requires Civitai Hub enabled, returns 409 for active jobs, and returns 404 for nonexistent entries. Regression tests check protected model files, interrupted partial cleanup, and rejection of running jobs.
