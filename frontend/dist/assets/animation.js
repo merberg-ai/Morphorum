@@ -1097,7 +1097,7 @@
     const longest = prompts.reduce((best, item) => Math.max(best, String(item || '').length), 0);
     // Heuristic only: exact token counts are determined by SDXL tokenizers at inference.
     notice.hidden = family !== 'sdxl' || longest < 250;
-    notice.textContent = 'Long SDXL prompt detected in this project. CLIP supports 77 tokens per encoder; some text may be truncated. This is a character-length advisory, not an exact token count. Review Console for exact generation diagnostics.';
+    notice.textContent = 'Long SDXL prompt likely. This is a character-length estimate, not an exact token count. Morphorum reports the actual chunking mode during SDXL diffusion; check render diagnostics.';
   }
 
   function populateAnimationScheduleTypes(preferred = '') {
@@ -4142,6 +4142,21 @@
     }
   }
 
+  function renderAnimationConditioningDiagnostic(job) {
+    const panel = qs('#animation-conditioning-diagnostic');
+    if (!panel) return;
+    const diagnostic = job?.conditioning_diagnostic;
+    panel.hidden = !diagnostic || !['standard', 'chunked', 'embedded'].includes(diagnostic.mode);
+    if (panel.hidden) { panel.textContent = ''; return; }
+    const mode = String(diagnostic.mode).toUpperCase() +
+      (diagnostic.blended ? ' / BLENDED' : '');
+    const info = ['SDXL conditioning: ' + mode];
+    if (Number.isInteger(diagnostic.frame)) info.push('diffusion anchor ' + diagnostic.frame);
+    if (Array.isArray(diagnostic.shape)) info.push('Embeddings: [' + diagnostic.shape.join(', ') + ']');
+    if (diagnostic.negative_aligned === true) info.push('Negative conditioning aligned');
+    panel.textContent = info.join(' · ');
+  }
+
   function renderPerformanceSummary(job) {
     const panel = qs('#animation-performance-summary');
     const stats = qs('#animation-performance-stats');
@@ -4184,6 +4199,10 @@
         : '') +
       (Number(perf.oom_count || 0)
         ? ' · OOM count ' + perf.oom_count
+        : '') +
+      ((Number(perf.conditioning_cache_hits || 0) + Number(perf.conditioning_cache_misses || 0)) > 0
+        ? ' · SDXL prompt cache ' + Number(perf.conditioning_cache_hits || 0) +
+          ' hits / ' + Number(perf.conditioning_cache_misses || 0) + ' misses'
         : '') +
       ' · resident LoRAs ≤ ' + perf.maximum_resident_loras +
       ' · execution ' + (perf.pipeline_device || 'not recorded') +
@@ -4399,6 +4418,7 @@
     const progress = qs('#animation-render-progress');
     if (progress) progress.hidden = true;
     renderAnimationPromptTelemetry(null);
+    renderAnimationConditioningDiagnostic(null);
     renderAnimationFrameTelemetry(null);
     const error = qs('#animation-render-error');
     if (error) { error.hidden = true; error.textContent = ''; }
@@ -4532,6 +4552,7 @@
     }
 
     renderAnimationPromptTelemetry(job);
+    renderAnimationConditioningDiagnostic(job);
     renderAnimationLoraVerification(job);
     renderAnimationFrameTelemetry(job);
     renderPerformanceSummary(job);
