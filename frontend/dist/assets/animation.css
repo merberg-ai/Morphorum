@@ -4091,3 +4091,20 @@ dialog#animation-deforum-dialog {
 .animation-audio-cue-select-row > .animation-audio-cue-item {min-width:0;max-width:100%;overflow-wrap:anywhere;}
 .animation-audio-director-actions [data-cue-selection-count] {white-space:nowrap;font-size:.8rem;}
 @media(max-width:600px) {.animation-audio-cue-select-row > .animation-audio-cue-item {white-space:normal;}}
+
+/* UX4.2: compact section navigation at phone widths and high zoom. */
+#animation-panel-editor .animation-editor-mobile-section {display:none;}
+#animation-panel-editor .animation-editor-group-button:focus-visible,
+#animation-panel-editor .animation-editor-mobile-section:focus-visible {
+  outline:3px solid var(--accent,#39bff5);outline-offset:2px;
+}
+#animation-panel-editor .animation-editor-group-button[aria-pressed="true"] {
+  font-weight:700;
+}
+@media (max-width:600px) {
+  #animation-panel-editor #animation-editor-group-nav {display:none;}
+  #animation-panel-editor .animation-editor-mobile-section {
+    display:block;width:100%;max-width:100%;min-width:0;
+    margin:.7rem 0 1rem;min-height:44px;
+  }
+}
