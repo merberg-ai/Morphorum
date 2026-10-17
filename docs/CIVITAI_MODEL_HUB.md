@@ -44,3 +44,20 @@ Example after enabling Hub in Settings:
 Pass the returned `next_cursor` URL-encoded as `cursor` on subsequent calls. Model previews honor the Hub thumbnail preference and mature-content requests cannot override the saved mature setting. Search API tokens remain backend-only. Requests are bounded in size/time and upstream errors are sanitized.
 
 C1.1 does **not** add the gallery/navigation UI; that is C1.2. Tests in `tests/test_civitai_search.py` cover disabled network guard, filters, opaque cursor, mature restriction, and thumbnail preference.
+
+## C1.2: Model discovery gallery (awaiting physical tests)
+
+With the Civitai Hub enabled and saved, the **Civitai Hub** sidebar entry exposes a responsive search gallery. Searching supports free-text, model type, base-model family, creator, tag, sort and period. Cards include the model thumbnail (when enabled), name, creator, version, base family, downloads and an external Civitai link. Results use the C1.1 API with cursor-based Next/Previous navigation, without assuming opaque cursors are numeric. A request gets a busy spinner, disabled Search button and live-region status; network/API errors trigger the existing toast notification system.
+
+When the Hub is disabled, its navigation is hidden, search is blocked in the UI and by the backend, and the local Models and LoRAs tools are not affected. Layout preference is loaded from existing Hub settings: thumbnail grid or compact list. Card image failures display a placeholder rather than breaking the layout. Download and local library actions are reserved for later stages.
+
+### Windows test checklist
+
+1. Enable and save Civitai Hub in Settings, then refresh the browser. Confirm the sidebar entry appears.
+2. Open Civitai Hub, search for an SDXL LoRA, and check thumbnails, card layout and external model links.
+3. Change sorting, time period, creator/tag filters; verify searches work and display feedback while busy.
+4. Use Next then Previous on a query with multiple pages. Confirm the previous page is restored.
+5. Toggle list mode in Settings, save and refresh; verify list layout. Check narrow/mobile widths.
+6. Disable and save Hub, reload; confirm navigation disappears and direct requests to `/api/civitai/models` return HTTP 403.
+
+**Status:** Code pushed; physical Windows/mobile verification pending. Do not mark C1.2 passed until confirmed.
