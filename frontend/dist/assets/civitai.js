@@ -11,6 +11,55 @@
     if (content != null) node.textContent = String(content);
     return node;
   };
+
+  async function refreshDownloads() {
+    if (!state.enabled) return;
+    try {
+      const response = await fetch('/api/civitai/downloads');
+      if (!response.ok) return;
+      const payload = await response.json();
+      const root = byId('civitai-download-jobs');
+      if (!root) return;
+      root.replaceChildren();
+      for (const job of payload.jobs || []) {
+        const row = elt('div', 'civitai-download-job');
+        row.append(elt('strong', '', job.name), elt('span', 'muted', job.status));
+        if (job.total_bytes) {
+          const progress = elt('progress', 'civitai-download-progress');
+          progress.max = job.total_bytes;
+          progress.value = job.bytes || 0;
+          row.append(progress);
+        } else row.append(elt('span', 'muted', ((job.bytes || 0) / 1048576).toFixed(1) + ' MB'));
+        if (['queued','downloading'].includes(job.status)) {
+          const cancel = elt('button', 'secondary-button compact', 'Cancel');
+          cancel.addEventListener('click', async () => {
+            cancel.disabled = true;
+            await fetch('/api/civitai/downloads/' + encodeURIComponent(job.id) + '/cancel', {method: 'POST'});
+            void refreshDownloads();
+          });
+          row.append(cancel);
+        }
+        if (job.error) row.append(elt('p', 'muted', job.error));
+        root.append(row);
+      }
+      if (!root.children.length) root.append(elt('p', 'muted', 'No downloads queued.'));
+    } catch (error) { toast('Download queue unavailable', error.message, 'warning'); }
+  }
+  async function queueDownload(modelId, versionId, fileName, button) {
+    button.disabled = true;
+    button.classList.add('busy');
+    button.textContent = 'Queueing…';
+    try {
+      const response = await fetch('/api/civitai/downloads', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model_id:modelId, version_id:versionId, file_name:fileName})});
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'Download request failed');
+      toast('Download queued', fileName, 'success');
+      void refreshDownloads();
+      if (!state.downloadTimer) state.downloadTimer = setInterval(refreshDownloads, 2000);
+    } catch (error) { toast('Unable to queue download', error.message, 'error'); }
+    finally { button.disabled = false; button.classList.remove('busy'); button.textContent = 'Add to download queue'; }
+  }
   function settingsChanged(config = {}) {
     state.enabled = config.enabled === true;
     state.layout = config.layout === 'list' ? 'list' : 'grid';
@@ -18,6 +67,8 @@
     if (nav) nav.hidden = !state.enabled;
     byId('civitai-results')?.classList.toggle('civitai-list', state.layout === 'list');
     if (!state.enabled) {
+      if (state.downloadTimer) clearInterval(state.downloadTimer);
+      state.downloadTimer = null;
       state.serial++;
       state.detailSerial++;
       byId('civitai-detail-dialog')?.close();
@@ -54,7 +105,7 @@
       byId('civitai-detail-title').textContent = data.name || 'Model details';
       body.replaceChildren();
       body.append(elt('p', 'muted', 'By ' + (data.creator || 'Unknown creator') + ' · ' + (data.type || 'Model')));
-      if (data.description) body.append(elt('p', 'civitai-detail-description', data.description));
+      if (data.description) body.append(elt('div', 'civitai-description-panel', data.description));
       if (Array.isArray(data.tags) && data.tags.length) body.append(elt('p', 'muted', 'Tags: ' + data.tags.join(', ')));
       const versions = Array.isArray(data.versions) ? data.versions : [];
       if (!versions.length) { body.append(elt('p', 'muted', 'No versions available.')); return; }
@@ -71,11 +122,19 @@
         area.replaceChildren();
         const v = versions[Number(select.value)] || versions[0];
         area.append(elt('p', 'civitai-detail-compatibility', v.compatibility || 'Compatibility not verified'));
-        if (v.description) area.append(elt('p', 'civitai-detail-description', v.description));
+        if (v.description) area.append(elt('div', 'civitai-description-panel', v.description));
         if (v.trained_words?.length) area.append(elt('p', '', 'Trigger words: ' + v.trained_words.join(', ')));
         const files = elt('div', 'civitai-detail-files');
         for (const file of (v.files || [])) {
-          files.append(elt('p', 'muted', [file.name, file.format, Number.isFinite(Number(file.size_kb)) ? (Number(file.size_kb)/1024).toFixed(1) + ' MB' : ''].filter(Boolean).join(' · ')));
+          const line = elt('div', 'civitai-detail-file');
+          line.append(elt('p', 'muted', [file.name, file.format, Number.isFinite(Number(file.size_kb)) ? (Number(file.size_kb)/1024).toFixed(1) + ' MB' : ''].filter(Boolean).join(' · ')));
+          if (/\\.safetensors$/i.test(file.name || '')) {
+            const download = elt('button', 'secondary-button compact busy-button', 'Add to download queue');
+            download.type = 'button';
+            download.addEventListener('click', () => void queueDownload(id, v.id, file.name, download));
+            line.append(download);
+          }
+          files.append(line);
         }
         if (files.childNodes.length) {
           area.append(elt('h3', '', 'Available files'), files);
@@ -169,8 +228,9 @@
       toast('Civitai search failed', error.message, 'error');
     } finally { if (current === state.serial) setBusy(false); }
   }
-  function activate() { if (state.enabled && !state.loaded && !state.busy) void search(0); }
+  function activate() { if (state.enabled && !state.loaded && !state.busy) void search(0); if (state.enabled) { void refreshDownloads(); if (!state.downloadTimer) state.downloadTimer = setInterval(refreshDownloads, 2000); } }
   document.addEventListener('DOMContentLoaded', () => {
+    byId('civitai-refresh-downloads')?.addEventListener('click', refreshDownloads);
     byId('civitai-detail-close')?.addEventListener('click', () => byId('civitai-detail-dialog')?.close());
     form()?.addEventListener('submit', event => {
       event.preventDefault();
