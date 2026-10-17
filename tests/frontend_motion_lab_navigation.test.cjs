@@ -356,7 +356,7 @@ test('Preview and render locks include pending API requests and active operation
 });
 
 test('Project Manager uses saved metadata and protects deletion', () => {
-  assert.match(html, /data-project-nav="projects" type="button"/);
+  assert.match(html, /type="button" data-project-nav="projects"/);
   assert.match(js, /projects: 'Project Manager'/);
   assert.match(js, /setupProjectManager\(panels\.projects\)/);
   assert.match(js, /function renderProjectManager\(\)/);
