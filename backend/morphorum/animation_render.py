@@ -946,6 +946,7 @@ class AnimationRenderJob:
     current_prompt_state: dict[str, Any] = field(default_factory=dict)
     current_frame_state: dict[str, Any] = field(default_factory=dict)
     lora_diagnostic: dict[str, Any] | None = None
+    conditioning_diagnostic: dict[str, Any] | None = None
     resumed: bool = False
     performance: dict[str, Any] = field(default_factory=dict)
     _frame_times: list[float] = field(default_factory=list, repr=False)
@@ -1532,6 +1533,7 @@ class AnimationRenderManager:
         generator_device = "cpu"
         conditioning_cache: dict[tuple[Any, ...], Any] = {}
         conditioning_cache_stats: dict[str, int] = {"hits": 0, "misses": 0}
+        previous_sdxl_conditioning: tuple[Any, ...] | None = None
         lora_records: list[dict[str, Any]] | None = None
         positive_prompts = project.get("prompts", {})
         if any(
@@ -1760,15 +1762,20 @@ class AnimationRenderManager:
                 )
                 call_args.update(conditioning)
                 if family == "sdxl":
+                    blended = call_args.get("prompt_embeds") is not None
                     call_args = GenerationManager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
-                    if call_args.get("prompt_embeds") is not None:
-                        shape = tuple(call_args["prompt_embeds"].shape)
-                        mode = "CHUNKED / BLENDED" if len(shape) > 1 and shape[1] > 77 else "BLENDED / EMBEDDED"
-                    else:
-                        shape = None
-                        mode = "STANDARD"
-                    emit_console("info", "animation",
-                        f"SDXL conditioning frame 0: {mode}, embeddings={shape}.")
+                    report = GenerationManager.sdxl_conditioning_diagnostic(pipe, call_args)
+                    report["frame"] = 0
+                    report["blended"] = blended
+                    job.conditioning_diagnostic = report
+                    previous_sdxl_conditioning = (
+                        report["mode"], blended, tuple(report.get("shape") or ()),
+                    )
+                    mode = report["mode"].upper() + (" / BLENDED" if blended else "")
+                    emit_console(
+                        "info", "animation",
+                        f"SDXL conditioning frame 0: {mode}, embeddings={report.get('shape')}.",
+                    )
 
                 with torch.inference_mode():
                     result = pipe(**call_args)
@@ -2177,18 +2184,20 @@ class AnimationRenderManager:
                 phase_memory["post_conditioning"] = generation_manager.cuda_memory_status()
                 call_args.update(conditioning)
                 if family == "sdxl":
+                    blended = call_args.get("prompt_embeds") is not None
                     call_args = GenerationManager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
-                    if frame == 3 or (frame % 60 == 0):
-                        shape = (
-                            tuple(call_args["prompt_embeds"].shape)
-                            if call_args.get("prompt_embeds") is not None else None
+                    report = GenerationManager.sdxl_conditioning_diagnostic(pipe, call_args)
+                    report["frame"] = frame
+                    report["blended"] = blended
+                    job.conditioning_diagnostic = report
+                    old_report = previous_sdxl_conditioning
+                    previous_sdxl_conditioning = (report["mode"], blended, tuple(report.get("shape") or ()))
+                    if previous_sdxl_conditioning != old_report or frame % 60 == 0:
+                        mode = report["mode"].upper() + (" / BLENDED" if blended else "")
+                        emit_console(
+                            "info", "animation",
+                            f"SDXL conditioning frame {frame}: {mode}, embeddings={report.get('shape')}.",
                         )
-                        mode = (
-                            "CHUNKED / BLENDED" if shape and len(shape) > 1 and shape[1] > 77
-                            else "BLENDED / EMBEDDED" if shape else "STANDARD"
-                        )
-                        emit_console("info", "animation",
-                            f"SDXL conditioning frame {frame}: {mode}, embeddings={shape}.")
 
                 diffusion_started = time.monotonic()
                 with torch.inference_mode():
