@@ -1085,6 +1085,60 @@
       : 'Compatible samplers';
   }
 
+  function showAnimationPromptLengthAdvisory() {
+    const notice = qs('#animation-prompt-token-warning');
+    if (!notice) return;
+    const model = modelById(qs('#animation-model')?.value || state.project?.model?.model_id || '');
+    const family = model?.family || state.project?.model?.family;
+    const prompts = [
+      ...Object.values(state.project?.prompts || {}),
+      ...Object.values(state.project?.negative_prompts || {}),
+    ];
+    const longest = prompts.reduce((best, item) => Math.max(best, String(item || '').length), 0);
+    // Heuristic only: exact token counts are determined by SDXL tokenizers at inference.
+    notice.hidden = family !== 'sdxl' || longest < 250;
+    notice.textContent = 'Long SDXL prompt likely. This is a character-length estimate, not an exact token count. Morphorum reports the actual chunking mode during SDXL diffusion; check render diagnostics.';
+  }
+
+  function populateAnimationScheduleTypes(preferred = '') {
+    const field = qs('#animation-schedule-type-field');
+    const select = qs('#animation-schedule-type');
+    if (!field || !select) return;
+    const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
+    const model = modelById(modelId);
+    // A saved project may load before its checkpoint is indexed. Retain its
+    // SDXL-only controls instead of silently hiding a persisted schedule.
+    const family = String(model?.family || (
+      modelId === state.project?.model?.model_id ? state.project?.model?.family : ''
+    ) || '').toLowerCase();
+    const isSdxl = family === 'sdxl';
+    field.hidden = !isSdxl;
+    select.replaceChildren();
+    if (!isSdxl) {
+      select.add(new Option('Normal', 'normal'));
+      select.disabled = true;
+      return;
+    }
+    const config = (model ? effectiveCapability(model) : state.capabilities.sdxl || {}).schedule_types || {};
+    const selectedSampler = qs('#animation-sampler')?.value;
+    const previous = preferred || state.project?.generation?.schedule_type || 'normal';
+    const options = Array.isArray(config.options) ? config.options : [];
+    for (const option of options) {
+      if (selectedSampler === 'ddim' && option.id !== 'normal') continue;
+      if (option.id === 'trailing' && !['euler', 'euler_a', 'dpmpp_2m', 'dpmpp_2m_sde', 'lms', 'heun', 'unipc'].includes(selectedSampler)) continue;
+      if (['exponential', 'beta'].includes(option.id) && !['euler', 'dpmpp_2m', 'dpmpp_2m_sde', 'unipc'].includes(selectedSampler)) continue;
+      select.add(new Option(option.label || option.id, option.id));
+    }
+    if (options.length) {
+      if (![...select.options].some(option => option.value === previous)) {
+        const unsupported = new Option('Unsupported schedule · ' + previous, previous);
+        select.add(unsupported);
+      }
+      select.value = previous;
+    }
+    select.disabled = !options.length;
+  }
+
   function repairConstantGuidanceForSelectedModel({ announce = false } = {}) {
     const input = qs('#animation-guidance');
     const modelId = qs('#animation-model')?.value || state.project?.model?.model_id || '';
@@ -1160,6 +1214,7 @@
       preserveSelection ? previousSampler : (state.project?.generation?.sampler || ''),
       { preserveUnsupported: true }
     );
+    populateAnimationScheduleTypes();
     populateResolutionPresets();
     renderEditorGuidance();
   }
@@ -2341,6 +2396,8 @@
 
       populateModelSelect();
       populateSamplerSelect(project.generation?.sampler || '', { preserveUnsupported: true });
+      populateAnimationScheduleTypes(project.generation?.schedule_type || 'normal');
+      showAnimationPromptLengthAdvisory();
       const repairedGuidance = repairConstantGuidanceForSelectedModel();
       renderPromptRows();
       syncAnimationModeUi();
@@ -2434,6 +2491,7 @@
         steps: qs('#animation-steps')?.value || '0:(20)',
         guidance: qs('#animation-guidance')?.value || '0:(0)',
         sampler: qs('#animation-sampler')?.value || 'flowmatch_euler',
+        schedule_type: qs('#animation-schedule-type')?.value || 'normal',
         seed: Number(qs('#animation-seed')?.value ?? -1),
         seed_behavior: qs('#animation-seed-behavior')?.value || 'fixed',
         seed_increment: Number(qs('#animation-seed-increment')?.value || 1),
@@ -4084,6 +4142,21 @@
     }
   }
 
+  function renderAnimationConditioningDiagnostic(job) {
+    const panel = qs('#animation-conditioning-diagnostic');
+    if (!panel) return;
+    const diagnostic = job?.conditioning_diagnostic;
+    panel.hidden = !diagnostic || !['standard', 'chunked', 'embedded'].includes(diagnostic.mode);
+    if (panel.hidden) { panel.textContent = ''; return; }
+    const mode = String(diagnostic.mode).toUpperCase() +
+      (diagnostic.blended ? ' / BLENDED' : '');
+    const info = ['SDXL conditioning: ' + mode];
+    if (Number.isInteger(diagnostic.frame)) info.push('diffusion anchor ' + diagnostic.frame);
+    if (Array.isArray(diagnostic.shape)) info.push('Embeddings: [' + diagnostic.shape.join(', ') + ']');
+    if (diagnostic.negative_aligned === true) info.push('Negative conditioning aligned');
+    panel.textContent = info.join(' · ');
+  }
+
   function renderPerformanceSummary(job) {
     const panel = qs('#animation-performance-summary');
     const stats = qs('#animation-performance-stats');
@@ -4126,6 +4199,10 @@
         : '') +
       (Number(perf.oom_count || 0)
         ? ' · OOM count ' + perf.oom_count
+        : '') +
+      ((Number(perf.conditioning_cache_hits || 0) + Number(perf.conditioning_cache_misses || 0)) > 0
+        ? ' · SDXL prompt cache ' + Number(perf.conditioning_cache_hits || 0) +
+          ' hits / ' + Number(perf.conditioning_cache_misses || 0) + ' misses'
         : '') +
       ' · resident LoRAs ≤ ' + perf.maximum_resident_loras +
       ' · execution ' + (perf.pipeline_device || 'not recorded') +
@@ -4341,6 +4418,7 @@
     const progress = qs('#animation-render-progress');
     if (progress) progress.hidden = true;
     renderAnimationPromptTelemetry(null);
+    renderAnimationConditioningDiagnostic(null);
     renderAnimationFrameTelemetry(null);
     const error = qs('#animation-render-error');
     if (error) { error.hidden = true; error.textContent = ''; }
@@ -4474,6 +4552,8 @@
     }
 
     renderAnimationPromptTelemetry(job);
+    renderAnimationConditioningDiagnostic(job);
+    renderAnimationLoraVerification(job);
     renderAnimationFrameTelemetry(job);
     renderPerformanceSummary(job);
 
@@ -4498,6 +4578,37 @@
     }
     renderSourceState();
     renderVideoExportState();
+  }
+
+  function renderAnimationLoraVerification(job) {
+    const panel = qs('#animation-lora-verification');
+    if (!panel) return;
+    const adapters = job?.lora_diagnostic?.adapters;
+    panel.hidden = !Array.isArray(adapters) || adapters.length === 0;
+    if (panel.hidden) { panel.textContent = ''; return; }
+    const title = document.createElement('strong');
+    title.textContent = 'SDXL LoRA verification · ' + adapters.length + ' active';
+    const list = document.createElement('div');
+    list.className = 'lora-verification-items';
+    for (const adapter of adapters) {
+      const row = document.createElement('p');
+      const status = adapter.status === 'checkpoint_verified'
+        ? 'CLIP weights matched checkpoint'
+        : adapter.status === 'unet_only'
+          ? 'UNet-only fallback; CLIP LoRA weights not applied'
+          : 'Active; source weight comparison unavailable';
+      const parts = [String(adapter.name || 'Unnamed LoRA'), status];
+      if (adapter.status === 'checkpoint_verified') {
+        for (const [label, key] of [['CLIP-L', 'text_encoder'], ['CLIP-G', 'text_encoder_2']]) {
+          const data = adapter.components?.[key];
+          if (data) parts.push(label + ' ' + data.checkpoint_values_verified + '/' + data.tensors);
+        }
+      }
+      parts.push('strength ' + Number(adapter.weight || 0).toFixed(3));
+      row.textContent = parts.join(' · ');
+      list.appendChild(row);
+    }
+    panel.replaceChildren(title, list);
   }
 
   function populateRenderHistory(renders) {
@@ -4634,6 +4745,7 @@
     'animation.start_mode': '#animation-start-mode',
     'animation.source_image': '#animation-source-file',
     'generation.sampler': '#animation-sampler',
+    'generation.schedule_type': '#animation-schedule-type',
     'generation.steps': '#animation-steps',
     'generation.guidance': '#animation-guidance',
     'hybrid.composite_opacity': '#animation-hybrid-composite-opacity',
@@ -11672,6 +11784,8 @@
 
     qs('#animation-model')?.addEventListener('change', () => {
       populateSamplerSelect('');
+      populateAnimationScheduleTypes('normal');
+      showAnimationPromptLengthAdvisory();
       populateResolutionPresets();
       const repairedGuidance = repairConstantGuidanceForSelectedModel({ announce: true });
       renderPromptRows();
@@ -11680,7 +11794,10 @@
       renderSourceState();
     });
 
-    qs('#animation-sampler')?.addEventListener('change', renderAnimationModelCompatibility);
+    qs('#animation-sampler')?.addEventListener('change', () => {
+      populateAnimationScheduleTypes(qs('#animation-schedule-type')?.value || 'normal');
+      renderAnimationModelCompatibility();
+    });
     qs('#animation-compatibility-action')?.addEventListener('click', () => {
       const action = qs('#animation-compatibility-action')?.dataset.compatibilityAction;
       if (action === 'models') {

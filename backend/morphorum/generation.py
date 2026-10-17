@@ -35,6 +35,36 @@ class _KnownDiffusersNoiseFilter(logging.Filter):
         )
 
 
+class _RepeatedClipWarningFilter(logging.Filter):
+    """Keep first occurrence of identical CLIP overflow reports; never filter LoRA diagnostics."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._seen: set[str] = set()
+        self._lock = threading.Lock()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        known = (
+            "Token indices sequence length is longer than the specified maximum sequence length"
+            in message
+            or "The following part of your input was truncated because CLIP can only handle"
+            in message
+            or "Ignoring clean_up_tokenization_spaces=True for BPE tokenizer CLIPTokenizer"
+            in message
+        )
+        if not known:
+            return True
+        with self._lock:
+            if message in self._seen:
+                return False
+            self._seen.add(message)
+        return True
+
+
+_clip_noise_filter = _RepeatedClipWarningFilter()
+
+
 _runtime_noise_configured = False
 
 
@@ -76,6 +106,12 @@ def _configure_external_runtime_noise() -> None:
     except Exception:
         pass
 
+    # Transformers emits identical CLIP warnings on repeat calls. Preserve
+    # the first report and all unrelated warnings, including LoRA load reports.
+    transformers_logger = logging.getLogger("transformers")
+    transformers_logger.addFilter(_clip_noise_filter)
+    logging.getLogger("transformers.tokenization_utils_base").addFilter(_clip_noise_filter)
+
     _runtime_noise_configured = True
 
 
@@ -94,6 +130,16 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
         "guidance": {"key": "cfg_scale", "label": "CFG", "default": 6.0, "min": 1.0, "max": 30.0},
         "negative_prompt": True,
         "default_resolution": {"width": 1024, "height": 1024},
+        "schedule_types": {
+            "default": "normal",
+            "options": [
+                {"id": "normal", "label": "Normal"},
+                {"id": "karras", "label": "Karras"},
+                {"id": "exponential", "label": "Exponential"},
+                {"id": "beta", "label": "Beta"},
+                {"id": "trailing", "label": "Trailing (Diffusers)"},
+            ],
+        },
         "samplers": {
             "default": "euler",
             "options": [
@@ -105,6 +151,10 @@ CAPABILITIES: dict[str, dict[str, Any]] = {
                 {"id": "lms", "label": "LMS"},
                 {"id": "heun", "label": "Heun"},
                 {"id": "unipc", "label": "UniPC"},
+                {"id": "dpm2", "label": "DPM2"},
+                {"id": "dpm2_a", "label": "DPM2 a"},
+                {"id": "deis", "label": "DEIS"},
+                {"id": "dpmpp_singlestep", "label": "DPM++ Single Step"},
             ],
         },
         "resolutions": [
@@ -221,6 +271,7 @@ class GenerationRequest:
     steps: int = 25
     guidance_scale: float = 7.0
     sampler: str = "euler"
+    schedule_type: str = "normal"
     seed: int = -1
     seed_mode: str = "fixed"
     seed_increment: int = 1
@@ -238,6 +289,7 @@ class GenerationRequest:
             steps=_safe_int(payload.get("steps"), 25),
             guidance_scale=_safe_float(payload.get("guidance_scale"), 7.0),
             sampler=str(payload.get("sampler", "euler")).strip().lower(),
+            schedule_type=str(payload.get("schedule_type", "normal")).strip().lower(),
             seed=_safe_int(payload.get("seed"), -1),
             seed_mode=str(payload.get("seed_mode", "fixed")).strip().lower(),
             seed_increment=_safe_int(payload.get("seed_increment"), 1),
@@ -265,6 +317,9 @@ class GenerationJob:
     average_step_seconds: float | None = None
     seeds: list[int] = field(default_factory=list)
     results: list[dict[str, Any]] = field(default_factory=list)
+    prompt_warnings: list[str] = field(default_factory=list)
+    conditioning_diagnostic: dict[str, Any] | None = None
+    lora_diagnostic: dict[str, Any] | None = None
     error: str | None = None
     cancel_requested: bool = False
     _started_monotonic: float | None = field(default=None, repr=False)
@@ -340,6 +395,55 @@ class GenerationManager:
             "sdxl_transition_profile": deepcopy(self._sdxl_transition_profile),
             "busy": active,
         }
+
+    def sdxl_lora_diagnostics(self) -> dict[str, Any]:
+        """Small, honest SDXL adapter report for render UIs.
+
+        Coverage/value verification refers only to the normalized full
+        text-encoder loader. A normal adapter load has not been compared
+        against the source checkpoint and must not be labeled as such.
+        """
+        active = dict(self._active_lora_signature)
+        adapters: list[dict[str, Any]] = []
+        for item in self._pipeline_loras.values():
+            name = str(item.get("adapter_name") or "")
+            if name not in active or item.get("family") != "sdxl":
+                continue
+            compatibility = item.get("compatibility")
+            diagnostic = item.get("diagnostics") or {}
+            components = diagnostic.get("components") or {}
+            verified = bool(
+                compatibility == "sdxl-text-encoder-normalized"
+                and all(
+                    (components.get(tower) or {}).get("coverage_verified")
+                    and (components.get(tower) or {}).get("checkpoint_values_verified")
+                    == (components.get(tower) or {}).get("checkpoint_tensors")
+                    for tower in ("text_encoder", "text_encoder_2")
+                )
+            )
+            if compatibility == "sdxl-clean-unet-only":
+                status = "unet_only"
+            elif verified:
+                status = "checkpoint_verified"
+            else:
+                status = "active_not_value_checked"
+            adapters.append({
+                "name": str(item.get("name") or name),
+                "adapter_name": name,
+                "weight": active[name],
+                "status": status,
+                "components": {
+                    part: {
+                        "tensors": int(data.get("tensors", 0)),
+                        "checkpoint_values_verified": int(
+                            data.get("checkpoint_values_verified", 0)
+                        ),
+                    }
+                    for part, data in components.items()
+                    if isinstance(data, dict)
+                },
+            })
+        return {"adapters": adapters, "active_count": len(adapters)}
 
     def unload_model(self) -> dict[str, Any]:
         with self._lock:
@@ -504,6 +608,25 @@ class GenerationManager:
             raise GenerationError(
                 f"Sampler '{request.sampler}' is not supported for {capability.get('label', family)}."
             )
+        if family == "sdxl":
+            schedule_ids = {
+                str(item.get("id"))
+                for item in capability["schedule_types"]["options"]
+            }
+            if request.schedule_type not in schedule_ids:
+                raise GenerationError(
+                    f"Schedule Type '{request.schedule_type}' is not supported for SDXL."
+                )
+            if request.schedule_type != "normal" and request.sampler == "ddim":
+                raise GenerationError("DDIM supports only Normal scheduling.")
+            if request.schedule_type == "trailing" and request.sampler not in {
+                "euler", "euler_a", "dpmpp_2m", "dpmpp_2m_sde", "lms", "heun", "unipc"
+            }:
+                raise GenerationError("Trailing spacing is not supported for this sampler.")
+            if request.schedule_type in {"exponential", "beta"} and request.sampler not in {
+                "euler", "dpmpp_2m", "dpmpp_2m_sde", "unipc"
+            }:
+                raise GenerationError("Selected SDXL sampler does not support this schedule.")
 
         model_path = Path(model["path"])
         if family == "zimage":
@@ -1646,7 +1769,9 @@ class GenerationManager:
             job,
             load_progress_callback,
         )
-        self._configure_sampler(pipe, model["family"], request.sampler)
+        self._configure_sampler(
+            pipe, model["family"], request.sampler, request.schedule_type
+        )
         self.configure_loras(pipe, model, request.loras)
         return pipe, generator_device, model
 
@@ -1682,7 +1807,9 @@ class GenerationManager:
             job,
             load_progress_callback,
         )
-        self._configure_sampler(pipe, model["family"], request.sampler)
+        self._configure_sampler(
+            pipe, model["family"], request.sampler, request.schedule_type
+        )
         if model["family"] == "sdxl":
             self._record_sdxl_transition_stage("after_sampler")
         self.configure_loras(pipe, model, request.loras)
@@ -2103,6 +2230,66 @@ class GenerationManager:
             component_counts,
         )
 
+    @staticmethod
+    def _compare_sdxl_clip_checkpoint_values(
+        component: Any, adapter_name: str, checkpoint: dict[str, Any],
+        component_name: str,
+    ) -> dict[str, int]:
+        """Compare every expected PEFT A/B tensor to the actual injected parameter."""
+        import torch
+        from diffusers.utils.state_dict_utils import (
+            convert_state_dict_to_diffusers, convert_state_dict_to_peft,
+        )
+
+        prefix = component_name + "."
+        source = {
+            str(key)[len(prefix):]: value
+            for key, value in checkpoint.items()
+            if str(key).startswith(prefix)
+        }
+        expected = convert_state_dict_to_peft(
+            convert_state_dict_to_diffusers(source)
+        )
+        expected = {
+            key: value for key, value in expected.items()
+            if key.endswith((".lora_A.weight", ".lora_B.weight"))
+        }
+        if not expected:
+            raise GenerationError(
+                f"SDXL {component_name}: no comparable checkpoint LoRA A/B tensors."
+            )
+        actual = dict(component.named_parameters())
+        checked = 0
+        for key, value in expected.items():
+            for suffix in (".lora_A.weight", ".lora_B.weight"):
+                if key.endswith(suffix):
+                    param_name = key[:-len(suffix)] + suffix.replace(
+                        ".weight", f".{adapter_name}.weight"
+                    )
+                    break
+            else:
+                continue
+            loaded = actual.get(param_name)
+            if loaded is None:
+                raise GenerationError(
+                    f"SDXL {component_name}: checkpoint tensor {key} "
+                    "is missing from the injected adapter."
+                )
+            if tuple(loaded.shape) != tuple(value.shape):
+                raise GenerationError(
+                    f"SDXL {component_name}: shape mismatch for {key}."
+                )
+            if not torch.allclose(
+                loaded.detach().to(device="cpu", dtype=torch.float32),
+                value.detach().to(device="cpu", dtype=torch.float32),
+                rtol=1e-4, atol=1e-5,
+            ):
+                raise GenerationError(
+                    f"SDXL {component_name}: checkpoint value mismatch for {key}."
+                )
+            checked += 1
+        return {"checkpoint_values_verified": checked}
+
     @classmethod
     def _load_sdxl_full_text_encoder_adapter(
         cls,
@@ -2149,7 +2336,19 @@ class GenerationManager:
 
         # The normal loader may have injected the UNet and/or first text
         # encoder before the rank error. Remove that partial adapter first.
+        emit_console(
+            "info", "generation",
+            f"SDXL LoRA {path.name}: resetting a partially injected adapter "
+            "before the full CLIP compatibility retry. PEFT may report an "
+            "active adapter being deleted; activation is verified after reload.",
+        )
         cls._delete_pipeline_adapter(pipe, adapter_name)
+        remaining = cls._pipeline_adapter_names(pipe)
+        if remaining is not None and adapter_name in remaining:
+            raise GenerationError(
+                f"SDXL adapter {adapter_name} was still registered after cleanup; "
+                "refusing to inject new weights into stale PEFT state."
+            )
         if unet_state:
             kwargs = {
                 "state_dict": state_dict,
@@ -2196,6 +2395,22 @@ class GenerationManager:
                 raise GenerationError(
                     f"SDXL LoRA {adapter_name} loaded no verifiable "
                     f"{component_name} parameters after normalization."
+                )
+            if component_name in source_counts:
+                expected_tensors = int(source_counts[component_name])
+                if observed["tensors"] != expected_tensors:
+                    raise GenerationError(
+                        f"SDXL LoRA {adapter_name} incomplete on {component_name}: "
+                        f"checkpoint has {expected_tensors} adapter tensors, "
+                        f"but PEFT registered {observed['tensors']}."
+                    )
+                observed["checkpoint_tensors"] = expected_tensors
+                observed["coverage_verified"] = True
+                observed.update(
+                    cls._compare_sdxl_clip_checkpoint_values(
+                        getattr(pipe, component_name), adapter_name,
+                        state_dict, component_name,
+                    )
                 )
             diagnostics["components"][component_name] = observed
         return diagnostics
@@ -2271,7 +2486,19 @@ class GenerationManager:
         else:
             unet_alphas = network_alphas
 
+        emit_console(
+            "warning", "generation",
+            f"SDXL LoRA {path.name}: removing the partially injected adapter "
+            "before a UNet-only compatibility retry. CLIP adapters will not "
+            "be applied for this LoRA.",
+        )
         cls._delete_pipeline_adapter(pipe, adapter_name)
+        remaining = cls._pipeline_adapter_names(pipe)
+        if remaining is not None and adapter_name in remaining:
+            raise GenerationError(
+                f"SDXL adapter {adapter_name} remained registered after "
+                "UNet-only fallback cleanup."
+            )
 
         kwargs = {
             "state_dict": unet_state,
@@ -2401,6 +2628,11 @@ class GenerationManager:
                             pipe, path, adapter_name
                         )
                     except Exception as full_exc:
+                        if "checkpoint value mismatch" in str(full_exc) or "checkpoint tensor" in str(full_exc):
+                            raise GenerationError(
+                                f"SDXL LoRA '{path.name}' failed strict checkpoint "
+                                f"verification: {full_exc}"
+                            ) from full_exc
                         try:
                             diagnostics = self._load_sdxl_unet_only_adapter(
                                 pipe, path, adapter_name
@@ -2537,7 +2769,15 @@ class GenerationManager:
                         + ", ".join(inactive)
                     )
 
+            previous_adapters = {name for name, _ in self._active_lora_signature}
             self._active_lora_signature = signature
+            if family == "sdxl" and previous_adapters != set(adapter_names):
+                emit_console(
+                    "info", "generation",
+                    "SDXL LoRA adapter set changed: "
+                    f"{len(previous_adapters)} previous -> {len(adapter_names)} active; "
+                    "activation confirmed. Weight-only updates are not reported here.",
+                )
             adapter_signature = tuple(adapter_names)
             if adapter_signature != self._verified_lora_adapters:
                 verification = (
@@ -2573,7 +2813,9 @@ class GenerationManager:
         return requested
 
 
-    def _configure_sampler(self, pipe: Any, family: str, sampler: str) -> None:
+    def _configure_sampler(
+        self, pipe: Any, family: str, sampler: str, schedule_type: str = "normal"
+    ) -> None:
         base_config = self._pipeline_scheduler_config or dict(pipe.scheduler.config)
 
         try:
@@ -2593,6 +2835,10 @@ class GenerationManager:
                     HeunDiscreteScheduler,
                     LMSDiscreteScheduler,
                     UniPCMultistepScheduler,
+                    KDPM2DiscreteScheduler,
+                    KDPM2AncestralDiscreteScheduler,
+                    DEISMultistepScheduler,
+                    DPMSolverSinglestepScheduler,
                 )
 
                 sampler_specs: dict[str, tuple[Any, dict[str, Any]]] = {
@@ -2610,11 +2856,39 @@ class GenerationManager:
                     "lms": (LMSDiscreteScheduler, {}),
                     "heun": (HeunDiscreteScheduler, {}),
                     "unipc": (UniPCMultistepScheduler, {}),
+                    "dpm2": (KDPM2DiscreteScheduler, {}),
+                    "dpm2_a": (KDPM2AncestralDiscreteScheduler, {}),
+                    "deis": (DEISMultistepScheduler, {}),
+                    "dpmpp_singlestep": (
+                        DPMSolverSinglestepScheduler,
+                        {"algorithm_type": "dpmsolver++"},
+                    ),
                 }
                 spec = sampler_specs.get(sampler)
                 if spec is None:
                     raise GenerationError(f"Unknown sampler '{sampler}'.")
                 scheduler_class, scheduler_kwargs = spec
+                if schedule_type not in {"normal", "karras", "exponential", "beta", "trailing"}:
+                    raise GenerationError(f"Unknown SDXL schedule type '{schedule_type}'.")
+                if sampler == "ddim" and schedule_type != "normal":
+                    raise GenerationError("DDIM supports only Normal scheduling.")
+                if schedule_type == "trailing" and sampler not in {
+                    "euler", "euler_a", "dpmpp_2m", "dpmpp_2m_sde", "lms", "heun", "unipc"
+                }:
+                    raise GenerationError("Trailing spacing is not supported for this sampler.")
+                if schedule_type in {"exponential", "beta"} and sampler not in {
+                    "euler", "dpmpp_2m", "dpmpp_2m_sde", "unipc"
+                }:
+                    raise GenerationError("Selected SDXL sampler does not support this schedule.")
+                if schedule_type == "trailing":
+                    scheduler_kwargs = {**scheduler_kwargs, "timestep_spacing": "trailing"}
+                elif schedule_type != "normal":
+                    sigma_key = {
+                        "karras": "use_karras_sigmas",
+                        "exponential": "use_exponential_sigmas",
+                        "beta": "use_beta_sigmas",
+                    }[schedule_type]
+                    scheduler_kwargs = {**scheduler_kwargs, sigma_key: True}
                 pipe.scheduler = scheduler_class.from_config(base_config, **scheduler_kwargs)
             else:
                 raise GenerationError(f"Sampler switching is not implemented for model family '{family}'.")
@@ -2660,6 +2934,159 @@ class GenerationManager:
         except Exception:
             pass
 
+    @staticmethod
+    def _sdxl_prompt_token_diagnostics(pipe: Any, request: GenerationRequest) -> list[dict[str, Any]]:
+        """Count SDXL CLIP tokens without changing inference conditioning."""
+        diagnostics: list[dict[str, Any]] = []
+        for encoder_name, tokenizer_name in (
+            ("CLIP-L", "tokenizer"), ("CLIP-G", "tokenizer_2")
+        ):
+            tokenizer = getattr(pipe, tokenizer_name, None)
+            if tokenizer is None:
+                continue
+            maximum = int(getattr(tokenizer, "model_max_length", 77))
+            if not 1 <= maximum <= 4096:
+                continue
+            for field_name, prompt in (
+                ("positive", request.prompt), ("negative", request.negative_prompt)
+            ):
+                if not prompt:
+                    continue
+                try:
+                    tokens = tokenizer(
+                        prompt, add_special_tokens=True, truncation=False
+                    )["input_ids"]
+                    count = len(tokens[0]) if tokens and isinstance(tokens[0], list) else len(tokens)
+                except Exception as exc:
+                    emit_console(
+                        "warning", "generation",
+                        f"Could not measure SDXL {encoder_name} {field_name} tokens: {exc}",
+                    )
+                    continue
+                diagnostics.append({
+                    "encoder": encoder_name,
+                    "field": field_name,
+                    "tokens": count,
+                    "limit": maximum,
+                    "truncated": count > maximum,
+                })
+        return diagnostics
+
+    @classmethod
+    def _warn_sdxl_prompt_truncation(cls, pipe: Any, request: GenerationRequest) -> list[str]:
+        """Warn only if overflowing text cannot use the SDXL chunking path."""
+        overflow = [
+            item for item in cls._sdxl_prompt_token_diagnostics(pipe, request)
+            if item["truncated"]
+        ]
+        if not overflow:
+            return []
+        details = "; ".join(
+            f"{item['encoder']} {item['field']} {item['tokens']}/{item['limit']}"
+            for item in overflow
+        )
+        chunking_available = all(
+            getattr(pipe, attr, None) is not None
+            for attr in ("tokenizer", "tokenizer_2", "text_encoder", "text_encoder_2")
+        )
+        if chunking_available:
+            emit_console(
+                "info", "generation",
+                f"SDXL long prompt detected ({details}). Chunked conditioning "
+                "is available; the actual mode will be logged when encoded.",
+            )
+            return []
+        notice = (
+            f"SDXL prompt exceeds CLIP capacity ({details}) but a required "
+            "SDXL text encoder/tokenizer is unavailable. Prompt text may be truncated."
+        )
+        emit_console("warning", "generation", notice)
+        return [notice]
+
+    @staticmethod
+    def apply_sdxl_long_prompt_conditioning(
+        pipe: Any, call_args: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Replace only overflowing SDXL string prompts with explicit CLIP embeddings."""
+        if call_args.get("prompt_embeds") is not None:
+            return call_args
+        if not all(
+            getattr(pipe, name, None) is not None
+            for name in ("tokenizer", "tokenizer_2", "text_encoder", "text_encoder_2")
+        ):
+            return call_args
+        from .sdxl_prompt_chunks import encode_sdxl_long_prompts, plan_clip_chunks
+
+        prompt = str(call_args.get("prompt") or "")
+        negative = str(call_args.get("negative_prompt") or "")
+        overflow = any(
+            plan_clip_chunks(tokenizer, value).overflow
+            for tokenizer in (pipe.tokenizer, pipe.tokenizer_2)
+            for value in (prompt, negative)
+            if value
+        )
+        if not overflow:
+            return call_args
+        do_cfg = float(call_args.get("guidance_scale", 7.5)) > 1.0
+        with __import__("torch").no_grad():
+            pos, neg, pooled, neg_pooled = encode_sdxl_long_prompts(
+                pipe, prompt, negative, do_classifier_free_guidance=do_cfg,
+            )
+        result = dict(call_args)
+        result["prompt"] = None
+        result["negative_prompt"] = None
+        result["prompt_embeds"] = pos
+        result["pooled_prompt_embeds"] = pooled
+        if do_cfg:
+            result["negative_prompt_embeds"] = neg
+            result["negative_pooled_prompt_embeds"] = neg_pooled
+        return result
+
+    @staticmethod
+    def sdxl_conditioning_diagnostic(pipe: Any, args: dict[str, Any]) -> dict[str, Any]:
+        """Describe actual prepared conditioning and CLIP chunk counts."""
+        from .sdxl_prompt_chunks import plan_clip_chunks
+        embeds = args.get("prompt_embeds")
+        tokenizers = (
+            getattr(pipe, "tokenizer", None),
+            getattr(pipe, "tokenizer_2", None),
+        )
+        limits = [
+            int(tokenizer.model_max_length)
+            for tokenizer in tokenizers
+            if tokenizer is not None
+        ]
+        clip_limit = max(limits) if limits else 77
+        if embeds is not None:
+            mode = "chunked" if len(embeds.shape) > 1 and embeds.shape[1] > clip_limit else "embedded"
+        else:
+            mode = "standard"
+        guidance_active = float(args.get("guidance_scale", 7.5)) > 1.0
+        result: dict[str, Any] = {"mode": mode, "guidance_active": guidance_active}
+        if embeds is not None:
+            result["shape"] = list(embeds.shape)
+            result["negative_aligned"] = (
+                args.get("negative_prompt_embeds") is not None
+                and len(args["negative_prompt_embeds"].shape) > 1
+                and args["negative_prompt_embeds"].shape[1] == embeds.shape[1]
+            ) if guidance_active else None
+        prompt = str(args.get("prompt") or "")
+        negative = str(args.get("negative_prompt") or "")
+        for label, tokenizer in (
+            ("clip_l", tokenizers[0]), ("clip_g", tokenizers[1]),
+        ):
+            if tokenizer is None:
+                continue
+            for field_name, text in (("", prompt), ("_negative", negative)):
+                if text:
+                    plan = plan_clip_chunks(tokenizer, text)
+                    result[label + field_name] = {
+                        "tokens": plan.token_count,
+                        "chunks": len(plan.chunks),
+                        "limit": plan.max_length,
+                    }
+        return result
+
     def _build_call_args(
         self,
         job: GenerationJob,
@@ -2695,8 +3122,13 @@ class GenerationManager:
         job.started_at = _utc_now()
         load_started = time.monotonic()
         pipe, device = self._load_pipeline(job)
-        self._configure_sampler(pipe, job.model["family"], job.request.sampler)
+        self._configure_sampler(
+            pipe, job.model["family"], job.request.sampler, job.request.schedule_type
+        )
         self.configure_loras(pipe, job.model, job.request.loras)
+        if job.model["family"] == "sdxl":
+            job.lora_diagnostic = self.sdxl_lora_diagnostics()
+            job.prompt_warnings = self._warn_sdxl_prompt_truncation(pipe, job.request)
         job.model_load_seconds = max(0.0, time.monotonic() - load_started)
         job._started_monotonic = time.monotonic()
         job._last_step_monotonic = None
@@ -2719,6 +3151,7 @@ class GenerationManager:
         output_dir.mkdir(parents=True, exist_ok=True)
         total_images = len(job.seeds)
 
+        previous_sdxl_diagnostic: dict[str, Any] | None = None
         for image_index, seed in enumerate(job.seeds):
             if job.cancel_requested:
                 self._finish_cancelled(job)
@@ -2764,6 +3197,39 @@ class GenerationManager:
                 return callback_kwargs
 
             call_args = self._build_call_args(job, generator, on_step_end)
+            if job.model["family"] == "sdxl":
+                raw_prompt = call_args.get("prompt")
+                raw_negative = call_args.get("negative_prompt")
+                call_args = self.apply_sdxl_long_prompt_conditioning(pipe, call_args)
+                diagnostic_args = {
+                    **call_args,
+                    "prompt": raw_prompt,
+                    "negative_prompt": raw_negative,
+                }
+                diagnostic = self.sdxl_conditioning_diagnostic(pipe, diagnostic_args)
+                job.conditioning_diagnostic = diagnostic
+                if diagnostic != previous_sdxl_diagnostic:
+                    positive = ", ".join(
+                        f"{label} {diagnostic[key]['tokens']} tokens / "
+                        f"{diagnostic[key]['chunks']} chunks"
+                        for label, key in (("CLIP-L", "clip_l"), ("CLIP-G", "clip_g"))
+                        if key in diagnostic
+                    )
+                    negative = ", ".join(
+                        f"{label} {diagnostic[key]['tokens']} tokens / "
+                        f"{diagnostic[key]['chunks']} chunks"
+                        for label, key in (("CLIP-L", "clip_l_negative"), ("CLIP-G", "clip_g_negative"))
+                        if key in diagnostic
+                    )
+                    shape = diagnostic.get("shape")
+                    summary = (
+                        f"SDXL conditioning: {diagnostic['mode'].upper()}"
+                        + (f" · positive: {positive}" if positive else "")
+                        + (f" · negative: {negative}" if negative else "")
+                        + (f" · embeddings {shape}" if shape else "")
+                    )
+                    emit_console("info", "generation", summary)
+                    previous_sdxl_diagnostic = diagnostic
 
             with torch.inference_mode():
                 result = pipe(**call_args)

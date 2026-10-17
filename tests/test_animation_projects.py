@@ -557,3 +557,16 @@ def test_wizard_default_template_is_nonpersistent_and_matches_project_defaults(
     assert saved["prompts"]["30"] == "A black cat"
     assert saved["tracks"]["prompts"]["positive"]["keyframes"][1]["frame"] == 30
     assert saved["tracks"]["camera_3d"]["rotation_y"]["schedule"] == "0:(0), 119:(12)"
+
+
+def test_schedule_type_survives_project_normalization_and_legacy_defaults() -> None:
+    legacy = normalize_animation_project({"name": "Legacy schedule"})
+    assert legacy["generation"]["schedule_type"] == "normal"
+
+    project = normalize_animation_project({
+        "name": "SDXL Karras",
+        "model": {"model_id": "sdxl-test", "family": "sdxl"},
+        "generation": {"sampler": "euler", "schedule_type": "karras"},
+    })
+    assert project["generation"]["schedule_type"] == "karras"
+    assert normalize_animation_project(project)["generation"]["schedule_type"] == "karras"

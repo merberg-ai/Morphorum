@@ -128,6 +128,31 @@ def check_animation_render_preflight(
                 f"Sampler '{sampler or 'none'}' is unavailable for {capability.get('label', family)}. "
                 "Select a supported sampler in Generation State.")
 
+        if family == "sdxl":
+            schedule_type = str(generation.get("schedule_type") or "normal").lower()
+            schedule_options = capability.get("schedule_types", {}).get("options", [])
+            supported_schedules = {
+                str(item.get("id")) for item in schedule_options
+                if isinstance(item, dict) and item.get("id")
+            }
+            if schedule_type not in supported_schedules:
+                add("error", "generation.schedule_type",
+                    f"Schedule Type '{schedule_type}' is unavailable for SDXL. "
+                    "Choose a supported schedule in Generation State.")
+            elif sampler == "ddim" and schedule_type != "normal":
+                add("error", "generation.schedule_type",
+                    "DDIM supports only Normal scheduling. Change the schedule or sampler.")
+            elif schedule_type == "trailing" and sampler not in {
+                "euler", "euler_a", "dpmpp_2m", "dpmpp_2m_sde", "lms", "heun", "unipc"
+            }:
+                add("error", "generation.schedule_type",
+                    "Trailing spacing is not supported for this SDXL sampler.")
+            elif schedule_type in {"exponential", "beta"} and sampler not in {
+                "euler", "dpmpp_2m", "dpmpp_2m_sde", "unipc"
+            }:
+                add("error", "generation.schedule_type",
+                    "The selected SDXL sampler does not support this schedule.")
+
     checked_frames = 0
     if schedules_valid and 1 <= total <= MAX_RENDER_FRAMES:
         # The same resolver used by the render pipeline handles timeline

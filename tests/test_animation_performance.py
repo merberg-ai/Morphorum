@@ -215,3 +215,38 @@ def test_ml42_short_or_cpu_only_runs_do_not_invent_gpu_drift():
         conditioning_cache_entries=0) for n in range(50)])
     assert no_cuda["stability"]["memory_delta_gib"] is None
     assert no_cuda["stability"]["warnings"] == []
+
+
+def test_g52_conditioning_cache_hit_miss_telemetry_survives_records_and_resume(tmp_path):
+    tracker = AnimationPerformance()
+    path = tmp_path / "performance.jsonl"
+    for frame, hits, misses in ((1, 0, 1), (2, 1, 0), (3, 2, 0)):
+        record = performance_record(
+            frame=frame, diffused=True, timings={"conditioning": 0.002},
+            cuda_before=None, cuda_after=None, model_status={},
+            conditioning_cache_entries=1,
+            conditioning_cache_hits=hits,
+            conditioning_cache_misses=misses,
+        )
+        assert record["conditioning_cache_hits"] == hits
+        assert record["conditioning_cache_misses"] == misses
+        append_performance_record(path, record)
+        tracker.observe(record)
+    assert tracker.public()["conditioning_cache_hits"] == 3
+    assert tracker.public()["conditioning_cache_misses"] == 1
+    restored = summarize_records(load_performance_records(path))
+    assert restored["conditioning_cache_hits"] == 3
+    assert restored["conditioning_cache_misses"] == 1
+    assert restored["total_conditioning_seconds"] == pytest.approx(0.006)
+
+
+def test_g52_older_performance_records_default_missing_cache_counters_to_zero():
+    tracker = AnimationPerformance()
+    prior = _record(1)
+    assert prior["conditioning_cache_hits"] == 0
+    assert prior["conditioning_cache_misses"] == 0
+    del prior["conditioning_cache_hits"]
+    del prior["conditioning_cache_misses"]
+    tracker.observe(prior)
+    assert tracker.public()["conditioning_cache_hits"] == 0
+    assert tracker.public()["conditioning_cache_misses"] == 0

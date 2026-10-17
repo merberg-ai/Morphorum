@@ -1049,3 +1049,52 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
   .workspace .operation-feedback-progress > span {transition:none;animation:none;}
   .workspace .operation-feedback-progress.indeterminate > span {width:100%;opacity:.65;}
 }
+
+
+/* G4.3: compact, responsive SDXL LoRA verification telemetry. */
+.workspace .lora-verification-report {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 7%, transparent),
+    color-mix(in srgb, var(--accent-2) 5%, transparent));
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.workspace .lora-verification-report[hidden] { display: none; }
+.workspace .lora-verification-report > strong {
+  display: block;
+  color: var(--accent);
+  font-weight: 750;
+  margin-bottom: 5px;
+}
+.workspace .lora-verification-items {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.workspace .lora-verification-items p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: .87rem;
+}
+
+
+/* G5.3: actual SDXL conditioning status, kept separate from editor warnings. */
+.workspace .sdxl-conditioning-diagnostic {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 29%, transparent);
+  background: linear-gradient(120deg,
+    color-mix(in srgb, var(--accent) 9%, transparent),
+    color-mix(in srgb, var(--accent-2) 5%, transparent));
+  color: var(--text);
+  font-size: .87rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.workspace .sdxl-conditioning-diagnostic[hidden] { display: none; }

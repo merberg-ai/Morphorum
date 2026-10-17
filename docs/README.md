@@ -13,6 +13,8 @@ Welcome! You do not need to know Python or Git to use Morphorum. Start with the 
 | **[Motion Studio](MOTION_STUDIO.md)** | Six-stage WAV workflow, beat assignment and cleanup, frequency channels, continuous motion and project camera tracks |
 | **[FFmpeg Manager](FFMPEG_MANAGER.md)** | Auto-detect, custom paths, verified local install, update/removal, media acceptance test and GPL terms |
 | **[Troubleshooting](TROUBLESHOOTING.md)** | Fix browser, installer, model, CUDA, LAN, project and video problems |
+| **[SDXL generation](SDXL_GENERATION.md)** | Select SDXL samplers/schedules; understand chunked CLIP prompts, LoRA integrity and render diagnostics |
+| **[G5 release acceptance history](G5_RELEASE_ACCEPTANCE.md)** | Owner acceptance summary and reusable Windows SDXL regression checklist (not required for normal users) |
 
 Project Manager, New Project Wizard and Project Editor are direct main-menu destinations. Motion Lab Overview provides a read-only project summary and guided Preview → Apply → Save → Render → Export navigation. Older renders do not automatically acquire newly attached audio. See [current features and limitations](CURRENT_STATUS.md) for testing boundaries.
 

@@ -94,3 +94,36 @@ def test_very_long_render_discloses_sampled_frames(tmp_path, monkeypatch):
     assert any(issue["severity"] == "warning" and
                "sampled" not in issue["message"].lower()
                for issue in report["issues"])
+
+
+def test_sdxl_schedule_preflight_rejects_incompatible_and_unknown_values(tmp_path, monkeypatch):
+    checkpoint = tmp_path / "model.safetensors"
+    checkpoint.write_bytes(b"mock")
+    monkeypatch.setattr(preflight, "get_model", lambda _id: index_model(checkpoint))
+    p = project()
+    p["generation"]["sampler"] = "ddim"
+    p["generation"]["schedule_type"] = "karras"
+    report = preflight.check_animation_render_preflight(p, tmp_path / "missing.png")
+    assert not report["valid"]
+    assert any(
+        issue["field"] == "generation.schedule_type" and "DDIM" in issue["message"]
+        for issue in report["issues"]
+    )
+    p["generation"]["sampler"] = "euler"
+    p["generation"]["schedule_type"] = "unsupported"
+    report = preflight.check_animation_render_preflight(p, tmp_path / "missing.png")
+    assert not report["valid"]
+    assert any(
+        issue["field"] == "generation.schedule_type"
+        for issue in report["issues"] if issue["severity"] == "error"
+    )
+
+
+def test_sdxl_karras_euler_passes_animation_preflight(tmp_path, monkeypatch):
+    checkpoint = tmp_path / "model.safetensors"
+    checkpoint.write_bytes(b"mock")
+    monkeypatch.setattr(preflight, "get_model", lambda _id: index_model(checkpoint))
+    p = project()
+    p["generation"]["schedule_type"] = "karras"
+    report = preflight.check_animation_render_preflight(p, tmp_path / "missing.png")
+    assert report["valid"], report["issues"]

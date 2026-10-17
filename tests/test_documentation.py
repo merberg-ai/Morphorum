@@ -16,6 +16,8 @@ GUIDES = [
     "docs/FFMPEG_MANAGER.md",
     "docs/CURRENT_STATUS.md",
     "docs/TESTING.md",
+    "docs/SDXL_GENERATION.md",
+    "docs/G5_RELEASE_ACCEPTANCE.md",
 ]
 MD_LINK = re.compile(r"!?\[[^\]]+\]\(([^)]+)\)")
 
@@ -106,3 +108,20 @@ def test_managed_ffmpeg_public_docs_track_shipped_manager() -> None:
     for label in ("Install managed FFmpeg", "Remove managed FFmpeg",
                   "Test FFmpeg / FFprobe"):
         assert label in ui or label in readme
+
+
+def test_g5_release_guides_distinguish_ci_from_windows_acceptance() -> None:
+    """Release docs must link to real guides without claiming GPU validation."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "docs/G5_RELEASE_ACCEPTANCE.md").read_text(encoding="utf-8")
+    sdxl = (ROOT / "docs/SDXL_GENERATION.md").read_text(encoding="utf-8")
+    assert "docs/SDXL_GENERATION.md" in readme
+    assert "G5_RELEASE_ACCEPTANCE.md" in index
+    assert "NOT TESTED" in acceptance
+    assert "Explicit owner approval" in acceptance
+    assert "explicitly approved merging" in acceptance.lower()
+    assert "not provided separately" in acceptance.lower()
+    assert "Not individually recorded" in acceptance
+    for feature in ("CLIP-L", "CLIP-G", "Karras", "UNet-only"):
+        assert feature in sdxl

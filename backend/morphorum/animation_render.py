@@ -40,7 +40,7 @@ from .animation_performance import (
 )
 from .imported_soundtrack import ImportedSoundtrackError, freeze_soundtrack
 from .console import emit_console
-from .generation import GenerationError, GenerationRequest, generation_manager
+from .generation import GenerationError, GenerationRequest, GenerationManager, generation_manager
 from .loras import lora_catalog
 from .model_index import get_model
 from .paths import OUTPUTS_DIR
@@ -256,6 +256,7 @@ def _prompt_conditioning_kwargs(
     conditioning_cache: dict[tuple[Any, ...], Any] | None = None,
     cache_zimage_on_cpu: bool = False,
     lora_signature: tuple[Any, ...] = (),
+    cache_stats: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     positive_to_weight = float(positive.get("to_weight") or 0.0)
     same_positive = (
@@ -277,6 +278,52 @@ def _prompt_conditioning_kwargs(
     to_negative = str(negative.get("to_text") or from_negative)
 
     if same_positive and (family != "sdxl" or same_negative):
+        # Stable long SDXL prompts previously re-encoded both CLIP towers on
+        # every diffusion anchor, because only blended prompts used the cache.
+        # Keep normal short prompts on Diffusers' native path.
+        if family == "sdxl":
+            from .sdxl_prompt_chunks import (
+                encode_sdxl_long_prompts, plan_clip_chunks,
+            )
+            tokenizers = (
+                getattr(pipe, "tokenizer", None),
+                getattr(pipe, "tokenizer_2", None),
+            )
+            if all(tokenizer is not None for tokenizer in tokenizers):
+                plans = [
+                    plan_clip_chunks(tokenizer, value)
+                    for tokenizer in tokenizers
+                    for value in (from_prompt, from_negative)
+                ]
+                if any(plan.overflow for plan in plans):
+                    do_cfg = float(guidance_scale) > 1.0
+                    chunk_count = max(len(plan.chunks) for plan in plans)
+                    key = (
+                        "sdxl", from_prompt, from_negative,
+                        do_cfg, tuple(lora_signature), chunk_count,
+                    )
+                    if conditioning_cache is not None and key in conditioning_cache:
+                        if cache_stats is not None:
+                            cache_stats["hits"] = cache_stats.get("hits", 0) + 1
+                        encoded = conditioning_cache[key]
+                    else:
+                        if cache_stats is not None:
+                            cache_stats["misses"] = cache_stats.get("misses", 0) + 1
+                        encoded = encode_sdxl_long_prompts(
+                            pipe, from_prompt, from_negative,
+                            do_classifier_free_guidance=do_cfg,
+                        )
+                        _cache_conditioning_value(conditioning_cache, key, encoded)
+                    result: dict[str, Any] = {
+                        "prompt": None,
+                        "negative_prompt": None,
+                        "prompt_embeds": encoded[0],
+                        "pooled_prompt_embeds": encoded[2],
+                    }
+                    if do_cfg:
+                        result["negative_prompt_embeds"] = encoded[1]
+                        result["negative_pooled_prompt_embeds"] = encoded[3]
+                    return result
         result: dict[str, Any] = {"prompt": from_prompt}
         if family == "sdxl":
             result["negative_prompt"] = from_negative or None
@@ -285,6 +332,17 @@ def _prompt_conditioning_kwargs(
     try:
         if family == "sdxl":
             do_cfg = float(guidance_scale) > 1.0
+            from .sdxl_prompt_chunks import plan_clip_chunks
+            tokenizers = (
+                getattr(pipe, "tokenizer", None),
+                getattr(pipe, "tokenizer_2", None),
+            )
+            have_tokenizers = all(item is not None for item in tokenizers)
+            common_chunks = max(
+                len(plan_clip_chunks(tokenizer, value).chunks)
+                for tokenizer in tokenizers
+                for value in (from_prompt, to_prompt, from_negative, to_negative)
+            ) if have_tokenizers else 1
 
             def sdxl_encoded(prompt_text: str, negative_text: str):
                 key = (
@@ -293,15 +351,38 @@ def _prompt_conditioning_kwargs(
                     negative_text,
                     bool(do_cfg),
                     tuple(lora_signature),
+                    common_chunks,
                 )
                 if conditioning_cache is not None and key in conditioning_cache:
+                    if cache_stats is not None:
+                        cache_stats["hits"] = cache_stats.get("hits", 0) + 1
                     return conditioning_cache[key]
-                encoded = pipe.encode_prompt(
-                    prompt=prompt_text,
-                    negative_prompt=negative_text or None,
-                    num_images_per_prompt=1,
-                    do_classifier_free_guidance=do_cfg,
+                if cache_stats is not None:
+                    cache_stats["misses"] = cache_stats.get("misses", 0) + 1
+                from .sdxl_prompt_chunks import (
+                    encode_sdxl_long_prompts, plan_clip_chunks,
                 )
+                overflow = have_tokenizers and any(
+                    plan_clip_chunks(tokenizer, value).overflow
+                    for tokenizer in tokenizers
+                    for value in (prompt_text, negative_text)
+                    if value
+                )
+                if overflow or common_chunks > 1:
+                    import torch
+                    with torch.no_grad():
+                        encoded = encode_sdxl_long_prompts(
+                            pipe, prompt_text, negative_text,
+                            do_classifier_free_guidance=do_cfg,
+                            min_chunks=common_chunks,
+                        )
+                else:
+                    encoded = pipe.encode_prompt(
+                        prompt=prompt_text,
+                        negative_prompt=negative_text or None,
+                        num_images_per_prompt=1,
+                        do_classifier_free_guidance=do_cfg,
+                    )
                 _cache_conditioning_value(conditioning_cache, key, encoded)
                 return encoded
 
@@ -864,6 +945,8 @@ class AnimationRenderJob:
     preview: dict[str, Any] | None = None
     current_prompt_state: dict[str, Any] = field(default_factory=dict)
     current_frame_state: dict[str, Any] = field(default_factory=dict)
+    lora_diagnostic: dict[str, Any] | None = None
+    conditioning_diagnostic: dict[str, Any] | None = None
     resumed: bool = False
     performance: dict[str, Any] = field(default_factory=dict)
     _frame_times: list[float] = field(default_factory=list, repr=False)
@@ -1449,6 +1532,8 @@ class AnimationRenderManager:
         pipe = None
         generator_device = "cpu"
         conditioning_cache: dict[tuple[Any, ...], Any] = {}
+        conditioning_cache_stats: dict[str, int] = {"hits": 0, "misses": 0}
+        previous_sdxl_conditioning: tuple[Any, ...] | None = None
         lora_records: list[dict[str, Any]] | None = None
         positive_prompts = project.get("prompts", {})
         if any(
@@ -1584,6 +1669,7 @@ class AnimationRenderManager:
                     steps=steps,
                     guidance_scale=guidance,
                     sampler=sampler,
+                    schedule_type=str(project.get("generation", {}).get("schedule_type") or "normal"),
                     seed=seed,
                     seed_mode="fixed",
                     images=1,
@@ -1603,6 +1689,12 @@ class AnimationRenderManager:
                         on_model_load,
                     )
                 )
+                if family == "sdxl" and isinstance(
+                    getattr(generation_manager, "_pipeline_loras", None), dict
+                ):
+                    job.lora_diagnostic = GenerationManager.sdxl_lora_diagnostics(
+                        generation_manager
+                    )
                 job.model_load_seconds = max(
                     0.0,
                     time.monotonic() - load_started,
@@ -1666,8 +1758,24 @@ class AnimationRenderManager:
                         }
                     ),
                     lora_signature=_resolved_lora_signature(resolved),
+                    cache_stats=conditioning_cache_stats if family == "sdxl" else None,
                 )
                 call_args.update(conditioning)
+                if family == "sdxl":
+                    blended = call_args.get("prompt_embeds") is not None
+                    call_args = GenerationManager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
+                    report = GenerationManager.sdxl_conditioning_diagnostic(pipe, call_args)
+                    report["frame"] = 0
+                    report["blended"] = blended
+                    job.conditioning_diagnostic = report
+                    previous_sdxl_conditioning = (
+                        report["mode"], blended, tuple(report.get("shape") or ()),
+                    )
+                    mode = report["mode"].upper() + (" / BLENDED" if blended else "")
+                    emit_console(
+                        "info", "animation",
+                        f"SDXL conditioning frame 0: {mode}, embeddings={report.get('shape')}.",
+                    )
 
                 with torch.inference_mode():
                     result = pipe(**call_args)
@@ -1765,6 +1873,8 @@ class AnimationRenderManager:
                 return
 
             frame_started = time.monotonic()
+            cache_hits_before = conditioning_cache_stats["hits"]
+            cache_misses_before = conditioning_cache_stats["misses"]
             timings: dict[str, float] = {}
             resolve_started = time.monotonic()
             resolved = resolve_project_frame(project, frame, lora_records=lora_records)
@@ -1962,6 +2072,7 @@ class AnimationRenderManager:
                     steps=steps,
                     guidance_scale=guidance,
                     sampler=sampler,
+                    schedule_type=str(project.get("generation", {}).get("schedule_type") or "normal"),
                     seed=seed,
                     seed_mode="fixed",
                     images=1,
@@ -1980,6 +2091,12 @@ class AnimationRenderManager:
                     time.monotonic() - prepare_started,
                 )
                 phase_memory["post_prepare"] = generation_manager.cuda_memory_status()
+                if family == "sdxl" and isinstance(
+                    getattr(generation_manager, "_pipeline_loras", None), dict
+                ):
+                    job.lora_diagnostic = GenerationManager.sdxl_lora_diagnostics(
+                        generation_manager
+                    )
                 if job.model_load_seconds is None:
                     job.model_load_seconds = max(
                         0.0,
@@ -2058,6 +2175,7 @@ class AnimationRenderManager:
                         }
                     ),
                     lora_signature=_resolved_lora_signature(resolved),
+                    cache_stats=conditioning_cache_stats if family == "sdxl" else None,
                 )
                 timings["conditioning"] = max(
                     0.0,
@@ -2065,6 +2183,21 @@ class AnimationRenderManager:
                 )
                 phase_memory["post_conditioning"] = generation_manager.cuda_memory_status()
                 call_args.update(conditioning)
+                if family == "sdxl":
+                    blended = call_args.get("prompt_embeds") is not None
+                    call_args = GenerationManager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
+                    report = GenerationManager.sdxl_conditioning_diagnostic(pipe, call_args)
+                    report["frame"] = frame
+                    report["blended"] = blended
+                    job.conditioning_diagnostic = report
+                    old_report = previous_sdxl_conditioning
+                    previous_sdxl_conditioning = (report["mode"], blended, tuple(report.get("shape") or ()))
+                    if previous_sdxl_conditioning != old_report or frame % 60 == 0:
+                        mode = report["mode"].upper() + (" / BLENDED" if blended else "")
+                        emit_console(
+                            "info", "animation",
+                            f"SDXL conditioning frame {frame}: {mode}, embeddings={report.get('shape')}.",
+                        )
 
                 diffusion_started = time.monotonic()
                 with torch.inference_mode():
@@ -2212,6 +2345,8 @@ class AnimationRenderManager:
                 cuda_after=memory,
                 model_status=pipeline_status,
                 conditioning_cache_entries=len(conditioning_cache),
+                conditioning_cache_hits=conditioning_cache_stats["hits"] - cache_hits_before,
+                conditioning_cache_misses=conditioning_cache_stats["misses"] - cache_misses_before,
                 phase_memory=phase_memory,
             )
             performance_tracker.observe(record)

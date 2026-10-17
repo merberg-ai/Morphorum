@@ -73,7 +73,7 @@ Use **Settings** to choose the directories where Morphorum should scan for your 
 5. Keep the other recommended settings at their defaults and start generation.
 6. Watch progress and then view the image in **Results**.
 
-After your first success, experiment with **seed behavior**, **batch count**, **steps**, **guidance**, and supported **LoRAs**. The available settings change with the model family.
+After your first success, experiment with **seed behavior**, **batch count**, **steps**, **guidance**, and supported **LoRAs**. For SDXL, see the [sampler, schedule, long-prompt and LoRA guide](SDXL_GENERATION.md). The available settings change with the model family.
 
 ### If generation is slow or runs out of memory
 

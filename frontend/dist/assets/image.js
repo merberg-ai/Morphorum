@@ -45,7 +45,7 @@
   const IMAGE_DRAFT_KEY = 'morphorum.image.form.v1';
   const DRAFT_FIELDS = [
     'image-prompt', 'image-negative-prompt', 'image-resolution-preset',
-    'image-width', 'image-height', 'image-steps', 'image-sampler', 'image-guidance',
+    'image-width', 'image-height', 'image-steps', 'image-sampler', 'image-schedule-type', 'image-guidance',
     'image-seed', 'image-seed-mode', 'image-seed-increment', 'image-count',
     'image-lora-select', 'image-lora-weight'
   ];
@@ -87,7 +87,7 @@
     const draft = state.draft;
     if (!draft || draft.modelId !== modelId || state.restoredModel === modelId) return;
     const values = draft.values;
-    const selectFields = ['image-sampler', 'image-seed-mode', 'image-lora-select'];
+    const selectFields = ['image-sampler', 'image-schedule-type', 'image-seed-mode', 'image-lora-select'];
     for (const id of selectFields) {
       const node = document.getElementById(id);
       const value = values[id];
@@ -254,7 +254,7 @@
   function setEnabled(enabled) {
     for (const id of [
       '#image-resolution-preset', '#image-width', '#image-height', '#swap-resolution',
-      '#image-steps', '#image-sampler', '#image-guidance', '#image-seed', '#random-seed',
+      '#image-steps', '#image-sampler', '#image-schedule-type', '#image-guidance', '#image-seed', '#random-seed',
       '#image-seed-mode', '#image-seed-increment', '#image-count'
     ]) {
       const element = qs(id);
@@ -303,6 +303,34 @@
       option.textContent = sampler.label || sampler.id;
       select.appendChild(option);
     }
+  }
+
+  function populateScheduleTypes(capability) {
+    const field = qs('#image-schedule-type-field');
+    const select = qs('#image-schedule-type');
+    if (!field || !select) return;
+    const isSdxl = state.model?.family === 'sdxl';
+    field.hidden = !isSdxl;
+    select.replaceChildren();
+    if (!isSdxl) {
+      select.add(new Option('Normal', 'normal'));
+      select.value = 'normal';
+      select.disabled = true;
+      return;
+    }
+    const settings = capability.schedule_types || {};
+    const options = Array.isArray(settings.options) ? settings.options : [];
+    const sampler = qs('#image-sampler')?.value;
+    const previous = select.value;
+    for (const option of options) {
+      if (sampler === 'ddim' && option.id !== 'normal') continue;
+      if (option.id === 'trailing' && !['euler', 'euler_a', 'dpmpp_2m', 'dpmpp_2m_sde', 'lms', 'heun', 'unipc'].includes(sampler)) continue;
+      if (['exponential', 'beta'].includes(option.id) && !['euler', 'dpmpp_2m', 'dpmpp_2m_sde', 'unipc'].includes(sampler)) continue;
+      select.add(new Option(option.label || option.id, option.id));
+    }
+    select.value = [...select.options].some(option => option.value === previous)
+      ? previous : (settings.default || 'normal');
+    select.disabled = !state.model || !options.length;
   }
 
   function applyModelDefaults(capability) {
@@ -484,6 +512,7 @@
       qs('#image-capability-note').textContent = `Ready for ${variantLabel} txt2img. Model defaults applied.`;
       populatePresets(capability);
       populateSamplers(capability);
+      populateScheduleTypes(capability);
       setEnabled(true);
       applyModelDefaults(capability);
       updateSeedMode();
@@ -513,10 +542,88 @@
     return `ETA ${hours}h ${minutes % 60}m`;
   }
 
+  function previewImagePromptLength() {
+    const node = qs('#image-prompt-token-warning');
+    if (!node) return;
+    if (!state.model || state.model.family !== 'sdxl') {
+      node.hidden = true;
+      node.textContent = '';
+      return;
+    }
+    const inputs = [qs('#image-prompt')?.value || '', qs('#image-negative-prompt')?.value || ''];
+    const likelyLong = inputs.some(value => value.length >= 250);
+    if (!likelyLong) {
+      node.hidden = true;
+      return;
+    }
+    node.hidden = false;
+    node.textContent = 'Long SDXL prompt likely. This is a character-length estimate, not a token count. During rendering, Morphorum will report whether chunked CLIP conditioning was actually used.';
+  }
+
+  function showImagePromptWarnings(job) {
+    const node = qs('#image-prompt-token-warning');
+    if (!node) return;
+    const warnings = Array.isArray(job.prompt_warnings) ? job.prompt_warnings : [];
+    node.hidden = !warnings.length;
+    node.textContent = warnings.join(' ');
+  }
+
+  function renderImageLoraVerification(job) {
+    const panel = qs('#image-lora-verification');
+    if (!panel) return;
+    const adapters = job?.lora_diagnostic?.adapters;
+    panel.hidden = !Array.isArray(adapters) || adapters.length === 0;
+    if (panel.hidden) { panel.textContent = ''; return; }
+    const title = document.createElement('strong');
+    title.textContent = 'SDXL LoRA verification · ' + adapters.length + ' active';
+    const list = document.createElement('div');
+    list.className = 'lora-verification-items';
+    for (const adapter of adapters) {
+      const row = document.createElement('p');
+      const status = adapter.status === 'checkpoint_verified'
+        ? 'CLIP weights matched checkpoint'
+        : adapter.status === 'unet_only'
+          ? 'UNet-only fallback; CLIP LoRA weights not applied'
+          : 'Active; source weight comparison unavailable';
+      const parts = [String(adapter.name || 'Unnamed LoRA'), status];
+      if (adapter.status === 'checkpoint_verified') {
+        for (const [label, key] of [['CLIP-L', 'text_encoder'], ['CLIP-G', 'text_encoder_2']]) {
+          const data = adapter.components?.[key];
+          if (data) parts.push(label + ' ' + data.checkpoint_values_verified + '/' + data.tensors);
+        }
+      }
+      parts.push('strength ' + Number(adapter.weight || 0).toFixed(3));
+      row.textContent = parts.join(' · ');
+      list.appendChild(row);
+    }
+    panel.replaceChildren(title, list);
+  }
+
   function updateProgress(job) {
     const panel = qs('#generation-progress');
     panel.hidden = false;
     const percent = Math.max(0, Math.min(100, Math.round((Number(job.progress) || 0) * 100)));
+    showImagePromptWarnings(job);
+    renderImageLoraVerification(job);
+    const node = qs('#image-conditioning-diagnostic');
+    const diag = job.conditioning_diagnostic;
+    if (node) {
+      node.hidden = !diag || !['standard', 'chunked', 'embedded'].includes(diag.mode);
+      if (node.hidden) {
+        node.textContent = '';
+      } else {
+        const summary = ['SDXL conditioning: ' + String(diag.mode).toUpperCase()];
+        for (const [label, key] of [
+          ['CLIP-L', 'clip_l'], ['CLIP-G', 'clip_g'],
+          ['CLIP-L negative', 'clip_l_negative'], ['CLIP-G negative', 'clip_g_negative'],
+        ]) {
+          if (diag[key]) summary.push(label + ': ' + diag[key].tokens + ' tokens / ' + diag[key].chunks + ' chunks');
+        }
+        if (diag.shape) summary.push('Embeddings: [' + diag.shape.join(', ') + ']');
+        if (diag.negative_aligned === true) summary.push('Negative conditioning aligned');
+        node.textContent = summary.join(' · ');
+      }
+    }
     qs('#generation-status').textContent = job.message || job.status;
     qs('#generation-percent').textContent = `${percent}%`;
     qs('#generation-progress-fill').style.width = `${percent}%`;
@@ -771,6 +878,7 @@
       height: Number(qs('#image-height').value),
       steps: Number(qs('#image-steps').value),
       sampler: qs('#image-sampler').value,
+      ...(state.model?.family === 'sdxl' ? { schedule_type: qs('#image-schedule-type').value } : {}),
       guidance_scale: Number(qs('#image-guidance').value),
       seed: Number(qs('#image-seed').value),
       seed_mode: qs('#image-seed-mode').value,
@@ -790,6 +898,11 @@
     if (unloadButton) unloadButton.disabled = true;
     qs('#cancel-generation').hidden = false;
     qs('#generation-progress').hidden = false;
+    const previousConditioning = qs('#image-conditioning-diagnostic');
+    if (previousConditioning) {
+      previousConditioning.hidden = true;
+      previousConditioning.textContent = '';
+    }
     qs('#generation-status').textContent = 'Submitting generation job…';
     qs('#generation-progress-fill').style.width = '0%';
     try {
@@ -860,6 +973,14 @@
 
   function bind() {
     qs('#image-model-select')?.addEventListener('change', configureModel);
+    for (const id of ['#image-prompt', '#image-negative-prompt']) {
+      qs(id)?.addEventListener('input', previewImagePromptLength);
+    }
+    qs('#image-sampler')?.addEventListener('change', () => {
+      if (state.model?.family === 'sdxl') {
+        populateScheduleTypes(effectiveCapability(state.model));
+      }
+    });
     qs('#image-insert-lora')?.addEventListener('click', insertSelectedLora);
     qs('#image-resolution-preset')?.addEventListener('change', event => {
       window.MorphorumResolution.apply(event.target,qs('#image-width'),qs('#image-height'));

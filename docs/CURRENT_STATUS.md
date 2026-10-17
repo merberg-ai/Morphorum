@@ -8,7 +8,7 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 | --- | --- |
 | Platforms | Windows 10/11, 64-bit Linux installers and browser UI |
 | Models | SDXL, FLUX and Z-Image, including managed Z-Image-Turbo; external checkpoint folders |
-| Image generation | Text-to-image, supported image-to-image, seed/batch controls and LoRAs |
+| Image generation | Text-to-image, supported image-to-image, seed/batch controls and LoRAs; SDXL-specific sampler/schedule selection, chunked CLIP prompt conditioning and adapter integrity reporting |
 | Animations | Saved projects, prompts/keyframes, 2D and depth-aware 3D motion, camera presets, curve editing, preview |
 | Motion Lab | Six-axis composer, keyboard/touch motion recording, supported gamepad controls; curve preview, ranged recording/refinement and saved-motion comparison |
 | Onboarding | Seven-step First-Run Setup Wizard with diagnostics, model/LoRA folders, optional Z-Image and 512 × 512 sample projects; separate seven-step New Project Wizard |
@@ -21,7 +21,7 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 
 The main menu includes Project Manager, New Project Wizard, and Project Editor directly. Project Editor groups its controls into five sections. Motion Lab Overview displays a read-only project/motion summary and workflow navigation for Preview, Apply, Save, Render, and Export. Motion Studio offers guided WAV analysis, beat detection, assignment, continuous/channel motion, and preview/apply stages. The project manager can move selected projects to Trash with confirmation; this is not permanent deletion.
 
-Owner Windows testing reported a successful 237-frame, 24 FPS animation with H.264 video and AAC audio export. Automated Syntax, Backend, and Installer checks passed at the pre-release development checkpoint. Physical mobile testing is deferred, and P5.3 soundtrack provenance, P5.4 consistency, and P5.5 closeout are not complete.
+Owner Windows testing reported a successful 237-frame, 24 FPS animation with H.264 video and AAC audio export. On 2026-10-17, the owner also reported **G5.5 SDXL acceptance passed** and explicitly approved promotion of the G1–G5 SDXL improvements to `main`. The candidate's automated Backend, Syntax, and Windows/Linux Installer checks passed. The changes include expanded SDXL sampler/schedule selection, dual-CLIP long-prompt and negative-prompt handling, LoRA validation, animation cache/performance telemetry, and clearer render diagnostics. Individual G5 acceptance-matrix results were not provided separately; treat this as owner acceptance rather than independent verification of every scenario. Physical mobile testing is deferred, and the remaining P5.3 soundtrack provenance, P5.4 consistency, and P5.5 closeout are not complete.
 
 ## Important limits
 

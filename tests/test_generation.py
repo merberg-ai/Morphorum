@@ -402,6 +402,10 @@ def test_sampler_capability_and_validation(tmp_path, monkeypatch) -> None:
         "lms",
         "heun",
         "unipc",
+        "dpm2",
+        "dpm2_a",
+        "deis",
+        "dpmpp_singlestep",
     ]
 
     request = GenerationRequest(model_id="model-1", prompt="test", sampler="dpmpp_2m")
@@ -431,6 +435,100 @@ def test_all_advertised_sdxl_samplers_construct_from_base_config() -> None:
         manager._configure_sampler(pipe, "sdxl", sampler)
         assert manager._pipeline_sampler == sampler
         assert pipe.scheduler is not None
+
+
+def test_sdxl_sampler_expansion_does_not_touch_flowmatch_families() -> None:
+    capabilities = GenerationManager().capabilities()
+    expected = [{"id": "flowmatch_euler", "label": "FlowMatch Euler"}]
+    for family in ("flux", "zimage"):
+        assert capabilities[family]["samplers"] == {
+            "default": "flowmatch_euler",
+            "options": expected,
+        }
+
+
+def test_sdxl_schedule_types_defaults_and_validation(tmp_path, monkeypatch) -> None:
+    checkpoint = tmp_path / "model.safetensors"
+    checkpoint.write_bytes(b"fake")
+    monkeypatch.setattr(generation, "get_model", lambda _: fake_model(checkpoint))
+    manager = GenerationManager()
+    assert manager.capabilities()["sdxl"]["schedule_types"] == {
+        "default": "normal",
+        "options": [
+            {"id": "normal", "label": "Normal"},
+            {"id": "karras", "label": "Karras"},
+            {"id": "exponential", "label": "Exponential"},
+            {"id": "beta", "label": "Beta"},
+            {"id": "trailing", "label": "Trailing (Diffusers)"},
+        ],
+    }
+    legacy = GenerationRequest.from_payload({"model_id": "model-1", "prompt": "test"})
+    assert legacy.schedule_type == "normal"
+    manager._validate_request(legacy)
+    manager._validate_request(
+        GenerationRequest(model_id="model-1", prompt="test", schedule_type="karras")
+    )
+    with pytest.raises(GenerationError, match="Schedule Type"):
+        manager._validate_request(
+            GenerationRequest(model_id="model-1", prompt="test", schedule_type="unknown")
+        )
+    with pytest.raises(GenerationError, match="DDIM"):
+        manager._validate_request(
+            GenerationRequest(
+                model_id="model-1", prompt="test", sampler="ddim", schedule_type="karras"
+            )
+        )
+
+
+def test_sdxl_karras_scheduler_configuration() -> None:
+    from diffusers import EulerDiscreteScheduler
+
+    class FakePipe:
+        def __init__(self) -> None:
+            self.scheduler = EulerDiscreteScheduler()
+
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    manager._configure_sampler(pipe, "sdxl", "euler", "karras")
+    assert pipe.scheduler.config.use_karras_sigmas is True
+    manager._configure_sampler(pipe, "sdxl", "euler", "normal")
+    assert pipe.scheduler.config.use_karras_sigmas is False
+
+
+def test_sdxl_exponential_and_beta_scheduler_configurations() -> None:
+    from diffusers import EulerDiscreteScheduler
+
+    class FakePipe:
+        def __init__(self) -> None:
+            self.scheduler = EulerDiscreteScheduler()
+
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    for schedule, flag in (
+        ("exponential", "use_exponential_sigmas"),
+        ("beta", "use_beta_sigmas"),
+    ):
+        manager._configure_sampler(pipe, "sdxl", "euler", schedule)
+        assert getattr(pipe.scheduler.config, flag) is True
+    manager._configure_sampler(pipe, "sdxl", "euler", "normal")
+    assert pipe.scheduler.config.use_exponential_sigmas is False
+    assert pipe.scheduler.config.use_beta_sigmas is False
+
+
+def test_non_sdxl_schedule_setting_does_not_change_flowmatch_scheduler() -> None:
+    from diffusers import FlowMatchEulerDiscreteScheduler
+
+    class FakePipe:
+        def __init__(self) -> None:
+            self.scheduler = FlowMatchEulerDiscreteScheduler()
+
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    manager._configure_sampler(pipe, "flux", "flowmatch_euler", "karras")
+    assert type(pipe.scheduler) is FlowMatchEulerDiscreteScheduler
 
 
 def test_flux_dev_and_schnell_capabilities_and_validation(tmp_path, monkeypatch) -> None:
@@ -1042,6 +1140,10 @@ class FakeVerifiedSDXLComponent:
         for adapter in self.peft_config:
             yield f"{self.target}.lora_A.{adapter}.weight", torch.ones(2, 2)
             yield f"{self.target}.lora_B.{adapter}.weight", torch.ones(2, 2)
+            if getattr(self, "inject_out_proj", False):
+                extra = self.target.replace(".q_proj", ".out_proj")
+                yield f"{extra}.lora_A.{adapter}.weight", torch.ones(2, 2)
+                yield f"{extra}.lora_B.{adapter}.weight", torch.ones(2, 2)
 
     def inject(self, adapter: str):
         self.peft_config[adapter] = object()
@@ -1067,6 +1169,8 @@ class FakeSDXLFullRankRepairPipe(FakeSDXLRankBugPipe):
             second_name = "text_model." + second_name
         self.text_encoder_2 = FakeVerifiedSDXLComponent(second_name)
         self.encoder_loads = []
+        for encoder in (self.text_encoder, self.text_encoder_2):
+            encoder.inject_out_proj = key_style == "kohya"
 
     def load_lora_weights(self, source, **kwargs):
         self.loads.append({"path": source, **kwargs})
@@ -2027,3 +2131,185 @@ def test_zimage_generation_rejects_missing_shard_even_with_complete_marker(
         GenerationManager()._validate_request(
             GenerationRequest(model_id="model-1", prompt="a cat", sampler="flowmatch_euler")
         )
+
+
+
+def test_sdxl_trailing_scheduler_uses_diffusers_timestep_spacing() -> None:
+    from diffusers import EulerDiscreteScheduler
+    class FakePipe:
+        def __init__(self):
+            self.scheduler = EulerDiscreteScheduler()
+    manager = GenerationManager()
+    pipe = FakePipe()
+    manager._pipeline_scheduler_config = dict(pipe.scheduler.config)
+    manager._configure_sampler(pipe, "sdxl", "euler", "trailing")
+    assert pipe.scheduler.config.timestep_spacing == "trailing"
+    manager._configure_sampler(pipe, "sdxl", "euler", "normal")
+    assert pipe.scheduler.config.timestep_spacing != "trailing"
+
+
+def test_sdxl_prompt_token_diagnostics_reports_overflow_without_mutating_prompt() -> None:
+    class Tokenizer:
+        model_max_length = 77
+
+        def __call__(self, text, **kwargs):
+            assert kwargs["truncation"] is False
+            return {"input_ids": list(range(len(text.split()) + 2))}
+
+    class Pipe:
+        tokenizer = Tokenizer()
+        tokenizer_2 = Tokenizer()
+
+    prompt = " ".join(["skull"] * 90)
+    request = GenerationRequest(model_id="sdxl", prompt=prompt, negative_prompt="fog")
+    result = GenerationManager._sdxl_prompt_token_diagnostics(Pipe(), request)
+    assert len(result) == 4
+    assert all(entry["truncated"] for entry in result if entry["field"] == "positive")
+    assert all(not entry["truncated"] for entry in result if entry["field"] == "negative")
+    assert request.prompt == prompt
+
+
+def test_sdxl_token_diagnostics_are_not_applied_to_flowmatch() -> None:
+    import inspect
+
+    source = inspect.getsource(GenerationManager._run_job)
+    assert 'job.model["family"] == "sdxl"' in source
+    assert "_warn_sdxl_prompt_truncation" in source
+
+
+def test_repeated_clip_warning_filter_preserves_first_and_lora_reports() -> None:
+    import logging
+
+    guard = generation._RepeatedClipWarningFilter()
+    overflow = logging.LogRecord(
+        "transformers", logging.WARNING, __file__, 1,
+        "Token indices sequence length is longer than the specified maximum sequence length",
+        (), None,
+    )
+    assert guard.filter(overflow)
+    assert not guard.filter(overflow)
+    adapter = logging.LogRecord(
+        "transformers", logging.WARNING, __file__, 1,
+        "CLIPTextModel LOAD REPORT: MISSING lora_A.weight", (), None,
+    )
+    assert guard.filter(adapter)
+    assert guard.filter(adapter)
+    different_overflow = logging.LogRecord(
+        "transformers", logging.WARNING, __file__, 1,
+        "Token indices sequence length is longer than the specified maximum sequence length (212 > 77)",
+        (), None,
+    )
+    assert guard.filter(different_overflow)
+
+
+def test_sdxl_long_prompt_hook_keeps_short_prompt_and_uses_embeds_for_overflow(monkeypatch):
+    import morphorum.sdxl_prompt_chunks as chunks
+
+    class Tokenizer:
+        model_max_length = 7
+        bos_token_id = 1
+        eos_token_id = 2
+        pad_token_id = 2
+
+        def __call__(self, text, **kwargs):
+            return {"input_ids": [3] * len(text.split())}
+
+    class Pipe:
+        tokenizer = Tokenizer()
+        tokenizer_2 = Tokenizer()
+        text_encoder = object()
+        text_encoder_2 = object()
+
+    plain = {"prompt": "one two", "negative_prompt": None, "guidance_scale": 7.0}
+    assert GenerationManager.apply_sdxl_long_prompt_conditioning(Pipe(), plain) is plain
+
+    observed = []
+    def fake_encode(pipe, prompt, negative, **kwargs):
+        observed.append((prompt, negative, kwargs))
+        return "positive", "negative", "pooled", "negative_pooled"
+
+    monkeypatch.setattr(chunks, "encode_sdxl_long_prompts", fake_encode)
+    long = {"prompt": "one two three four five six", "negative_prompt": "", "guidance_scale": 7.0}
+    result = GenerationManager.apply_sdxl_long_prompt_conditioning(Pipe(), long)
+    assert result["prompt"] is None
+    assert result["prompt_embeds"] == "positive"
+    assert result["negative_prompt_embeds"] == "negative"
+    assert result["pooled_prompt_embeds"] == "pooled"
+    assert result["negative_pooled_prompt_embeds"] == "negative_pooled"
+    assert len(observed) == 1
+    assert long["prompt"] == "one two three four five six"
+
+
+def test_sdxl_checkpoint_value_verification_rejects_corrupt_clip_tensor() -> None:
+    component = FakeVerifiedSDXLComponent("encoder.layers.0.self_attn.q_proj")
+    component.inject("morphorum_test")
+    checkpoint = {
+        "text_encoder.encoder.layers.0.self_attn.q_proj.lora_A.weight":
+            torch.zeros(2, 2),
+        "text_encoder.encoder.layers.0.self_attn.q_proj.lora_B.weight":
+            torch.ones(2, 2),
+    }
+    with pytest.raises(GenerationError, match="checkpoint value mismatch"):
+        GenerationManager._compare_sdxl_clip_checkpoint_values(
+            component, "morphorum_test", checkpoint, "text_encoder",
+        )
+
+
+def test_g43_sdxl_lora_ui_report_never_overclaims_checkpoint_validation() -> None:
+    manager = GenerationManager()
+    manager._pipeline_loras = {
+        "full": {
+            "id": "full", "name": "Verified art", "family": "sdxl",
+            "adapter_name": "full_adapter",
+            "compatibility": "sdxl-text-encoder-normalized",
+            "diagnostics": {
+                "components": {
+                    "text_encoder": {
+                        "tensors": 144, "checkpoint_tensors": 144,
+                        "checkpoint_values_verified": 144, "coverage_verified": True,
+                    },
+                    "text_encoder_2": {
+                        "tensors": 384, "checkpoint_tensors": 384,
+                        "checkpoint_values_verified": 384, "coverage_verified": True,
+                    },
+                }
+            },
+        },
+        "ordinary": {
+            "id": "ordinary", "name": "Normal adapter", "family": "sdxl",
+            "adapter_name": "normal_adapter", "compatibility": None,
+            "diagnostics": {"tensors": 200, "abs_sum": 10.0},
+        },
+        "fallback": {
+            "id": "fallback", "name": "U-net only", "family": "sdxl",
+            "adapter_name": "fallback_adapter",
+            "compatibility": "sdxl-clean-unet-only",
+            "diagnostics": {"tensors": 100},
+        },
+        "inactive": {
+            "id": "inactive", "name": "Inactive", "family": "sdxl",
+            "adapter_name": "inactive_adapter", "compatibility": None,
+            "diagnostics": {},
+        },
+    }
+    manager._active_lora_signature = (
+        ("full_adapter", 0.7),
+        ("normal_adapter", 0.5),
+        ("fallback_adapter", 0.3),
+    )
+    report = manager.sdxl_lora_diagnostics()
+    assert report["active_count"] == 3
+    assert [item["status"] for item in report["adapters"]] == [
+        "checkpoint_verified", "active_not_value_checked", "unet_only",
+    ]
+    assert report["adapters"][0]["components"]["text_encoder"] == {
+        "tensors": 144, "checkpoint_values_verified": 144,
+    }
+    assert report["adapters"][0]["weight"] == 0.7
+    assert "path" not in str(report)
+    manager._pipeline_loras["full"]["diagnostics"]["components"]["text_encoder_2"][
+        "checkpoint_values_verified"
+    ] = 383
+    assert manager.sdxl_lora_diagnostics()["adapters"][0]["status"] == (
+        "active_not_value_checked"
+    )
