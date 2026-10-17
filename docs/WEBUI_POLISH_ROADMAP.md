@@ -89,6 +89,8 @@ separate, explicit authorization.** Next development phase: P4.
 
 **Sequencing:** implement UX2.4 navigation and UX2.5 bulk trash before UX3 Editor grouping; then complete UX4/UX5 and resume P5. These are roadmap additions only, not implemented or accepted.
 
+**UX2.5 implementation checkpoint (2026-10-16):** Added checkbox multi-selection in Project Manager, Select All Visible (respecting current search), Clear Selection, selection count, confirmed Move Selected to Trash, per-item failure reporting, and preservation of unsuccessful selections. Reuses the existing managed project DELETE-to-`.trash` endpoint; completed renders and exports remain separate. Motion Studio was moved immediately below Overview in the Motion Lab sidebar. Added responsive styling and source regression assertions. **CI, physical Windows/mobile acceptance and recovery behavior remain pending; do not merge to main.**
+
 ### UX3–UX5 · next after acceptance
 
 - [ ] **UX3:** Split Project Editor into Setup, Sources & Media,
