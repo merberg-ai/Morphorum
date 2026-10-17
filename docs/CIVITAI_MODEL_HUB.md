@@ -61,3 +61,20 @@ When the Hub is disabled, its navigation is hidden, search is blocked in the UI 
 6. Disable and save Hub, reload; confirm navigation disappears and direct requests to `/api/civitai/models` return HTTP 403.
 
 **Status:** Code pushed; physical Windows/mobile verification pending. Do not mark C1.2 passed until confirmed.
+
+## C1.3: Detail inspection and sidebar grouping (pending Windows verification)
+
+- Read-only `GET /api/civitai/models/{model_id}` returns bounded model descriptions, creator/tags, up to 40 versions with file sizes/formats/hashes, trigger words, and up to 16 example images per version. Backend enforces the Hub enabled flag, hides mature models unless permitted, and sanitizes upstream responses.
+- Gallery cards now provide **Details & versions**, opening a native responsive dialog. Version selection updates metadata and example previews without a download.
+- Compatibility is deliberately advisory, not a promise of successful loading: family names alone do not establish runtime compatibility.
+- Primary navigation now has an expandable **Project** item immediately beneath **Image**, containing Project Manager, New Project and Project Editor. The optional Civitai Hub item follows Project and precedes Motion Lab. Existing Motion Lab workspace links remain.
+
+### Physical test sequence
+
+1. Open a Civitai model card's **Details & versions** button; confirm the dialog loads, closes, and version selection switches previews/metadata.
+2. Try models with no example images or file metadata; confirm clear graceful empty states.
+3. Check SDXL vs FLUX model compatibility messaging and test the mature-content preference.
+4. Expand/collapse **Project** and visit all three project views; confirm no change to the underlying project behavior.
+5. Test navigation with Civitai Hub disabled, and check sidebar and dialog responsiveness at narrow widths.
+
+No downloads or model modifications occur in C1.3. Runtime/CI and physical Windows tests have not been executed from this chat.
