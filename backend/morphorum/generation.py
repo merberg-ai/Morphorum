@@ -2336,6 +2336,12 @@ class GenerationManager:
 
         # The normal loader may have injected the UNet and/or first text
         # encoder before the rank error. Remove that partial adapter first.
+        emit_console(
+            "info", "generation",
+            f"SDXL LoRA {path.name}: resetting a partially injected adapter "
+            "before the full CLIP compatibility retry. PEFT may report an "
+            "active adapter being deleted; activation is verified after reload.",
+        )
         cls._delete_pipeline_adapter(pipe, adapter_name)
         remaining = cls._pipeline_adapter_names(pipe)
         if remaining is not None and adapter_name in remaining:
@@ -2480,7 +2486,19 @@ class GenerationManager:
         else:
             unet_alphas = network_alphas
 
+        emit_console(
+            "warning", "generation",
+            f"SDXL LoRA {path.name}: removing the partially injected adapter "
+            "before a UNet-only compatibility retry. CLIP adapters will not "
+            "be applied for this LoRA.",
+        )
         cls._delete_pipeline_adapter(pipe, adapter_name)
+        remaining = cls._pipeline_adapter_names(pipe)
+        if remaining is not None and adapter_name in remaining:
+            raise GenerationError(
+                f"SDXL adapter {adapter_name} remained registered after "
+                "UNet-only fallback cleanup."
+            )
 
         kwargs = {
             "state_dict": unet_state,
