@@ -1177,7 +1177,48 @@
     connectionTitle.textContent = 'Connection';
     const notice = document.createElement('p');
     notice.className = 'muted';
-    notice.textContent = 'Optional API token: configure CIVITAI_API_TOKEN on the Morphorum host. Save settings before testing.';
+    notice.textContent = 'Save a Civitai API key below, then Test Connection. CIVITAI_API_TOKEN environment variable takes precedence.';
+    const keyRow = document.createElement('div');
+    keyRow.className = 'civitai-key-controls';
+    const keyInput = document.createElement('input');
+    keyInput.type = 'password';
+    keyInput.autocomplete = 'new-password';
+    keyInput.placeholder = 'Paste Civitai API key';
+    keyInput.setAttribute('aria-label', 'Civitai API key');
+    const keyStatus = document.createElement('span');
+    keyStatus.className = 'muted';
+    keyStatus.textContent = 'Checking key status…';
+    const saveKey = makeButton('Save / Replace Key', 'secondary-button compact');
+    const clearKey = makeButton('Clear Key', 'secondary-button compact');
+    const refreshKey = async () => {
+      try {
+        const response = await api('/api/civitai/auth');
+        keyStatus.textContent = response.configured ? 'API key configured (' + response.source + ')' : 'No API key configured';
+        clearKey.disabled = response.source !== 'saved';
+      } catch (error) { keyStatus.textContent = 'Unable to read key status'; }
+    };
+    saveKey.addEventListener('click', async () => {
+      saveKey.disabled = true;
+      try {
+        await api('/api/civitai/auth', {method:'PUT', body:JSON.stringify({token:keyInput.value})});
+        keyInput.value = '';
+        toast('Civitai key saved', 'Key stored on Morphorum host. Test Connection to verify it.', 'success');
+        await refreshKey();
+      } catch (error) { toast('Cannot save API key', error.message, 'error'); }
+      finally { saveKey.disabled = false; }
+    });
+    clearKey.addEventListener('click', async () => {
+      clearKey.disabled = true;
+      try {
+        await api('/api/civitai/auth', {method:'DELETE'});
+        keyInput.value = '';
+        toast('Civitai key cleared', 'Stored API key removed.', 'success');
+        await refreshKey();
+      } catch (error) { toast('Cannot clear API key', error.message, 'error'); }
+    });
+    keyRow.append(keyInput, saveKey, clearKey, keyStatus);
+    connection.append(keyRow);
+    void refreshKey();
     const test = document.createElement('button');
     test.type = 'button';
     test.className = 'secondary-button busy-button civitai-test-button';
