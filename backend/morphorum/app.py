@@ -112,6 +112,7 @@ from .lora_inspector import LoRAInspectionError, inspect_lora
 from .civitai import CivitaiLookupError, lookup_civitai
 from .civitai_search import CivitaiSearchError, search_models
 from .civitai_detail import model_details
+from .civitai_download import start_download, list_jobs, cancel_download
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -458,6 +459,29 @@ def api_civitai_model_details(model_id: int) -> dict[str, Any]:
         return model_details(model_id)
     except CivitaiSearchError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.get("/api/civitai/downloads")
+def api_civitai_downloads() -> dict[str, Any]:
+    if not load_settings().get("civitai", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Civitai Hub disabled.")
+    return {"jobs": list_jobs()}
+
+
+@app.post("/api/civitai/downloads", status_code=202)
+def api_civitai_create_download(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return start_download(int(payload["model_id"]), int(payload["version_id"]), str(payload["file_name"]))
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/civitai/downloads/{job_id}/cancel")
+def api_civitai_cancel_download(job_id: str) -> dict[str, Any]:
+    try:
+        return cancel_download(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Download not found.") from exc
 
 
 @app.post("/api/civitai/test-connection")
