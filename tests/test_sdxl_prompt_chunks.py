@@ -55,7 +55,7 @@ def test_dual_clip_long_encoding_shapes_and_pooled_outputs():
             sequence = ids.shape[1]
             hidden = torch.ones((1, sequence, self.width))
             return SimpleNamespace(
-                hidden_states=(hidden * 0, hidden),
+                hidden_states=(hidden, hidden * 0),
                 text_embeds=torch.ones((1, self.width)) * 2,
             )
 
