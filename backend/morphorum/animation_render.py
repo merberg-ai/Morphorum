@@ -1701,6 +1701,14 @@ class AnimationRenderManager:
                 call_args.update(conditioning)
                 if family == "sdxl":
                     call_args = generation_manager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
+                    if call_args.get("prompt_embeds") is not None:
+                        shape = tuple(call_args["prompt_embeds"].shape)
+                        mode = "CHUNKED / BLENDED" if shape[1] > 77 else "BLENDED / EMBEDDED"
+                    else:
+                        shape = None
+                        mode = "STANDARD"
+                    emit_console("info", "animation",
+                        f"SDXL conditioning frame 0: {mode}, embeddings={shape}.")
 
                 with torch.inference_mode():
                     result = pipe(**call_args)
@@ -2101,6 +2109,17 @@ class AnimationRenderManager:
                 call_args.update(conditioning)
                 if family == "sdxl":
                     call_args = generation_manager.apply_sdxl_long_prompt_conditioning(pipe, call_args)
+                    if frame == 3 or (frame % 60 == 0):
+                        shape = (
+                            tuple(call_args["prompt_embeds"].shape)
+                            if call_args.get("prompt_embeds") is not None else None
+                        )
+                        mode = (
+                            "CHUNKED / BLENDED" if shape and shape[1] > 77
+                            else "BLENDED / EMBEDDED" if shape else "STANDARD"
+                        )
+                        emit_console("info", "animation",
+                            f"SDXL conditioning frame {frame}: {mode}, embeddings={shape}.")
 
                 diffusion_started = time.monotonic()
                 with torch.inference_mode():
