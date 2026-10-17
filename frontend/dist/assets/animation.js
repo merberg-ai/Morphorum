@@ -10568,8 +10568,14 @@
         qs('#animation-tab-' + keys[next])?.focus();
         showAnimationTab(keys[next]);
       });
-      // Project destinations live in the primary menu; keep their real panels and IDs.
-      if (!['wizard','projects','editor'].includes(name)) nav.appendChild(button);
+      // Retain programmatic workspace targets for primary-nav routing and older shortcuts.
+      // The visible navigation for these three destinations lives in the main menu.
+      if (['wizard','projects','editor'].includes(name)) {
+        button.hidden = true;
+        button.style.display = 'none';
+        button.tabIndex = -1;
+      }
+      nav.appendChild(button);
       const panel = document.createElement('section');
       panel.className = 'animation-workspace-panel';
       panel.id = 'animation-panel-' + name;
