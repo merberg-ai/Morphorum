@@ -1110,6 +1110,7 @@
     const options = Array.isArray(config.options) ? config.options : [];
     for (const option of options) {
       if (selectedSampler === 'ddim' && option.id !== 'normal') continue;
+      if (option.id === 'trailing' && !['euler', 'euler_a', 'dpmpp_2m', 'dpmpp_2m_sde', 'lms', 'heun', 'unipc'].includes(selectedSampler)) continue;
       if (['exponential', 'beta'].includes(option.id) && !['euler', 'dpmpp_2m', 'dpmpp_2m_sde', 'unipc'].includes(selectedSampler)) continue;
       select.add(new Option(option.label || option.id, option.id));
     }
