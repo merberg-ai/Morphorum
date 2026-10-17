@@ -2169,3 +2169,28 @@ def test_sdxl_token_diagnostics_are_not_applied_to_flowmatch() -> None:
     source = inspect.getsource(GenerationManager._run_job)
     assert 'job.model["family"] == "sdxl"' in source
     assert "_warn_sdxl_prompt_truncation" in source
+
+
+def test_repeated_clip_warning_filter_preserves_first_and_lora_reports() -> None:
+    import logging
+
+    guard = generation._RepeatedClipWarningFilter()
+    overflow = logging.LogRecord(
+        "transformers", logging.WARNING, __file__, 1,
+        "Token indices sequence length is longer than the specified maximum sequence length",
+        (), None,
+    )
+    assert guard.filter(overflow)
+    assert not guard.filter(overflow)
+    adapter = logging.LogRecord(
+        "transformers", logging.WARNING, __file__, 1,
+        "CLIPTextModel LOAD REPORT: MISSING lora_A.weight", (), None,
+    )
+    assert guard.filter(adapter)
+    assert guard.filter(adapter)
+    different_overflow = logging.LogRecord(
+        "transformers", logging.WARNING, __file__, 1,
+        "Token indices sequence length is longer than the specified maximum sequence length (212 > 77)",
+        (), None,
+    )
+    assert guard.filter(different_overflow)
