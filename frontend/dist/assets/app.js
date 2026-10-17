@@ -308,7 +308,7 @@
     }
   }
   function selectSettingsTab(tab, { persist = true } = {}) {
-    if (!['appearance','generation','paths','storage'].includes(tab)) return;
+    if (!['appearance','generation','paths','storage','civitai'].includes(tab)) return;
     state.settingsTab = tab;
     qsa('#settings-internal-tabs button[data-settings-tab]').forEach(button => {
       const selected = button.dataset.settingsTab === tab;
@@ -1098,6 +1098,79 @@
     return section;
   }
 
+  function createCivitaiSettingsCard() {
+    state.settings.civitai ||= {};
+    const cfg = state.settings.civitai;
+    const card = document.createElement('article');
+    card.className = 'card glass settings-preferences-card';
+    const title = document.createElement('h2');
+    title.textContent = 'Civitai Hub';
+    const description = document.createElement('p');
+    description.className = 'muted';
+    description.textContent = 'Optional online model discovery. Disabled by default. Local models and LoRA inspection remain available.';
+    card.append(title, description);
+    const toggle = (label, key, fallback = false) => {
+      const wrap = document.createElement('label');
+      wrap.className = 'settings-preference-toggle';
+      const caption = document.createElement('span');
+      caption.textContent = label;
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = cfg[key] === undefined ? fallback : cfg[key] === true;
+      input.addEventListener('change', () => { cfg[key] = input.checked; markSettingsDirty(); });
+      wrap.append(caption, input);
+      card.appendChild(wrap);
+    };
+    toggle('Enable Civitai Hub', 'enabled');
+    toggle('Allow mature previews', 'allow_mature');
+    toggle('Load model thumbnails', 'load_previews', true);
+    toggle('Check for updates automatically (future Hub feature)', 'auto_check_updates');
+    const selectField = (label, key, values, fallback) => {
+      const labelEl = document.createElement('label');
+      labelEl.textContent = label;
+      const select = document.createElement('select');
+      for (const [value, text] of values) {
+        const option = document.createElement('option');
+        option.value = String(value);
+        option.textContent = text;
+        select.append(option);
+      }
+      select.value = String(cfg[key] ?? fallback);
+      select.addEventListener('change', () => {
+        cfg[key] = key === 'concurrent_downloads' ? Number(select.value) : select.value;
+        markSettingsDirty();
+      });
+      labelEl.appendChild(select);
+      card.appendChild(labelEl);
+    };
+    selectField('Browsing layout', 'layout', [['grid','Thumbnail grid'],['list','Compact list']], 'grid');
+    selectField('Concurrent downloads (future Hub feature)', 'concurrent_downloads', [[1,'1'],[2,'2'],[3,'3']], 1);
+    const notice = document.createElement('p');
+    notice.className = 'muted';
+    notice.textContent = 'Optional API token: set CIVITAI_API_TOKEN in the host environment. The token is never sent to the browser. Save settings before testing.';
+    const test = document.createElement('button');
+    test.type = 'button';
+    test.className = 'secondary-button';
+    test.textContent = 'Test Connection';
+    const status = document.createElement('p');
+    status.setAttribute('role','status');
+    test.addEventListener('click', async () => {
+      test.disabled = true;
+      status.textContent = 'Connecting to Civitai…';
+      try {
+        const result = await api('/api/civitai/test-connection', {method:'POST',body:'{}'});
+        status.textContent = result.message + (result.status ? ' HTTP ' + result.status : '') +
+          (result.authenticated ? ' (token configured)' : ' (public access)');
+        toast(result.ok ? 'Civitai connected' : 'Civitai connection failed', status.textContent, result.ok ? 'success' : 'warning');
+      } catch (error) {
+        status.textContent = error.message;
+        toast('Civitai test failed', error.message, 'error');
+      } finally { test.disabled = false; }
+    });
+    card.append(notice, test, status);
+    return card;
+  }
+
   function renderSettings() {
     const container = qs('#model-path-cards');
     const loader = qs('#settings-loading');
@@ -1111,7 +1184,7 @@
     tabs.className = 'settings-internal-tabs';
     tabs.setAttribute('aria-label', 'Settings groups');
     const panes = {};
-    for (const [name,label] of [['appearance','Appearance'],['generation','Generation'],['paths','Model Paths'],['storage','Storage']]) {
+    for (const [name,label] of [['appearance','Appearance'],['generation','Generation'],['paths','Model Paths'],['storage','Storage'],['civitai','Civitai Hub']]) {
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.settingsTab = name;
@@ -1130,6 +1203,7 @@
     panes.generation.appendChild(createPreferencesCard());
     panes.storage.appendChild(createManagedModelsCard());
     panes.storage.appendChild(createFFmpegManagerCard());
+    panes.civitai.appendChild(createCivitaiSettingsCard());
     for (const [family, fallbackLabel, source, loraSource, supportsLoras] of FAMILY_DEFS) {
       if (source === 'managed' && !(supportsLoras && loraSource === 'external')) continue;
       const familyData = ensureFamily(family);
@@ -1260,6 +1334,7 @@
         show_help_hints: state.settings.ui.show_help_hints !== false,
         image_preview_limit: Math.max(1, Math.min(50, Number(state.settings.ui.image_preview_limit) || 5)),
       },
+      civitai: state.settings.civitai || { enabled: false },
       performance: {
         unload_after_generation: Boolean(state.settings.performance.unload_after_generation),
         sdxl_vae_tiling: Boolean(state.settings.performance.sdxl_vae_tiling),
