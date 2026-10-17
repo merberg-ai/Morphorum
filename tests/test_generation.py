@@ -2140,3 +2140,32 @@ def test_sdxl_trailing_scheduler_uses_diffusers_timestep_spacing() -> None:
     assert pipe.scheduler.config.timestep_spacing == "trailing"
     manager._configure_sampler(pipe, "sdxl", "euler", "normal")
     assert pipe.scheduler.config.timestep_spacing != "trailing"
+
+
+def test_sdxl_prompt_token_diagnostics_reports_overflow_without_mutating_prompt() -> None:
+    class Tokenizer:
+        model_max_length = 77
+
+        def __call__(self, text, **kwargs):
+            assert kwargs["truncation"] is False
+            return {"input_ids": list(range(len(text.split()) + 2))}
+
+    class Pipe:
+        tokenizer = Tokenizer()
+        tokenizer_2 = Tokenizer()
+
+    prompt = " ".join(["skull"] * 90)
+    request = GenerationRequest(model_id="sdxl", prompt=prompt, negative_prompt="fog")
+    result = GenerationManager._sdxl_prompt_token_diagnostics(Pipe(), request)
+    assert len(result) == 4
+    assert all(entry["truncated"] for entry in result if entry["field"] == "positive")
+    assert all(not entry["truncated"] for entry in result if entry["field"] == "negative")
+    assert request.prompt == prompt
+
+
+def test_sdxl_token_diagnostics_are_not_applied_to_flowmatch() -> None:
+    import inspect
+
+    source = inspect.getsource(GenerationManager._run_job)
+    assert 'job.model["family"] == "sdxl"' in source
+    assert "_warn_sdxl_prompt_truncation" in source
