@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const state = { records: [], selected: null, detail: null, civitai: null, request: 0 };
+  const state = { records: [], selected: null, detail: null, civitai: null, identity: null, identifying: false, request: 0 };
   const qs = selector => document.querySelector(selector);
   const toast = (title, message, type = 'info') => window.MorphorumToast?.(title, message, type, 6000);
   const api = async (url, options = {}) => {
@@ -85,6 +85,27 @@
     field(overview, 'Trigger source', d.trigger_source);
     field(overview, 'JSON sidecar', d.sidecar);
     field(overview, 'HTML sidecar', d.html_sidecar?.filename);
+    const identityPanel = document.createElement('div');
+    identityPanel.className = 'lora-exact-identity';
+    const identify = text('button', state.identifying ? 'Identifying…' : 'Identify on Civitai');
+    identify.type = 'button';
+    identify.className = 'secondary-button compact busy-button';
+    identify.disabled = state.identifying;
+    identify.classList.toggle('busy', state.identifying);
+    identify.title = 'Opt-in exact SHA-256 file match on Civitai';
+    identify.addEventListener('click', identifySelectedLora);
+    identityPanel.append(identify);
+    if (state.identity?.found) {
+      const link = document.createElement('a');
+      link.href = state.identity.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Verified: ' + (state.identity.name || 'Civitai model') + ' · ' + (state.identity.version || 'version') + ' ↗';
+      identityPanel.append(link);
+    } else if (state.identity && !state.identity.found) {
+      identityPanel.append(text('p', state.identity.message || 'No exact SHA-256 match found.', 'muted lora-manager-small'));
+    }
+    overview.append(identityPanel);
     target.appendChild(section('Identification', overview));
     if (d.html_sidecar?.text_excerpt) {
       const htmlData = document.createElement('div');
@@ -157,10 +178,35 @@
     }
   }
 
+  async function identifySelectedLora() {
+    const selected = state.selected;
+    if (!selected || state.identifying) return;
+    const request = state.request;
+    state.identifying = true;
+    renderDetail();
+    try {
+      const result = await api('/api/civitai/identify/' + encodeURIComponent(selected.id), {method:'POST', body:'{}'});
+      if (request !== state.request) return;
+      state.identity = result;
+      toast(result.found ? 'Exact SHA-256 match' : 'No verified Civitai match',
+            result.found ? selected.name + ' identified on Civitai.' : result.message,
+            result.found ? 'success' : 'info');
+    } catch (error) {
+      if (request === state.request) {
+        state.identity = null;
+        toast('Civitai identification failed', error.message, 'error');
+      }
+    } finally {
+      if (request === state.request) { state.identifying = false; renderDetail(); }
+    }
+  }
+
   async function selectLora(record) {
     state.selected = record;
     state.detail = null;
     state.civitai = null;
+    state.identity = null;
+    state.identifying = false;
     const request = ++state.request;
     renderLibrary();
     renderDetail();
@@ -184,7 +230,7 @@
       const result = await api('/api/loras');
       state.records = result.loras || [];
       const selected = state.records.find(item => item.id === state.selected?.id);
-      if (!selected) { state.selected = null; state.detail = null; state.civitai = null; ++state.request; }
+      if (!selected) { state.selected = null; state.detail = null; state.civitai = null; state.identity = null; state.identifying = false; ++state.request; }
       renderLibrary();
       if (selected) await selectLora(selected);
       else renderDetail();
