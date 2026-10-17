@@ -8300,7 +8300,8 @@
       motionLabSoundtrackBusy = false;
       if (state.project?.id === projectId) {
         renderProjectMedia();
-        motionStudioRefreshStageStatus();
+        if (typeof motionStudioRefreshStageStatus === 'function')
+          motionStudioRefreshStageStatus();
       }
     }
   }
