@@ -1085,6 +1085,21 @@
       : 'Compatible samplers';
   }
 
+  function showAnimationPromptLengthAdvisory() {
+    const notice = qs('#animation-prompt-token-warning');
+    if (!notice) return;
+    const model = modelById(qs('#animation-model')?.value || state.project?.model?.model_id || '');
+    const family = model?.family || state.project?.model?.family;
+    const prompts = [
+      ...Object.values(state.project?.prompts || {}),
+      ...Object.values(state.project?.negative_prompts || {}),
+    ];
+    const longest = prompts.reduce((best, item) => Math.max(best, String(item || '').length), 0);
+    // Heuristic only: exact token counts are determined by SDXL tokenizers at inference.
+    notice.hidden = family !== 'sdxl' || longest < 250;
+    notice.textContent = 'Long SDXL prompt detected in this project. CLIP supports 77 tokens per encoder; some text may be truncated. This is a character-length advisory, not an exact token count. Review Console for exact generation diagnostics.';
+  }
+
   function populateAnimationScheduleTypes(preferred = '') {
     const field = qs('#animation-schedule-type-field');
     const select = qs('#animation-schedule-type');
@@ -2382,6 +2397,7 @@
       populateModelSelect();
       populateSamplerSelect(project.generation?.sampler || '', { preserveUnsupported: true });
       populateAnimationScheduleTypes(project.generation?.schedule_type || 'normal');
+      showAnimationPromptLengthAdvisory();
       const repairedGuidance = repairConstantGuidanceForSelectedModel();
       renderPromptRows();
       syncAnimationModeUi();
@@ -11716,6 +11732,7 @@
     qs('#animation-model')?.addEventListener('change', () => {
       populateSamplerSelect('');
       populateAnimationScheduleTypes('normal');
+      showAnimationPromptLengthAdvisory();
       populateResolutionPresets();
       const repairedGuidance = repairConstantGuidanceForSelectedModel({ announce: true });
       renderPromptRows();
