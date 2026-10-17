@@ -1098,3 +1098,30 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
   overflow-wrap: anywhere;
 }
 .workspace .sdxl-conditioning-diagnostic[hidden] { display: none; }
+
+/* Civitai Hub: compact, fluid settings controls; never inherit full-width giant checkboxes. */
+.civitai-settings-card { max-width: 1100px; width: 100%; }
+.civitai-settings-heading { margin-bottom: 18px; }
+.civitai-settings-heading p { margin: 6px 0 0; }
+.civitai-settings-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+.civitai-settings-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 62px; padding: 12px 14px; border: 1px solid var(--border, rgba(255,255,255,.1)); border-radius: 12px; background: rgba(255,255,255,.025); }
+.civitai-settings-toggle-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.civitai-settings-toggle-copy strong { font-size: .9rem; }
+.civitai-settings-toggle-copy small { font-size: .77rem; }
+.civitai-settings-toggle input[type="checkbox"] { display: block; flex: 0 0 18px; width: 18px !important; height: 18px !important; min-width: 18px !important; min-height: 18px !important; max-width: 18px; max-height: 18px; margin: 0; padding: 0; accent-color: var(--accent, #41d9ff); cursor: pointer; }
+.civitai-settings-selects { display: grid; grid-template-columns: repeat(2, minmax(0, 270px)); gap: 16px; margin: 20px 0; }
+.civitai-settings-field { display: flex; flex-direction: column; gap: 7px; font-size: .87rem; font-weight: 600; }
+.civitai-settings-field select { width: 100%; max-width: 270px; min-height: 40px; }
+.civitai-settings-connection { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 17px; border: 1px solid var(--border, rgba(255,255,255,.1)); border-radius: 12px; background: rgba(255,255,255,.025); }
+.civitai-settings-connection h3, .civitai-settings-connection p { margin: 0; }
+.civitai-test-button { min-width: 160px; }
+.civitai-settings-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (max-width: 760px) {
+  .civitai-settings-options { grid-template-columns: minmax(0, 1fr); }
+  .civitai-settings-selects { grid-template-columns: minmax(0, 1fr); }
+  .civitai-settings-field select { max-width: 100%; }
+}
+
+.civitai-key-controls {display:flex; flex-wrap:wrap; align-items:center; gap:10px; width:100%;}
+.civitai-key-controls input {flex:1 1 250px; max-width:460px; min-width:0;}
+.civitai-key-controls .muted {flex-basis:100%;}

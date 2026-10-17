@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/assets/first-run-setup.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/mobile.css?v=__MORPHORUM_ASSET_VERSION__" media="(max-width: 640px)">
   <link rel="stylesheet" href="/assets/models.css?v=__MORPHORUM_ASSET_VERSION__">
+  <link rel="stylesheet" href="/assets/civitai.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/image.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/animation.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/tablet.css?v=__MORPHORUM_ASSET_VERSION__" media="(min-width: 641px) and (max-width: 1180px), (min-width: 1181px) and (pointer: coarse)">
@@ -100,11 +101,15 @@
 
     <nav class="main-nav glass" aria-label="Primary">
       <button class="nav-button active" data-view="image"><span class="nav-icon">▣</span><span>Image</span></button>
-      <button class="nav-button" data-project-nav="projects" type="button"><span class="nav-icon">▤</span><span>Project Manager</span></button>
-      <button class="nav-button" data-project-nav="wizard" type="button"><span class="nav-icon">＋</span><span>New Project</span></button>
-      <button class="nav-button" data-project-nav="editor" type="button"><span class="nav-icon">▧</span><span>Project Editor</span></button>
-      <button class="nav-button" data-view="animation" type="button"><span class="nav-icon">◈</span><span>Motion Lab</span></button>
-      <div class="motion-lab-sidebar" id="motion-lab-sidebar" role="group" aria-label="Motion Lab workspaces">
+      <button class="nav-button" id="project-nav-toggle" type="button" aria-expanded="false" aria-controls="project-nav-submenu"><span class="nav-icon">▤</span><span>Project</span><span class="project-nav-chevron">▾</span></button>
+      <div class="project-nav-submenu" id="project-nav-submenu" hidden>
+        <button type="button" data-project-nav="projects">Project Manager</button>
+        <button type="button" data-project-nav="wizard">New Project</button>
+        <button type="button" data-project-nav="editor">Project Editor</button>
+      </div>
+      <button class="nav-button" data-view="civitai" id="civitai-nav" hidden><span class="nav-icon">◈</span><span>Civitai Hub</span></button>
+      <button class="nav-button" data-view="animation" id="motion-nav-toggle" type="button" aria-expanded="false" aria-controls="motion-lab-sidebar"><span class="nav-icon">◈</span><span>Motion Lab</span><span class="project-nav-chevron">▾</span></button>
+      <div class="motion-lab-sidebar" id="motion-lab-sidebar" role="group" aria-label="Motion Lab workspaces" hidden>
         <button type="button" data-motion-nav="motion">Overview</button>
         <button type="button" data-motion-nav="audio">Motion Studio</button>
         <button type="button" data-motion-nav="composer">Camera Composer</button>
@@ -1298,6 +1303,29 @@
         </div>
       </section>
 
+      <section class="view" id="view-civitai">
+        <div class="page-heading"><div><p class="eyebrow">MODEL DISCOVERY</p><h1>Civitai Hub</h1><p class="muted">Browse models without leaving Morphorum. Downloads and version inspection arrive in later stages.</p></div></div>
+        <article class="card glass civitai-browser">
+          <form id="civitai-search-form" class="civitai-search-form">
+            <label class="civitai-search-query"><span>Search models</span><input name="query" type="search" placeholder="Search checkpoints and LoRAs…" maxlength="120"></label>
+            <label><span>Type</span><select name="model_type"><option value="">All types</option><option value="Checkpoint">Checkpoints</option><option value="LORA">LoRAs</option></select></label>
+            <label><span>Base model</span><select name="base_model"><option value="">All models</option><option>SDXL 1.0</option><option>SDXL Turbo</option><option>SDXL Lightning</option><option>Flux.1 D</option><option>Flux.1 S</option><option>ZImageTurbo</option></select></label>
+            <label><span>Sort</span><select name="sort"><option>Most Downloaded</option><option>Highest Rated</option><option>Most Liked</option><option>Most Discussed</option><option>Most Collected</option><option>Most Images</option><option>Newest</option><option>Oldest</option></select></label>
+            <label><span>Period</span><select name="period"><option value="AllTime">All time</option><option>Year</option><option>Month</option><option>Week</option><option>Day</option></select></label>
+            <label><span>Creator</span><input name="username" maxlength="120" placeholder="Optional"></label>
+            <label><span>Tag</span><input name="tag" maxlength="120" placeholder="Optional"></label>
+            <div class="civitai-search-action"><button class="primary-button busy-button" id="civitai-search-button" type="submit"><span class="spinner"></span><span class="button-label">Search models</span></button></div>
+          </form>
+          <div class="civitai-result-toolbar"><span id="civitai-result-status" role="status" aria-live="polite">Search Civitai to discover models.</span><span class="badge" id="civitai-result-page">Page 1</span></div>
+          <div class="civitai-gallery" id="civitai-results"></div>
+          <dialog id="civitai-detail-dialog" class="civitai-detail-dialog" aria-labelledby="civitai-detail-title">
+            <div class="civitai-detail-header"><h2 id="civitai-detail-title">Model details</h2><button id="civitai-detail-close" type="button" class="secondary-button compact">Close ✕</button></div>
+            <div id="civitai-detail-content" role="status" aria-live="polite"></div>
+          </dialog>
+          <section class="civitai-download-manager"><div class="civitai-download-heading"><h3>Download queue</h3><button type="button" id="civitai-refresh-downloads" class="secondary-button compact">Refresh</button></div><div id="civitai-download-jobs" role="status" aria-live="polite">No downloads queued.</div></section>
+          <div class="civitai-pagination"><button id="civitai-previous" class="secondary-button compact" type="button" disabled>← Previous</button><button id="civitai-next" class="secondary-button compact" type="button" disabled>Next →</button></div>
+        </article>
+      </section>
       <section class="view" id="view-models">
         <div class="page-heading models-heading">
           <div><p class="eyebrow">MODEL MANAGER</p><h1>Models</h1><p class="muted">Find installed models, scan your folders, or download supported managed models. Select a model in Image or Animation to use it.</p></div>
@@ -1340,6 +1368,13 @@
             </select>
             <button class="secondary-button compact" type="button" id="model-filters-clear">Clear Filters</button>
           </div>
+          <div class="model-bulk-toolbar">
+            <button type="button" class="secondary-button compact" id="model-select-visible">Select visible</button>
+            <button type="button" class="secondary-button compact" id="model-clear-selected">Clear selection</button>
+            <button type="button" class="secondary-button compact busy-button" id="model-bulk-identify" disabled>Identify Selected (0)</button>
+            <button type="button" class="secondary-button compact busy-button" id="model-bulk-updates" disabled>Check Updates (0)</button>
+            <span id="model-bulk-status" role="status" aria-live="polite" class="muted">0 selected</span>
+          </div>
           <div id="model-list" class="model-list">
             <div class="model-empty"><span class="large-spinner"></span><span>Loading model index…</span></div>
           </div>
@@ -1360,6 +1395,12 @@
               <select id="lora-manager-family"><option value="sdxl">SDXL</option><option value="flux">Flux</option><option value="zimage">Z-Image</option></select>
               <label class="field-label" for="lora-manager-search">Find a LoRA</label>
               <input id="lora-manager-search" type="search" placeholder="Search name or filename…">
+            </div>
+            <div class="lora-bulk-toolbar">
+              <button type="button" class="secondary-button compact" id="lora-select-visible">Select visible</button>
+              <button type="button" class="secondary-button compact" id="lora-clear-selected">Clear selection</button>
+              <button type="button" class="primary-button compact busy-button" id="lora-sync-selected" disabled><span class="spinner"></span><span class="button-label">Sync Selected (0)</span></button>
+              <span class="muted" id="lora-bulk-status" role="status" aria-live="polite">0 selected</span>
             </div>
             <div id="lora-manager-list" class="lora-manager-list" role="listbox" aria-label="LoRA library"><div class="model-empty">Loading library…</div></div>
             <p class="muted lora-manager-footnote">Uses the directories in Settings. Scanning refreshes the shared Models index.</p>
@@ -1502,6 +1543,7 @@
   <script src="/assets/resolution.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/app.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/civitai.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/loras.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-visual.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>

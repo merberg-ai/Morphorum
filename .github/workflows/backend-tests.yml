@@ -2,7 +2,7 @@ name: Backend tests
 
 on:
   push:
-    branches: [main, dev-ui, dev-webui]
+    branches: [main, dev-ui, dev-webui, feature/civitai-model-hub]
     paths:
       - 'backend/**'
       - 'tests/**'

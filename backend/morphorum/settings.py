@@ -187,6 +187,17 @@ def _normalize_preferences(settings: dict[str, Any]) -> dict[str, Any]:
             "1", "true", "yes", "on"
         }
     performance["sdxl_vae_tiling"] = sdxl_vae_tiling
+    civitai = settings.setdefault("civitai", {})
+    if not isinstance(civitai, dict):
+        civitai = {}
+        settings["civitai"] = civitai
+    for key, default in (("enabled", False), ("allow_mature", False), ("load_previews", True), ("auto_check_updates", False)):
+        civitai[key] = civitai.get(key, default) is True
+    civitai["layout"] = civitai.get("layout") if civitai.get("layout") in ("grid", "list") else "grid"
+    try:
+        civitai["concurrent_downloads"] = max(1, min(3, int(civitai.get("concurrent_downloads", 1))))
+    except (TypeError, ValueError):
+        civitai["concurrent_downloads"] = 1
     tools = settings.setdefault("tools", {})
     if not isinstance(tools, dict):
         tools = {}

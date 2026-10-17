@@ -5,6 +5,16 @@ This guide covers the supported Windows and Linux installers, first launch, netw
 > [!IMPORTANT]
 > Morphorum is early alpha. Models are **not included** and can require substantial downloads. The installer configures a **private Python 3.12 environment** for Morphorum; you do not need to install Python or Node.js manually.
 
+## Optional Civitai Hub setup
+
+The Civitai integration is **not required for installation or local generation**. After launching Morphorum, configure checkpoint and LoRA directories for SDXL, FLUX, or Z-Image in **Settings**, and scan those folders. Enable **Civitai Hub** in Settings when you want online search, identification, metadata synchronization, and downloads. When Civitai restricts access to a model, supply your own Civitai API token using the masked settings field, then test the connection. You can also set the host-side `CIVITAI_API_TOKEN` environment variable.
+
+Civitai downloads go to configured model directories, verify SHA-256 when available, and never overwrite an existing model. Interrupted downloads can be resumed or restarted from the queue. Leave adequate disk space for model weights and temporary `.part` files, plus the download safety reserve. After a completed download, the local model index is refreshed.
+
+Synced model information and optional preview images are cached under `cache/civitai-library/`; the authentication token, when saved in Settings, is stored at `data/.civitai-token` **without encryption at rest**. Restrict local filesystem access and don't upload that file to support tickets or GitHub. The environment variable takes precedence over the saved key. Turning the Hub off does not prevent ordinary local image or animation generation.
+
+The [Civitai Hub guide](CIVITAI_MODEL_HUB.md) explains the optional integration and Windows acceptance checks.
+
 ## Requirements
 
 | Requirement | Details |

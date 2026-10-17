@@ -6,6 +6,7 @@ Welcome! You do not need to know Python or Git to use Morphorum. Start with the 
 
 | Guide | Use it for |
 | --- | --- |
+| **[Civitai Model Hub](CIVITAI_MODEL_HUB.md)** | Optional model discovery, download queue, local SHA identification, metadata/preview sync, LoRA trigger words and generation integration |
 | **[Installation & maintenance](INSTALLATION.md)** | Set up Windows/Linux, choose a folder and port, update, repair, back up data |
 | **[Getting started](GETTING_STARTED.md)** | Download/select a model, generate an image, create an animation, export video |
 | **[First-Run Setup](GETTING_STARTED.md#first-run-setup-wizard)** | Initial seven-step setup, checkpoint folders, optional managed-model download and 3D starter projects |
