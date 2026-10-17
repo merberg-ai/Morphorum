@@ -195,3 +195,12 @@ The checks are initiated only by user action. No automatic network traffic, loca
 5. Confirm unrelated model files, folders, and locally generated outputs remain unchanged.
 
 Automated regression tests were added, but not executed from this chat. C3.3 requires physical Windows acceptance before merge.
+
+### C3.3 follow-up: LoRA triggers and multi-select synchronization
+
+- **Sync Civitai Info** in the dedicated LoRA Manager now refreshes the existing **Quick Use** prompt snippet using verified Civitai trained/trigger words, when returned. **Include recorded trigger words** still controls whether those words appear in the copied/inserted prompt tag. **View Cached Info** restores those trigger words without a network call. No trigger is inserted automatically into an already-written prompt.
+- The LoRA Library supports independent per-row checkboxes without changing the LoRA currently being inspected. **Select visible** selects items matching the current family/search filter, **Clear selection** clears all selected items, and **Sync Selected (N)** synchronizes all checked IDs sequentially with per-item progress and an end-of-batch success/failure summary. Selections may span family/search changes; invalid indexed IDs are removed on library reload.
+- Failed or unidentified files are reported and do not abort the remainder of the batch. Backend exact-SHA validation, mature-preview restrictions, and explicit opt-in are unchanged.
+- On Windows, verify selection with multiple families, filter changes, partial failures, and prompt tag trigger-word inclusion/exclusion after both single and bulk sync. No automatic bulk sync is scheduled.
+
+This follow-up is committed to `feature/civitai-model-hub` but requires Windows UI acceptance.
