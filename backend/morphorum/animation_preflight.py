@@ -128,6 +128,22 @@ def check_animation_render_preflight(
                 f"Sampler '{sampler or 'none'}' is unavailable for {capability.get('label', family)}. "
                 "Select a supported sampler in Generation State.")
 
+        if family == "sdxl":
+            schedule_type = str(generation.get("schedule_type") or "normal").lower()
+            schedule_options = capability.get("schedule_types", {}).get("options", [])
+            supported_schedules = {
+                str(item.get("id")) for item in schedule_options
+                if isinstance(item, dict) and item.get("id")
+            }
+            if schedule_type not in supported_schedules:
+                add("error", "generation.schedule_type",
+                    f"Schedule Type '{schedule_type}' is unavailable for SDXL. "
+                    "Choose a supported schedule in Generation State.")
+            elif sampler == "ddim" and schedule_type == "karras":
+                add("error", "generation.schedule_type",
+                    "DDIM does not support Karras scheduling. "
+                    "Choose Normal or change the sampler.")
+
     checked_frames = 0
     if schedules_valid and 1 <= total <= MAX_RENDER_FRAMES:
         # The same resolver used by the render pipeline handles timeline
