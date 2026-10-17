@@ -362,7 +362,8 @@ def test_g52_static_long_sdxl_uses_shared_blend_cache_when_keys_match():
     assert blended["prompt_embeds"].shape == static["prompt_embeds"].shape
     # The initial long prompt is identical and should be recovered from cache;
     # only the second blending endpoint requires new CLIP inference.
-    assert len(pipe.text_encoder.calls) == initial + 3
+    # One new endpoint requires three positive AND three negative CLIP passes.
+    assert len(pipe.text_encoder.calls) == initial + 6
 
 
 def test_g52_static_short_sdxl_keeps_native_prompt_without_using_cache():
