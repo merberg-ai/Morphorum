@@ -29,3 +29,9 @@ This is a development-only checklist. Do not merge to main before user acceptanc
 - Record actual Windows, mobile and GPU smoke outcomes. Don't mark unchecked cases passed.
 - Update public user-facing docs only after final behavior is verified.
 - Keep main unchanged until explicit authorization.
+
+## Owner Windows acceptance (2026-10-16)
+
+**PASS:** Owner reports the combined UX5 Windows test successful and supplied a rendered/exported MP4. The uploaded export was independently inspected: H.264 video, 832×1216 at 24 fps, duration 9.875 seconds, plus an AAC audio stream. This verifies an audio track exists, not subjective A/V synchronization. Earlier checks include Project Manager bulk trash, contextual navigation, Editor layout, cue bulk delete, and soundtrack attachment. Automated Syntax, Backend, and Installer workflows all passed at source commit `25eafd2`.
+
+**Remaining nonblocking release review:** a dedicated physical phone/mobile check and final public documentation review have not been independently reported as complete. Do not treat mobile or frame-accurate audio sync as tested. Keep `main` unchanged pending explicit merge authorization.
