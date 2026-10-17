@@ -112,7 +112,8 @@ from .lora_inspector import LoRAInspectionError, inspect_lora
 from .civitai import CivitaiLookupError, lookup_civitai
 from .civitai_search import CivitaiSearchError, search_models
 from .civitai_detail import model_details
-from .civitai_download import start_download, list_jobs, cancel_download, resume_download
+from .civitai_download import start_download, list_jobs, cancel_download, resume_download, retry_download
+from .civitai_auth import get_token, token_status, store_token, clear_token
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
 from .paths import ROOT, ensure_runtime_dirs
@@ -496,31 +497,55 @@ def api_civitai_resume_download(job_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@app.get("/api/civitai/auth")
+def api_civitai_auth() -> dict[str, Any]:
+    return token_status()
+
+
+@app.put("/api/civitai/auth")
+def api_civitai_auth_save(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return store_token(payload.get("token"))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.delete("/api/civitai/auth")
+def api_civitai_auth_clear() -> dict[str, Any]:
+    return clear_token()
+
+
+@app.post("/api/civitai/downloads/{job_id}/retry")
+def api_civitai_retry_download(job_id: str) -> dict[str, Any]:
+    if not load_settings().get("civitai", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Civitai Hub disabled.")
+    try:
+        return retry_download(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Download not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.post("/api/civitai/test-connection")
 def api_civitai_test_connection() -> dict[str, Any]:
-    """Explicit, opt-in reachability test. Never return credentials or upstream bodies."""
-    import os
-    import urllib.error
-    import urllib.request
-
-    cfg = load_settings().get("civitai", {})
-    if not cfg.get("enabled", False):
-        raise HTTPException(status_code=403, detail="Enable and save Civitai Hub before testing the connection.")
-    token = os.environ.get("CIVITAI_API_TOKEN", "").strip()
-    headers = {"Accept": "application/json", "User-Agent": "Morphorum-CivitaiHub/0.1"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request("https://civitai.com/api/v1/models?limit=1", headers=headers)
+    """Test authenticated account access, not merely public API reachability."""
+    import httpx
+    if not load_settings().get("civitai", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Enable and save Civitai Hub first.")
+    token = get_token()
+    if not token:
+        return {"ok": True, "authenticated": False, "message": "Public API access only. Add an API key to test authenticated downloads."}
     try:
-        with urllib.request.urlopen(req, timeout=12) as response:
-            return {"ok": True, "status": response.status, "authenticated": bool(token),
-                    "message": "Civitai API reachable."}
-    except urllib.error.HTTPError as exc:
-        return {"ok": False, "status": exc.code, "authenticated": bool(token),
-                "message": "Civitai rejected the request; check authentication or service access."}
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        return {"ok": False, "status": None, "authenticated": bool(token),
-                "message": "Civitai could not be reached. Check network connectivity."}
+        with httpx.Client(timeout=12, follow_redirects=False, trust_env=False) as client:
+            response = client.get("https://civitai.com/api/v1/me",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+        if response.status_code == 200:
+            return {"ok": True, "authenticated": True, "status": 200, "message": "API key verified with Civitai account endpoint."}
+        return {"ok": False, "authenticated": False, "status": response.status_code,
+                "message": "API key was rejected or account verification unavailable."}
+    except httpx.RequestError:
+        return {"ok": False, "authenticated": False, "message": "Unable to contact Civitai authentication service."}
 
 
 @app.get("/api/tools/ffmpeg/status")
