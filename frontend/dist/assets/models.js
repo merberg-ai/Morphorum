@@ -727,6 +727,8 @@
     try {
       const payload = await api('/api/models?limit=2000');
       state.models = Array.isArray(payload.models) ? payload.models : [];
+      const validIds = new Set(state.models.map(item => item.id));
+      for (const id of state.bulkSelected) if (!validIds.has(id)) state.bulkSelected.delete(id);
       window.dispatchEvent(new CustomEvent('morphorum:models-updated', {
         detail: { models: state.models, loaded: true },
       }));
@@ -754,7 +756,7 @@
   }
 
   async function scanModels() {
-    if (state.scanning) return;
+    if (state.scanning || state.bulkBusy) return;
     state.scanning = true;
     const button = qs('#scan-models');
     setBusy(button, true);
