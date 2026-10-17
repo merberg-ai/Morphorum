@@ -15,6 +15,8 @@
     downloadOperations: new Map(),
     downloadPendingChecks: new Map(),
     scanning: false,
+    bulkSelected: new Set(),
+    bulkBusy: false,
   };
   const qs = (selector, root = document) => root.querySelector(selector);
   const toast = (title, message, type = 'info', timeout) => {
@@ -384,6 +386,50 @@
 
   function copyText(text) { return window.MorphorumClipboard.writeText(text); }
 
+  function updateBulkControls() {
+    const count = state.bulkSelected.size;
+    for (const [id, label] of [['model-bulk-identify','Identify Selected'],['model-bulk-updates','Check Updates']]) {
+      const button = qs('#' + id);
+      if (button) { button.disabled = state.bulkBusy || !count; button.textContent = label + ' (' + count + ')'; }
+    }
+    for (const id of ['model-select-visible','model-clear-selected']) {
+      const button = qs('#' + id);
+      if (button) button.disabled = state.bulkBusy;
+    }
+    const status = qs('#model-bulk-status');
+    if (status && !state.bulkBusy) status.textContent = count + ' selected';
+  }
+  async function bulkCheck(mode) {
+    if (state.bulkBusy || !state.bulkSelected.size) return;
+    const selected = [...state.bulkSelected].filter(id => state.models.some(model => model.id === id));
+    state.bulkBusy = true;
+    updateBulkControls();
+    let matched = 0, unmatched = 0, failed = 0;
+    const errors = [];
+    try {
+      for (let index = 0; index < selected.length; index++) {
+        const id = selected[index];
+        const model = state.models.find(item => item.id === id);
+        qs('#model-bulk-status').textContent = (index + 1) + '/' + selected.length + ' · ' + (model?.name || id);
+        try {
+          const response = await api('/api/civitai/' + (mode === 'identify' ? 'identify/' : 'updates/') + encodeURIComponent(id), {method:'POST'});
+          if (mode === 'identify' ? response.found : response.status === 'newer_available') matched++;
+          else unmatched++;
+        } catch (error) {
+          failed++;
+          if (errors.length < 3) errors.push((model?.name || id) + ': ' + error.message);
+        }
+      }
+      toast('Bulk Civitai ' + (mode === 'identify' ? 'identification' : 'update check') + ' completed',
+        matched + ' matches/newer · ' + unmatched + ' no match/no newer · ' + failed + ' failed.' + (errors.length ? ' ' + errors.join(' | ') : ''),
+        failed ? 'warning' : 'success', 9000);
+    } finally {
+      state.bulkBusy = false;
+      updateBulkControls();
+      qs('#model-bulk-status').textContent = matched + ' found · ' + unmatched + ' unchanged/unmatched · ' + failed + ' errors';
+    }
+  }
+
   function modelRow(model) {
     const row = document.createElement('div');
     row.className = 'model-row';
@@ -571,7 +617,18 @@
         if (!data.synced) toast('No cached metadata', 'Use Sync Civitai Info first.', 'info');
       } catch (error) { toast('Cannot read Civitai cache', error.message, 'error'); }
     });
-    row.append(nameWrap, family, kind, pathDetails, size, action, identify, update, sync, viewCache);
+    const checked = document.createElement('input');
+    checked.type = 'checkbox';
+    checked.className = 'model-bulk-checkbox';
+    checked.checked = state.bulkSelected.has(model.id);
+    checked.disabled = state.bulkBusy;
+    checked.setAttribute('aria-label', 'Select ' + model.name + ' for bulk Civitai actions');
+    checked.addEventListener('change', () => {
+      if (checked.checked) state.bulkSelected.add(model.id);
+      else state.bulkSelected.delete(model.id);
+      updateBulkControls();
+    });
+    row.append(checked, nameWrap, family, kind, pathDetails, size, action, identify, update, sync, viewCache);
     return row;
   }
 
@@ -602,6 +659,7 @@
     note.className = 'model-count-note';
     note.textContent = `Showing ${models.length} of ${state.models.length} indexed file${state.models.length === 1 ? '' : 's'}.`;
     list.appendChild(note);
+    updateBulkControls();
   }
 
   function updateImageBadge() {
@@ -734,6 +792,13 @@
 
   function bind() {
     qs('#scan-models')?.addEventListener('click', scanModels);
+    qs('#model-select-visible')?.addEventListener('click', () => {
+      for (const item of currentFilteredModels()) state.bulkSelected.add(item.id);
+      renderModels();
+    });
+    qs('#model-clear-selected')?.addEventListener('click', () => { state.bulkSelected.clear(); renderModels(); });
+    qs('#model-bulk-identify')?.addEventListener('click', () => bulkCheck('identify'));
+    qs('#model-bulk-updates')?.addEventListener('click', () => bulkCheck('updates'));
     qs('#model-search')?.addEventListener('input', renderModels);
     qs('#model-family-filter')?.addEventListener('change', renderModels);
     qs('#model-kind-filter')?.addEventListener('change', renderModels);
