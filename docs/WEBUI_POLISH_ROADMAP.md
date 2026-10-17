@@ -24,6 +24,12 @@ separate, explicit authorization.** Next development phase: P4.
 | P6 | Startup fault isolation, refresh/reconnect, version/cache, sanitized diagnostics, regression tests, 3D warp error detail | Optional services cannot block the basic editor |
 | P7 | Portable project ZIP import/export including media, integrity manifest, optional large files and model remapping | Projects move between hosts without overwriting existing data |
 
+## P5 · Next implementation milestone
+
+**Plan:** [P5 Motion Lab Workflow Plan](P5_MOTION_LAB_WORKFLOW_PLAN.md) on `dev-webui`. The planned sequence is **P5.1 project/motion summary → P5.2 preview/apply/render clarity → P5.3 soundtrack reuse/export provenance → P5.4 units and navigation → P5.5 regression, docs and owner signoff**.
+
+**Gate:** UX5 Windows/GPU acceptance was reported as PASS and Syntax, Backend and Installer CI were green at the verified checkpoint. **Physical mobile testing has been explicitly deferred by the owner** and is tracked as remaining work, not a failed or passed test; this does not block P5 implementation. Keep `main` unchanged without explicit merge authorization.
+
 ## Pre-P5 UX organization: Motion Studio and Project Editor
 
 **Branch:** `dev-webui` (rebased/fast-forwarded to the approved WebUI+FFmpeg release, with dev-only acceptance notes restored). Do not promote these unfinished changes to `main` without a separate owner acceptance and CI gate.
