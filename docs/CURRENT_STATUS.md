@@ -17,6 +17,12 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 | Import | Compatible Deforum Motion Studio camera schedules into existing 3D projects |
 | Remote operation | Authenticated API-only server, versioned client capabilities, project assets, telemetry, previews and job recovery |
 
+## Current workflow and tested milestone
+
+The main menu includes Project Manager, New Project Wizard, and Project Editor directly. Project Editor groups its controls into five sections. Motion Lab Overview displays a read-only project/motion summary and workflow navigation for Preview, Apply, Save, Render, and Export. Motion Studio offers guided WAV analysis, beat detection, assignment, continuous/channel motion, and preview/apply stages. The project manager can move selected projects to Trash with confirmation; this is not permanent deletion.
+
+Owner Windows testing reported a successful 237-frame, 24 FPS animation with H.264 video and AAC audio export. Automated Syntax, Backend, and Installer checks passed at the pre-release development checkpoint. Physical mobile testing is deferred, and P5.3 soundtrack provenance, P5.4 consistency, and P5.5 closeout are not complete.
+
 ## Important limits
 
 - **FFmpeg and FFprobe are separately installed tools.** Use an existing pair or explicitly download Morphorum-managed FFmpeg in Settings. The optional BtbN static GPL package is third-party software with its own license. Windows managed install and media checks received owner acceptance; Linux-managed installation and selected resilience cases require further testing. See [FFmpeg Manager](FFMPEG_MANAGER.md).
