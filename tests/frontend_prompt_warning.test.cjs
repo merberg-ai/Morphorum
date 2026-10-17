@@ -19,3 +19,16 @@ test('animation editor includes an SDXL-only prompt length advisory', () => {
   assert.match(animation, /showAnimationPromptLengthAdvisory/);
   assert.match(animation, /family !== 'sdxl'/);
 });
+
+
+test('image and animation show scoped LoRA verification results without masking fallbacks', () => {
+  assert.match(html, /id="image-lora-verification"/);
+  assert.match(html, /id="animation-lora-verification"/);
+  for (const source of [image, animation]) {
+    assert.match(source, /lora_diagnostic\?\.adapters/);
+    assert.match(source, /checkpoint_verified/);
+    assert.match(source, /unet_only/);
+    assert.match(source, /source weight comparison unavailable/);
+    assert.match(source, /textContent = parts\.join/);
+  }
+});
