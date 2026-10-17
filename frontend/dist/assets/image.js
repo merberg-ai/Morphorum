@@ -568,6 +568,17 @@
     panel.hidden = false;
     const percent = Math.max(0, Math.min(100, Math.round((Number(job.progress) || 0) * 100)));
     showImagePromptWarnings(job);
+    const diag = job.conditioning_diagnostic;
+    if (diag && qs('#image-prompt-token-warning')) {
+      const summary = ['SDXL conditioning: ' + String(diag.mode || 'unknown').toUpperCase()];
+      for (const [label, key] of [['CLIP-L', 'clip_l'], ['CLIP-G', 'clip_g']]) {
+        if (diag[key]) summary.push(label + ': ' + diag[key].tokens + ' tokens / ' + diag[key].chunks + ' chunks');
+      }
+      if (diag.shape) summary.push('Embeddings: [' + diag.shape.join(', ') + ']');
+      const node = qs('#image-prompt-token-warning');
+      node.hidden = false;
+      node.textContent = summary.join(' · ');
+    }
     qs('#generation-status').textContent = job.message || job.status;
     qs('#generation-percent').textContent = `${percent}%`;
     qs('#generation-progress-fill').style.width = `${percent}%`;
