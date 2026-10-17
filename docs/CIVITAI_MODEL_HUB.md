@@ -150,3 +150,10 @@ The **Models** manager now offers **Identify on Civitai** on each indexed model 
 5. Re-identify a previously hashed file; verify the cached digest behavior without uploading weights.
 
 **Implementation committed. Regression tests added but not executed; physical Windows test still required.**
+
+### C3.1 follow-up: identify result layout and LoRA Manager integration
+
+- The Models list holds exactly one verified identity per row. Repeating identification replaces the old result instead of appending new links.
+- The dedicated **LoRAs** manager's selected-adapter **Identification** section includes **Identify on Civitai**. It uses the same explicit SHA-256 lookup endpoint as Models, while the existing LoRA metadata and sidecar lookup remain available.
+- Identification results are tied to the selected LoRA. Switching adapters clears the previous identification and ignores stale asynchronous responses.
+- Verify repeated clicks in Models do not stack links, then identify a selected LoRA and switch selection while a request is running.
