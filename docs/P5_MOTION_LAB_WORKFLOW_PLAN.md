@@ -71,3 +71,9 @@ P5.1 → Windows checkpoint → P5.2 → Windows checkpoint → P5.3 → Windows
 - Added a read-only warning on unapplied draft layers and unsaved Editor changes. Explained that previews do not persist, unapplied drafts are not rendered, and existing render soundtrack snapshots govern audio inclusion.
 - Responsive styling added. No project data, media, schedules, render internals or conflict confirmation behavior changed.
 - This is an initial P5.2 clarity pass, **not complete P5.2 acceptance**. Remaining scope: detailed operation context at apply/render, busy and recovery UX, physical Windows test, and regression/CI verification.
+
+## P5.2 owner feedback hotfix (2026-10-16)
+
+- After Apply, the backend intentionally retains applied Motion Lab layers in `project.motion_lab.layers`. The Overview had incorrectly labeled every retained layer unapplied. It now compares the editor's layer draft with the last applied layer snapshot, showing matching layers as applied.
+- Overview **Save Project** now dispatches the existing `#animation-save` button directly, so it calls the established save operation with its busy/error handling instead of merely navigating to Editor. Disabled save state is respected.
+- Full Windows verification and CI still pending. Camera schedule provenance detail remains a later P5.2 item.
