@@ -77,6 +77,8 @@ separate, explicit authorization.** Next development phase: P4.
 
 **UX2.4 implementation checkpoint (2026-10-16):** Primary navigation now links directly to Project Manager, New Project Wizard and Project Editor, with those entries removed from the Motion Lab sidebar and tool-card launcher. All three retain the original panels and handlers; Motion Lab primary entry opens its Overview. Focused source regression tests added in `tests/frontend_project_navigation.test.cjs`. **Automated CI and physical Windows/mobile acceptance are pending**; do not mark UX2.4 fully accepted yet.
 
+**UX2.4 routing hotfix (2026-10-16):** owner Windows test found that all three promoted top-level project links opened Motion Lab Overview rather than their workspaces. Root cause: the main-menu click handler still targeted `#animation-tab-*`, but UX2.4 removed those DOM buttons. Restored the real workspace dispatch buttons as programmatically clickable, visually hidden elements; no duplicate panels or visible Motion Lab menu entries. Added targeted regression coverage (`7db2f6db`, `6e22a880`). **Windows retest and automated CI still required.**
+
 ### UX2.5 · Safe bulk project trash (Project Manager)
 
 - [ ] Add accessible multi-select (checkboxes), **Select All Visible**, **Clear Selection**, and a selected-count action bar with **Move Selected to Trash**. Filters/search/pagination must not silently include hidden projects; use stable project IDs rather than row positions.
