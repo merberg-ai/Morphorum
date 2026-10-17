@@ -8245,7 +8245,8 @@
     const ready = Boolean(state.project?.id && animationMode() === '3d' && !motionLabBusy);
     const analyze = qs('#animation-motion-lab-analyze-audio');
     const add = qs('#animation-motion-lab-add-audio');
-    if (analyze) analyze.disabled = !ready;
+    if (analyze) analyze.disabled = !ready ||
+      qs('#motion-studio-analysis-status')?.dataset.busy === 'true';
     const attached = qs('#animation-motion-lab-use-soundtrack');
     if (attached) attached.disabled = !ready || motionLabSoundtrackBusy ||
       !projectMediaAssets('soundtrack').length;
@@ -8297,7 +8298,10 @@
       toast('Project soundtrack unavailable', error?.message || String(error), 'error');
     } finally {
       motionLabSoundtrackBusy = false;
-      if (state.project?.id === projectId) renderProjectMedia();
+      if (state.project?.id === projectId) {
+        renderProjectMedia();
+        motionStudioRefreshStageStatus();
+      }
     }
   }
 
@@ -10245,6 +10249,16 @@
     const continuous = qs('#animation-motion-studio-arrangement');
     const introActions = audioIntro.querySelector('.animation-audio-workspace-actions');
     if (sourceDock) stages.source.appendChild(sourceDock);
+    const proceed = document.createElement('button');
+    proceed.type = 'button';
+    proceed.className = 'primary-button compact';
+    proceed.id = 'motion-studio-go-analyze';
+    proceed.textContent = 'Continue to Analyze WAV →';
+    proceed.addEventListener('click', () => motionStudioSelectStage('analysis'));
+    const proceedRow = document.createElement('div');
+    proceedRow.className = 'motion-studio-step-actions';
+    proceedRow.appendChild(proceed);
+    stages.source.appendChild(proceedRow);
     if (analysis) stages.analysis.appendChild(analysis);
     // This existing live message was accidentally left inside the hidden
     // Single-Band Pulse card. Put it with the Analyze action instead.
@@ -10905,6 +10919,15 @@
     });
     qs('#animation-motion-lab-add')?.addEventListener('click', motionLabAddPreset);
     qs('#animation-motion-lab-record')?.addEventListener('click', motionLabStartRecording);
+    qs('#animation-motion-lab-audio-file')?.addEventListener('change', event => {
+      const file = event.target.files?.[0];
+      if (file) {
+        const status = qs('#motion-studio-analysis-status');
+        if (status) status.textContent = 'WAV selected: ' + file.name +
+          '. Continue to Step 2 and choose Analyze WAV.';
+      }
+      motionStudioRefreshStageStatus();
+    });
     qs('#animation-motion-lab-analyze-audio')?.addEventListener('click', () => void motionLabAnalyzeAudio());
     qs('#animation-motion-lab-use-soundtrack')?.addEventListener('click',
       () => void motionLabUseProjectSoundtrack());
