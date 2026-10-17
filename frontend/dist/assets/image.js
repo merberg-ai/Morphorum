@@ -324,6 +324,7 @@
     const previous = select.value;
     for (const option of options) {
       if (sampler === 'ddim' && option.id !== 'normal') continue;
+      if (option.id === 'trailing' && !['euler', 'euler_a', 'dpmpp_2m', 'dpmpp_2m_sde', 'lms', 'heun', 'unipc'].includes(sampler)) continue;
       if (['exponential', 'beta'].includes(option.id) && !['euler', 'dpmpp_2m', 'dpmpp_2m_sde', 'unipc'].includes(sampler)) continue;
       select.add(new Option(option.label || option.id, option.id));
     }
