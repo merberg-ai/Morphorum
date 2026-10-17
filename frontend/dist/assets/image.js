@@ -563,11 +563,43 @@
     node.textContent = warnings.join(' ');
   }
 
+  function renderImageLoraVerification(job) {
+    const panel = qs('#image-lora-verification');
+    if (!panel) return;
+    const adapters = job?.lora_diagnostic?.adapters;
+    panel.hidden = !Array.isArray(adapters) || adapters.length === 0;
+    if (panel.hidden) { panel.textContent = ''; return; }
+    const title = document.createElement('strong');
+    title.textContent = 'SDXL LoRA verification · ' + adapters.length + ' active';
+    const list = document.createElement('div');
+    list.className = 'lora-verification-items';
+    for (const adapter of adapters) {
+      const row = document.createElement('p');
+      const status = adapter.status === 'checkpoint_verified'
+        ? 'CLIP weights matched checkpoint'
+        : adapter.status === 'unet_only'
+          ? 'UNet-only fallback; CLIP LoRA weights not applied'
+          : 'Active; source weight comparison unavailable';
+      const parts = [String(adapter.name || 'Unnamed LoRA'), status];
+      if (adapter.status === 'checkpoint_verified') {
+        for (const [label, key] of [['CLIP-L', 'text_encoder'], ['CLIP-G', 'text_encoder_2']]) {
+          const data = adapter.components?.[key];
+          if (data) parts.push(label + ' ' + data.checkpoint_values_verified + '/' + data.tensors);
+        }
+      }
+      parts.push('strength ' + Number(adapter.weight || 0).toFixed(3));
+      row.textContent = parts.join(' · ');
+      list.appendChild(row);
+    }
+    panel.replaceChildren(title, list);
+  }
+
   function updateProgress(job) {
     const panel = qs('#generation-progress');
     panel.hidden = false;
     const percent = Math.max(0, Math.min(100, Math.round((Number(job.progress) || 0) * 100)));
     showImagePromptWarnings(job);
+    renderImageLoraVerification(job);
     const diag = job.conditioning_diagnostic;
     if (diag && qs('#image-prompt-token-warning')) {
       const summary = ['SDXL conditioning: ' + String(diag.mode || 'unknown').toUpperCase()];
