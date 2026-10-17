@@ -2253,3 +2253,63 @@ def test_sdxl_checkpoint_value_verification_rejects_corrupt_clip_tensor() -> Non
         GenerationManager._compare_sdxl_clip_checkpoint_values(
             component, "morphorum_test", checkpoint, "text_encoder",
         )
+
+
+def test_g43_sdxl_lora_ui_report_never_overclaims_checkpoint_validation() -> None:
+    manager = GenerationManager()
+    manager._pipeline_loras = {
+        "full": {
+            "id": "full", "name": "Verified art", "family": "sdxl",
+            "adapter_name": "full_adapter",
+            "compatibility": "sdxl-text-encoder-normalized",
+            "diagnostics": {
+                "components": {
+                    "text_encoder": {
+                        "tensors": 144, "checkpoint_tensors": 144,
+                        "checkpoint_values_verified": 144, "coverage_verified": True,
+                    },
+                    "text_encoder_2": {
+                        "tensors": 384, "checkpoint_tensors": 384,
+                        "checkpoint_values_verified": 384, "coverage_verified": True,
+                    },
+                }
+            },
+        },
+        "ordinary": {
+            "id": "ordinary", "name": "Normal adapter", "family": "sdxl",
+            "adapter_name": "normal_adapter", "compatibility": None,
+            "diagnostics": {"tensors": 200, "abs_sum": 10.0},
+        },
+        "fallback": {
+            "id": "fallback", "name": "U-net only", "family": "sdxl",
+            "adapter_name": "fallback_adapter",
+            "compatibility": "sdxl-clean-unet-only",
+            "diagnostics": {"tensors": 100},
+        },
+        "inactive": {
+            "id": "inactive", "name": "Inactive", "family": "sdxl",
+            "adapter_name": "inactive_adapter", "compatibility": None,
+            "diagnostics": {},
+        },
+    }
+    manager._active_lora_signature = (
+        ("full_adapter", 0.7),
+        ("normal_adapter", 0.5),
+        ("fallback_adapter", 0.3),
+    )
+    report = manager.sdxl_lora_diagnostics()
+    assert report["active_count"] == 3
+    assert [item["status"] for item in report["adapters"]] == [
+        "checkpoint_verified", "active_not_value_checked", "unet_only",
+    ]
+    assert report["adapters"][0]["components"]["text_encoder"] == {
+        "tensors": 144, "checkpoint_values_verified": 144,
+    }
+    assert report["adapters"][0]["weight"] == 0.7
+    assert "path" not in str(report)
+    manager._pipeline_loras["full"]["diagnostics"]["components"]["text_encoder_2"][
+        "checkpoint_values_verified"
+    ] = 383
+    assert manager.sdxl_lora_diagnostics()["adapters"][0]["status"] == (
+        "active_not_value_checked"
+    )
