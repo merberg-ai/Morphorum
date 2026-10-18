@@ -491,7 +491,7 @@ def verify_fp8_stream_against_source(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Morphorum Z2.18 isolated conversion (CPU only)")
     parser.add_argument("--checkpoint", required=True)
-    parser.add_argument("--managed-root", required=True, help="Managed Z-Image-Turbo package directory")
+    parser.add_argument("--managed-root", help="Managed Z-Image-Turbo package directory (defaults to Morphorum settings)")
     parser.add_argument("--family", choices=("transformer", "encoder"), required=True)
     parser.add_argument("--scratch", help="New isolated output directory on a disk with enough room")
     mode = parser.add_mutually_exclusive_group()
@@ -502,15 +502,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if (args.export or args.verify_existing) and not args.scratch:
         parser.error("--export and --verify-existing require --scratch")
+    managed = args.managed_root or (managed_model_location("zimage") / "Z-Image-Turbo")
     try:
         if args.verify_existing:
             result = verify_fp8_stream_against_source(
-                args.checkpoint, args.managed_root, family=args.family, scratch=args.scratch)
+                args.checkpoint, managed, family=args.family, scratch=args.scratch)
         elif args.export:
-            result = export_fp8_stream(args.checkpoint, args.managed_root,
+            result = export_fp8_stream(args.checkpoint, managed,
                                       family=args.family, scratch=args.scratch)
         else:
-            result = plan_fp8_stream(args.checkpoint, args.managed_root, family=args.family,
+            result = plan_fp8_stream(args.checkpoint, managed, family=args.family,
                                      scratch=args.scratch)
     except (FP8StreamError, OSError) as exc:
         parser.error(str(exc))
