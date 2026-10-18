@@ -95,13 +95,14 @@ def test_z215_managed_component_candidate_is_not_loader_approval():
         "reference_role_evidence": {k: {"matches": True}
                                      for k in ("tokenizer", "vae", "scheduler")},
         "configuration": {"text_encoder": {
-            "summary": {"model_type": "qwen3", "num_hidden_layers": 36}
+            "summary": {"model_type": "qwen3", "num_hidden_layers": 36, "hidden_size": 2560, "intermediate_size": 9728, "vocab_size": 151936}
         }},
     }
-    result = assess_managed_component_candidates(inventory, {"layer_count": 36})
+    evidence = {"layer_count": 36, "tensor_dimensions": {"model.embed_tokens.weight": [151936, 2560], "model.layers.0.mlp.up_proj.weight": [9728, 2560], "model.layers.0.mlp.down_proj.weight": [2560, 9728], "model.layers.0.self_attn.q_proj.weight": [4096, 2560], "model.layers.0.self_attn.k_proj.weight": [1024, 2560], "model.layers.0.self_attn.v_proj.weight": [1024, 2560]}}
+    result = assess_managed_component_candidates(inventory, evidence)
     assert result["status"] == "config_evidence_matches"
     assert all(result["checks"].values())
     assert result["compatible"] is False and result["reuse_enabled"] is False
-    mismatched = assess_managed_component_candidates(inventory, {"layer_count": 35})
+    mismatched = assess_managed_component_candidates(inventory, {**evidence, "layer_count": 35})
     assert mismatched["status"] == "incomplete_or_mismatched"
     assert not mismatched["checks"]["encoder_layers"]
