@@ -22,6 +22,10 @@ Initial implementation: `backend/morphorum/zimage_inspect.py` reads only a bound
 
 Add bounded safetensors header/metadata inspection that recognizes supported Z-Image full checkpoint formats vs transformer-only exports, quantized and architecture-incompatible weights. Capture tensor naming/shape requirements and the exact auxiliary components needed by each supported class. Surface an explicit reason for Unsupported / Needs components / Candidate status. Inspect actual Civitai sample files, including the user's quantized FP8 example, without assuming its format is directly loadable.
 
+### Z1 auxiliary text encoders (initial implementation)
+
+When a configured external Z-Image checkpoint folder contains a safetensors file with a recognizable Qwen-style token-embedding + attention + MLP tensor signature, scanning indexes it with `kind=components` rather than `kind=checkpoints`. Default model listings and their totals exclude these supporting components. Backend inspection is header-only; files are not executed or loaded into GPU memory. An explicit `kind=components` backend query can find these records for upcoming dependency matching. This is deliberately conservative: it does not prove Qwen version, tokenizer/config presence, or compatibility with any checkpoint. Runtime loader wiring and full compatibility checks belong to Z2. Synthetic regression tests cover index visibility.
+
 ## Z2: Separate native loader strategy
 
 Introduce a Z-Image checkpoint loader registered separately from the existing `ManagedModelManager` Diffusers path. Resolve text encoder/tokenizer/scheduler/transformer and verify the expected configuration. Decide whether supported single-file state dictionaries can populate a reusable managed architecture or require conversion; any conversion is explicit and cached under Morphorum control, not written over the original. Reject incomplete weights early.
