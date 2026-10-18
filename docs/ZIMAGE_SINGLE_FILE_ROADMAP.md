@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -55,6 +55,12 @@ The header-only inspector now reports per-block layer counts, contiguous index c
 The standalone dependency resolver now examines optional adjacent `config.json` and `tokenizer.json` for indexed encoder safetensors files. JSON reads are bounded and disallow symlinks. A Qwen3 model type, Qwen3 architecture identifier, and positive hidden size, layer count, head count and vocabulary size are required before reporting `component_evidence_present`. This is evidence of locally supplied supporting files, **not** validation of the actual transformer/encoder tensors, tokenizer content or runtime loadability. Unsupported configuration is rejected as unverified. It also reports non-executable conversion candidates for recognized floating-point original versus Diffusers-style transformer layouts; quantized layouts remain blocked pending precision mapping. Managed Z-Image and generation validation are unchanged.
 
 Z2.3 CI surfaced a failure in structural layer numbering caused by an over-escaped regex; repaired on dev-webui before Z2.4. Final CI verification remains required. Outstanding before enabling runtime: actual safetensors sample header evidence, exact model dimensions and tensor schema, verified tokenizer/VAE/scheduler pairing, dedicated converter, FP8 handling and Windows GPU validation.
+
+### Z2.5: isolated conversion preflight and cache planning
+
+Added `backend/morphorum/zimage_conversion.py` with `plan_conversion(checkpoint, cache_root)`. It performs read-only safetensors inspection, requires recognized structural fingerprints and supported ordinary floating dtypes, explicitly blocks FP8/low-bit quantized variants, rejects symlinks, and refuses a conversion cache that overlaps or contains the source checkpoint. It derives a cache identity from the normalized source path, size, mtime and architecture. The planned output location is separate from the original file and managed Z-Image package. It creates **no files**, converts **no tensors**, and always returns `conversion_enabled=false`, `ready=false`, `loadable=false`.
+
+Automated tests in `tests/test_zimage_conversion.py` cover deterministic cache planning, modified-source cache invalidation, FP8/partial checkpoint rejection and unsafe cache locations. The preflight is **not** an implemented converter or loader: future work must establish exact Diffusers state-dict conversion using verified real weights, strengthen cache content checks and atomic writes, resolve the full encoder/tokenizer/VAE/scheduler package, and run Windows GPU validation before enabling model selection.
 
 ## Z3: Generation runtime integration
 
