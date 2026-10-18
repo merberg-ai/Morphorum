@@ -63,11 +63,26 @@ def run_cpu_binding(transformer, encoder, managed_root, *, family, execute=False
             config = Qwen3Config.from_pretrained(root / "text_encoder", local_files_only=True)
             cls = Qwen3Model
         result["binding_attempted"] = True
-        # Explicit config and explicit scratch path: no implicit HF downloads.
-        model = cls.from_pretrained(
-            str(folder), config=config, local_files_only=True,
-            torch_dtype=torch.bfloat16, low_cpu_mem_usage=True,
-        )
+        if family == "transformer":
+            # Diffusers from_pretrained expects config.json in the scratch folder.
+            # Construct from the managed config on meta, then load only scratch weights.
+            from accelerate import load_checkpoint_and_dispatch
+            with torch.device("meta"):
+                model = cls.from_config(config)
+            model = load_checkpoint_and_dispatch(
+                model,
+                checkpoint=str(folder / "diffusion_pytorch_model.safetensors"),
+                device_map={"": "cpu"},
+                dtype=torch.bfloat16,
+                strict=True,
+            )
+            result["binding_method"] = "accelerate_meta_to_cpu_strict"
+        else:
+            model = cls.from_pretrained(
+                str(folder), config=config, local_files_only=True,
+                torch_dtype=torch.bfloat16, low_cpu_mem_usage=True,
+            )
+            result["binding_method"] = "transformers_local_cpu"
         try:
             params = list(model.named_parameters())
             buffers = list(model.named_buffers())
