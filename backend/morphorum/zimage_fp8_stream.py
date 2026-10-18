@@ -305,6 +305,9 @@ def export_fp8_stream(checkpoint: str | Path, managed_root: str | Path,
                 json.dump(manifest, file, indent=2, sort_keys=True)
                 file.flush()
                 os.fsync(file.fileno())
+            verified = verify_fp8_stream_artifact(temp)
+            if verified["status"] != "verified_nonloadable":
+                raise FP8StreamError("Scratch verification did not pass.")
             if destination.exists() or destination.is_symlink():
                 raise FP8StreamError("Scratch destination appeared concurrently.")
             os.rename(temp, destination)
@@ -318,6 +321,72 @@ def export_fp8_stream(checkpoint: str | Path, managed_root: str | Path,
             "tensor_count": len(actions), "output_bytes": plan["output_exact_bytes"],
             "output_sha256": full_hash, "loadable": False,
             "runtime_verified": False, "conversion_enabled": False}
+
+
+def verify_fp8_stream_artifact(directory: str | Path) -> dict[str, Any]:
+    """Independently validate every tensor hash/shape/dtype before publication.
+
+    Also available for read-only inspection of a completed scratch artifact.
+    This never upgrades model loadability or runtime authorization.
+    """
+    folder = Path(directory)
+    if folder.is_symlink() or not folder.is_dir():
+        raise FP8StreamError("Unsafe or missing experimental directory.")
+    manifest_path = folder / "manifest.json"
+    if (manifest_path.is_symlink() or not manifest_path.is_file()
+            or not 0 < manifest_path.stat().st_size <= 1024 * 1024):
+        raise FP8StreamError("Missing or oversized experimental manifest.")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if (manifest.get("kind") != "z218_experimental_nonloadable_bf16_conversion"
+            or manifest.get("loadable") is not False
+            or manifest.get("runtime_verified") is not False
+            or manifest.get("conversion_enabled") is not False):
+        raise FP8StreamError("Experimental output has unsafe authorization metadata.")
+    name = manifest.get("output_file")
+    if name not in ("diffusion_pytorch_model.safetensors", "model.safetensors"):
+        raise FP8StreamError("Unexpected experimental weight filename.")
+    artifact = folder / name
+    if artifact.is_symlink() or not artifact.is_file():
+        raise FP8StreamError("Missing or unsafe experimental weight file.")
+    if artifact.stat().st_size != manifest.get("output_bytes"):
+        raise FP8StreamError("Experimental artifact byte length mismatch.")
+    specs, data_start = _load_header(artifact)
+    checksums = manifest.get("tensor_sha256")
+    if not isinstance(checksums, dict) or set(checksums) != set(specs):
+        raise FP8StreamError("Incomplete tensor hash inventory.")
+    payload_size = artifact.stat().st_size - data_start
+    previous = 0
+    with artifact.open("rb") as stream:
+        for key, spec in sorted(specs.items(), key=lambda pair: pair[1]["data_offsets"][0]):
+            offsets = spec["data_offsets"]
+            dtype = spec["dtype"]
+            shape = spec["shape"]
+            stride = _SUPPORTED_COPY.get(dtype)
+            if (stride is None or not isinstance(shape, list)
+                    or any(type(n) is not int or n <= 0 for n in shape)
+                    or not isinstance(offsets, list) or len(offsets) != 2):
+                raise FP8StreamError("Invalid converted tensor header metadata.")
+            start, end = offsets
+            if (start != previous or end - start != math.prod(shape) * stride
+                    or end > payload_size):
+                raise FP8StreamError("Converted tensor offsets or sizes are inconsistent.")
+            digest = hashlib.sha256()
+            stream.seek(data_start + start)
+            remaining = end - start
+            while remaining:
+                chunk = stream.read(min(CHUNK, remaining))
+                if not chunk:
+                    raise FP8StreamError("Experimental tensor truncated.")
+                digest.update(chunk)
+                remaining -= len(chunk)
+            if digest.hexdigest() != checksums[key]:
+                raise FP8StreamError("Experimental tensor SHA-256 mismatch: " + key[:100])
+            previous = end
+    if previous != payload_size or sha256_file(artifact) != manifest.get("output_sha256"):
+        raise FP8StreamError("Full experimental artifact SHA-256 or payload coverage mismatch.")
+    return {"status": "verified_nonloadable", "tensor_count": len(specs),
+            "output_bytes": artifact.stat().st_size,
+            "loadable": False, "runtime_verified": False, "conversion_enabled": False}
 
 
 def main(argv: list[str] | None = None) -> int:
