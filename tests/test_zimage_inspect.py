@@ -58,3 +58,33 @@ def test_symlink_rejected(tmp_path):
     link = tmp_path / "link.safetensors"
     link.symlink_to(target)
     assert inspect_zimage_checkpoint(link)["status"] == "unsupported"
+
+
+def test_zimage_original_transformer_signature_is_not_load_authorization(tmp_path):
+    path = tmp_path / "unrelated_filename.safetensors"
+    names = [
+        "model.diffusion_model.x_embedder.weight",
+        "model.diffusion_model.final_layer.weight",
+        "model.diffusion_model.cap_embedder.1.weight",
+        "model.diffusion_model.noise_refiner.0.attention.qkv.weight",
+        "model.diffusion_model.context_refiner.0.attention.qkv.weight",
+        "model.diffusion_model.layers.0.attention.qkv.weight",
+    ]
+    header = {}
+    for index, name in enumerate(names):
+        header[name] = {"dtype": "F16", "shape": [1], "data_offsets": [2*index, 2*index+2]}
+    _write(path, header, b"ab"*len(names))
+    result = inspect_zimage_checkpoint(path)
+    assert result["architecture"] == "zimage_original_transformer"
+    assert result["status"] == "needs_components"
+    assert result["loadable"] is False
+    assert result["ready"] is False
+
+
+def test_partial_zimage_signature_not_verified(tmp_path):
+    path = tmp_path / "looks_like_zimage.safetensors"
+    _write(path, {"model.diffusion_model.x_embedder.weight":
+                  {"dtype": "F16", "shape": [1], "data_offsets": [0, 2]}}, b"ab")
+    result = inspect_zimage_checkpoint(path)
+    assert result["architecture"] == "unverified"
+    assert result["loadable"] is False
