@@ -8,6 +8,7 @@ from .zimage_inspect import inspect_zimage_checkpoint
 from .zimage_fp8_validation import (validate_fp8_single_file, assess_managed_component_candidates,
                                     plan_managed_auxiliary_binding)
 from .zimage_fp8_prototype import plan_fp8_bf16_windows
+from .zimage_schema_validation import validate_complete_tensor_schema
 from .zimage_fp8_evidence import probe_fp8_scalars, inspect_managed_auxiliaries
 from .settings import managed_model_location
 from .zimage_standalone import inspect_encoder_bundle, resolve_standalone_dependencies
@@ -23,7 +24,8 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
     inspection = inspect_zimage_checkpoint(source)
     resolution = resolve_standalone_dependencies(source, candidate_rows)
     encoders: list[dict[str, Any]] = []
-    managed_inventory = inspect_managed_auxiliaries(managed_model_location("zimage") / "Z-Image-Turbo")
+    managed_root = managed_model_location("zimage") / "Z-Image-Turbo"
+    managed_inventory = inspect_managed_auxiliaries(managed_root)
     for row in candidate_rows:
         path = row.get("path")
         if not isinstance(path, str):
@@ -43,21 +45,28 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
                 "encoder_evidence": probe.get("encoder_evidence"),
                 "fp8_scalar_probe": probe_fp8_scalars(path),
                 "fp8_validation": encoder_validation,
+                "schema_validation": validate_complete_tensor_schema(
+                    path, managed_root, family="encoder", validation=encoder_validation
+                ),
                 "experimental_bf16_plan": plan_fp8_bf16_windows(path, validated=encoder_validation),
                 "quantization_evidence": probe.get("quantization_evidence"),
             },
             "bundle": inspect_encoder_bundle(path),
         })
     checkpoint_validation = validate_fp8_single_file(source)
+    transformer_schema = validate_complete_tensor_schema(
+        source, managed_root, family="transformer", validation=checkpoint_validation
+    )
     encoder_evidence = (encoders[0]["header"].get("encoder_evidence") if len(encoders) == 1 else None)
     assessment = assess_managed_component_candidates(managed_inventory, encoder_evidence)
     return {
-        "diagnostic_version": "z2.16",
+        "diagnostic_version": "z2.17",
         "checkpoint": {
             "filename": source.name,
             "inspection": inspection,
             "fp8_scalar_probe": probe_fp8_scalars(source),
             "fp8_validation": checkpoint_validation,
+            "schema_validation": transformer_schema,
             "experimental_bf16_plan": plan_fp8_bf16_windows(source, validated=checkpoint_validation),
         },
         "auxiliary_encoders": encoders,
@@ -79,6 +88,7 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
             "Every FP8 scale is inspected, but only bounded weight samples are compared against CPU PyTorch.",
             "Matching component configs do not approve runtime reuse or standalone generation.",
             "The Z2.16 BF16 plan samples tensor windows only; no full weights are converted or published.",
+            "Z2.17 compares all mapped names and shapes to managed shard headers; this does not establish model identity or runtime compatibility.",
         ],
         "ready": False, "loadable": False, "conversion_enabled": False,
     }
