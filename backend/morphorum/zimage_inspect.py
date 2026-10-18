@@ -163,6 +163,16 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
         if encoder_signature:
             result["encoder_evidence"] = {
                 "architecture": "qwen_like_unverified",
+                "tensor_dimensions": {
+                    name: tensor_shapes[name] for name in (
+                        "model.embed_tokens.weight",
+                        "model.layers.0.mlp.up_proj.weight",
+                        "model.layers.0.mlp.down_proj.weight",
+                        "model.layers.0.self_attn.q_proj.weight",
+                        "model.layers.0.self_attn.k_proj.weight",
+                        "model.layers.0.self_attn.v_proj.weight",
+                    ) if name in tensor_shapes
+                },
                 "layer_count": len({int(k.split(".")[2]) for k in normalized_keys
                                    if k.startswith("model.layers.") and len(k.split(".")) > 3
                                    and k.split(".")[2].isdigit()}),
