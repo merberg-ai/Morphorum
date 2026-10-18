@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .zimage_inspect import inspect_zimage_checkpoint
+from .zimage_fp8_validation import validate_fp8_single_file, assess_managed_component_candidates
 from .zimage_fp8_evidence import probe_fp8_scalars, inspect_managed_auxiliaries
 from .settings import managed_model_location
 from .zimage_standalone import inspect_encoder_bundle, resolve_standalone_dependencies
@@ -20,6 +21,7 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
     inspection = inspect_zimage_checkpoint(source)
     resolution = resolve_standalone_dependencies(source, candidate_rows)
     encoders: list[dict[str, Any]] = []
+    managed_inventory = inspect_managed_auxiliaries(managed_model_location("zimage") / "Z-Image-Turbo")
     for row in candidate_rows:
         path = row.get("path")
         if not isinstance(path, str):
@@ -37,21 +39,25 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
                 "sample_keys": probe.get("sample_keys"),
                 "encoder_evidence": probe.get("encoder_evidence"),
                 "fp8_scalar_probe": probe_fp8_scalars(path),
+                "fp8_validation": validate_fp8_single_file(path),
                 "quantization_evidence": probe.get("quantization_evidence"),
             },
             "bundle": inspect_encoder_bundle(path),
         })
+    encoder_evidence = (encoders[0]["header"].get("encoder_evidence") if len(encoders) == 1 else None)
     return {
-        "diagnostic_version": "z2.14",
+        "diagnostic_version": "z2.15",
         "checkpoint": {
             "filename": source.name,
             "inspection": inspection,
             "fp8_scalar_probe": probe_fp8_scalars(source),
+            "fp8_validation": validate_fp8_single_file(source),
         },
         "auxiliary_encoders": encoders,
         "candidate_count": len(encoders),
         "candidates_truncated": len(candidate_rows) == MAX_CANDIDATES,
-        "managed_auxiliary_inventory": inspect_managed_auxiliaries(managed_model_location("zimage") / "Z-Image-Turbo"),
+        "managed_auxiliary_inventory": managed_inventory,
+        "managed_reuse_assessment": assess_managed_component_candidates(managed_inventory, encoder_evidence),
         "dependencies": {
             "status": resolution["status"],
             "missing_components": resolution["missing_components"],
@@ -62,7 +68,8 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
             "Bounded marker, scalar scale and up to four tiny FP8 samples per file; no full weight matrices loaded.",
             "Filename patterns and neighboring files do not prove model compatibility.",
             "A detected Qwen-style encoder is not proof of Qwen3-4B or matching tokenizer.",
-            "FP8 multiplication follows a named upstream reference; this is not an end-to-end checkpoint conversion validation.",
+            "Every FP8 scale is inspected, but only bounded weight samples are compared against CPU PyTorch.",
+            "Matching component configs do not approve runtime reuse or standalone generation.",
         ],
         "ready": False, "loadable": False, "conversion_enabled": False,
     }
