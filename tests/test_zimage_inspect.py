@@ -164,3 +164,18 @@ def test_z211_qwen_like_encoder_evidence_without_config(tmp_path):
     assert result["status"] == "auxiliary"
     assert result["encoder_evidence"]["layer_count"] == 1
     assert result["encoder_evidence"]["architecture"] == "qwen_like_unverified"
+
+
+def test_z212_identifies_fp8_non_weight_tensor(tmp_path):
+    path = tmp_path / "fp8.safetensors"
+    names = ["x_embedder.weight", "final_layer.weight", "cap_embedder.weight",
+             "noise_refiner.0.weight", "context_refiner.0.weight",
+             "layers.0.weight", "cap_pad_token"]
+    header = {name: {"dtype": "F8_E4M3", "shape": [1],
+                     "data_offsets": [i, i + 1]} for i, name in enumerate(names)}
+    _write(path, header, b"a" * len(names))
+    result = inspect_zimage_checkpoint(path)
+    evidence = result["quantization_evidence"]
+    assert evidence["unclassified_fp8_tensor_count"] == 1
+    assert evidence["unclassified_fp8_tensor_keys"] == ["cap_pad_token"]
+    assert not result["loadable"]
