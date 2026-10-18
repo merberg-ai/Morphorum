@@ -129,3 +129,38 @@ def test_z23_rejects_noncontiguous_transformer_layer_numbers(tmp_path):
     assert result["architecture"] == "zimage_original_transformer"
     assert result["status"] == "unsupported"
     assert "layers" in result["reason"]
+
+
+def test_z211_real_world_scale_weight_pairing(tmp_path):
+    file = tmp_path / "actual_style.safetensors"
+    names = ["x_embedder.weight", "final_layer.weight", "cap_embedder.weight",
+             "noise_refiner.0.weight", "context_refiner.0.weight",
+             "layers.0.attention.qkv.weight", "layers.0.attention.qkv.scale_weight"]
+    header = {}
+    offset = 0
+    for name in names:
+        dtype = "F32" if name.endswith(".scale_weight") else "F8_E4M3"
+        width = 4 if dtype == "F32" else 1
+        header[name] = {"dtype": dtype, "shape": [1],
+                        "data_offsets": [offset, offset + width]}
+        offset += width
+    _write(file, header, b"x" * offset)
+    result = inspect_zimage_checkpoint(file)
+    assert result["quantization_evidence"]["scale_tensor_count"] == 1
+    assert result["quantization_evidence"]["paired_fp8_scale_count"] == 1
+    assert result["tensor_validation"]["scale_tensor_count"] == 1
+    assert result["quantization_evidence"]["convention"] == "unverified"
+    assert not result["loadable"]
+
+
+def test_z211_qwen_like_encoder_evidence_without_config(tmp_path):
+    file = tmp_path / "encoder.safetensors"
+    names = ["model.embed_tokens.weight", "model.layers.0.self_attn.q_proj.weight",
+             "model.layers.0.mlp.gate_proj.weight"]
+    _write(file, {key: {"dtype": "BF16", "shape": [1],
+                       "data_offsets": [2*i, 2*i+2]}
+                  for i, key in enumerate(names)}, b"ab"*len(names))
+    result = inspect_zimage_checkpoint(file)
+    assert result["status"] == "auxiliary"
+    assert result["encoder_evidence"]["layer_count"] == 1
+    assert result["encoder_evidence"]["architecture"] == "qwen_like_unverified"
