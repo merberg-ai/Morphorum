@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity and Z2.8 gated streaming conversion and Z2.9 cache integrity/concurrency protection added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity and Z2.8 gated streaming conversion and Z2.9 cache integrity/concurrency protection and Z2.10 read-only real-checkpoint diagnostics added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -85,6 +85,14 @@ Added `convert_original_checkpoint()`: requires the complete independently suppl
 Added `backend/morphorum/zimage_cache.py` with read-only SHA-256 verification of published staged weights against their manifest, strict unverified/loadable=false checks, and an exclusive cross-process per-destination reservation. Both Z2.6 staging and Z2.8 conversion now use the reservation and independently verify the published cache before returning. Competing writers are rejected; lock files are released after success or ordinary failures. A stale lock is **not** removed automatically, deliberately avoiding interference with another process. Synthetic tests cover cache corruption, competing reservations, and failure cleanup.
 
 Still pending: real model schema and tensor-value verification against reference conversion, robust stale-lock diagnosis/recovery and symlink/reparse-point security audits for parent folders, real checkpoint dependency and FP8 verification, Windows hardware acceptance. Integrity verified means matching the manifest's hash, **not** genuine model authenticity or runtime compatibility. All outputs remain `loadable=false`; managed loader and generation UI are unchanged.
+
+### Z2.10: read-only real-checkpoint diagnostics
+
+Added `backend/morphorum/zimage_diagnostics.py` and the endpoint `GET /api/models/{model_id}/zimage-diagnostics` for indexed external Z-Image checkpoints. It returns bounded header-derived tensor, architecture and precision evidence; up to 64 indexed text-encoder candidates with adjacent Qwen configuration/tokenizer file evidence; outstanding dependencies and conservative conversion strategy. It does **not** read tensor payloads, convert weights, invoke the loader or create caches. Every report retains `ready=false`, `loadable=false`. The original managed Z-Image model is not a valid diagnostic target. Automated tests cover supported-looking and invalid synthetic samples.
+
+On the user's Windows install, first scan Models, find an external Z-Image checkpoint ID, then visit `/api/models/<ID>/zimage-diagnostics` on the local Morphorum server. Save the returned JSON for comparison to the actual FP8 format and downloaded Qwen encoder. The report includes local file paths through the encoder bundle diagnostics; review/redact paths before sharing publicly. Missing tokenizer/config files are reported, not silently accepted.
+
+**Outstanding:** actual FP8 header report and a genuine text-encoder report, authoritative tensor compatibility, runtime load verification, and Z2.9 CI regression repair (the most recent backend run failed; syntax passed). Z2.10 does not bypass the conversion or generation safety gates.
 
 ## Z3: Generation runtime integration
 
