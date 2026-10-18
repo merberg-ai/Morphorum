@@ -3,7 +3,7 @@ import struct
 
 import pytest
 
-from morphorum.zimage_conversion import ConversionPreflightError, plan_conversion, stage_verified_tensor_copy
+from morphorum.zimage_conversion import ConversionPreflightError, plan_conversion, stage_verified_tensor_copy, plan_original_tensor_mapping
 
 
 def checkpoint(path, dtype="F16", missing=False):
@@ -91,3 +91,49 @@ def test_z26_refuses_original_layout_even_with_supplied_schema(tmp_path):
     checkpoint(file)
     with pytest.raises(ConversionPreflightError, match="not yet verified"):
         stage_verified_tensor_copy(file, tmp_path / "cache", expected_tensor_shapes={"x": (1,)})
+
+
+def test_z27_mapping_renames_and_splits_qkv():
+    source = {
+        "model.diffusion_model.x_embedder.weight": (4, 2),
+        "model.diffusion_model.layers.0.attention.qkv.weight": (12, 4),
+        "model.diffusion_model.layers.0.attention.out.weight": (4, 4),
+        "model.diffusion_model.norm_final.weight": (4,),
+    }
+    target = {
+        "all_x_embedder.2-1.weight": (4, 2),
+        **{f"layers.0.attention.to_{p}.weight": (4, 4) for p in ("q", "k", "v")},
+        "layers.0.attention.to_out.0.weight": (4, 4),
+    }
+    result = plan_original_tensor_mapping(source, target)
+    assert result["tensor_count"] == 5
+    assert not result["loadable"]
+    assert any(op["action"] == "split_qkv" for op in result["operations"])
+    with pytest.raises(ConversionPreflightError, match="exactly match"):
+        plan_original_tensor_mapping(source, {"not_a_real_tensor": (1,)})
+
+
+def test_z27_mapping_rejects_invalid_fused_qkv():
+    with pytest.raises(ConversionPreflightError, match="divisible by 3"):
+        plan_original_tensor_mapping(
+            {"layers.0.attention.qkv.weight": (10, 2)},
+            {"layers.0.attention.to_q.weight": (3, 2)},
+        )
+
+
+def test_z27_staging_manifest_contains_matching_hashes(tmp_path):
+    import hashlib
+    file = tmp_path / "weights.safetensors"
+    names = ["all_x_embedder.weight", "all_final_layer.weight", "cap_embedder.weight",
+             "noise_refiner.0.weight", "context_refiner.0.weight", "layers.0.weight"]
+    fields = {key: {"dtype": "F16", "shape": [1], "data_offsets": [2*i, 2*i+2]}
+              for i, key in enumerate(names)}
+    h = json.dumps(fields).encode()
+    file.write_bytes(struct.pack("<Q", len(h)) + h + b"ab"*len(fields))
+    plan = stage_verified_tensor_copy(file, tmp_path / "cache",
+                                      expected_tensor_shapes={k: (1,) for k in names})
+    manifest = json.loads((tmp_path / "cache" / "standalone-zimage" / plan["cache_key"] /
+                           "manifest.json").read_text())
+    assert manifest["source_sha256"] == hashlib.sha256(file.read_bytes()).hexdigest()
+    assert manifest["source_sha256"] == manifest["staged_sha256"]
+    assert not manifest["loadable"]
