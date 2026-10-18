@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics implemented. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -49,6 +49,12 @@ Outstanding work: inspect actual sample headers including the owner's FP8 Civita
 ### Z2.3: structural and quantization diagnostics (initial implementation)
 
 The header-only inspector now reports per-block layer counts, contiguous index checks, zero-sized parameter evidence, quantized dtype inventory, scale tensor count and an explicit unverified quantization convention for FP8/low-bit files. A fingerprint with missing/noncontiguous major block indices is rejected as unsupported. The result **never** enables generation. These checks do not prove exact layer counts, widths, full parameter coverage, per-tensor scale mapping, Qwen3 architecture/version, tokenizer availability, scheduler, VAE or Diffusers converter compatibility. Real downloaded checkpoint headers are still required for authoritative validation; the owner's local files are not available to this GitHub-based workflow.
+
+### Z2.4: guarded auxiliary bundle and conversion planning
+
+The standalone dependency resolver now examines optional adjacent `config.json` and `tokenizer.json` for indexed encoder safetensors files. JSON reads are bounded and disallow symlinks. A Qwen3 model type, Qwen3 architecture identifier, and positive hidden size, layer count, head count and vocabulary size are required before reporting `component_evidence_present`. This is evidence of locally supplied supporting files, **not** validation of the actual transformer/encoder tensors, tokenizer content or runtime loadability. Unsupported configuration is rejected as unverified. It also reports non-executable conversion candidates for recognized floating-point original versus Diffusers-style transformer layouts; quantized layouts remain blocked pending precision mapping. Managed Z-Image and generation validation are unchanged.
+
+Z2.3 CI surfaced a failure in structural layer numbering caused by an over-escaped regex; repaired on dev-webui before Z2.4. Final CI verification remains required. Outstanding before enabling runtime: actual safetensors sample header evidence, exact model dimensions and tensor schema, verified tokenizer/VAE/scheduler pairing, dedicated converter, FP8 handling and Windows GPU validation.
 
 ## Z3: Generation runtime integration
 
