@@ -15,6 +15,7 @@ from typing import Any
 from .zimage_conversion import ConversionPreflightError, plan_original_tensor_mapping
 from .zimage_fp8_validation import validate_fp8_single_file
 from .zimage_inspect import MAX_HEADER_BYTES, inspect_zimage_checkpoint
+from .zimage_input_scales import inspect_input_scale_metadata, InputScaleInspectionError
 
 MAX_INDEX_BYTES = 8 * 1024 * 1024
 MAX_SHARDS = 64
@@ -138,65 +139,37 @@ def read_managed_component_schema(root: str | Path, family: str) -> dict[str, tu
     return observed
 
 
-def _external_shapes(path: Path) -> tuple[dict[str, tuple[int, ...]], int]:
-    """Return actual model parameters, discarding ONLY proven unit input scales.
+def _external_shapes(path: Path) -> tuple[dict[str, tuple[int, ...]], dict[str, Any]]:
+    """Compare model parameters independently from quantization-only metadata.
 
-    In ComfyUI comfy/utils.py convert_old_quants, the old .scale_input
-    is discarded if and only if its scalar value is exactly 1.0. Non-unit
-    scales cannot be silently ignored because they affect inference math.
-    All other tensors must participate in the complete schema comparison.
+    The input scales are retained on disk. All values and pairings must pass
+    read-only validation first; their quantized runtime semantics remain gated.
     """
+    evidence = inspect_input_scale_metadata(path)
     with path.open("rb") as handle:
-        raw_length = handle.read(8)
-        if len(raw_length) != 8:
-            raise SchemaInspectionError("Truncated external safetensors header.")
-        length = struct.unpack("<Q", raw_length)[0]
+        raw_len = handle.read(8)
+        if len(raw_len) != 8:
+            raise SchemaInspectionError("Truncated external header.")
+        length = struct.unpack("<Q", raw_len)[0]
         if length < 2 or length > MAX_HEADER_BYTES:
-            raise SchemaInspectionError("Invalid external safetensors header.")
+            raise SchemaInspectionError("Invalid external header length.")
         raw = handle.read(length)
         if len(raw) != length:
-            raise SchemaInspectionError("Truncated external safetensors header.")
+            raise SchemaInspectionError("Truncated external header.")
         data = json.loads(raw)
-        if not isinstance(data, dict):
-            raise SchemaInspectionError("Malformed external header.")
-        data.pop("__metadata__", None)
-        if len(data) > MAX_TENSORS:
-            raise SchemaInspectionError("External tensor count exceeds bound.")
-        removed_unit_scales = 0
-        result: dict[str, tuple[int, ...]] = {}
-        for name, spec in data.items():
-            if name == "scaled_fp8" or name.endswith(".scale_weight"):
-                continue
-            if name.endswith(".scale_input"):
-                weight_key = name[:-len(".scale_input")] + ".weight"
-                weight_spec = data.get(weight_key)
-                if not isinstance(weight_spec, dict) or weight_spec.get("dtype") != "F8_E4M3":
-                    raise SchemaInspectionError("Orphan input scale without a matching FP8 weight.")
-                shape = spec.get("shape")
-                offsets = spec.get("data_offsets")
-                formats = {"F32": ("<f", 4), "F16": ("<e", 2), "BF16": (None, 2)}
-                fmt_and_size = formats.get(spec.get("dtype"))
-                if (shape not in ([], [1]) or fmt_and_size is None
-                        or not isinstance(offsets, list) or len(offsets) != 2
-                        or offsets[1] - offsets[0] != fmt_and_size[1]):
-                    raise SchemaInspectionError("Unsupported input scale scalar dtype or shape.")
-                handle.seek(8 + length + offsets[0])
-                raw_scalar = handle.read(fmt_and_size[1])
-                if len(raw_scalar) != fmt_and_size[1]:
-                    raise SchemaInspectionError("Truncated input scale.")
-                if spec["dtype"] == "BF16":
-                    # BF16 1.0 is exactly 0x3f80; reject non-unit and NaN codes.
-                    is_unit = struct.unpack("<H", raw_scalar)[0] == 0x3F80
-                else:
-                    is_unit = struct.unpack(fmt_and_size[0], raw_scalar)[0] == 1.0
-                if not is_unit:
-                    raise SchemaInspectionError(
-                        "Non-unit .scale_input requires explicitly verified input-scale handling."
-                    )
-                removed_unit_scales += 1
-                continue
-            result[name] = tuple(spec["shape"])
-    return result, removed_unit_scales
+    if not isinstance(data, dict):
+        raise SchemaInspectionError("Malformed external header.")
+    data.pop("__metadata__", None)
+    if len(data) > MAX_TENSORS:
+        raise SchemaInspectionError("External tensor count exceeds bound.")
+    result = {
+        name: tuple(spec["shape"]) for name, spec in data.items()
+        if name != "scaled_fp8"
+        and not name.endswith(".scale_weight")
+        and not name.endswith(".scale_input")
+    }
+    return result, evidence
+
 
 def _original_transformer_shapes(
     original: dict[str, tuple[int, ...]],
@@ -293,7 +266,7 @@ def validate_complete_tensor_schema(
         if evidence.get("status") != "reference_matched":
             raise SchemaInspectionError("Z2.15 complete FP8 scale checks have not passed.")
         stat = source.stat()
-        shapes, discarded_unit_input_scales = _external_shapes(source)
+        shapes, input_scale_evidence = _external_shapes(source)
         if family == "transformer":
             mapped, qkv_count = _original_transformer_shapes(shapes)
         elif family == "encoder":
@@ -307,7 +280,16 @@ def validate_complete_tensor_schema(
         result.update(compare_tensor_schemas(mapped, managed))
         result["fused_qkv_splits"] = qkv_count
         result["source_parameter_count"] = len(shapes)
-        result["discarded_unit_input_scale_count"] = discarded_unit_input_scales
+        result["discarded_unit_input_scale_count"] = input_scale_evidence["unit_count"]
+        result["excluded_input_scale_count"] = input_scale_evidence["count"]
+        result["input_scale_metadata"] = input_scale_evidence
+        result["quantization_compatibility"] = {
+            "status": "fp8_activation_scale_binding_unverified",
+            "has_nonunit_input_scales": input_scale_evidence["nonunit_count"] > 0,
+            "fp8_runtime_verified": False,
+            "bf16_weight_only_policy": "activation_scales_not_used_in_bf16_linear",
+            "bf16_runtime_verified": False,
+        }
         result["reference_origin"] = "managed_Z-Image-Turbo_sharded_safetensors_headers"
         return result
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError,
