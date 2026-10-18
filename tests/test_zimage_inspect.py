@@ -88,3 +88,44 @@ def test_partial_zimage_signature_not_verified(tmp_path):
     result = inspect_zimage_checkpoint(path)
     assert result["architecture"] == "unverified"
     assert result["loadable"] is False
+
+
+def test_z23_fp8_structural_diagnostics_are_not_load_authorization(tmp_path):
+    path = tmp_path / "quantized.safetensors"
+    names = [
+        "model.diffusion_model.x_embedder.weight",
+        "model.diffusion_model.final_layer.weight",
+        "model.diffusion_model.cap_embedder.weight",
+        "model.diffusion_model.noise_refiner.0.weight",
+        "model.diffusion_model.context_refiner.0.weight",
+        "model.diffusion_model.layers.0.weight",
+        "model.diffusion_model.layers.1.weight",
+        "model.diffusion_model.layers.0.weight_scale_inv",
+    ]
+    header = {name: {"dtype": "F8_E4M3FN", "shape": [1], "data_offsets": [i, i+1]}
+              for i, name in enumerate(names)}
+    _write(path, header, b"a" * len(names))
+    result = inspect_zimage_checkpoint(path)
+    assert result["architecture"] == "zimage_original_transformer"
+    assert result["tensor_validation"]["blocks"]["layers"]["count"] == 2
+    assert result["tensor_validation"]["blocks"]["layers"]["contiguous"]
+    assert result["tensor_validation"]["quantization_convention"] == "unverified"
+    assert result["tensor_validation"]["scale_tensor_count"] == 1
+    assert result["ready"] is False and result["loadable"] is False
+
+
+def test_z23_rejects_noncontiguous_transformer_layer_numbers(tmp_path):
+    path = tmp_path / "incomplete.safetensors"
+    names = [
+        "transformer.x_embedder.weight", "transformer.final_layer.weight",
+        "transformer.cap_embedder.weight", "transformer.noise_refiner.0.weight",
+        "transformer.context_refiner.0.weight", "transformer.layers.0.weight",
+        "transformer.layers.2.weight",
+    ]
+    header = {name: {"dtype": "F16", "shape": [1], "data_offsets": [2*i, 2*i+2]}
+              for i, name in enumerate(names)}
+    _write(path, header, b"ab" * len(names))
+    result = inspect_zimage_checkpoint(path)
+    assert result["architecture"] == "zimage_original_transformer"
+    assert result["status"] == "unsupported"
+    assert "layers" in result["reason"]
