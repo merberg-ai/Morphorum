@@ -154,6 +154,15 @@ def assess_managed_component_candidates(inventory: dict[str, Any],
     encoder = encoder or {}
     text_config = conf.get("text_encoder", {}).get("summary", {})
     layer_count = encoder.get("layer_count")
+    dims = encoder.get("tensor_dimensions") or {}
+    hidden = text_config.get("hidden_size")
+    intermediate = text_config.get("intermediate_size")
+    vocab = text_config.get("vocab_size")
+    embedding = dims.get("model.embed_tokens.weight")
+    up = dims.get("model.layers.0.mlp.up_proj.weight")
+    down = dims.get("model.layers.0.mlp.down_proj.weight")
+    qkv = [dims.get("model.layers.0.self_attn." + suffix + ".weight")
+           for suffix in ("q_proj", "k_proj", "v_proj")]
     observations = {
         "tokenizer": bool(components.get("tokenizer", {}).get("present")) and
                      role_evidence.get("tokenizer", {}).get("matches") is True,
@@ -164,6 +173,19 @@ def assess_managed_component_candidates(inventory: dict[str, Any],
         "encoder_layers": type(layer_count) is int and
                           layer_count == text_config.get("num_hidden_layers"),
         "encoder_model_type": text_config.get("model_type") == "qwen3",
+        "encoder_embedding_hidden": type(hidden) is int and hidden > 0 and
+                                    isinstance(embedding, list) and len(embedding) == 2 and
+                                    embedding[1] == hidden,
+        "encoder_vocab": type(vocab) is int and vocab > 0 and
+                         isinstance(embedding, list) and len(embedding) == 2 and
+                         embedding[0] == vocab,
+        "encoder_feedforward": type(hidden) is int and type(intermediate) is int and
+                               up == [intermediate, hidden] and
+                               down == [hidden, intermediate],
+        "encoder_attention_input": type(hidden) is int and
+                                   all(isinstance(shape, list) and len(shape) == 2
+                                       and shape[1] == hidden and shape[0] > 0
+                                       for shape in qkv),
     }
     return {
         "status": "config_evidence_matches" if all(observations.values()) else
