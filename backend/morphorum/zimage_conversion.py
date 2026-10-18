@@ -206,3 +206,116 @@ def plan_original_tensor_mapping(
         "tensor_count": len(mapped),
         "ready": False, "loadable": False, "conversion_enabled": False,
     }
+
+
+def convert_original_checkpoint(
+    checkpoint: str | Path,
+    cache_root: str | Path,
+    *,
+    expected_output_shapes: dict[str, tuple[int, ...]],
+) -> dict[str, Any]:
+    """Stream an exact-schema original-layout checkpoint to an isolated cache.
+
+    Copies one tensor (or contiguous Q/K/V slice) at a time in bounded chunks.
+    It does not load a Torch model and never certifies runtime compatibility.
+    """
+    import json
+    import shutil
+    import struct
+    import tempfile
+
+    plan = plan_conversion(checkpoint, cache_root)
+    if plan["architecture"] != "zimage_original_transformer":
+        raise ConversionPreflightError("Expected an original Z-Image transformer checkpoint.")
+    file = Path(plan["checkpoint"])
+    with file.open("rb") as handle:
+        header_length = struct.unpack("<Q", handle.read(8))[0]
+        if header_length < 2 or header_length > 16 * 1024 * 1024:
+            raise ConversionPreflightError("Invalid safetensors header bound.")
+        header = json.loads(handle.read(header_length))
+    header.pop("__metadata__", None)
+    shapes = {name: tuple(spec["shape"]) for name, spec in header.items()}
+    mapping = plan_original_tensor_mapping(shapes, expected_output_shapes)
+    output_specs = {}
+    slices = []
+    position = 0
+    for operation in mapping["operations"]:
+        source_spec = header[operation["source"]]
+        start, end = source_spec["data_offsets"]
+        nbytes = end - start
+        targets = operation["targets"]
+        if operation["action"] == "split_qkv":
+            if nbytes % 3:
+                raise ConversionPreflightError("Fused QKV byte length must be divisible by three.")
+            part_bytes = nbytes // 3
+        else:
+            part_bytes = nbytes
+        for index, target in enumerate(targets):
+            next_position = position + part_bytes
+            output_specs[target] = {
+                "dtype": source_spec["dtype"],
+                "shape": list(expected_output_shapes[target]),
+                "data_offsets": [position, next_position],
+            }
+            slices.append((start + index * part_bytes, part_bytes))
+            position = next_position
+    serialized_header = json.dumps(output_specs, separators=(",", ":")).encode("utf-8")
+    if len(serialized_header) > 16 * 1024 * 1024:
+        raise ConversionPreflightError("Converted header exceeds safetensors size bound.")
+    destination = Path(plan["cache_destination"])
+    if destination.exists() or destination.is_symlink():
+        raise ConversionPreflightError("Cache destination already exists; refusing overwrite.")
+    parent = destination.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=".zimage-convert-", dir=parent))
+    try:
+        target = temporary / "diffusion_pytorch_model.safetensors"
+        source_hash = hashlib.sha256()
+        with file.open("rb") as source:
+            for chunk in iter(lambda: source.read(4 * 1024 * 1024), b""):
+                source_hash.update(chunk)
+        with file.open("rb") as source, target.open("xb") as output:
+            output.write(struct.pack("<Q", len(serialized_header)))
+            output.write(serialized_header)
+            offset = 8 + header_length
+            for start, count in slices:
+                source.seek(offset + start)
+                remaining = count
+                while remaining:
+                    block = source.read(min(4 * 1024 * 1024, remaining))
+                    if not block:
+                        raise ConversionPreflightError("Source truncated during conversion.")
+                    output.write(block)
+                    remaining -= len(block)
+            output.flush()
+            os.fsync(output.fileno())
+        stat = file.stat()
+        if stat.st_size != plan["source_size_bytes"] or stat.st_mtime_ns != plan["source_mtime_ns"]:
+            raise ConversionPreflightError("Source changed during conversion.")
+        # Reinspect converted output, including shape/offset/payload validation.
+        converted = inspect_zimage_checkpoint(target)
+        if converted["status"] == "unsupported":
+            raise ConversionPreflightError("Converted safetensors failed structure validation.")
+        output_hash = hashlib.sha256()
+        with target.open("rb") as stream:
+            for block in iter(lambda: stream.read(4 * 1024 * 1024), b""):
+                output_hash.update(block)
+        manifest = {
+            "schema": 2, "kind": "unverified_zimage_transformed_weights",
+            "source": str(file), "cache_key": plan["cache_key"],
+            "source_sha256": source_hash.hexdigest(),
+            "output_sha256": output_hash.hexdigest(),
+            "tensor_count": len(output_specs),
+            "runtime_verified": False, "loadable": False,
+        }
+        (temporary / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        if destination.exists():
+            raise ConversionPreflightError("Cache destination was created concurrently.")
+        os.rename(temporary, destination)
+    except BaseException:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return {
+        **plan, "state": "converted_unverified", "staged_file": str(destination / target.name),
+        "ready": False, "loadable": False, "conversion_enabled": False,
+    }
