@@ -286,3 +286,20 @@ git pull
 **Important:** `--ram-gib 32` is an *example only*; replace with the actual measured RAM value. `--managed-root` can optionally specify the existing managed Z-Image-Turbo directory, otherwise it resolves from settings. This preflight can take time when hashing 18.96 GiB of weights. `--skip-hashes` is a diagnostic speed shortcut that cannot count as integrity acceptance.
 
 A `capacity_candidate_unverified` result means only that weight files fit the very rough RAM/VRAM heuristic with fixed reserves, not that inference can work. `capacity_warning_unverified` indicates likely offload requirements; `blocked` indicates failed inputs or artifact checks. The transformer itself is about 11.47 GiB of BF16 weights, leaving insufficient proven margin for a fully GPU-resident 16 GiB workflow; the preferred *experiment* is sequential Qwen CPU offload and transformer/group offload, subject to physical performance testing. Static reserves of 3 GiB VRAM and 8 GiB RAM are intentionally not a complete activation/allocator model. **Next:** Z2.20b isolated configuration and CPU initialization probes, followed separately by a deliberately gated Z2.20c low-resolution inference smoke test. Neither is implemented here. Keep the production managed loader and `main` unchanged.
+
+
+### Z2.20a Windows physical acceptance (2026-10-18)
+
+**PASS for read-only memory/integrity preflight.** Owner ran the SHA-256-validating CLI on RTX 4080 SUPER 16 GiB / system RAM 63.59 GiB. Result `capacity_candidate_unverified`, `artifact_hashes_checked=true`, `loadable=false`, `inference_attempted=false`. Weight footprints: transformer 11.466 GiB, Qwen encoder 7.492 GiB, combined 18.959 GiB. Managed installation untouched. This confirms integrity and basic capacity gating only, not model execution or runtime compatibility.
+
+### Z2.20b1: read-only component configuration/schema binding probe
+
+Added `backend/morphorum/zimage_config_probe.py` with separate test coverage. It reads managed `model_index.json`, transformer/encoder/VAE configs, tokenizer_config and scheduler_config; checks explicit component entries, scratch family manifests and expected weight sizes, and compares every converted tensor's name, shape and ordinary float dtype to the managed reference sharded headers. It imports no Torch, loads no model, does not hash the 19 GiB scratch payload and does not enable generation. This phase is a *configuration candidate* check, not CPU initialization or GPU inference.
+
+Physical Windows command from Morphorum root after `git pull`:
+
+```powershell
+.\.venv\Scripts\python.exe -m morphorum.zimage_config_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder"
+```
+
+Expected success status: `config_shape_candidate_unverified`. If blocked, inspect `reasons` to identify missing/mismatched configs; do not modify managed files to silence the probe. **Next:** Z2.20b2 guarded CPU model-class initialization proof and then Z2.20c minimal inference smoke test. Wait for physical b1 results before enabling either. `main` is unchanged.
