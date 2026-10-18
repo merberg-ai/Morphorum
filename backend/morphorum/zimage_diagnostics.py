@@ -42,7 +42,7 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
             "bundle": inspect_encoder_bundle(path),
         })
     return {
-        "diagnostic_version": "z2.13",
+        "diagnostic_version": "z2.14",
         "checkpoint": {
             "filename": source.name,
             "inspection": inspection,
@@ -59,10 +59,10 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
             "reason": resolution["reason"],
         },
         "limits": [
-            "Only bounded marker and scalar scale payload reads; no weight matrices loaded.",
+            "Bounded marker, scalar scale and up to four tiny FP8 samples per file; no full weight matrices loaded.",
             "Filename patterns and neighboring files do not prove model compatibility.",
             "A detected Qwen-style encoder is not proof of Qwen3-4B or matching tokenizer.",
-            "FP8 scales, tensor dimensions and actual runtime loading require further verification.",
+            "FP8 multiplication follows a named upstream reference; this is not an end-to-end checkpoint conversion validation.",
         ],
         "ready": False, "loadable": False, "conversion_enabled": False,
     }
