@@ -319,3 +319,8 @@ git pull
 ```
 
 Expected: `meta_initialized_unverified`, each component initialized true, `weights_loaded=false`, `cuda_used=false`. Any `blocked` status warrants class/config investigation instead of editing managed files. Next after physical acceptance: separately gated CPU load of actual scratch tensors using explicit offload strategy; no full-GPU inference yet.
+
+
+### Z2.20b2 Windows physical acceptance (2026-10-18)
+
+**PASS:** `meta_initialized_unverified` on the owner's Windows host. Transformer: 521 parameter tensors, 6,154,908,736 elements; encoder: 398 parameter tensors, 4,022,468,096 elements. All parameters and buffers resided on PyTorch `meta`; `weights_loaded=false`, `cuda_used=false`, `inference_attempted=false`, `loadable=false`. This validates construction of both classes from managed configurations, **not** real CPU weight binding, forward computation or generation. Next phase requires explicit sequential CPU-only weight loading and guards against accidental CUDA allocation; managed files remain immutable.
