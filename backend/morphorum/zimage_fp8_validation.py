@@ -194,3 +194,38 @@ def assess_managed_component_candidates(inventory: dict[str, Any],
         "compatible": False, "reuse_enabled": False, "loadable": False,
         "reason": "Config and layer matching alone do not establish runtime compatibility.",
     }
+
+
+def plan_managed_auxiliary_binding(inventory: dict[str, Any],
+                                   assessment: dict[str, Any]) -> dict[str, Any]:
+    """Read-only source-role proposal; never binds or imports runtime objects."""
+    checks = assessment.get("checks", {})
+    roles = ("tokenizer", "vae", "scheduler")
+    planned: dict[str, dict[str, Any]] = {}
+    for role in roles:
+        approved_evidence = (inventory.get("components", {}).get(role, {})
+                             .get("present") is True and checks.get(role) is True)
+        planned[role] = {
+            "source": "managed:zimage-turbo",
+            "relative_directory": role,
+            "status": "candidate_only" if approved_evidence else "unverified",
+            "binding_enabled": False,
+        }
+    planned["text_encoder"] = {
+        "source": "external_fp8_candidate",
+        "status": "mapping_and_runtime_unverified",
+        "binding_enabled": False,
+    }
+    planned["transformer"] = {
+        "source": "external_fp8_checkpoint",
+        "status": "mapping_and_runtime_unverified",
+        "binding_enabled": False,
+    }
+    return {
+        "status": "candidates_identified" if all(
+            planned[r]["status"] == "candidate_only" for r in roles
+        ) else "requires_more_evidence",
+        "components": planned, "runtime_binding_enabled": False,
+        "loadable": False, "ready": False,
+        "reason": "Path and configuration evidence cannot establish inference compatibility.",
+    }
