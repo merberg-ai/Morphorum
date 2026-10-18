@@ -43,7 +43,7 @@
   }
   function updateModels(models) {
     state.models = (Array.isArray(models) ? models : []).filter(m =>
-      m.family === 'zimage' && m.source !== 'managed' && (m.kind === 'checkpoint' || m.kind === 'model' || !m.kind));
+      m.family === 'zimage' && m.source !== 'managed' && m.kind === 'checkpoints');
     const select = $('diagnostic-model-select');
     const previous = select.value || sessionStorage.getItem('morphorum-diagnostic-model') || '';
     select.replaceChildren();
