@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging primitive added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -61,6 +61,12 @@ Z2.3 CI surfaced a failure in structural layer numbering caused by an over-escap
 Added `backend/morphorum/zimage_conversion.py` with `plan_conversion(checkpoint, cache_root)`. It performs read-only safetensors inspection, requires recognized structural fingerprints and supported ordinary floating dtypes, explicitly blocks FP8/low-bit quantized variants, rejects symlinks, and refuses a conversion cache that overlaps or contains the source checkpoint. It derives a cache identity from the normalized source path, size, mtime and architecture. The planned output location is separate from the original file and managed Z-Image package. It creates **no files**, converts **no tensors**, and always returns `conversion_enabled=false`, `ready=false`, `loadable=false`.
 
 Automated tests in `tests/test_zimage_conversion.py` cover deterministic cache planning, modified-source cache invalidation, FP8/partial checkpoint rejection and unsafe cache locations. The preflight is **not** an implemented converter or loader: future work must establish exact Diffusers state-dict conversion using verified real weights, strengthen cache content checks and atomic writes, resolve the full encoder/tokenizer/VAE/scheduler package, and run Windows GPU validation before enabling model selection.
+
+### Z2.6: exact-schema weight staging primitive
+
+`stage_verified_tensor_copy()` implements the first executable, CPU-only conversion-preparation path for **Diffusers-layout, ordinary floating-point safetensors only**. An independently supplied complete expected tensor-name/shape schema must match exactly: missing, extra or wrong-shaped entries are rejected before any copying. The file is copied into an isolated temporary cache directory, checked for source mutation and size, and then atomically published along with a manifest declaring `runtime_verified=false` and `loadable=false`. Existing destinations are never intentionally overwritten. Source safetensors remain immutable. Synthetic tests verify exact-schema matching, cache publication, non-overwrite and original-layout rejection.
+
+This **does not yet perform tensor-name conversion** of original/ComfyUI-format checkpoints. The full expected tensor schema has not been established from verified actual checkpoint headers, so production conversion cannot safely be activated. FP8/low-bit formats remain blocked; no runtime loading, UI-ready status or managed-model changes were introduced. Next is upstream-verified original-to-Diffusers tensor mapping, validated real checkpoint fixtures, SHA-256 integrity checks and Windows physical testing.
 
 ## Z3: Generation runtime integration
 
