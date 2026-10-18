@@ -233,3 +233,5 @@ python -m morphorum.zimage_fp8_stream --checkpoint "D:\models\Checkpoints\Z-Imag
 ```
 
 The encoder uses the same three modes but `--family encoder`, its separate FP8 encoder source file, and a **different new scratch directory**. Use the `managed_model_location("zimage") / "Z-Image-Turbo"` path configured by your installation; do not guess its location. Actual multi-gigabyte exports and real Windows verifier acceptance remain **pending physical owner tests**. First validate Download JSON and copy fallback, then share the Z2.18 preflight sizes and disk results; only run exports with sufficient disk space. Keep `dev-webui`, `main`, the original checkpoints and managed Z-Image untouched. Any GPU/offload testing is a distinct, subsequent milestone.
+
+Z2.19 CLI convenience: `--managed-root` is optional for the three physical acceptance commands. When omitted, Morphorum resolves the managed package from its configured `managed_model_location("zimage") / "Z-Image-Turbo"` setting; this avoids guessing the path. You must still supply the real checkpoint, family and scratch directory. The `--verify-existing` mode never creates or overwrites files.
