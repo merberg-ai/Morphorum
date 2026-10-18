@@ -147,3 +147,41 @@ def test_z216_auxiliary_binding_is_candidate_only():
     bad = plan_managed_auxiliary_binding(inventory, assessment)
     assert bad["status"] == "requires_more_evidence"
     assert bad["components"]["vae"]["status"] == "unverified"
+
+
+def test_z216_qwen_encoder_windows_are_separate_from_transformer(tmp_path):
+    pytest.importorskip("torch")
+    source = tmp_path / "encoder" / "encoder.safetensors"
+    source.parent.mkdir()
+    header = {}
+    data = bytearray()
+
+    def add(key, dtype, shape, values):
+        start = len(data)
+        data.extend(values)
+        header[key] = {"dtype": dtype, "shape": shape,
+                       "data_offsets": [start, len(data)]}
+
+    add("model.embed_tokens.weight", "BF16", [8, 4], bytes(8 * 4 * 2))
+    for key, shape in (
+        ("model.layers.0.self_attn.q_proj.weight", [8, 4]),
+        ("model.layers.0.mlp.down_proj.weight", [4, 8]),
+        ("model.layers.0.mlp.gate_proj.weight", [8, 4]),
+    ):
+        add(key, "F8_E4M3", shape, bytes([0x38, 0x40, 0xB8, 0x00] * 8))
+        add(key[:-len(".weight")] + ".scale_weight", "F32", [1],
+            struct.pack("<f", 2.0))
+    add("scaled_fp8", "F8_E4M3", [0], b"")
+    encoded = json.dumps(header).encode()
+    source.write_bytes(struct.pack("<Q", len(encoded)) + encoded + data)
+    assert inspect_zimage_checkpoint(source)["component_type"] == "text_encoder"
+    plan = plan_fp8_bf16_windows(source)
+    assert plan["family"] == "encoder"
+    assert plan["status"] == "planned"
+    assert plan["windows_count"] == 2
+    assert all(w["partition"] == "full" for w in plan["windows"])
+    assert not plan["loadable"]
+    result = export_fp8_bf16_windows(source, tmp_path / "scratch" / "encoder-experiment")
+    assert result["status"] == "sample_windows_exported"
+    assert result["window_count"] == 2
+    assert not result["loadable"]
