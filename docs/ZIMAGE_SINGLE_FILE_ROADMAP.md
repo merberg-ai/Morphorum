@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity and Z2.8 gated streaming conversion added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity and Z2.8 gated streaming conversion and Z2.9 cache integrity/concurrency protection added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -79,6 +79,12 @@ Still required: authoritative source and target schemas for real Z-Image variant
 Added `convert_original_checkpoint()`: requires the complete independently supplied Diffusers target-name/shape schema and the Z2.5 non-quantized preflight. Original-layout tensor names are mapped using Z2.7's validator and contiguous fused QKV weights are split as bounded raw byte ranges along dimension zero. The converter writes a new safetensors header and streams each tensor in 4 MiB chunks to a separate temporary cache folder, verifies the resulting safetensors structure, hashes source/output with SHA-256 and atomically publishes an unverified manifest. The original file is never modified. Failures clean temporary artifacts; existing destination paths refuse overwrite. Synthetic tests cover exact Q/K/V bytes, output tensors, hashes, rejection, and repeat-conversion refusal.
 
 **Not yet production-ready:** real checkpoint target schemas and tensor layouts have not been verified, concurrent cache publication requires stronger locking, and output still says `runtime_verified=false` and `loadable=false`. FP8 remains blocked; no automatic background conversions, UI enablement, runtime model loading or main merge. Physical Windows validation and real representative checkpoints remain necessary.
+
+### Z2.9: cache integrity and concurrency hardening
+
+Added `backend/morphorum/zimage_cache.py` with read-only SHA-256 verification of published staged weights against their manifest, strict unverified/loadable=false checks, and an exclusive cross-process per-destination reservation. Both Z2.6 staging and Z2.8 conversion now use the reservation and independently verify the published cache before returning. Competing writers are rejected; lock files are released after success or ordinary failures. A stale lock is **not** removed automatically, deliberately avoiding interference with another process. Synthetic tests cover cache corruption, competing reservations, and failure cleanup.
+
+Still pending: real model schema and tensor-value verification against reference conversion, robust stale-lock diagnosis/recovery and symlink/reparse-point security audits for parent folders, real checkpoint dependency and FP8 verification, Windows hardware acceptance. Integrity verified means matching the manifest's hash, **not** genuine model authenticity or runtime compatibility. All outputs remain `loadable=false`; managed loader and generation UI are unchanged.
 
 ## Z3: Generation runtime integration
 
