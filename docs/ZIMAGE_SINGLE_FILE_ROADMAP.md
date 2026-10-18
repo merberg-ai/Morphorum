@@ -222,16 +222,21 @@ The owner's first Console > Diagnostics test passed, but **Copy JSON** raised `C
 
 For the next actual Windows acceptance step, `backend/morphorum/zimage_fp8_stream.py` adds **`--verify-existing`** to inspect a separately exported scratch artifact **without writing**. Verification rechecks every output tensor's SHA-256 and full artifact digest, compares exact model names/dtypes/shapes/offsets against the current original checkpoint and managed reference schema, validates the source file path/size/mtime recorded in the manifest, and independently recalculates **bounded start/middle/end sample windows from the original FP8 source** using CPU BF16 reference conversion. Every output tensor is sampled, including all three fused Q/K/V partitions and the separate Qwen encoder. A self-consistent but maliciously rehashed altered output is rejected if a sampled value differs. No source full SHA-256 or whole-model numerical equivalence is claimed, and **neither verification nor export enables loading or inference**.
 
-Use the Morphorum backend Python environment, with concrete paths for each input:
+Use the Morphorum backend Python environment and a **real existing filename**, not an example placeholder. From `PS D:\\Morphorum-test>` the following example uses the owner's indexed checkpoint location. Run `Test-Path` first and confirm `True`. Choose an entirely new scratch directory outside the external models and managed installation.
 ```powershell
-# Inspect resource budget only; choose a NEW scratch path outside model directories.
-python -m morphorum.zimage_fp8_stream --checkpoint "D:\models\Checkpoints\Z-Image\zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors" --managed-root "<managed Z-Image-Turbo directory>" --family transformer --scratch "D:\Morphorum-z219-test\transformer"
-# Only after reviewing budget and free space, explicitly opt in to conversion:
-python -m morphorum.zimage_fp8_stream --checkpoint "D:\models\Checkpoints\Z-Image\zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors" --managed-root "<managed Z-Image-Turbo directory>" --family transformer --scratch "D:\Morphorum-z219-test\transformer" --export
-# Reread the resulting scratch output and compare it with independently decoded source samples:
-python -m morphorum.zimage_fp8_stream --checkpoint "D:\models\Checkpoints\Z-Image\zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors" --managed-root "<managed Z-Image-Turbo directory>" --family transformer --scratch "D:\Morphorum-z219-test\transformer" --verify-existing
-```
+Test-Path "D:\\models\\Checkpoints\\Z-Image\\zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors"
 
+# Read-only conversion/disk preflight:
+.\\.venv\\Scripts\\python.exe -m morphorum.zimage_fp8_stream --checkpoint "D:\\models\\Checkpoints\\Z-Image\\zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors" --family transformer --scratch "D:\\Morphorum-z219-test\\transformer"
+
+# Only when status=planned and scratch_space_sufficient=true, explicitly export:
+.\\.venv\\Scripts\\python.exe -m morphorum.zimage_fp8_stream --checkpoint "D:\\models\\Checkpoints\\Z-Image\\zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors" --family transformer --scratch "D:\\Morphorum-z219-test\\transformer" --export
+
+# Check source parity and output hashes after successful export:
+.\\.venv\\Scripts\\python.exe -m morphorum.zimage_fp8_stream --checkpoint "D:\\models\\Checkpoints\\Z-Image\\zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors" --family transformer --scratch "D:\\Morphorum-z219-test\\transformer" --verify-existing
+```
 The encoder uses the same three modes but `--family encoder`, its separate FP8 encoder source file, and a **different new scratch directory**. Use the `managed_model_location("zimage") / "Z-Image-Turbo"` path configured by your installation; do not guess its location. Actual multi-gigabyte exports and real Windows verifier acceptance remain **pending physical owner tests**. First validate Download JSON and copy fallback, then share the Z2.18 preflight sizes and disk results; only run exports with sufficient disk space. Keep `dev-webui`, `main`, the original checkpoints and managed Z-Image untouched. Any GPU/offload testing is a distinct, subsequent milestone.
 
 Z2.19 CLI convenience: `--managed-root` is optional for the three physical acceptance commands. When omitted, Morphorum resolves the managed package from its configured `managed_model_location("zimage") / "Z-Image-Turbo"` setting; this avoids guessing the path. You must still supply the real checkpoint, family and scratch directory. The `--verify-existing` mode never creates or overwrites files.
+
+Z2.19 preflight troubleshooting: Literal documentation placeholders such as `"<transformer.safetensors>"` are not Windows paths. PowerShell sends those characters unchanged, producing `WinError 123` or a misleading general `blocked` status. The CLI now rejects angle-bracket checkpoint placeholders explicitly, suggests `Test-Path` when the file is missing, and surfaces actual `schema_mismatch` counts or lower-level schema reasons instead of collapsing all failures into “Z2.17.2 checks must pass.” These messages are read-only diagnostic improvements; all conversion and runtime safeguards remain unchanged.
