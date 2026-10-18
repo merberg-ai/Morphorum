@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity and Z2.8 gated streaming conversion added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -73,6 +73,12 @@ This **does not yet perform tensor-name conversion** of original/ComfyUI-format 
 Added `plan_original_tensor_mapping()`, a **non-executable** full-schema validator following upstream Diffusers Z-Image key renames and fused QKV splitting. It requires a caller-supplied *complete* expected output shape/name schema and rejects mismatches, duplicate destinations, and invalid fused QKV dimensions. Original checkpoint tensors are not read into memory or converted by this function. The existing Diffusers-layout cache stager now hashes both the source and staged file with SHA-256 before atomic publication, recording both digests in the unverified manifest. Synthetic tests cover mapping and integrity. No model is marked ready or loadable.
 
 Still required: authoritative source and target schemas for real Z-Image variants, a memory-safe executable QKV splitting converter, validated FP8 scale handling, component compatibility, cache concurrency hardening and physical Windows RTX 4080 SUPER testing. This stage does not implement full original-format conversion or native generation.
+
+### Z2.8: executable streaming tensor remapping (gated)
+
+Added `convert_original_checkpoint()`: requires the complete independently supplied Diffusers target-name/shape schema and the Z2.5 non-quantized preflight. Original-layout tensor names are mapped using Z2.7's validator and contiguous fused QKV weights are split as bounded raw byte ranges along dimension zero. The converter writes a new safetensors header and streams each tensor in 4 MiB chunks to a separate temporary cache folder, verifies the resulting safetensors structure, hashes source/output with SHA-256 and atomically publishes an unverified manifest. The original file is never modified. Failures clean temporary artifacts; existing destination paths refuse overwrite. Synthetic tests cover exact Q/K/V bytes, output tensors, hashes, rejection, and repeat-conversion refusal.
+
+**Not yet production-ready:** real checkpoint target schemas and tensor layouts have not been verified, concurrent cache publication requires stronger locking, and output still says `runtime_verified=false` and `loadable=false`. FP8 remains blocked; no automatic background conversions, UI enablement, runtime model loading or main merge. Physical Windows validation and real representative checkpoints remain necessary.
 
 ## Z3: Generation runtime integration
 
