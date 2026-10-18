@@ -9,6 +9,7 @@ from .zimage_fp8_validation import (validate_fp8_single_file, assess_managed_com
                                     plan_managed_auxiliary_binding)
 from .zimage_fp8_prototype import plan_fp8_bf16_windows
 from .zimage_schema_validation import validate_complete_tensor_schema
+from .zimage_fp8_stream import plan_fp8_stream
 from .zimage_fp8_evidence import probe_fp8_scalars, inspect_managed_auxiliaries
 from .settings import managed_model_location
 from .zimage_standalone import inspect_encoder_bundle, resolve_standalone_dependencies
@@ -48,6 +49,7 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
                 "schema_validation": validate_complete_tensor_schema(
                     path, managed_root, family="encoder", validation=encoder_validation
                 ),
+                "z218_stream_preflight": plan_fp8_stream(path, managed_root, family="encoder"),
                 "experimental_bf16_plan": plan_fp8_bf16_windows(path, validated=encoder_validation),
                 "quantization_evidence": probe.get("quantization_evidence"),
             },
@@ -60,13 +62,14 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
     encoder_evidence = (encoders[0]["header"].get("encoder_evidence") if len(encoders) == 1 else None)
     assessment = assess_managed_component_candidates(managed_inventory, encoder_evidence)
     return {
-        "diagnostic_version": "z2.17.2",
+        "diagnostic_version": "z2.18",
         "checkpoint": {
             "filename": source.name,
             "inspection": inspection,
             "fp8_scalar_probe": probe_fp8_scalars(source),
             "fp8_validation": checkpoint_validation,
             "schema_validation": transformer_schema,
+            "z218_stream_preflight": plan_fp8_stream(source, managed_root, family="transformer"),
             "experimental_bf16_plan": plan_fp8_bf16_windows(source, validated=checkpoint_validation),
         },
         "auxiliary_encoders": encoders,
@@ -90,6 +93,7 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
             "The Z2.16 BF16 plan samples tensor windows only; no full weights are converted or published.",
             "Z2.17.2 separates parameters from validated FP8 activation-scale metadata; non-unit input scales still require a verified FP8 runtime.",
             "Even a complete parameter schema match does not enable standalone loading or model conversion.",
+            "Z2.18 streaming preflight reports exact BF16 conversion sizes; export requires explicit isolated CLI invocation.",
         ],
         "ready": False, "loadable": False, "conversion_enabled": False,
     }
