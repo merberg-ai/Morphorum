@@ -33,11 +33,13 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
                 "tensor_count": probe.get("tensor_count"),
                 "dtypes": probe.get("dtypes"),
                 "sample_keys": probe.get("sample_keys"),
+                "encoder_evidence": probe.get("encoder_evidence"),
+                "quantization_evidence": probe.get("quantization_evidence"),
             },
             "bundle": inspect_encoder_bundle(path),
         })
     return {
-        "diagnostic_version": "z2.10",
+        "diagnostic_version": "z2.12",
         "checkpoint": {
             "filename": source.name,
             "inspection": inspection,
