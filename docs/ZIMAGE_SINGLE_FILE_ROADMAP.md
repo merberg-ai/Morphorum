@@ -112,6 +112,14 @@ Added `zimage_fp8_evidence.py`: after the independent safetensors structural che
 
 The same report inventories required tokenizer, VAE and scheduler files in the existing managed Z-Image-Turbo installation **without creating or modifying files**. File presence is not architectural compatibility and does not authorize component reuse. Any unrecognized BF16 scalar and quantization convention stays unverified. FP8 conversion, runtime GPU loading and automatic auxiliary reuse remain disabled.
 
+### Z2.14: FP8 marker semantics, numerical references, managed configuration evidence
+
+Read-only diagnostics now interpret the exact `scaled_fp8` marker **shape convention**, following upstream ComfyUI `comfy/utils.py:convert_old_quants`: a two-element marker sets `full_precision_matrix_mult`, while a zero-element marker does not. Values are not treated as a load authorization. At most two raw marker bytes are returned as hexadecimal with exploratory E4M3FN numeric decoding. Each checkpoint can also yield up to four samples of four FP8 weight bytes with matching F32 scale and a CPU-only reference multiplication. This follows the open-source `comfy_kitchen/backends/eager/quantization.py:dequantize_per_tensor_fp8` operation (`weight_float * scale`). Samples help independently verify our decoder; they are **not** whole-model conversion or evidence of generation correctness.
+
+Managed Z-Image-Turbo diagnostics now read only bounded, selected fields from the installed `model_index.json`, tokenizer config, VAE config, scheduler config and text-encoder config. They compare component class labels against the official Z-Image package roles without copying, mutating or automatically selecting any component. Even a matching class name is not standalone checkpoint compatibility. Raw tokenizer vocabulary and huge weight files are never read.
+
+References: https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/utils.py and https://github.com/Comfy-Org/comfy-kitchen/blob/main/comfy_kitchen/backends/eager/quantization.py ; official pipeline roles https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/model_index.json . FP8 production conversion, standalone text-encoder loading, reusing managed parts at runtime and UI activation remain disabled until an isolated Windows physical test establishes compatibility.
+
 ## Z3: Generation runtime integration
 
 Dispatch on verified model source and loader type; preserve the managed path unchanged. Exercise txt2img and img2img, prompt encoding, guidance, inference steps, seed determinism, cancellation, progress reports, GPU memory unloading and source switching on the user's RTX 4080 SUPER 16 GB.
