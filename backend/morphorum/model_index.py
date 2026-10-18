@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .console import emit_console
+from .zimage_inspect import inspect_zimage_checkpoint
 from .paths import MODEL_INDEX_DB, ensure_runtime_dirs
 from .settings import EXTERNAL_MODEL_FAMILIES, LORA_PATH_FAMILIES, MODEL_FAMILIES, load_settings, managed_model_location
 
@@ -159,7 +160,12 @@ def scan_models() -> dict[str, Any]:
                     extension = path.suffix.lower()
                     if extension not in extensions:
                         continue
-                    record_id = _model_id(family, kind, path)
+                    record_kind = kind
+                    if family == "zimage" and kind == "checkpoints" and extension == ".safetensors":
+                        inspection = inspect_zimage_checkpoint(path)
+                        if inspection.get("component_type") == "text_encoder":
+                            record_kind = "components"
+                    record_id = _model_id(family, record_kind, path)
                     if record_id in seen_ids:
                         continue
                     try:
@@ -171,7 +177,7 @@ def scan_models() -> dict[str, Any]:
                         (
                             record_id,
                             family,
-                            kind,
+                            record_kind,
                             path.stem,
                             path.name,
                             str(path),
@@ -184,7 +190,7 @@ def scan_models() -> dict[str, Any]:
                             now,
                         )
                     )
-                    counts[family][kind] += 1
+                    counts[family][record_kind] += 1
 
     with _DB_LOCK, _connect() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -296,6 +302,9 @@ def list_models(
     if kind:
         clauses.append("kind = ?")
         params.append(kind)
+    else:
+        # Auxiliary components are not selectable model entries.
+        clauses.append("kind != 'components'")
     if search:
         clauses.append("(name LIKE ? OR filename LIKE ? OR path LIKE ?)")
         pattern = f"%{search}%"
@@ -323,9 +332,9 @@ def model_summary() -> dict[str, Any]:
     init_model_index()
     with _DB_LOCK, _connect() as db:
         rows = db.execute(
-            "SELECT family, kind, COUNT(*) AS count FROM models GROUP BY family, kind"
+            "SELECT family, kind, COUNT(*) AS count FROM models WHERE kind != 'components' GROUP BY family, kind"
         ).fetchall()
-        total = db.execute("SELECT COUNT(*) AS count FROM models").fetchone()["count"]
+        total = db.execute("SELECT COUNT(*) AS count FROM models WHERE kind != 'components'").fetchone()["count"]
     counts: dict[str, dict[str, int]] = defaultdict(dict)
     for row in rows:
         counts[row["family"]][row["kind"]] = int(row["count"])
