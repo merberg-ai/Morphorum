@@ -343,3 +343,19 @@ Expected result: `cpu_samples_verified_nonloadable`, two sample entries, `weight
 ### Z2.20b3 Windows physical acceptance (2026-10-18)
 
 **PASS:** `cpu_samples_verified_nonloadable`; default hash verification passed and real scratch BF16 tensors materialized on CPU. Transformer sample `layers.0.adaLN_modulation.0.weight`, shape [15360,256], 7,864,320 bytes; encoder sample `model.layers.0.self_attn.k_proj.weight`, shape [1024,2560], 5,242,880 bytes. Both all-finite, no GPU, no full weights or inference, `loadable=false`. Next: explicitly gated *sequential* full CPU binding with memory telemetry, leaving GPU and managed production route unused.
+
+
+### Z2.20b4: explicitly gated sequential full CPU binding (unverified implementation)
+
+A *separate* CLI module `backend/morphorum/zimage_cpu_binding.py` accepts one `--family` at a time and requires `--execute-cpu-binding`. Preconditions: Z2.20b1 schema/config match, full scratch SHA-256 verification, CUDA masked using `CUDA_VISIBLE_DEVICES=-1` before Python imports Torch, Torch confirms CUDA unavailable, and available system RAM at least twice the chosen artifact size plus 12 GiB. Only then does a local-files-only model class `from_pretrained` load the explicitly selected scratch BF16 weights with a managed reference config. No generation, GPU inference or production model registry wiring. Successful import is `cpu_weights_bound_unverified` and is not a runtime verification. This may fail due to Diffusers/Transformers API differences; the failure details are valuable physical test evidence. CI and Windows test remain pending.
+
+Run transformer first *in its own PowerShell process*, with Morphorum/ComfyUI image jobs stopped to preserve memory:
+
+```powershell
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_cpu_binding --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --family transformer --execute-cpu-binding
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Do not run the encoder in the same process. When ready, launch another fresh CLI invocation with `--family encoder` and the same masked CUDA setting. If the first run is blocked, stop and examine its `reasons`; do not modify managed Z-Image files or weaken guards to force it. Console memory use can spike well beyond file size. `main` unchanged.
