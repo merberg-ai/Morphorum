@@ -392,3 +392,98 @@ def test_z218_stream_nan_fp8_refuses_publish_and_cleans_temporary_files(tmp_path
     assert not dest.exists()
     assert not list((tmp_path / "scratch").glob(".z218-stream-*"))
     assert not list((tmp_path / "scratch").glob("*.lock"))
+
+
+def test_z219_read_only_source_parity_checks_every_transformer_tensor_and_qkv(tmp_path):
+    from morphorum.zimage_fp8_stream import (
+        export_fp8_stream, verify_fp8_stream_against_source
+    )
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", expected)
+    scratch = tmp_path / "scratch" / "z219-transformer"
+    exported = export_fp8_stream(source, managed, family="transformer", scratch=scratch)
+    before = (scratch / "diffusion_pytorch_model.safetensors").read_bytes()
+    result = verify_fp8_stream_against_source(
+        source, managed, family="transformer", scratch=scratch
+    )
+    assert exported["status"] == "exported_nonloadable"
+    assert result["status"] == "source_sample_parity_verified_nonloadable"
+    assert result["tensor_count"] == 8
+    assert result["sample_windows_checked"] >= 8
+    assert result["fp8_windows_checked"] >= 8
+    assert result["sample_mismatches"] == 0
+    assert result["source_full_sha256_verified"] is False
+    assert not result["loadable"] and not result["runtime_verified"]
+    assert (scratch / "diffusion_pytorch_model.safetensors").read_bytes() == before
+
+
+def test_z219_read_only_source_parity_for_separate_qwen_encoder(tmp_path):
+    from morphorum.zimage_fp8_stream import (
+        export_fp8_stream, verify_fp8_stream_against_source
+    )
+    pytest.importorskip("torch")
+    source, expected = _encoder(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "encoder", expected)
+    scratch = tmp_path / "scratch" / "z219-encoder"
+    export_fp8_stream(source, managed, family="encoder", scratch=scratch)
+    result = verify_fp8_stream_against_source(
+        source, managed, family="encoder", scratch=scratch
+    )
+    assert result["status"] == "source_sample_parity_verified_nonloadable"
+    assert result["tensor_count"] == 3
+    assert result["fp8_windows_checked"] >= 2
+    assert not result["loadable"]
+
+
+def test_z219_parity_rejects_changed_source_metadata(tmp_path):
+    from morphorum.zimage_fp8_stream import (
+        FP8StreamError, export_fp8_stream, verify_fp8_stream_against_source
+    )
+    import os
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", expected)
+    scratch = tmp_path / "scratch" / "z219-changed"
+    export_fp8_stream(source, managed, family="transformer", scratch=scratch)
+    stat = source.stat()
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 100000))
+    with pytest.raises(FP8StreamError, match="checkpoint metadata differs"):
+        verify_fp8_stream_against_source(source, managed, family="transformer", scratch=scratch)
+
+
+def test_z219_parity_rejects_rehashed_but_numerically_wrong_scratch(tmp_path):
+    from morphorum.zimage_fp8_stream import (
+        FP8StreamError, export_fp8_stream, verify_fp8_stream_against_source
+    )
+    import hashlib
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", expected)
+    scratch = tmp_path / "scratch" / "z219-rehashed"
+    export_fp8_stream(source, managed, family="transformer", scratch=scratch)
+    artifact = scratch / "diffusion_pytorch_model.safetensors"
+    data = bytearray(artifact.read_bytes())
+    header_len = struct.unpack("<Q", data[:8])[0]
+    header = json.loads(data[8:8 + header_len])
+    name = "layers.0.attention.to_k.weight"
+    start, end = header[name]["data_offsets"]
+    data[8 + header_len + start] ^= 0x01
+    artifact.write_bytes(data)
+    # Recompute BOTH checksums to prove source parity does more than
+    # simply trust an internally self-consistent scratch manifest.
+    manifest_path = scratch / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["tensor_sha256"][name] = hashlib.sha256(
+        data[8 + header_len + start:8 + header_len + end]
+    ).hexdigest()
+    manifest["output_sha256"] = hashlib.sha256(data).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(FP8StreamError, match="Source-to-output window parity mismatch"):
+        verify_fp8_stream_against_source(
+            source, managed, family="transformer", scratch=scratch
+        )
