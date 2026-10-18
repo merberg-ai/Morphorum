@@ -11,7 +11,7 @@ from typing import Any
 
 from .console import emit_console
 from .paths import MODEL_INDEX_DB, ensure_runtime_dirs
-from .settings import EXTERNAL_MODEL_FAMILIES, LORA_PATH_FAMILIES, MODEL_FAMILIES, load_settings
+from .settings import EXTERNAL_MODEL_FAMILIES, LORA_PATH_FAMILIES, MODEL_FAMILIES, load_settings, managed_model_location
 
 CHECKPOINT_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf"}
 LORA_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth"}
@@ -132,7 +132,9 @@ def scan_models() -> dict[str, Any]:
             kinds.append("loras")
         for kind in kinds:
             extensions = CHECKPOINT_EXTENSIONS if kind == "checkpoints" else LORA_EXTENSIONS
-            configured = family_settings.get(kind, []) or []
+            configured = list(family_settings.get(kind, []) or [])
+            if family == "zimage" and kind == "checkpoints":
+                configured.append(str(managed_model_location("zimage", settings) / "civitai-checkpoints"))
             for raw_root in configured:
                 root = Path(os.path.expandvars(os.path.expanduser(str(raw_root)))).resolve(strict=False)
                 if not root.exists() or not root.is_dir():
