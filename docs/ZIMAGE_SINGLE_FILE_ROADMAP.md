@@ -338,3 +338,8 @@ git pull
 ```
 
 Expected result: `cpu_samples_verified_nonloadable`, two sample entries, `weights_fully_loaded=false`, `gpu_used=false`, `loadable=false`. This rehashes 18.96 GiB of scratch weights, which is intentional for the first materialization. No code runs on CUDA. Continue to sequential, fully bound CPU model experiments only after physical acceptance, memory telemetry, and CI review.
+
+
+### Z2.20b3 Windows physical acceptance (2026-10-18)
+
+**PASS:** `cpu_samples_verified_nonloadable`; default hash verification passed and real scratch BF16 tensors materialized on CPU. Transformer sample `layers.0.adaLN_modulation.0.weight`, shape [15360,256], 7,864,320 bytes; encoder sample `model.layers.0.self_attn.k_proj.weight`, shape [1024,2560], 5,242,880 bytes. Both all-finite, no GPU, no full weights or inference, `loadable=false`. Next: explicitly gated *sequential* full CPU binding with memory telemetry, leaving GPU and managed production route unused.
