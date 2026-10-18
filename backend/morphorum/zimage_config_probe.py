@@ -52,7 +52,7 @@ def probe_configuration(
             directory = root / name
             if directory.is_symlink() or not directory.is_dir():
                 raise ValueError("Missing managed component: " + name)
-            configurations[name] = _json(directory / ("tokenizer_config.json" if name == "tokenizer" else "config.json"))
+            configurations[name] = _json(directory / ("tokenizer_config.json" if name == "tokenizer" else "scheduler_config.json" if name == "scheduler" else "config.json"))
         for family, scratch_dir, filename in zip(
             ("transformer", "encoder"), scratch,
             ("diffusion_pytorch_model.safetensors", "model.safetensors"),
