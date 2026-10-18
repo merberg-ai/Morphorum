@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 
 from .paths import DATA_DIR, ensure_runtime_dirs
-from .settings import load_settings
+from .settings import load_settings, managed_model_location
 from .civitai_detail import model_details
 from .model_index import scan_models
 
@@ -129,11 +129,15 @@ def start_download(model_id: int, version_id: int, file_name: str) -> dict[str, 
     if not family or not kind:
         raise ValueError("Unsupported model type or base family.")
     paths = cfg.get("models", {}).get(family, {}).get(kind, [])
-    if not paths:
-        raise ValueError(f"Configure a {family} {kind} destination in Settings first.")
-    root = Path(os.path.expandvars(os.path.expanduser(str(paths[0])))).resolve()
-    if not root.is_dir():
-        raise ValueError("Configured destination folder does not exist.")
+    if family == "zimage" and kind == "checkpoints" and not paths:
+        root = managed_model_location("zimage", cfg) / "civitai-checkpoints"
+        root.mkdir(parents=True, exist_ok=True)
+    else:
+        if not paths:
+            raise ValueError(f"Configure a {family} {kind} destination in Settings first.")
+        root = Path(os.path.expandvars(os.path.expanduser(str(paths[0])))).resolve()
+        if not root.is_dir():
+            raise ValueError("Configured destination folder does not exist.")
     target = root / filename
     if target.exists():
         raise ValueError("Destination already exists. Never overwriting it.")
