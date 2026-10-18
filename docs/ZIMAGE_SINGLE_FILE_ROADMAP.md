@@ -235,8 +235,36 @@ Test-Path "D:\\models\\Checkpoints\\Z-Image\\zImageTurboQuantized_fp8ScaledE4m3f
 # Check source parity and output hashes after successful export:
 .\\.venv\\Scripts\\python.exe -m morphorum.zimage_fp8_stream --checkpoint "D:\\models\\Checkpoints\\Z-Image\\zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors" --family transformer --scratch "D:\\Morphorum-z219-test\\transformer" --verify-existing
 ```
-The encoder uses the same three modes but `--family encoder`, its separate FP8 encoder source file, and a **different new scratch directory**. Use the `managed_model_location("zimage") / "Z-Image-Turbo"` path configured by your installation; do not guess its location. Actual multi-gigabyte exports and real Windows verifier acceptance remain **pending physical owner tests**. First validate Download JSON and copy fallback, then share the Z2.18 preflight sizes and disk results; only run exports with sufficient disk space. Keep `dev-webui`, `main`, the original checkpoints and managed Z-Image untouched. Any GPU/offload testing is a distinct, subsequent milestone.
+The encoder uses the same three modes but `--family encoder`, its separate FP8 encoder source file, and a **different new scratch directory**. Use the `managed_model_location("zimage") / "Z-Image-Turbo"` path configured by your installation; do not guess its location. Real Windows transformer and encoder scratch exports and independent verifications **passed on 2026-10-18**; see the measured acceptance report below. First validate Download JSON and copy fallback, then share the Z2.18 preflight sizes and disk results; only run exports with sufficient disk space. Keep `dev-webui`, `main`, the original checkpoints and managed Z-Image untouched. Any GPU/offload testing is a distinct, subsequent milestone.
 
 Z2.19 CLI convenience: `--managed-root` is optional for the three physical acceptance commands. When omitted, Morphorum resolves the managed package from its configured `managed_model_location("zimage") / "Z-Image-Turbo"` setting; this avoids guessing the path. You must still supply the real checkpoint, family and scratch directory. The `--verify-existing` mode never creates or overwrites files.
 
 Z2.19 preflight troubleshooting: Literal documentation placeholders such as `"<transformer.safetensors>"` are not Windows paths. PowerShell sends those characters unchanged, producing `WinError 123` or a misleading general `blocked` status. The CLI now rejects angle-bracket checkpoint placeholders explicitly, suggests `Test-Path` when the file is missing, and surfaces actual `schema_mismatch` counts or lower-level schema reasons instead of collapsing all failures into “Z2.17.2 checks must pass.” These messages are read-only diagnostic improvements; all conversion and runtime safeguards remain unchanged.
+
+### Z2.19 physical acceptance: Windows transformer + Qwen3 encoder (2026-10-18)
+
+**Acceptance: PASS for both exported scratch artifacts.** These are owner-provided Windows outputs from the unmodified production-path sandbox exporter. Original models and managed Z-Image pipeline were not overwritten. Converted results remain explicitly **non-loadable**, with `conversion_enabled=false` and `runtime_verified=false`; this milestone grants **no** inference or application loader approval.
+
+| Metric | Z-Image transformer | Qwen3 text encoder |
+|---|---:|---:|
+| Original checkpoint size | 6,158,115,074 bytes | 4,411,721,216 bytes |
+| Converted BF16 safetensors size | 12,311,963,391 bytes | 8,044,981,765 bytes |
+| Managed-schema mapped tensors | 521/521 | 398/398 |
+| FP8 converted tensors | 276 | 252 |
+| Input activation calibration scales inspected | 0 | 252 |
+| Sample windows checked against original FP8 | 1,563 | 1,194 |
+| FP8 sample windows checked | 828 | 756 |
+| Sample elements checked | 50,016 | 38,208 |
+| Sample numerical mismatches | **0** | **0** |
+| Full scratch artifact hash verification | **PASS** | **PASS** |
+| Source-to-output sample parity | **PASS** | **PASS** |
+
+**Transformer artifact:** `D:\Morphorum-z219-test\transformer\diffusion_pytorch_model.safetensors`  
+SHA-256: `960bf96c6095bad51f520a6c343a21b15ebdbb87cb69b961e1b43ddfbf879110`
+
+**Text encoder artifact:** `D:\Morphorum-z219-test\encoder\model.safetensors`  
+SHA-256: `fca14c4c9242e38deae2c5205c4be04eed67db99f82d818245b6cde70e1e3a6a`
+
+The encoder `--verify-existing` was run **twice**, with identical passing counts. Together, the outputs contain **20,356,945,156 bytes (18.96 GiB)** of model artifacts, greater than a 16 GiB GPU even before text processing, VAE and activations. This establishes file conversion consistency and source-sampled numerical parity, **not** full source numerical equivalence, source-file SHA-256 equality, runtime component compatibility, or workable inference on 16 GiB VRAM.
+
+**Next milestone (Z2.20 proposal, not implemented by this acceptance record):** design a separate *experimental-only* inference preflight with explicit scratch path/config binding and immutable managed tokenizer, VAE and scheduler inputs. First estimate RAM/VRAM/offloading and ensure independent artifact manifests are verified; then validate strict model initialization and tiny low-resource smoke tests in a non-production execution route. Keep the managed generation pipeline and external model's disabled status unchanged until physical inference acceptance and separately approved integration.
