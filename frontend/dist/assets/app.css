@@ -1160,13 +1160,3 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
 .diagnostic-result-row.unverified .diagnostic-value { color:var(--warn, #ffc87b); }
 .diagnostic-truncated { padding:10px 14px; font-size:.82rem; color:var(--muted); }
 @media(max-width:1080px) { .diagnostic-controls { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media(max-width:600px) {
-  .diagnostic-controls { grid-template-columns:minmax(0,1fr); }
-  .diagnostic-actions { width:100%; }
-  .diagnostic-actions button { flex:1; }
-  .diagnostic-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .diagnostic-result-row { display:block; }
-  .diagnostic-path,.diagnostic-value { display:block; padding:6px 10px; }
-  .diagnostic-path { border-right:0; padding-bottom:2px; }
-  .diagnostic-value { padding-top:2px; }
-}
