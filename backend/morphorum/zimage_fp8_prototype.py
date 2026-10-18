@@ -157,7 +157,7 @@ def _check_isolated_destination(source: Path, destination: Path,
     if scratch.exists() or scratch.is_symlink():
         raise FP8PrototypeError("Experiment output directory already exists.")
     # Prevent traversing through symlinks in any existing destination ancestor.
-    for parent in (scratch, *scratch.parents):
+    for parent in (destination, *destination.parents):
         if parent.is_symlink():
             raise FP8PrototypeError("Symlink destination ancestor is not allowed.")
 
@@ -298,3 +298,31 @@ def export_fp8_bf16_windows(
         "bf16_payload_bytes": len(payload),
         "ready": False, "loadable": False, "conversion_enabled": False,
     }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI defaults to inspection; --export is required before any write."""
+    import argparse
+    parser = argparse.ArgumentParser(description="Z2.16 isolated FP8 BF16 window experiment")
+    parser.add_argument("--checkpoint", required=True, help="Existing safetensors source")
+    parser.add_argument("--output", help="Fresh scratch directory, outside checkpoint and managed trees")
+    parser.add_argument("--managed-root", help="Optional managed package root for write protection")
+    parser.add_argument("--export", action="store_true", help="Explicitly write tiny non-loadable samples")
+    args = parser.parse_args(argv)
+    if args.export:
+        if not args.output:
+            parser.error("--export requires --output")
+        try:
+            result = export_fp8_bf16_windows(
+                args.checkpoint, args.output, managed_root=args.managed_root
+            )
+        except (FP8PrototypeError, OSError) as exc:
+            parser.error(str(exc))
+    else:
+        result = plan_fp8_bf16_windows(args.checkpoint)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if result["status"] in ("planned", "sample_windows_exported") else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
