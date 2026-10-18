@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity and Z2.8 gated streaming conversion and Z2.9 cache integrity/concurrency protection and Z2.10 read-only real-checkpoint diagnostics added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity and Z2.8 gated streaming conversion and Z2.9 cache integrity/concurrency protection and Z2.10 read-only diagnostics and Z2.11 real FP8 scale/encoder evidence added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -93,6 +93,12 @@ Added `backend/morphorum/zimage_diagnostics.py` and the endpoint `GET /api/model
 On the user's Windows install, first scan Models, find an external Z-Image checkpoint ID, then visit `/api/models/<ID>/zimage-diagnostics` on the local Morphorum server. Save the returned JSON for comparison to the actual FP8 format and downloaded Qwen encoder. The report includes local file paths through the encoder bundle diagnostics; review/redact paths before sharing publicly. Missing tokenizer/config files are reported, not silently accepted.
 
 **Outstanding:** actual FP8 header report and a genuine text-encoder report, authoritative tensor compatibility, runtime load verification, and Z2.9 CI regression repair (the most recent backend run failed; syntax passed). Z2.10 does not bypass the conversion or generation safety gates.
+
+### Z2.11: real FP8 scale and standalone encoder diagnostics
+
+Based on the owner's actual 662-tensor checkpoint (209 `F8_E4M3`) and 903-tensor standalone Qwen-like encoder, inspection now recognizes `.scale_weight` alongside the older scale suffixes. The report exposes a total scale count, count paired with adjacent FP8 `.weight` tensors, unpaired scale count, FP8 weights without a recognized scale and up to 12 sample pairs of header shapes. It also reports Qwen-like encoder layer count and FP8 evidence **without** requiring adjacent HF JSON files for the structural fingerprint. Exact Qwen3 version and tokenizer/config pairing remain unverified. The prior misleading `scale_tensor_count=0` should now be corrected after a fresh scan/API diagnosis.
+
+The managed Z-Image package's existing tokenizer, scheduler and VAE may become reusable auxiliary components, but only after a future read-only verification of component configs and a separate runtime proof. No managed files are modified, moved, copied or automatically selected. FP8 conversion remains blocked until its dequantization semantics are established. Current work is diagnostics only; it does not mark any external model loadable.
 
 ## Z3: Generation runtime integration
 
