@@ -120,6 +120,7 @@ from .civitai_library import cached_metadata, sync_metadata, preview_path
 from .civitai_installed import installed_versions
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
+from .zimage_standalone import resolve_standalone_dependencies
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
 from .ffmpeg_tools import ffmpeg_status, normalize_ffmpeg_settings
@@ -2271,6 +2272,16 @@ def api_models_summary() -> dict[str, Any]:
 @app.post("/api/models/scan")
 def api_models_scan() -> dict[str, Any]:
     return scan_models()
+
+
+@app.get("/api/models/{model_id}/standalone-dependencies")
+def api_zimage_standalone_dependencies(model_id: str) -> dict[str, Any]:
+    """Read-only Z2 dependency inventory. Never approves generation."""
+    model = get_model(model_id)
+    if not model or model.get("family") != "zimage" or model.get("kind") != "checkpoints" or model.get("source") != "external":
+        raise HTTPException(status_code=404, detail="External Z-Image checkpoint not found.")
+    components = list_models(family="zimage", kind="components", limit=2000)
+    return resolve_standalone_dependencies(model["path"], components)
 
 
 @app.get("/api/models/{model_id}")
