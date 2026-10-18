@@ -15,7 +15,7 @@ test('Console preserves logs and adds a separately gated diagnostics tab', () =>
     'console-tab-logs', 'console-tab-diagnostics', 'console-window', 'level-filters',
     'diagnostic-model-select', 'diagnostic-section', 'diagnostic-status',
     'diagnostic-search', 'diagnostic-results', 'diagnostic-copy-json',
-    'diagnostic-copy-filtered', 'diagnostic-refresh']) {
+    'diagnostic-copy-filtered', 'diagnostic-download-json', 'diagnostic-refresh']) {
     assert.ok(html.includes('id="' + id + '"'), id);
   }
   assert.match(html, /id="console-panel-diagnostics"[^>]+hidden/);
