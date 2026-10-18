@@ -78,6 +78,7 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
         prefixes: Counter[str] = Counter()
         key_samples: list[str] = []
         tensor_keys: set[str] = set()
+        tensor_shapes: dict[str, list[int]] = {}
         for key, spec in parsed.items():
             if not isinstance(key, str) or not key or not isinstance(spec, dict):
                 return reject("Malformed tensor entry.")
@@ -100,6 +101,7 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
             if (expected_bits + 7) // 8 != end - start:
                 return reject("Tensor dimensions and dtype do not match byte offsets.")
             tensor_keys.add(key)
+            tensor_shapes[key] = shape
             intervals.append((start, end))
             dtypes[dtype] += 1
             prefixes[key.split(".", 1)[0]] += 1
@@ -164,6 +166,52 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
             else diffusers_markers if layout else original_markers
         )
         if layout:
+            # Inspect tensor dimensions and contiguous layer IDs, without
+            # assuming a particular released Z-Image depth or hidden size.
+            import re
+            numbered = {}
+            for block in ("layers", "noise_refiner", "context_refiner"):
+                matches = set()
+                for key in native:
+                    found = re.match(r"^" + block + r"\\.(\\d+)\\.", key)
+                    if found:
+                        matches.add(int(found.group(1)))
+                numbered[block] = {
+                    "count": len(matches),
+                    "contiguous": bool(matches) and matches == set(range(max(matches) + 1)),
+                    "highest_index": max(matches) if matches else None,
+                }
+            # Shape checks are sanity checks, not an architecture certification.
+            invalid_matrix = []
+            for key, shape in tensor_shapes.items():
+                if key.endswith((".weight", ".bias")) and shape and any(dim == 0 for dim in shape):
+                    invalid_matrix.append(key[:180])
+            quantized = [dtype for dtype in dtypes if dtype.startswith("F8_") or dtype == "F4"]
+            scale_keys = [key for key in tensor_keys
+                          if key.endswith((".scale", ".weight_scale", ".scale_inv", ".weight_scale_inv"))]
+            result["tensor_validation"] = {
+                "blocks": numbered,
+                "zero_sized_parameters": invalid_matrix[:20],
+                "precision": "quantized" if quantized else "floating",
+                "quantized_dtypes": sorted(quantized),
+                "scale_tensor_count": len(scale_keys),
+                "quantization_convention": "unverified" if quantized else "not_applicable",
+            }
+            if quantized:
+                result["precision_warning"] = (
+                    "FP8/low-bit tensors detected; scaling convention and conversion support "
+                    "are not verified even if scale tensors exist."
+                )
+            problems = [
+                name for name, info in numbered.items()
+                if not info["contiguous"]
+            ]
+            if invalid_matrix:
+                problems.append("zero-sized parameters")
+            if problems:
+                result["status"] = "unsupported"
+                result["reason"] = "Incomplete or malformed structural evidence: " + ", ".join(problems)
+                return result
             result["status"] = "needs_components"
             result["reason"] = (
                 "Z-Image transformer structural signature detected (" + layout + "). "
