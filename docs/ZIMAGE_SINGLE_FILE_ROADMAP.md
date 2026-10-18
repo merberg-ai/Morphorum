@@ -106,6 +106,12 @@ The latest Windows diagnostic confirmed 209 FP8 transformer tensors, 208 paired 
 
 Managed component reuse and FP8 dequantization semantics remain unverified and deliberately inactive; inspecting component file presence does not establish compatibility. The latest prior CI fix at `961399e` passed both backend and syntax workflows (920 passed, 1 skipped). Z2.12 test results are tracked separately.
 
+### Z2.13: bounded FP8 scalar probes and managed auxiliary inventory
+
+Added `zimage_fp8_evidence.py`: after the independent safetensors structural check, it reads at most eight ordinary F16/F32/F64 scalar values from `.scale_weight` entries and checks the `scaled_fp8` marker shape/dtype and small scalar value where supported. It does **not** read any FP8 matrix, reconstruct weights, infer the scale direction, or authorize loading. Diagnostic endpoint returns this evidence for the external checkpoint and indexed encoder files.
+
+The same report inventories required tokenizer, VAE and scheduler files in the existing managed Z-Image-Turbo installation **without creating or modifying files**. File presence is not architectural compatibility and does not authorize component reuse. Any unrecognized BF16 scalar and quantization convention stays unverified. FP8 conversion, runtime GPU loading and automatic auxiliary reuse remain disabled.
+
 ## Z3: Generation runtime integration
 
 Dispatch on verified model source and loader type; preserve the managed path unchanged. Exercise txt2img and img2img, prompt encoding, guidance, inference steps, seed determinism, cancellation, progress reports, GPU memory unloading and source switching on the user's RTX 4080 SUPER 16 GB.
