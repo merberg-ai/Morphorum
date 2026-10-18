@@ -133,11 +133,14 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
         missing = [key for key in fp8_keys if key.endswith(".weight") and
                    not any(key[:-len(".weight")] + suffix in tensor_keys
                            for suffix in scale_suffixes)]
+        unclassified_fp8 = sorted(k for k in fp8_keys if not k.endswith(".weight"))
         result["quantization_evidence"] = {
             "scale_tensor_count": len(scale_keys),
             "paired_fp8_scale_count": len(paired),
             "unpaired_scale_count": len(unpaired),
             "fp8_weights_without_scale_count": len(missing),
+            "unclassified_fp8_tensor_count": len(unclassified_fp8),
+            "unclassified_fp8_tensor_keys": unclassified_fp8[:20],
             "sample_pairs": [{"scale": scale[:180], "scale_shape": tensor_shapes[scale],
                               "weight_shape": tensor_shapes[weight]}
                              for scale, weight in paired[:12]],
