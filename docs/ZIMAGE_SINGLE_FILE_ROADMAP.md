@@ -303,3 +303,19 @@ Physical Windows command from Morphorum root after `git pull`:
 ```
 
 Expected success status: `config_shape_candidate_unverified`. If blocked, inspect `reasons` to identify missing/mismatched configs; do not modify managed files to silence the probe. **Next:** Z2.20b2 guarded CPU model-class initialization proof and then Z2.20c minimal inference smoke test. Wait for physical b1 results before enabling either. `main` is unchanged.
+
+
+### Z2.20b1 Windows physical acceptance (2026-10-18)
+
+**PASS:** `config_shape_candidate_unverified`; managed ZImagePipeline component config bindings: FlowMatchEulerDiscreteScheduler, Qwen3Model, Qwen2Tokenizer, ZImageTransformer2DModel, AutoencoderKL. BF16 scratch tensor schemas: transformer 521, encoder 398. No weights initialized or inference attempted.
+
+### Z2.20b2: experimental meta-only class construction (physical test pending)
+
+Added `backend/morphorum/zimage_meta_probe.py` and a fail-closed regression test. Requires b1 config/schema probe, imports model classes, constructs them on the PyTorch `meta` device using managed configs, checks **all** parameters and buffers remain on `meta`, then discards both model objects. Does not read scratch weights, initialize real CPU/GPU parameters, run forward, enable standalone models, or change managed package. This is a **class-constructor compatibility probe**, not yet the full CPU weight-loading test. Run with Morphorum stopped if possible:
+
+```powershell
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_meta_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder"
+```
+
+Expected: `meta_initialized_unverified`, each component initialized true, `weights_loaded=false`, `cuda_used=false`. Any `blocked` status warrants class/config investigation instead of editing managed files. Next after physical acceptance: separately gated CPU load of actual scratch tensors using explicit offload strategy; no full-GPU inference yet.
