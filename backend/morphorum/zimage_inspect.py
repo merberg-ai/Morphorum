@@ -137,6 +137,40 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
                 "checkpoint compatibility remain unverified."
             )
             return result
+        # Z2.2: conservative architectural evidence from upstream Z-Image
+        # transformer naming (original ComfyUI and Diffusers layouts).
+        # This is a fingerprint, never permission to execute a model.
+        native = {key.removeprefix("model.diffusion_model.").removeprefix("transformer.")
+                  for key in tensor_keys}
+        original_markers = {
+            "x_embedder": any(k.startswith("x_embedder.") for k in native),
+            "final_layer": any(k.startswith("final_layer.") for k in native),
+            "cap_embedder": any(k.startswith("cap_embedder.") for k in native),
+            "noise_refiner": any(k.startswith("noise_refiner.") for k in native),
+            "context_refiner": any(k.startswith("context_refiner.") for k in native),
+            "layers": any(k.startswith("layers.") for k in native),
+        }
+        diffusers_markers = dict(original_markers)
+        diffusers_markers["x_embedder"] = any(k.startswith("all_x_embedder.") for k in native)
+        diffusers_markers["final_layer"] = any(k.startswith("all_final_layer.") for k in native)
+        layout = None
+        if all(original_markers.values()):
+            layout = "zimage_original_transformer"
+        elif all(diffusers_markers.values()):
+            layout = "zimage_diffusers_transformer"
+        result["architecture"] = layout or "unverified"
+        result["architecture_evidence"] = (
+            original_markers if layout == "zimage_original_transformer"
+            else diffusers_markers if layout else original_markers
+        )
+        if layout:
+            result["status"] = "needs_components"
+            result["reason"] = (
+                "Z-Image transformer structural signature detected (" + layout + "). "
+                "Completeness, tensor dimensions, quantization support and accompanying "
+                "Qwen3 encoder/tokenizer, VAE and scheduler are not yet verified."
+            )
+            return result
         # This is a heuristic inventory, not a filename-based family guess.
         tokens = set(prefixes)
         hints = []
