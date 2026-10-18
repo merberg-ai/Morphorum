@@ -132,3 +132,18 @@ def test_z216_existing_production_converter_still_blocks_fp8(tmp_path):
     source = make_source(tmp_path)
     with pytest.raises(ConversionPreflightError, match="FP8"):
         plan_conversion(source, tmp_path / "cache")
+
+
+def test_z216_auxiliary_binding_is_candidate_only():
+    from morphorum.zimage_fp8_validation import plan_managed_auxiliary_binding
+    inventory = {"components": {x: {"present": True} for x in ("tokenizer", "vae", "scheduler")}}
+    assessment = {"checks": {x: True for x in ("tokenizer", "vae", "scheduler")}}
+    result = plan_managed_auxiliary_binding(inventory, assessment)
+    assert result["status"] == "candidates_identified"
+    assert all(not x["binding_enabled"] for x in result["components"].values())
+    assert not result["runtime_binding_enabled"]
+    assert not result["loadable"]
+    assessment["checks"]["vae"] = False
+    bad = plan_managed_auxiliary_binding(inventory, assessment)
+    assert bad["status"] == "requires_more_evidence"
+    assert bad["components"]["vae"]["status"] == "unverified"
