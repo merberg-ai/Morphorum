@@ -124,7 +124,9 @@ def scan_models() -> dict[str, Any]:
         if not isinstance(family_settings, dict):
             continue
         kinds: list[str] = []
-        if family in EXTERNAL_MODEL_FAMILIES:
+        if family in EXTERNAL_MODEL_FAMILIES or family == "zimage":
+            # Civitai standalone Z-Image checkpoints are searchable even though
+            # the runtime currently loads only complete managed Diffusers packages.
             kinds.append("checkpoints")
         if family in LORA_PATH_FAMILIES:
             kinds.append("loras")
