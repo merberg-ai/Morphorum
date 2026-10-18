@@ -324,3 +324,17 @@ Expected: `meta_initialized_unverified`, each component initialized true, `weigh
 ### Z2.20b2 Windows physical acceptance (2026-10-18)
 
 **PASS:** `meta_initialized_unverified` on the owner's Windows host. Transformer: 521 parameter tensors, 6,154,908,736 elements; encoder: 398 parameter tensors, 4,022,468,096 elements. All parameters and buffers resided on PyTorch `meta`; `weights_loaded=false`, `cuda_used=false`, `inference_attempted=false`, `loadable=false`. This validates construction of both classes from managed configurations, **not** real CPU weight binding, forward computation or generation. Next phase requires explicit sequential CPU-only weight loading and guards against accidental CUDA allocation; managed files remain immutable.
+
+
+### Z2.20b3: bounded real CPU scratch tensor materialization
+
+Implemented `backend/morphorum/zimage_cpu_probe.py` with fail-closed tests. After successful b1 schema/config preflight and full scratch integrity hashing, it materializes **one bounded tensor per model family**, sequentially, via `safetensors.safe_open(..., device="cpu")`, checking shape and finite values. Sample size defaults to at most 16 MiB, configurable 1–64 MiB. No production model is created, no whole checkpoint is loaded, no GPU is used, and no model is marked ready. This is deliberately a stepping-stone to actual full CPU model weight loading, *not* that loading itself.
+
+Windows physical test (from Morphorum root on dev-webui):
+
+```powershell
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_cpu_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder"
+```
+
+Expected result: `cpu_samples_verified_nonloadable`, two sample entries, `weights_fully_loaded=false`, `gpu_used=false`, `loadable=false`. This rehashes 18.96 GiB of scratch weights, which is intentional for the first materialization. No code runs on CUDA. Continue to sequential, fully bound CPU model experiments only after physical acceptance, memory telemetry, and CI review.
