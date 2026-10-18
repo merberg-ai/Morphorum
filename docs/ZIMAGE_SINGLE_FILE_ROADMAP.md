@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 in progress**. Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory implemented (not a working standalone loader)**. Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -29,6 +29,16 @@ When a configured external Z-Image checkpoint folder contains a safetensors file
 ## Z2: Separate native loader strategy
 
 Introduce a Z-Image checkpoint loader registered separately from the existing `ManagedModelManager` Diffusers path. Resolve text encoder/tokenizer/scheduler/transformer and verify the expected configuration. Decide whether supported single-file state dictionaries can populate a reusable managed architecture or require conversion; any conversion is explicit and cached under Morphorum control, not written over the original. Reject incomplete weights early.
+
+### Z2.1 implementation: read-only dependency inventory
+
+- Added `backend/morphorum/zimage_standalone.py`, isolated from the managed model loader.
+- Resolves a checkpoint's current inspection against separately indexed auxiliary encoder candidates, via `GET /api/models/{model_id}/standalone-dependencies`.
+- Uses tensor structure, not filenames, to identify encoder candidates. Compatibility remains unverified; tokenizer, VAE, scheduler and exact transformer mapping are required.
+- Exposes `missing_components`, `encoder_candidates`, status and reason. Always `ready=false` and `loadable=false`.
+- Existing generation validation still rejects all non-managed Z-Image checkpoints. This is deliberate until actual format mapping and loader tests pass.
+- Added isolated synthetic tests `tests/test_zimage_standalone.py`.
+- **Next:** inspect real FP8 and other checkpoint headers, positively fingerprint supported architecture, validate component bundles and build verified loader/conversion strategy. Do not turn on Use before Windows tests.
 
 ## Z3: Generation runtime integration
 
