@@ -379,3 +379,8 @@ $env:CUDA_VISIBLE_DEVICES="-1"
 .\.venv\Scripts\python.exe -m morphorum.zimage_cpu_binding --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --family encoder --execute-cpu-binding
 Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
+
+
+### Z2.20b4 encoder Windows physical acceptance (2026-10-18)
+
+**PASS for encoder CPU weight binding.** With `CUDA_VISIBLE_DEVICES=-1`, the Transformers `transformers_local_cpu` path bound **398/398 parameter tensors / 4,022,468,096 parameter elements**, loading progress 100%. Starting available RAM 50.91 GiB, minimum available RAM threshold 26.98 GiB. Result `status=cpu_weights_bound_unverified`, `cuda_used=false`, `inference_attempted=false`, `runtime_verified=false`, `loadable=false`. The transformer was independently accepted earlier (521/521, 6,154,908,736 elements). **Z2.20b4 sequential CPU weight-binding acceptance is complete for both components.** This is not evidence that transformer and encoder can coexist with the VAE and activations or execute a forward pass. Follow-on Z2.20c should first measure a guarded single-component forward/pipeline resource plan and reuse immutable managed tokenizer/scheduler/VAE through isolated references; keep production loading disabled and `main` unchanged.
