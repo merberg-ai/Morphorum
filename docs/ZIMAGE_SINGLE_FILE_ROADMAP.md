@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging primitive added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -67,6 +67,12 @@ Automated tests in `tests/test_zimage_conversion.py` cover deterministic cache p
 `stage_verified_tensor_copy()` implements the first executable, CPU-only conversion-preparation path for **Diffusers-layout, ordinary floating-point safetensors only**. An independently supplied complete expected tensor-name/shape schema must match exactly: missing, extra or wrong-shaped entries are rejected before any copying. The file is copied into an isolated temporary cache directory, checked for source mutation and size, and then atomically published along with a manifest declaring `runtime_verified=false` and `loadable=false`. Existing destinations are never intentionally overwritten. Source safetensors remain immutable. Synthetic tests verify exact-schema matching, cache publication, non-overwrite and original-layout rejection.
 
 This **does not yet perform tensor-name conversion** of original/ComfyUI-format checkpoints. The full expected tensor schema has not been established from verified actual checkpoint headers, so production conversion cannot safely be activated. FP8/low-bit formats remain blocked; no runtime loading, UI-ready status or managed-model changes were introduced. Next is upstream-verified original-to-Diffusers tensor mapping, validated real checkpoint fixtures, SHA-256 integrity checks and Windows physical testing.
+
+### Z2.7: upstream-aligned tensor mapping and SHA-256 integrity
+
+Added `plan_original_tensor_mapping()`, a **non-executable** full-schema validator following upstream Diffusers Z-Image key renames and fused QKV splitting. It requires a caller-supplied *complete* expected output shape/name schema and rejects mismatches, duplicate destinations, and invalid fused QKV dimensions. Original checkpoint tensors are not read into memory or converted by this function. The existing Diffusers-layout cache stager now hashes both the source and staged file with SHA-256 before atomic publication, recording both digests in the unverified manifest. Synthetic tests cover mapping and integrity. No model is marked ready or loadable.
+
+Still required: authoritative source and target schemas for real Z-Image variants, a memory-safe executable QKV splitting converter, validated FP8 scale handling, component compatibility, cache concurrency hardening and physical Windows RTX 4080 SUPER testing. This stage does not implement full original-format conversion or native generation.
 
 ## Z3: Generation runtime integration
 
