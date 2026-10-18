@@ -173,7 +173,8 @@ def inspect_managed_auxiliaries(destination: str | Path) -> dict[str, Any]:
                        ("_class_name", "num_train_timesteps", "shift")),
         "text_encoder": ("text_encoder/config.json",
                          ("model_type", "hidden_size", "num_hidden_layers",
-                          "num_attention_heads", "intermediate_size")),
+                          "num_attention_heads", "num_key_value_heads", "head_dim",
+                          "vocab_size", "intermediate_size")),
     }
     result["configuration"] = {}
     for name, (relative, fields) in configs.items():
