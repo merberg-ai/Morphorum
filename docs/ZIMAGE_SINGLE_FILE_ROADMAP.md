@@ -359,3 +359,10 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Do not run the encoder in the same process. When ready, launch another fresh CLI invocation with `--family encoder` and the same masked CUDA setting. If the first run is blocked, stop and examine its `reasons`; do not modify managed Z-Image files or weaken guards to force it. Console memory use can spike well beyond file size. `main` unchanged.
+
+
+### Z2.20b4 Windows first transformer attempt and targeted fix (2026-10-18)
+
+First explicit transformer CPU bind returned `blocked` after successful artifact/integrity and memory gating (`available_ram_gib=50.94`, `required_available_ram_gib=34.93`, `cuda_used=false`): Diffusers `ModelMixin.from_pretrained` searched the intentionally weights-only scratch transformer directory for `config.json`, even though a managed config dict was provided. This is a **loader packaging/API mismatch**, not evidence that the converted weights are invalid.
+
+Corrected the *experimental transformer-only* loading path to instantiate `ZImageTransformer2DModel.from_config(managed_config)` under `torch.device("meta")`, followed by `accelerate.load_checkpoint_and_dispatch` with an explicit scratch `.safetensors` file, `device_map={"": "cpu"}`, `dtype=torch.bfloat16`, and `strict=True`. Encoder loader path and production model handling are unchanged. This is not yet physically verified and might reveal further model-loader compatibility issues. Re-run the same masked-CUDA transformer CLI from the previous section. Do not copy configs into scratch, change managed components, or enable external model selection.
