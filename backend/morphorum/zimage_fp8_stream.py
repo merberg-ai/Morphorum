@@ -389,27 +389,135 @@ def verify_fp8_stream_artifact(directory: str | Path) -> dict[str, Any]:
             "loadable": False, "runtime_verified": False, "conversion_enabled": False}
 
 
+def verify_fp8_stream_against_source(
+    checkpoint: str | Path, managed_root: str | Path, *,
+    family: str, scratch: str | Path,
+) -> dict[str, Any]:
+    """Z2.19 read-only Windows acceptance: full hashes + bounded source parity.
+
+    Checks every output tensor's SHA-256, the full artifact SHA-256, exact
+    converted state-dict schema, and independent CPU samples from the
+    original checkpoint (including each separate fused Q/K/V region).
+    Sample parity is NOT full numerical equivalence or runtime approval.
+    """
+    import torch
+
+    source = Path(checkpoint)
+    managed = Path(managed_root)
+    folder = Path(scratch)
+    if source.is_symlink() or not source.is_file():
+        raise FP8StreamError("Missing or unsafe original checkpoint.")
+    if family not in ("transformer", "encoder"):
+        raise FP8StreamError("Unexpected checkpoint family.")
+    verified = verify_fp8_stream_artifact(folder)
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    observed_source = source.resolve(strict=True)
+    source_stat = source.stat()
+    if (manifest.get("source") != str(observed_source)
+            or manifest.get("family") != family
+            or manifest.get("source_size_bytes") != source_stat.st_size
+            or manifest.get("source_mtime_ns") != source_stat.st_mtime_ns):
+        raise FP8StreamError("Original checkpoint metadata differs from exported artifact.")
+    schema_check = validate_complete_tensor_schema(source, managed, family=family)
+    if schema_check["status"] != "schema_matches":
+        raise FP8StreamError("Source schema no longer matches managed reference.")
+    header, source_data, actions, _, _ = _tensor_actions(source, managed, family)
+    artifact = folder / manifest["output_file"]
+    output_header, output_data = _load_header(artifact)
+    if set(output_header) != {a["name"] for a in actions}:
+        raise FP8StreamError("Converted output tensor inventory differs from original mapping.")
+    for action in actions:
+        actual = output_header[action["name"]]
+        if (actual["dtype"] != action["output_dtype"]
+                or actual["shape"] != action["shape"]
+                or actual["data_offsets"] != [
+                    action["output_offset"], action["output_offset"] + action["output_bytes"]
+                ]):
+            raise FP8StreamError("Converted output tensor schema differs from expected original mapping.")
+
+    sample_values = 0
+    windows = 0
+    fp8_windows = 0
+    with source.open("rb") as orig, artifact.open("rb") as converted_file:
+        for action in actions:
+            scale = None
+            input_bytes = 1 if action["source_dtype"] == "F8_E4M3" else _SUPPORTED_COPY[action["source_dtype"]]
+            output_bytes_per = _SUPPORTED_COPY[action["output_dtype"]]
+            if action["source_dtype"] == "F8_E4M3":
+                scalar = header[action["scale_key"]]
+                orig.seek(source_data + scalar["data_offsets"][0])
+                raw_scale = orig.read(4)
+                if len(raw_scale) != 4:
+                    raise FP8StreamError("Original FP8 weight scale truncated.")
+                scale = torch.tensor(struct.unpack("<f", raw_scale)[0], dtype=torch.bfloat16)
+            elements = action["source_bytes"] // input_bytes
+            width = min(32, elements)
+            first = max(0, (elements - width) // 2)
+            last = max(0, elements - width)
+            for index in sorted({0, first, last}):
+                orig.seek(source_data + action["source_offset"] + index * input_bytes)
+                raw = orig.read(width * input_bytes)
+                converted_file.seek(output_data + action["output_offset"] + index * output_bytes_per)
+                output = converted_file.read(width * output_bytes_per)
+                if len(raw) != width * input_bytes or len(output) != width * output_bytes_per:
+                    raise FP8StreamError("Truncated window during independent source comparison.")
+                if scale is not None:
+                    original = torch.frombuffer(bytearray(raw), dtype=torch.uint8).view(
+                        torch.float8_e4m3fn
+                    ).to(torch.bfloat16)
+                    reference = (original * scale).contiguous().view(torch.uint8).numpy().tobytes()
+                    fp8_windows += 1
+                else:
+                    reference = raw
+                if reference != output:
+                    raise FP8StreamError("Source-to-output window parity mismatch: " + action["name"][:110])
+                windows += 1
+                sample_values += width
+    after = source.stat()
+    if after.st_size != source_stat.st_size or after.st_mtime_ns != source_stat.st_mtime_ns:
+        raise FP8StreamError("Source checkpoint changed during independent verification.")
+    return {
+        "status": "source_sample_parity_verified_nonloadable",
+        "artifact_integrity": verified["status"],
+        "family": family, "tensor_count": len(actions),
+        "sample_windows_checked": windows, "fp8_windows_checked": fp8_windows,
+        "sample_elements_checked": sample_values, "sample_mismatches": 0,
+        "full_source_numerical_equivalence_verified": False,
+        "source_full_sha256_verified": False,
+        "runtime_verified": False, "loadable": False, "conversion_enabled": False,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Morphorum Z2.18 isolated conversion (CPU only)")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--managed-root", required=True, help="Managed Z-Image-Turbo package directory")
     parser.add_argument("--family", choices=("transformer", "encoder"), required=True)
     parser.add_argument("--scratch", help="New isolated output directory on a disk with enough room")
-    parser.add_argument("--export", action="store_true",
-                        help="Explicitly export a NON-LOADABLE scratch checkpoint")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--export", action="store_true",
+                      help="Explicitly export a NON-LOADABLE scratch checkpoint")
+    mode.add_argument("--verify-existing", action="store_true",
+                      help="Read-only revalidation of an existing scratch conversion")
     args = parser.parse_args(argv)
-    if args.export and not args.scratch:
-        parser.error("--export requires --scratch")
+    if (args.export or args.verify_existing) and not args.scratch:
+        parser.error("--export and --verify-existing require --scratch")
     try:
-        result = (export_fp8_stream(args.checkpoint, args.managed_root,
-                                  family=args.family, scratch=args.scratch)
-                  if args.export else plan_fp8_stream(
-                      args.checkpoint, args.managed_root, family=args.family,
-                      scratch=args.scratch))
+        if args.verify_existing:
+            result = verify_fp8_stream_against_source(
+                args.checkpoint, args.managed_root, family=args.family, scratch=args.scratch)
+        elif args.export:
+            result = export_fp8_stream(args.checkpoint, args.managed_root,
+                                      family=args.family, scratch=args.scratch)
+        else:
+            result = plan_fp8_stream(args.checkpoint, args.managed_root, family=args.family,
+                                     scratch=args.scratch)
     except (FP8StreamError, OSError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["status"] in ("planned", "exported_nonloadable") else 2
+    return 0 if result["status"] in (
+        "planned", "exported_nonloadable", "source_sample_parity_verified_nonloadable"
+    ) else 2
 
 
 if __name__ == "__main__":
