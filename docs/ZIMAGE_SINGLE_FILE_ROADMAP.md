@@ -145,3 +145,11 @@ Unit tests for each checkpoint class, malformed file, accidental cross-family lo
 Verify the newly introduced Z1 inspector in CI; inspect representative actual Z-Image checkpoint headers and define positively verified architecture signatures before any loader integration. UI integration and the owner-requested layout tweaks remain future work.
 
 First verify and remove the unexpected Wan2GP entry in Settings if undesired, save, and rescan. It only affects Morphorum's indexing/download choice; removing it does not delete any Wan2GP files. The already-downloaded file stays where it is unless manually moved. Then gather representative checkpoints, refine Z1/Z2 format support, and collect the remaining UI requests.
+
+### Z2.15: full FP8 pairing validation and independent CPU reference tests
+
+Added backend/morphorum/zimage_fp8_validation.py. The diagnostic checker requires one matching F32 scalar .scale_weight for every F8_E4M3 .weight, no unexpected FP8 tensor apart from scaled_fp8, an approved [0] or [2] marker shape, and finite positive values for every scale (bounded at 4096 pairs). It samples up to eight weights with up to sixteen FP8 elements each, and compares our E4M3FN decoder and multiplied values against CPU PyTorch without reading full matrices. The result is fail-closed when torch is unavailable or comparisons fail. Tests include all 256 possible FP8 byte patterns and corruption cases.
+
+The existing /api/models/{model_id}/zimage-diagnostics endpoint now reports diagnostic_version z2.15, transformer fp8_validation, and auxiliary encoder fp8_validation. Managed reuse assessment additionally compares actual encoder embedding, vocab, MLP, attention input and layer dimension evidence with the installed managed Qwen3 config. All are read-only evidence: compatible=false, reuse_enabled=false, conversion_enabled=false and loadable=false, irrespective of successful validation.
+
+Windows acceptance: update dev-webui, restart, open the existing diagnostic URL, confirm both FP8 validation statuses are reference_matched and counts are 208 and 252, review managed_reuse_assessment checks. Keep standalone generation disabled pending a separately reviewed runtime plan and hardware acceptance.
