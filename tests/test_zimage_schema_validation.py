@@ -487,3 +487,47 @@ def test_z219_parity_rejects_rehashed_but_numerically_wrong_scratch(tmp_path):
         verify_fp8_stream_against_source(
             source, managed, family="transformer", scratch=scratch
         )
+
+
+
+def test_z219_cli_preflight_rejects_literal_placeholder_with_actionable_message(tmp_path):
+    from morphorum.zimage_fp8_stream import (
+        FP8StreamError, export_fp8_stream, plan_fp8_stream,
+        verify_fp8_stream_against_source,
+    )
+    placeholder = "<transformer.safetensors>"
+    managed = tmp_path / "managed"
+    scratch = tmp_path / "scratch" / "out"
+    result = plan_fp8_stream(placeholder, managed, family="transformer", scratch=scratch)
+    assert result["status"] == "blocked"
+    assert "placeholder" in result["reason"]
+    assert "without angle brackets" in result["reason"]
+    with pytest.raises(FP8StreamError, match="placeholder"):
+        export_fp8_stream(placeholder, managed, family="transformer", scratch=scratch)
+    with pytest.raises(FP8StreamError, match="placeholder"):
+        verify_fp8_stream_against_source(
+            placeholder, managed, family="transformer", scratch=scratch
+        )
+    assert not scratch.exists()
+
+
+def test_z219_preflight_missing_checkpoint_suggests_test_path(tmp_path):
+    from morphorum.zimage_fp8_stream import plan_fp8_stream
+    absent = tmp_path / "missing.safetensors"
+    result = plan_fp8_stream(absent, tmp_path / "managed", family="transformer")
+    assert result["status"] == "blocked"
+    assert "Checkpoint file not found" in result["reason"]
+    assert "Test-Path" in result["reason"]
+
+
+def test_z219_schema_preflight_explains_exact_mismatch(tmp_path):
+    from morphorum.zimage_fp8_stream import plan_fp8_stream
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", {**expected, "unexpected_reference.weight": (1,)})
+    result = plan_fp8_stream(source, managed, family="transformer")
+    assert result["status"] == "blocked"
+    assert "schema_mismatch" in result["reason"]
+    assert "1 missing" in result["reason"]
+    assert result["loadable"] is False
