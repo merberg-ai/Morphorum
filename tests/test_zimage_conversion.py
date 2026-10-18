@@ -205,3 +205,47 @@ def test_z28_bad_mapping_never_publishes_cache(tmp_path):
     with pytest.raises(ConversionPreflightError, match="exactly match"):
         convert_original_checkpoint(source, root, expected_output_shapes={"fake": (1,)})
     assert not list(root.rglob("*.safetensors"))
+
+
+def test_z29_verify_cache_detects_corruption(tmp_path):
+    from morphorum.zimage_cache import CacheIntegrityError, verify_staged_cache
+    source = tmp_path / "weights.safetensors"
+    names = ["all_x_embedder.weight", "all_final_layer.weight", "cap_embedder.weight",
+             "noise_refiner.0.weight", "context_refiner.0.weight", "layers.0.weight"]
+    fields = {name: {"dtype": "F16", "shape": [1], "data_offsets": [2*i, 2*i+2]}
+              for i, name in enumerate(names)}
+    header = json.dumps(fields).encode()
+    source.write_bytes(struct.pack("<Q", len(header)) + header + b"ab" * len(names))
+    plan = stage_verified_tensor_copy(
+        source, tmp_path / "cache", expected_tensor_shapes={name: (1,) for name in names}
+    )
+    folder = tmp_path / "cache" / "standalone-zimage" / plan["cache_key"]
+    assert verify_staged_cache(folder)["integrity"] == "verified"
+    weights = folder / "diffusion_pytorch_model.safetensors"
+    with weights.open("ab") as output:
+        output.write(b"corrupted")
+    with pytest.raises(CacheIntegrityError, match="differ"):
+        verify_staged_cache(folder)
+
+
+def test_z29_exclusive_reservation_rejects_concurrent_writer(tmp_path):
+    from morphorum.zimage_cache import CacheIntegrityError, ExclusiveCacheReservation
+    destination = tmp_path / "cache" / "some-identifier"
+    with ExclusiveCacheReservation(destination):
+        with pytest.raises(CacheIntegrityError, match="reservation"):
+            with ExclusiveCacheReservation(destination):
+                pass
+        assert destination.with_name(destination.name + ".lock").exists()
+    assert not destination.with_name(destination.name + ".lock").exists()
+
+
+def test_z29_failed_conversion_releases_lock(tmp_path):
+    from morphorum.zimage_cache import ExclusiveCacheReservation
+    source = tmp_path / "original.safetensors"
+    checkpoint(source)
+    root = tmp_path / "cache"
+    plan = plan_conversion(source, root)
+    with pytest.raises(ConversionPreflightError, match="exactly match"):
+        convert_original_checkpoint(source, root, expected_output_shapes={"bad": (1,)})
+    lock = (root / "standalone-zimage" / plan["cache_key"]).with_name(plan["cache_key"] + ".lock")
+    assert not lock.exists()
