@@ -348,11 +348,18 @@ def convert_original_checkpoint(
     expected_output_shapes: dict[str, tuple[int, ...]],
 ) -> dict[str, Any]:
     """Reserve conversion destination and independently verify published weights."""
-    from .zimage_cache import ExclusiveCacheReservation, verify_staged_cache
+    from .zimage_cache import CacheIntegrityError, ExclusiveCacheReservation, verify_staged_cache
     plan = plan_conversion(checkpoint, cache_root)
-    with ExclusiveCacheReservation(plan["cache_destination"]):
+    try:
+        reservation = ExclusiveCacheReservation(plan["cache_destination"])
+        reservation.__enter__()
+    except CacheIntegrityError as exc:
+        raise ConversionPreflightError(str(exc)) from exc
+    try:
         result = _convert_original_checkpoint(
             checkpoint, cache_root, expected_output_shapes=expected_output_shapes
         )
         verify_staged_cache(plan["cache_destination"])
         return result
+    finally:
+        reservation.__exit__(None, None, None)
