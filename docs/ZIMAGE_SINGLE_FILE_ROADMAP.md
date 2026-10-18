@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory implemented (not a working standalone loader)**. Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint implemented. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -39,6 +39,12 @@ Introduce a Z-Image checkpoint loader registered separately from the existing `M
 - Existing generation validation still rejects all non-managed Z-Image checkpoints. This is deliberate until actual format mapping and loader tests pass.
 - Added isolated synthetic tests `tests/test_zimage_standalone.py`.
 - **Next:** inspect real FP8 and other checkpoint headers, positively fingerprint supported architecture, validate component bundles and build verified loader/conversion strategy. Do not turn on Use before Windows tests.
+
+### Z2.2: preliminary architecture fingerprint
+
+Inspection now detects two Z-Image transformer tensor-key layouts through independent structural markers: original/ComfyUI form (`x_embedder`, `final_layer`, `cap_embedder`, `noise_refiner`, `context_refiner`, `layers`, including `model.diffusion_model.` prefix), and the Diffusers form (`all_x_embedder`, `all_final_layer` with the same other blocks). Source references: Diffusers `convert_z_image_transformer_checkpoint_to_diffusers` and `ZImageTransformer2DModel`. Diagnostics include `architecture` and `architecture_evidence`. Matching remains a **preliminary fingerprint**, not proof of tensor completeness or supported precision: `ready=false`, `loadable=false`.
+
+Outstanding work: inspect actual sample headers including the owner's FP8 Civitai file, assess required dimensions/layer counts and FP8 quantization scale conventions, validate matching Qwen3 tokenizer/config and Flux AE VAE, select the compatible Diffusers converter/loading API, then run real GPU tests. No real checkpoint bytes were available in this execution environment. The managed pipeline is unchanged.
 
 ## Z3: Generation runtime integration
 
