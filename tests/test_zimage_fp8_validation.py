@@ -106,3 +106,19 @@ def test_z215_managed_component_candidate_is_not_loader_approval():
     mismatched = assess_managed_component_candidates(inventory, {**evidence, "layer_count": 35})
     assert mismatched["status"] == "incomplete_or_mismatched"
     assert not mismatched["checks"]["encoder_layers"]
+
+
+def test_z215_e4m3fn_decoder_matches_pytorch_all_256_bit_patterns():
+    import torch
+    from morphorum.zimage_fp8_evidence import _decode_e4m3fn_byte
+    raw = bytearray(range(256))
+    reference = torch.frombuffer(raw, dtype=torch.uint8).view(torch.float8_e4m3fn)
+    fp32 = reference.to(dtype=torch.float32).tolist()
+    for code, value in enumerate(fp32):
+        decoded = _decode_e4m3fn_byte(code)
+        if math.isnan(value):
+            assert decoded is None
+        else:
+            assert decoded == value
+            if value == 0.0:
+                assert math.copysign(1.0, decoded) == math.copysign(1.0, value)
