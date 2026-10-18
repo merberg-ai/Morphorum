@@ -268,3 +268,21 @@ SHA-256: `fca14c4c9242e38deae2c5205c4be04eed67db99f82d818245b6cde70e1e3a6a`
 The encoder `--verify-existing` was run **twice**, with identical passing counts. Together, the outputs contain **20,356,945,156 bytes (18.96 GiB)** of model artifacts, greater than a 16 GiB GPU even before text processing, VAE and activations. This establishes file conversion consistency and source-sampled numerical parity, **not** full source numerical equivalence, source-file SHA-256 equality, runtime component compatibility, or workable inference on 16 GiB VRAM.
 
 **Next milestone (Z2.20 proposal, not implemented by this acceptance record):** design a separate *experimental-only* inference preflight with explicit scratch path/config binding and immutable managed tokenizer, VAE and scheduler inputs. First estimate RAM/VRAM/offloading and ensure independent artifact manifests are verified; then validate strict model initialization and tiny low-resource smoke tests in a non-production execution route. Keep the managed generation pipeline and external model's disabled status unchanged until physical inference acceptance and separately approved integration.
+
+
+### Z2.20a: isolated inference capacity and artifact preflight (implementation)
+
+Added `backend/morphorum/zimage_inference_preflight.py` and synthetic guard tests in `tests/test_zimage_inference_preflight.py`. This is **read-only and non-executable**: it never imports model weights, creates a pipeline, moves files, changes the managed model, marks a standalone checkpoint ready, or authorizes inference. It checks distinct scratch directories, family-bound immutable Z2.19 manifests, converted weight filenames/sizes, managed tokenizer/VAE/scheduler directory presence, and by default full per-tensor plus artifact SHA-256 through the Z2.18 verifier. It reports a conservative capacity heuristic and whether the exact export hashes were checked. It does **not** verify runtime config compatibility or scheduler semantics.
+
+On the Windows test machine, from `D:\Morphorum-test` on `dev-webui`:
+
+```powershell
+git pull
+# Determine installed system RAM (GiB), then substitute the reported number below:
+[math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+.\.venv\Scripts\python.exe -m morphorum.zimage_inference_preflight --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --ram-gib 32 --vram-gib 16
+```
+
+**Important:** `--ram-gib 32` is an *example only*; replace with the actual measured RAM value. `--managed-root` can optionally specify the existing managed Z-Image-Turbo directory, otherwise it resolves from settings. This preflight can take time when hashing 18.96 GiB of weights. `--skip-hashes` is a diagnostic speed shortcut that cannot count as integrity acceptance.
+
+A `capacity_candidate_unverified` result means only that weight files fit the very rough RAM/VRAM heuristic with fixed reserves, not that inference can work. `capacity_warning_unverified` indicates likely offload requirements; `blocked` indicates failed inputs or artifact checks. The transformer itself is about 11.47 GiB of BF16 weights, leaving insufficient proven margin for a fully GPU-resident 16 GiB workflow; the preferred *experiment* is sequential Qwen CPU offload and transformer/group offload, subject to physical performance testing. Static reserves of 3 GiB VRAM and 8 GiB RAM are intentionally not a complete activation/allocator model. **Next:** Z2.20b isolated configuration and CPU initialization probes, followed separately by a deliberately gated Z2.20c low-resolution inference smoke test. Neither is implemented here. Keep the production managed loader and `main` unchanged.
