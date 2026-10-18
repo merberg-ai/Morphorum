@@ -326,14 +326,21 @@ def stage_verified_tensor_copy(
     expected_tensor_shapes: dict[str, tuple[int, ...]],
 ) -> dict[str, Any]:
     """Reserve destination across processes before staging; verify publication."""
-    from .zimage_cache import ExclusiveCacheReservation, verify_staged_cache
+    from .zimage_cache import CacheIntegrityError, ExclusiveCacheReservation, verify_staged_cache
     plan = plan_conversion(checkpoint, cache_root)
-    with ExclusiveCacheReservation(plan["cache_destination"]):
+    try:
+        reservation = ExclusiveCacheReservation(plan["cache_destination"])
+        reservation.__enter__()
+    except CacheIntegrityError as exc:
+        raise ConversionPreflightError(str(exc)) from exc
+    try:
         result = _stage_verified_tensor_copy(
             checkpoint, cache_root, expected_tensor_shapes=expected_tensor_shapes
         )
         verify_staged_cache(plan["cache_destination"])
         return result
+    finally:
+        reservation.__exit__(None, None, None)
 
 
 def convert_original_checkpoint(
