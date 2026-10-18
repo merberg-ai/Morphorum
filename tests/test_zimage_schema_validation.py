@@ -233,3 +233,104 @@ def test_z217_orphan_unit_input_scale_blocks_even_if_value_is_one(tmp_path):
     assert result["status"] == "blocked"
     assert "Orphan input scale" in result["reason"]
     assert not result["schema_verified"]
+
+
+def test_z218_stream_preflight_is_exact_and_read_only(tmp_path):
+    from morphorum.zimage_fp8_stream import plan_fp8_stream
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", expected)
+    raw = source.read_bytes()
+    result = plan_fp8_stream(source, managed, family="transformer")
+    assert result["status"] == "planned", result
+    assert result["tensor_count"] == 8
+    assert result["fp8_output_tensors"] == 8
+    assert result["max_input_chunk_bytes"] == 2 * 1024 ** 2
+    assert result["estimated_peak_conversion_ram_bytes"] <= 32 * 1024 ** 2
+    assert result["output_exact_bytes"] > result["output_payload_bytes"]
+    assert result["disk_required_bytes"] >= result["output_exact_bytes"] + 2 * 1024 ** 3
+    assert not result["loadable"] and not result["conversion_enabled"]
+    assert source.read_bytes() == raw
+    assert not (tmp_path / "scratch").exists()
+
+
+def test_z218_stream_export_validates_qkv_and_atomically_publishes_scratch(tmp_path):
+    from morphorum.zimage_fp8_stream import FP8StreamError, export_fp8_stream
+    torch = pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", expected)
+    source_raw = source.read_bytes()
+    managed_file = managed / "transformer" / "weights-00001-of-00001.safetensors"
+    managed_raw = managed_file.read_bytes()
+    destination = tmp_path / "scratch" / "experiment"
+    exported = export_fp8_stream(source, managed, family="transformer", scratch=destination)
+    assert exported["status"] == "exported_nonloadable"
+    assert exported["tensor_count"] == 8
+    assert not exported["loadable"]
+    artifact = destination / "diffusion_pytorch_model.safetensors"
+    buf = artifact.read_bytes()
+    hsize = struct.unpack("<Q", buf[:8])[0]
+    converted = json.loads(buf[8:8 + hsize])
+    assert set(converted) == set(expected)
+    assert all(v["dtype"] == "BF16" for v in converted.values())
+    payload = buf[8 + hsize:]
+    assert len(payload) == sum(2 * __import__("math").prod(dims) for dims in expected.values())
+    for suffix in ("q", "k", "v"):
+        spec = converted[f"layers.0.attention.to_{suffix}.weight"]
+        start, end = spec["data_offsets"]
+        data = torch.frombuffer(bytearray(payload[start:end]), dtype=torch.uint8).view(torch.bfloat16)
+        assert data.shape == (8,)
+        assert (data == 2.0).all().item()
+    manifest = json.loads((destination / "manifest.json").read_text())
+    assert manifest["loadable"] is False
+    assert manifest["runtime_verified"] is False
+    assert manifest["output_sha256"] == __import__("hashlib").sha256(buf).hexdigest()
+    assert len(manifest["tensor_sha256"]) == 8
+    assert source.read_bytes() == source_raw
+    assert managed_file.read_bytes() == managed_raw
+    with pytest.raises(FP8StreamError, match="Scratch destination"):
+        export_fp8_stream(source, managed, family="transformer", scratch=destination)
+
+
+def test_z218_stream_separate_qwen_keeps_bf16_embedding_and_fp8_weights(tmp_path):
+    from morphorum.zimage_fp8_stream import export_fp8_stream
+    torch = pytest.importorskip("torch")
+    source, expected = _encoder(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "encoder", expected)
+    output = tmp_path / "scratch" / "encoder"
+    result = export_fp8_stream(source, managed, family="encoder", scratch=output)
+    assert result["status"] == "exported_nonloadable"
+    artifact = output / "model.safetensors"
+    raw = artifact.read_bytes()
+    length = struct.unpack("<Q", raw[:8])[0]
+    header = json.loads(raw[8:8 + length])
+    assert set(header) == set(expected)
+    assert len(header) == 3
+    assert all(t["dtype"] == "BF16" for t in header.values())
+    assert not result["loadable"]
+
+
+def test_z218_stream_blocks_output_inside_managed_model_or_source_tree(tmp_path):
+    from morphorum.zimage_fp8_stream import FP8StreamError, export_fp8_stream
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", expected)
+    for output in (source.parent / "bad", managed / "bad"):
+        with pytest.raises(FP8StreamError, match="intersects"):
+            export_fp8_stream(source, managed, family="transformer", scratch=output)
+        assert not output.exists()
+
+
+def test_z218_stream_requires_exact_schema_not_just_fp8_marker(tmp_path):
+    from morphorum.zimage_fp8_stream import plan_fp8_stream
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", {**expected, "alien.weight": (1,)})
+    plan = plan_fp8_stream(source, managed, family="transformer")
+    assert plan["status"] == "blocked"
+    assert not plan["loadable"]
