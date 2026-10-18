@@ -129,6 +129,8 @@ def test_z217_separate_qwen_encoder_exact_schema(tmp_path):
     assert result["source_parameter_count"] == 3
     assert result["fused_qkv_splits"] == 0
     assert result["discarded_unit_input_scale_count"] == 2
+    assert result["excluded_input_scale_count"] == 2
+    assert result["input_scale_metadata"]["nonunit_count"] == 0
     assert result["schema_verified"] is True
     assert result["loadable"] is False
 
@@ -190,7 +192,7 @@ def test_z217_rejects_unindexed_extra_tensor_in_managed_shard(tmp_path):
         read_managed_component_schema(root, "transformer")
 
 
-def test_z217_nonunit_encoder_input_scale_blocks_reconciliation(tmp_path):
+def test_z2172_nonunit_encoder_input_scale_preserved_as_calibration_evidence(tmp_path):
     pytest.importorskip("torch")
     source, expected = _encoder(tmp_path)
     root = tmp_path / "managed"
@@ -203,9 +205,13 @@ def test_z217_nonunit_encoder_input_scale_blocks_reconciliation(tmp_path):
     raw[offset:offset + 2] = struct.pack("<H", 0x4000)  # BF16 2.0
     source.write_bytes(raw)
     result = validate_complete_tensor_schema(source, root, family="encoder")
-    assert result["status"] == "blocked"
-    assert "Non-unit" in result["reason"]
-    assert not result["schema_verified"]
+    assert result["status"] == "schema_matches"
+    assert result["schema_verified"] is True
+    assert result["excluded_input_scale_count"] == 2
+    assert result["input_scale_metadata"]["nonunit_count"] == 1
+    assert result["input_scale_metadata"]["unit_count"] == 1
+    assert result["input_scale_metadata"]["nonunit_max"] == 2.0
+    assert result["quantization_compatibility"]["fp8_runtime_verified"] is False
     assert not result["loadable"]
 
 
