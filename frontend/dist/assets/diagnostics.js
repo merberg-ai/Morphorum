@@ -164,6 +164,7 @@
       summaryCard(payload);
       render();
       $('diagnostic-copy-json').disabled = false;
+      $('diagnostic-download-json').disabled = false;
       $('diagnostic-copy-filtered').disabled = false;
       $('diagnostic-status-line').textContent = 'Read-only diagnostic · ' +
         (payload.diagnostic_version || '?') + ' · ' + state.leaves.length.toLocaleString() +
@@ -175,12 +176,68 @@
       $('diagnostic-refresh').disabled = false;
     }
   }
-  async function copy(value, label) {
+  function copyWithSelection(value) {
+    // Clipboard API is unavailable on many HTTP LAN hosts. Legacy selection
+    // still requires a direct click, but works on browsers that allow it.
+    const field = document.createElement('textarea');
+    field.value = value;
+    field.setAttribute('readonly', '');
+    field.setAttribute('aria-hidden', 'true');
+    field.style.position = 'fixed';
+    field.style.left = '-9999px';
+    field.style.top = '0';
+    document.body.appendChild(field);
+    const previous = document.activeElement;
     try {
-      await navigator.clipboard.writeText(value);
-      $('diagnostic-status-line').textContent = label + ' copied.';
+      field.focus();
+      field.select();
+      field.setSelectionRange(0, field.value.length);
+      if (typeof document.execCommand !== 'function' || !document.execCommand('copy')) {
+        throw new Error('Clipboard permission denied. Use Download JSON instead.');
+      }
+    } finally {
+      field.remove();
+      if (previous && typeof previous.focus === 'function') previous.focus();
+    }
+  }
+  async function copy(value, label) {
+    let clipboardFailure;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        $('diagnostic-status-line').textContent = label + ' copied.';
+        return;
+      }
     } catch (error) {
-      $('diagnostic-status-line').textContent = 'Copy failed: ' + error.message;
+      clipboardFailure = error;
+    }
+    try {
+      copyWithSelection(value);
+      $('diagnostic-status-line').textContent = label + ' copied (LAN browser fallback).';
+    } catch (error) {
+      $('diagnostic-status-line').textContent = 'Copy unavailable: ' +
+        (clipboardFailure?.message || error.message) + '. Use Download JSON.';
+    }
+  }
+  function downloadJson() {
+    if (!state.data) return;
+    const filename = state.models.find(m => m.id === $('diagnostic-model-select').value)?.filename ||
+      state.data.checkpoint?.filename || 'zimage-diagnostic';
+    const stem = String(filename).replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_.-]+/g, '_').slice(0, 80);
+    const version = String(state.data.diagnostic_version || 'diagnostic').replace(/[^a-zA-Z0-9_.-]/g, '');
+    const json = JSON.stringify(state.data, null, 2) + '\n';
+    const blob = new Blob([json], {type: 'application/json;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = (stem || 'zimage') + '-' + version + '.json';
+    document.body.appendChild(anchor);
+    try {
+      anchor.click();
+      $('diagnostic-status-line').textContent = 'Diagnostic JSON download started: ' + anchor.download;
+    } finally {
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
   }
   function setTab(which) {
@@ -200,13 +257,24 @@
       tab.addEventListener('click', () => setTab(tab.dataset.consoleInnerTab));
     }
     $('diagnostic-refresh').addEventListener('click', loadDiagnostics);
-    $('diagnostic-model-select').addEventListener('change', () =>
-      sessionStorage.setItem('morphorum-diagnostic-model', $('diagnostic-model-select').value));
+    $('diagnostic-model-select').addEventListener('change', () => {
+      sessionStorage.setItem('morphorum-diagnostic-model', $('diagnostic-model-select').value);
+      state.data = null;
+      state.leaves = [];
+      state.filtered = [];
+      summaryCard(null);
+      $('diagnostic-results').replaceChildren(text('p', 'Run diagnostics for the selected checkpoint.', 'muted'));
+      $('diagnostic-results-count').textContent = 'No diagnostic loaded';
+      for (const id of ['diagnostic-copy-json', 'diagnostic-download-json', 'diagnostic-copy-filtered']) {
+        $(id).disabled = true;
+      }
+    });
     for (const id of ['diagnostic-section', 'diagnostic-status', 'diagnostic-search']) {
       $(id).addEventListener(id === 'diagnostic-search' ? 'input' : 'change', render);
     }
     $('diagnostic-copy-json').addEventListener('click', () =>
       state.data && copy(JSON.stringify(state.data, null, 2), 'Full diagnostic JSON'));
+    $('diagnostic-download-json').addEventListener('click', downloadJson);
     $('diagnostic-copy-filtered').addEventListener('click', () =>
       copy(state.filtered.map(r => r.path + '\t' + r.value).join('\n'), 'Filtered diagnostic fields'));
     fetchModels();
