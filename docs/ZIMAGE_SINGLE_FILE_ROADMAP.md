@@ -100,6 +100,12 @@ Based on the owner's actual 662-tensor checkpoint (209 `F8_E4M3`) and 903-tensor
 
 The managed Z-Image package's existing tokenizer, scheduler and VAE may become reusable auxiliary components, but only after a future read-only verification of component configs and a separate runtime proof. No managed files are modified, moved, copied or automatically selected. FP8 conversion remains blocked until its dequantization semantics are established. Current work is diagnostics only; it does not mark any external model loadable.
 
+### Z2.12: exact FP8 tensor accounting and encoder report
+
+The latest Windows diagnostic confirmed 209 FP8 transformer tensors, 208 paired scalar `.scale_weight` tensors, no unmatched `.weight` tensors. Diagnostics now list FP8 tensor keys **not ending in `.weight`** separately so no model tensor is silently omitted from the accounting. Encoder diagnostics now surface the existing unverified Qwen-like layer and scale-pair evidence. Diagnostic version is `z2.12`. No tensor payload reads or GPU loads.
+
+Managed component reuse and FP8 dequantization semantics remain unverified and deliberately inactive; inspecting component file presence does not establish compatibility. The latest prior CI fix at `961399e` passed both backend and syntax workflows (920 passed, 1 skipped). Z2.12 test results are tracked separately.
+
 ## Z3: Generation runtime integration
 
 Dispatch on verified model source and loader type; preserve the managed path unchanged. Exercise txt2img and img2img, prompt encoding, guidance, inference steps, seed determinism, cancellation, progress reports, GPU memory unloading and source switching on the user's RTX 4080 SUPER 16 GB.
