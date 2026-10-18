@@ -184,5 +184,21 @@ def inspect_managed_auxiliaries(destination: str | Path) -> dict[str, Any]:
                         if data is not None and key in data
                         and isinstance(data[key], (str, int, float, bool, list))}
         }
+    # A reference-class match is not standalone checkpoint compatibility.
+    roles = {
+        "pipeline": ("_class_name", "ZImagePipeline"),
+        "vae": ("_class_name", "AutoencoderKL"),
+        "scheduler": ("_class_name", "FlowMatchEulerDiscreteScheduler"),
+        "tokenizer": ("tokenizer_class", "Qwen2Tokenizer"),
+        "text_encoder": ("model_type", "qwen3"),
+    }
+    result["reference_role_evidence"] = {}
+    for component, (field, expected_value) in roles.items():
+        summary = result["configuration"][component]["summary"]
+        actual = summary.get(field)
+        result["reference_role_evidence"][component] = {
+            "field": field, "expected": expected_value,
+            "observed": actual, "matches": actual == expected_value if actual is not None else None,
+        }
     result["status"] = "configurations_inspected"
     return result
