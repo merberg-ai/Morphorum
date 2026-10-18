@@ -179,7 +179,12 @@ def export_fp8_bf16_windows(
         raise FP8PrototypeError("CPU PyTorch FP8 support unavailable.")
     source = Path(checkpoint)
     destination = Path(output_directory)
-    _check_isolated_destination(source, destination, managed_root)
+    # Always protect Morphorum's configured managed-model directory. An
+    # optional extra root extends protection; it never disables the default.
+    from .settings import managed_model_location
+    _check_isolated_destination(source, destination, managed_model_location("zimage"))
+    if managed_root is not None:
+        _check_isolated_destination(source, destination, managed_root)
     plan = plan_fp8_bf16_windows(source)
     if plan["status"] != "planned":
         raise FP8PrototypeError(plan["reason"])
