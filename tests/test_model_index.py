@@ -158,3 +158,42 @@ def test_managed_zimage_family_scans_external_loras(tmp_path, monkeypatch) -> No
     assert indexed[0]["filename"] == lora.name
     assert indexed[0]["source"] == "external"
     assert result["counts"]["zimage"]["loras"] == 1
+
+
+def test_zimage_text_encoder_indexed_as_nonselectable_component(tmp_path, monkeypatch) -> None:
+    import json
+    import struct
+    user_config = tmp_path / "config.yaml"
+    index_db = tmp_path / "model-index.db"
+    root = tmp_path / "zimage"
+    root.mkdir()
+    encoder = root / "whatever.safetensors"
+    tensors = {}
+    payload = bytearray()
+    for name in (
+        "model.embed_tokens.weight",
+        "model.layers.0.self_attn.q_proj.weight",
+        "model.layers.0.mlp.gate_proj.weight",
+    ):
+        start = len(payload)
+        payload.extend(b"ab")
+        tensors[name] = {"dtype": "F16", "shape": [1], "data_offsets": [start, start + 2]}
+    header = json.dumps(tensors).encode("utf-8")
+    encoder.write_bytes(struct.pack("<Q", len(header)) + header + payload)
+    checkpoint = root / "standalone.safetensors"
+    checkpoint.write_bytes(b"fake-checkpoint")
+
+    monkeypatch.setattr(settings_module, "USER_CONFIG", user_config)
+    monkeypatch.setattr(model_index, "MODEL_INDEX_DB", index_db)
+    save_settings({"models": {"zimage": {"checkpoints": [str(root)], "loras": []}}})
+    result = model_index.scan_models()
+
+    assert result["counts"]["zimage"]["components"] == 1
+    normal = model_index.list_models(family="zimage")
+    assert all(item["kind"] != "components" for item in normal)
+    assert len(normal) == 1
+    assert model_index.model_summary()["total"] == 1
+    components = model_index.list_models(family="zimage", kind="components")
+    assert len(components) == 1
+    assert components[0]["filename"] == encoder.name
+    assert components[0]["source"] == "external"
