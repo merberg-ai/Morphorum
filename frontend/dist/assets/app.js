@@ -1308,14 +1308,14 @@
       headingWrap.append(heading, code);
       const count = document.createElement('span');
       count.className = 'badge';
-      const modelCount = source === 'external' ? familyData.checkpoints.length : 0;
+      const modelCount = (source === 'external' || family === 'zimage') ? familyData.checkpoints.length : 0;
       const loraCount = supportsLoras && loraSource === 'external' ? familyData.loras.length : 0;
       count.textContent = `${modelCount} model path${modelCount === 1 ? '' : 's'} · ${loraCount} LoRA path${loraCount === 1 ? '' : 's'}`;
       header.append(headingWrap, count);
       card.appendChild(header);
 
-      if (source === 'external') {
-        card.appendChild(createPathSection(family, 'checkpoints', 'Model / checkpoint directories'));
+      if (source === 'external' || family === 'zimage') {
+        card.appendChild(createPathSection(family, 'checkpoints', family === 'zimage' ? 'Standalone checkpoint directories (Civitai)' : 'Model / checkpoint directories'));
       }
       if (supportsLoras && loraSource === 'external') {
         card.appendChild(createPathSection(family, 'loras', 'LoRA directories'));
