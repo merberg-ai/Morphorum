@@ -356,3 +356,39 @@ def test_z218_stream_independent_scratch_integrity_detects_tensor_corruption(tmp
     artifact.write_bytes(raw)
     with pytest.raises(FP8StreamError, match="tensor SHA-256 mismatch"):
         verify_fp8_stream_artifact(destination)
+
+
+def test_z218_stream_disk_shortage_refuses_export_before_creation(tmp_path, monkeypatch):
+    import morphorum.zimage_fp8_stream as fp8_stream
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", expected)
+    scratch = tmp_path / "scratch" / "new"
+    monkeypatch.setattr(fp8_stream, "_free_space", lambda *_: 1)
+    plan = fp8_stream.plan_fp8_stream(source, managed, family="transformer", scratch=scratch)
+    assert plan["status"] == "insufficient_disk"
+    assert plan["scratch_space_sufficient"] is False
+    with pytest.raises(fp8_stream.FP8StreamError, match="insufficient_disk"):
+        fp8_stream.export_fp8_stream(source, managed, family="transformer", scratch=scratch)
+    assert not scratch.exists()
+
+
+def test_z218_stream_nan_fp8_refuses_publish_and_cleans_temporary_files(tmp_path):
+    from morphorum.zimage_fp8_stream import FP8StreamError, export_fp8_stream
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", expected)
+    raw = bytearray(source.read_bytes())
+    size = struct.unpack("<Q", raw[:8])[0]
+    header = json.loads(raw[8:8 + size])
+    start = header["x_embedder.weight"]["data_offsets"][0]
+    raw[8 + size + start] = 0x7F  # E4M3FN NaN
+    source.write_bytes(raw)
+    dest = tmp_path / "scratch" / "bad_fp8"
+    with pytest.raises(FP8StreamError, match="Nonfinite FP8 conversion output"):
+        export_fp8_stream(source, managed, family="transformer", scratch=dest)
+    assert not dest.exists()
+    assert not list((tmp_path / "scratch").glob(".z218-stream-*"))
+    assert not list((tmp_path / "scratch").glob("*.lock"))
