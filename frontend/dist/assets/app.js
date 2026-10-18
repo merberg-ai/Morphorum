@@ -1392,7 +1392,7 @@
     for (const [family, , familySource, loraSource, supportsLoras] of FAMILY_DEFS) {
       const source = ensureFamily(family);
       const familyPayload = {};
-      if (familySource === 'external') {
+      if (familySource === 'external' || family === 'zimage') {
         familyPayload.checkpoints = (source.checkpoints || []).map(value => String(value).trim()).filter(Boolean);
       }
       if (supportsLoras && loraSource === 'external') {
