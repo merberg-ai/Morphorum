@@ -80,6 +80,9 @@
     const t = data.checkpoint?.schema_validation || {};
     const e = data.auxiliary_encoders?.[0]?.header?.schema_validation || {};
     const scales = e.input_scale_metadata || {};
+    const transformerBudget = data.checkpoint?.z218_stream_preflight || {};
+    const encoderBudget = data.auxiliary_encoders?.[0]?.header?.z218_stream_preflight || {};
+    const gib = bytes => Number.isFinite(bytes) ? (bytes / (1024 ** 3)).toFixed(2) + ' GiB' : 'Not available';
     const status = obj => obj.status === 'schema_matches' ? 'Verified' : obj.status || 'Unavailable';
     summary.append(
       summaryItem('Diagnostic', data.diagnostic_version || '?'),
@@ -91,6 +94,12 @@
         e.mapped_tensor_count + ' / ' + e.reference_tensor_count),
       summaryItem('Encoder FP8 input scales', scales.count == null ? '?' :
         scales.count + ' total · ' + scales.nonunit_count + ' non-unit'),
+      summaryItem('Transformer conversion', transformerBudget.status || 'Unavailable',
+        transformerBudget.status === 'planned' ? 'pass' : 'issue'),
+      summaryItem('Transformer scratch size', gib(transformerBudget.output_exact_bytes)),
+      summaryItem('Encoder scratch size', gib(encoderBudget.output_exact_bytes)),
+      summaryItem('Encoder conversion', encoderBudget.status || 'Unavailable',
+        encoderBudget.status === 'planned' ? 'pass' : 'issue'),
       summaryItem('Standalone loadable', data.loadable ? 'Yes' : 'No (safeguard)', data.loadable ? 'pass' : 'unverified')
     );
   }
