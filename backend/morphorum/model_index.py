@@ -138,6 +138,11 @@ def scan_models() -> dict[str, Any]:
             for raw_root in configured:
                 root = Path(os.path.expandvars(os.path.expanduser(str(raw_root)))).resolve(strict=False)
                 if not root.exists() or not root.is_dir():
+                    # Default Civitai standalone directory is optional until a file is downloaded.
+                    if family == "zimage" and kind == "checkpoints" and root == (
+                        managed_model_location("zimage", settings) / "civitai-checkpoints"
+                    ).resolve(strict=False):
+                        continue
                     warning = f"Skipping unavailable {family} {kind} directory: {root}"
                     warnings.append(warning)
                     emit_console("warning", "model", warning)
