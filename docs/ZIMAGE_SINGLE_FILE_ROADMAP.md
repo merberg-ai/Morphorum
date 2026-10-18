@@ -1,6 +1,6 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **planning**. Implementation has not started. Main remains unchanged.
+Status: **Z1 in progress**. Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -17,6 +17,8 @@ Dev-webui now exposes Z-Image standalone checkpoint directories in Settings and 
 - Build one stage at a time on `dev-webui`; run automated CI and stop for Windows physical tests before merging to `main`.
 
 ## Z1: Inspect and classify single-file formats
+
+Initial implementation: `backend/morphorum/zimage_inspect.py` reads only a bounded JSON header, checks dtype/shape/offset consistency and complete payload coverage, and reports conservative statuses (`unsupported`, `needs_components`, `candidate`). All results have `ready=false` and `loadable=false`; no weights are loaded or architecture support claimed. Synthetic tests: `tests/test_zimage_inspect.py`. Still pending: inspect actual representative Z-Image files including FP8 quantized example, establish authoritative tensor signatures, integrate inspection results with model indexing/API/UX, run CI and physical Windows acceptance.
 
 Add bounded safetensors header/metadata inspection that recognizes supported Z-Image full checkpoint formats vs transformer-only exports, quantized and architecture-incompatible weights. Capture tensor naming/shape requirements and the exact auxiliary components needed by each supported class. Surface an explicit reason for Unsupported / Needs components / Candidate status. Inspect actual Civitai sample files, including the user's quantized FP8 example, without assuming its format is directly loadable.
 
@@ -45,5 +47,7 @@ Prove LoRA injection separately for new Z-Image architectures and supported prec
 Unit tests for each checkpoint class, malformed file, accidental cross-family load, missing dependencies and path migration. Regression tests of managed install and txt2img/img2img plus standalone load, changeovers, VRAM cleanup and project save/reload. Run GitHub CI and physical Windows tests, update README, installation and model documentation. Merge only after owner acceptance.
 
 ## Next action
+
+Verify the newly introduced Z1 inspector in CI; inspect representative actual Z-Image checkpoint headers and define positively verified architecture signatures before any loader integration. UI integration and the owner-requested layout tweaks remain future work.
 
 First verify and remove the unexpected Wan2GP entry in Settings if undesired, save, and rescan. It only affects Morphorum's indexing/download choice; removing it does not delete any Wan2GP files. The already-downloaded file stays where it is unless manually moved. Then gather representative checkpoints, refine Z1/Z2 format support, and collect the remaining UI requests.
