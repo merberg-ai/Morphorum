@@ -3,7 +3,7 @@ import struct
 
 import pytest
 
-from morphorum.zimage_conversion import ConversionPreflightError, plan_conversion, stage_verified_tensor_copy, plan_original_tensor_mapping
+from morphorum.zimage_conversion import ConversionPreflightError, plan_conversion, stage_verified_tensor_copy, plan_original_tensor_mapping, convert_original_checkpoint
 
 
 def checkpoint(path, dtype="F16", missing=False):
@@ -137,3 +137,71 @@ def test_z27_staging_manifest_contains_matching_hashes(tmp_path):
     assert manifest["source_sha256"] == hashlib.sha256(file.read_bytes()).hexdigest()
     assert manifest["source_sha256"] == manifest["staged_sha256"]
     assert not manifest["loadable"]
+
+
+def test_z28_streaming_original_conversion_with_qkv(tmp_path):
+    source = tmp_path / "original.safetensors"
+    tensors = {
+        "model.diffusion_model.x_embedder.weight": ((2,), b"ab"),
+        "model.diffusion_model.final_layer.weight": ((2,), b"cd"),
+        "model.diffusion_model.cap_embedder.weight": ((2,), b"ef"),
+        "model.diffusion_model.noise_refiner.0.weight": ((2,), b"gh"),
+        "model.diffusion_model.context_refiner.0.weight": ((2,), b"ij"),
+        "model.diffusion_model.layers.0.attention.qkv.weight": ((6, 2), b"abcdefghijkl"),
+    }
+    fields = {}
+    payload = bytearray()
+    for name, (shape, data) in tensors.items():
+        start = len(payload)
+        payload.extend(data)
+        fields[name] = {"dtype": "U8", "shape": list(shape),
+                        "data_offsets": [start, len(payload)]}
+    # Conversion preflight intentionally rejects U8; use F16 for real path.
+    fields = {}
+    payload = bytearray()
+    for name, (_, data) in tensors.items():
+        # 2-byte F16 elements. Fused QKV is [6, 1].
+        shape = [6, 1] if "qkv" in name else [1]
+        start = len(payload)
+        payload.extend(data)
+        fields[name] = {"dtype": "F16", "shape": shape,
+                        "data_offsets": [start, len(payload)]}
+    h = json.dumps(fields).encode()
+    source.write_bytes(struct.pack("<Q", len(h)) + h + payload)
+    expected = {
+        "all_x_embedder.2-1.weight": (1,),
+        "all_final_layer.2-1.weight": (1,),
+        "cap_embedder.weight": (1,),
+        "noise_refiner.0.weight": (1,),
+        "context_refiner.0.weight": (1,),
+        **{f"layers.0.attention.to_{part}.weight": (2, 1) for part in ("q", "k", "v")},
+    }
+    root = tmp_path / "converted-cache"
+    result = convert_original_checkpoint(source, root, expected_output_shapes=expected)
+    assert not result["ready"] and not result["loadable"]
+    target = root / "standalone-zimage" / result["cache_key"] / "diffusion_pytorch_model.safetensors"
+    with target.open("rb") as handle:
+        count = struct.unpack("<Q", handle.read(8))[0]
+        out_header = json.loads(handle.read(count))
+        out_payload = handle.read()
+    assert set(out_header) == set(expected)
+    parts = []
+    for key in [f"layers.0.attention.to_{p}.weight" for p in ("q", "k", "v")]:
+        a, b = out_header[key]["data_offsets"]
+        parts.append(out_payload[a:b])
+    assert parts == [b"abcd", b"efgh", b"ijkl"]
+    import hashlib
+    manifest = json.loads(target.with_name("manifest.json").read_text())
+    assert manifest["source_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert manifest["output_sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
+    with pytest.raises(ConversionPreflightError, match="already exists"):
+        convert_original_checkpoint(source, root, expected_output_shapes=expected)
+
+
+def test_z28_bad_mapping_never_publishes_cache(tmp_path):
+    source = tmp_path / "original.safetensors"
+    checkpoint(source)
+    root = tmp_path / "cache"
+    with pytest.raises(ConversionPreflightError, match="exactly match"):
+        convert_original_checkpoint(source, root, expected_output_shapes={"fake": (1,)})
+    assert not list(root.rglob("*.safetensors"))
