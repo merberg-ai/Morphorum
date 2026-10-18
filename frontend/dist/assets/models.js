@@ -470,7 +470,11 @@
     if (model.kind === 'checkpoints') {
       action = document.createElement('button');
       action.className = 'primary-button use-model-button';
-      action.textContent = 'Use';
+      action.textContent = (model.family === 'zimage' && model.source !== 'managed') ? 'Indexed only' : 'Use';
+      if (model.family === 'zimage' && model.source !== 'managed') {
+        action.disabled = true;
+        action.title = 'Standalone Civitai Z-Image checkpoints need a single-file loader before generation is supported.';
+      }
       action.addEventListener('click', () => useModel(model.id));
     } else {
       action = document.createElement('button');
@@ -689,13 +693,17 @@
 
     for (const model of models) {
       const option = document.createElement('option');
+      if (model.family === 'zimage' && model.source !== 'managed') {
+        option.disabled = true;
+        option.title = 'Indexed Civitai checkpoint. Standalone Z-Image weights are not supported by the current Diffusers package loader.';
+      }
       option.value = model.id;
-      option.textContent = `[${FAMILY_LABELS[model.family] || model.family}] ${model.name}`;
+      option.textContent = `[${FAMILY_LABELS[model.family] || model.family}] ${model.name}` + (option.disabled ? ' · indexed only (loader unsupported)' : '');
       option.title = model.path;
       select.appendChild(option);
     }
     select.disabled = models.length === 0;
-    if (models.some(model => model.id === previous)) select.value = previous;
+    if (models.some(model => model.id === previous && !(model.family === 'zimage' && model.source !== 'managed'))) select.value = previous;
     updateImageBadge();
     notifyImageSelection(select);
   }
@@ -704,6 +712,10 @@
     const select = qs('#image-model-select');
     const model = state.models.find(item => item.id === modelId);
     if (!select || !model) return;
+    if (model.family === 'zimage' && model.source !== 'managed') {
+      toast('Indexed but not loadable', 'Standalone Z-Image Civitai checkpoints require a compatible single-file loader. The existing runtime supports managed Diffusers packages.', 'warning');
+      return;
+    }
     select.value = modelId;
     updateImageBadge();
     notifyImageSelection(select);
@@ -715,7 +727,7 @@
     await loadModels();
     const model = state.models.find(item => item.id === modelId && item.kind === 'checkpoints');
     const select = qs('#image-model-select');
-    if (!model || !select) return false;
+    if (!model || !select || (model.family === 'zimage' && model.source !== 'managed')) return false;
     select.value = modelId;
     updateImageBadge();
     notifyImageSelection(select);
