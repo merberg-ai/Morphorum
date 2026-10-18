@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .zimage_inspect import inspect_zimage_checkpoint
+from .zimage_fp8_evidence import probe_fp8_scalars, inspect_managed_auxiliaries
+from .settings import managed_model_location
 from .zimage_standalone import inspect_encoder_bundle, resolve_standalone_dependencies
 
 MAX_CANDIDATES = 64
@@ -34,19 +36,22 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
                 "dtypes": probe.get("dtypes"),
                 "sample_keys": probe.get("sample_keys"),
                 "encoder_evidence": probe.get("encoder_evidence"),
+                "fp8_scalar_probe": probe_fp8_scalars(path),
                 "quantization_evidence": probe.get("quantization_evidence"),
             },
             "bundle": inspect_encoder_bundle(path),
         })
     return {
-        "diagnostic_version": "z2.12",
+        "diagnostic_version": "z2.13",
         "checkpoint": {
             "filename": source.name,
             "inspection": inspection,
+            "fp8_scalar_probe": probe_fp8_scalars(source),
         },
         "auxiliary_encoders": encoders,
         "candidate_count": len(encoders),
         "candidates_truncated": len(candidate_rows) == MAX_CANDIDATES,
+        "managed_auxiliary_inventory": inspect_managed_auxiliaries(managed_model_location("zimage") / "Z-Image-Turbo"),
         "dependencies": {
             "status": resolution["status"],
             "missing_components": resolution["missing_components"],
@@ -54,7 +59,7 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
             "reason": resolution["reason"],
         },
         "limits": [
-            "Header and local adjacent configuration inspection only; no tensor payload was read.",
+            "Only bounded marker and scalar scale payload reads; no weight matrices loaded.",
             "Filename patterns and neighboring files do not prove model compatibility.",
             "A detected Qwen-style encoder is not proof of Qwen3-4B or matching tokenizer.",
             "FP8 scales, tensor dimensions and actual runtime loading require further verification.",
