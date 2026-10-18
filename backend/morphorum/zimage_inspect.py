@@ -173,7 +173,7 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
             for block in ("layers", "noise_refiner", "context_refiner"):
                 matches = set()
                 for key in native:
-                    found = re.match(r"^" + block + r"\\.(\\d+)\\.", key)
+                    found = re.match(r"^" + block + r"\.(\d+)\.", key)
                     if found:
                         matches.add(int(found.group(1)))
                 numbered[block] = {
