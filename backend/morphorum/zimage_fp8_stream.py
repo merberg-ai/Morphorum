@@ -36,6 +36,24 @@ class FP8StreamError(ValueError):
     pass
 
 
+def _require_real_checkpoint(checkpoint: str | Path) -> Path:
+    """Fail early on documentation placeholders and missing source paths."""
+    raw = str(checkpoint)
+    if "<" in raw or ">" in raw:
+        raise FP8StreamError(
+            "The --checkpoint argument is a placeholder, not a filename. "
+            "Replace <transformer.safetensors> with the existing absolute path "
+            "to your .safetensors checkpoint, without angle brackets."
+        )
+    source = Path(checkpoint).expanduser()
+    if source.is_symlink() or not source.is_file():
+        raise FP8StreamError(
+            "Checkpoint file not found or unsafe: " + str(source) +
+            ". Confirm the path with Test-Path in PowerShell."
+        )
+    return source
+
+
 def _load_header(source: Path) -> tuple[dict[str, Any], int]:
     if source.is_symlink() or not source.is_file():
         raise FP8StreamError("Unsafe or missing checkpoint.")
@@ -155,11 +173,22 @@ def plan_fp8_stream(checkpoint: str | Path, managed_root: str | Path,
         "conversion_enabled": False, "loadable": False, "runtime_verified": False,
     }
     try:
-        source = Path(checkpoint)
+        source = _require_real_checkpoint(checkpoint)
         managed = Path(managed_root)
         reference = validate_complete_tensor_schema(source, managed, family=family)
         if reference["status"] != "schema_matches":
-            raise FP8StreamError("Z2.17.2 exact model schema and FP8 scale checks must pass.")
+            reason = reference.get("reason")
+            if not reason and reference["status"] == "schema_mismatch":
+                reason = (
+                    f"{reference.get('missing_reference_tensors', '?')} missing, "
+                    f"{reference.get('unexpected_external_tensors', '?')} unexpected, "
+                    f"{reference.get('shape_mismatches', '?')} shape mismatches"
+                )
+            raise FP8StreamError(
+                "Z2.17.2 schema validation did not pass (" +
+                str(reference["status"]) + "): " +
+                (str(reason) if reason else "inspect the model's zimage-diagnostics output")
+            )
         _, _, actions, calibration, payload = _tensor_actions(source, managed, family)
         specs = {}
         position = 0
@@ -206,7 +235,7 @@ def export_fp8_stream(checkpoint: str | Path, managed_root: str | Path,
     """Explicit, non-loadable BF16 parameter export into an isolated directory."""
     import torch
 
-    source = Path(checkpoint)
+    source = _require_real_checkpoint(checkpoint)
     managed = Path(managed_root)
     destination = Path(scratch)
     _valid_destination(source, destination, managed)
@@ -402,11 +431,9 @@ def verify_fp8_stream_against_source(
     """
     import torch
 
-    source = Path(checkpoint)
+    source = _require_real_checkpoint(checkpoint)
     managed = Path(managed_root)
     folder = Path(scratch)
-    if source.is_symlink() or not source.is_file():
-        raise FP8StreamError("Missing or unsafe original checkpoint.")
     if family not in ("transformer", "encoder"):
         raise FP8StreamError("Unexpected checkpoint family.")
     verified = verify_fp8_stream_artifact(folder)
