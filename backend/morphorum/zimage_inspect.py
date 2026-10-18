@@ -77,6 +77,7 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
         dtypes: Counter[str] = Counter()
         prefixes: Counter[str] = Counter()
         key_samples: list[str] = []
+        tensor_keys: set[str] = set()
         for key, spec in parsed.items():
             if not isinstance(key, str) or not key or not isinstance(spec, dict):
                 return reject("Malformed tensor entry.")
@@ -98,6 +99,7 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
             expected_bits = int(elements * _DTYPE_BYTES[dtype] * 8)
             if (expected_bits + 7) // 8 != end - start:
                 return reject("Tensor dimensions and dtype do not match byte offsets.")
+            tensor_keys.add(key)
             intervals.append((start, end))
             dtypes[dtype] += 1
             prefixes[key.split(".", 1)[0]] += 1
@@ -112,6 +114,29 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
         if previous_end != payload_size:
             return reject("Tensor payload contains unreferenced bytes.")
         result.update(tensor_count=len(parsed), dtypes=dict(dtypes), sample_keys=key_samples)
+        # Detect Qwen-like encoder weights from structure, never filename.
+        normalized_keys = {
+            key.removeprefix("text_encoder.").removeprefix("language_model.")
+            for key in tensor_keys
+        }
+        encoder_signature = (
+            "model.embed_tokens.weight" in normalized_keys
+            and any(key.startswith("model.layers.") and ".self_attn.q_proj.weight" in key
+                    for key in normalized_keys)
+            and any(key.startswith("model.layers.") and ".mlp.gate_proj.weight" in key
+                    for key in normalized_keys)
+            and not any(key.startswith(("transformer.", "diffusion_model.", "vae."))
+                        for key in tensor_keys)
+        )
+        if encoder_signature:
+            result["status"] = "auxiliary"
+            result["component_type"] = "text_encoder"
+            result["reason"] = (
+                "Text-encoder-like weights detected from tensor structure. Indexed as an "
+                "auxiliary component only; tokenizer, configuration and exact Z-Image "
+                "checkpoint compatibility remain unverified."
+            )
+            return result
         # This is a heuristic inventory, not a filename-based family guess.
         tokens = set(prefixes)
         hints = []
