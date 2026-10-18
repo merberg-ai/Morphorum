@@ -43,11 +43,11 @@ def _make_reference_fp8_file(path, marker_size):
                 "noise_refiner.0.weight", "context_refiner.0.weight"]
     for name in ordinary:
         start = len(payload)
-        payload.extend(b"\\x38")
+        payload.extend(bytes([0x38]))
         specs[name] = {"dtype": "F8_E4M3", "shape": [1],
                        "data_offsets": [start, len(payload)]}
     start = len(payload)
-    payload.extend(b"\\x38\\x40\\xb8\\x00")
+    payload.extend(bytes([0x38, 0x40, 0xB8, 0x00]))
     specs["layers.0.weight"] = {"dtype": "F8_E4M3", "shape": [4],
                                 "data_offsets": [start, len(payload)]}
     start = len(payload)
@@ -55,7 +55,7 @@ def _make_reference_fp8_file(path, marker_size):
     specs["layers.0.scale_weight"] = {"dtype": "F32", "shape": [1],
                                      "data_offsets": [start, len(payload)]}
     start = len(payload)
-    payload.extend(b"\\x38" * marker_size)
+    payload.extend(bytes([0x38]) * marker_size)
     specs["scaled_fp8"] = {"dtype": "F8_E4M3", "shape": [marker_size],
                            "data_offsets": [start, len(payload)]}
     header = json.dumps(specs).encode()
