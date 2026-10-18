@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .zimage_inspect import inspect_zimage_checkpoint
-from .zimage_fp8_validation import validate_fp8_single_file, assess_managed_component_candidates
+from .zimage_fp8_validation import (validate_fp8_single_file, assess_managed_component_candidates,
+                                    plan_managed_auxiliary_binding)
 from .zimage_fp8_prototype import plan_fp8_bf16_windows
 from .zimage_fp8_evidence import probe_fp8_scalars, inspect_managed_auxiliaries
 from .settings import managed_model_location
@@ -49,6 +50,7 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
         })
     checkpoint_validation = validate_fp8_single_file(source)
     encoder_evidence = (encoders[0]["header"].get("encoder_evidence") if len(encoders) == 1 else None)
+    assessment = assess_managed_component_candidates(managed_inventory, encoder_evidence)
     return {
         "diagnostic_version": "z2.16",
         "checkpoint": {
@@ -62,7 +64,8 @@ def diagnose_standalone_checkpoint(checkpoint: str | Path, components: Iterable[
         "candidate_count": len(encoders),
         "candidates_truncated": len(candidate_rows) == MAX_CANDIDATES,
         "managed_auxiliary_inventory": managed_inventory,
-        "managed_reuse_assessment": assess_managed_component_candidates(managed_inventory, encoder_evidence),
+        "managed_reuse_assessment": assessment,
+        "managed_auxiliary_binding_plan": plan_managed_auxiliary_binding(managed_inventory, assessment),
         "dependencies": {
             "status": resolution["status"],
             "missing_components": resolution["missing_components"],
