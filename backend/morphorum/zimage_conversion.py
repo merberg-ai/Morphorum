@@ -125,10 +125,20 @@ def stage_verified_tensor_copy(
         after = file.stat()
         if after.st_size != plan["source_size_bytes"] or after.st_mtime_ns != plan["source_mtime_ns"]:
             raise ConversionPreflightError("Source checkpoint changed during staging.")
+        source_sha256 = hashlib.sha256()
+        staged_sha256 = hashlib.sha256()
+        for item, digest in ((file, source_sha256), (target, staged_sha256)):
+            with item.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""):
+                    digest.update(chunk)
+        if source_sha256.digest() != staged_sha256.digest():
+            raise ConversionPreflightError("Staged checkpoint checksum differs from original.")
         manifest = {
             "schema": 1, "kind": "unverified_diffusers_weight_stage",
             "source": plan["checkpoint"], "cache_key": plan["cache_key"],
             "tensor_count": len(fields), "runtime_verified": False, "loadable": False,
+            "source_sha256": source_sha256.hexdigest(),
+            "staged_sha256": staged_sha256.hexdigest(),
         }
         (temp / "manifest.json").write_text(
             json.dumps(manifest, sort_keys=True, indent=2), encoding="utf-8"
@@ -140,4 +150,59 @@ def stage_verified_tensor_copy(
     return {
         **plan, "state": "staged_unverified", "staged_file": str(destination / target.name),
         "conversion_enabled": False, "ready": False, "loadable": False,
+    }
+
+
+def plan_original_tensor_mapping(
+    tensor_shapes: dict[str, tuple[int, ...]],
+    expected_output_shapes: dict[str, tuple[int, ...]],
+) -> dict[str, Any]:
+    """Validate a complete original-to-Diffusers mapping without loading weights.
+
+    Mirrors the upstream Z-Image renames and fused QKV splitting. A caller must
+    supply an independently obtained *complete* target architecture schema.
+    """
+    if not tensor_shapes or not expected_output_shapes:
+        raise ConversionPreflightError("Both complete source and target tensor schemas are required.")
+    mapped: dict[str, tuple[int, ...]] = {}
+    operations: list[dict[str, Any]] = []
+    for original, shape in tensor_shapes.items():
+        if not isinstance(shape, tuple) or not shape or any(type(n) is not int or n <= 0 for n in shape):
+            raise ConversionPreflightError("Invalid source tensor shape.")
+        key = original.removeprefix("model.diffusion_model.")
+        if key == "norm_final.weight":
+            continue  # Explicit upstream excluded tensor.
+        for old, new in (
+            ("final_layer.", "all_final_layer.2-1."),
+            ("x_embedder.", "all_x_embedder.2-1."),
+            (".attention.out.bias", ".attention.to_out.0.bias"),
+            (".attention.k_norm.weight", ".attention.norm_k.weight"),
+            (".attention.q_norm.weight", ".attention.norm_q.weight"),
+            (".attention.out.weight", ".attention.to_out.0.weight"),
+        ):
+            key = key.replace(old, new)
+        if key.endswith(".attention.qkv.weight"):
+            if len(shape) < 2 or shape[0] % 3:
+                raise ConversionPreflightError("Fused QKV first dimension must be divisible by 3.")
+            split_shape = (shape[0] // 3, *shape[1:])
+            for part in ("q", "k", "v"):
+                target = key.replace(".attention.qkv.weight", f".attention.to_{part}.weight")
+                if target in mapped:
+                    raise ConversionPreflightError("Duplicate converted tensor key.")
+                mapped[target] = split_shape
+            operations.append({"source": original, "action": "split_qkv", "targets": [
+                key.replace(".attention.qkv.weight", f".attention.to_{p}.weight") for p in ("q", "k", "v")
+            ]})
+        else:
+            if key in mapped:
+                raise ConversionPreflightError("Duplicate converted tensor key.")
+            mapped[key] = shape
+            operations.append({"source": original, "action": "rename", "targets": [key]})
+    if mapped != expected_output_shapes:
+        raise ConversionPreflightError("Mapped tensor names and shapes do not exactly match target schema.")
+    return {
+        "status": "schema_verified_mapping_only",
+        "operations": operations,
+        "tensor_count": len(mapped),
+        "ready": False, "loadable": False, "conversion_enabled": False,
     }
