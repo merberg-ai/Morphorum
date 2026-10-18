@@ -384,3 +384,19 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ### Z2.20b4 encoder Windows physical acceptance (2026-10-18)
 
 **PASS for encoder CPU weight binding.** With `CUDA_VISIBLE_DEVICES=-1`, the Transformers `transformers_local_cpu` path bound **398/398 parameter tensors / 4,022,468,096 parameter elements**, loading progress 100%. Starting available RAM 50.91 GiB, minimum available RAM threshold 26.98 GiB. Result `status=cpu_weights_bound_unverified`, `cuda_used=false`, `inference_attempted=false`, `runtime_verified=false`, `loadable=false`. The transformer was independently accepted earlier (521/521, 6,154,908,736 elements). **Z2.20b4 sequential CPU weight-binding acceptance is complete for both components.** This is not evidence that transformer and encoder can coexist with the VAE and activations or execute a forward pass. Follow-on Z2.20c should first measure a guarded single-component forward/pipeline resource plan and reuse immutable managed tokenizer/scheduler/VAE through isolated references; keep production loading disabled and `main` unchanged.
+
+
+### Z2.20c1: isolated auxiliary-component structural probe
+
+Following successful physical Z2.20b4 transformer and encoder CPU binding, added `backend/morphorum/zimage_aux_probe.py` and `tests/test_zimage_aux_probe.py` on `dev-webui`. This CLI requires an isolated process with `CUDA_VISIBLE_DEVICES=-1`, reruns the Z2.20b1 scratch/managed configuration gate, tokenizes and decodes a short local sample with managed Qwen2Tokenizer, creates two CPU scheduler timesteps from the managed FlowMatchEulerDiscreteScheduler configuration, and constructs managed AutoencoderKL **on meta only**. No VAE weights are loaded, no image is generated, no scratch transformer/encoder weights are rebound, and no managed files are modified. It returns `auxiliary_components_structurally_verified` when all checks pass, but `loadable=false`, `runtime_verified=false`, `inference_attempted=false`. This does not yet establish compatibility of conditioning tensor semantics or genuine pipeline inference.
+
+Windows physical test (from `D:\Morphorum-test`):
+
+```powershell
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_aux_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder"
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Next only after successful physical acceptance: Z2.20c2 explicitly gated tiny-model forward and real-memory telemetry; Z2.20c3 the isolated minimal image generation smoke test. The production managed pipeline and `main` remain unchanged.
