@@ -334,3 +334,25 @@ def test_z218_stream_requires_exact_schema_not_just_fp8_marker(tmp_path):
     plan = plan_fp8_stream(source, managed, family="transformer")
     assert plan["status"] == "blocked"
     assert not plan["loadable"]
+
+
+def test_z218_stream_independent_scratch_integrity_detects_tensor_corruption(tmp_path):
+    from morphorum.zimage_fp8_stream import (
+        FP8StreamError, export_fp8_stream, verify_fp8_stream_artifact
+    )
+    pytest.importorskip("torch")
+    source, expected = _original_transformer(tmp_path)
+    managed = tmp_path / "managed"
+    _managed(managed, "transformer", expected)
+    destination = tmp_path / "scratch" / "verify"
+    exported = export_fp8_stream(source, managed, family="transformer", scratch=destination)
+    assert exported["status"] == "exported_nonloadable"
+    valid = verify_fp8_stream_artifact(destination)
+    assert valid["status"] == "verified_nonloadable"
+    assert valid["tensor_count"] == 8 and not valid["loadable"]
+    artifact = destination / "diffusion_pytorch_model.safetensors"
+    raw = bytearray(artifact.read_bytes())
+    raw[-1] ^= 0x01
+    artifact.write_bytes(raw)
+    with pytest.raises(FP8StreamError, match="tensor SHA-256 mismatch"):
+        verify_fp8_stream_artifact(destination)
