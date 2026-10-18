@@ -116,6 +116,33 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
         if previous_end != payload_size:
             return reject("Tensor payload contains unreferenced bytes.")
         result.update(tensor_count=len(parsed), dtypes=dict(dtypes), sample_keys=key_samples)
+        # Z2.11: report actual FP8 scale-weight pair evidence.
+        scale_suffixes = (".scale_weight", ".scale", ".weight_scale",
+                          ".scale_inv", ".weight_scale_inv")
+        scale_keys = sorted(k for k in tensor_keys if k.endswith(scale_suffixes))
+        fp8_keys = {k for k in tensor_keys if parsed[k]["dtype"].startswith("F8_")}
+        paired = []
+        unpaired = []
+        for key in scale_keys:
+            suffix = next(x for x in scale_suffixes if key.endswith(x))
+            weight = key[:-len(suffix)] + ".weight"
+            if weight in fp8_keys:
+                paired.append((key, weight))
+            else:
+                unpaired.append(key)
+        missing = [key for key in fp8_keys if key.endswith(".weight") and
+                   not any(key[:-len(".weight")] + suffix in tensor_keys
+                           for suffix in scale_suffixes)]
+        result["quantization_evidence"] = {
+            "scale_tensor_count": len(scale_keys),
+            "paired_fp8_scale_count": len(paired),
+            "unpaired_scale_count": len(unpaired),
+            "fp8_weights_without_scale_count": len(missing),
+            "sample_pairs": [{"scale": scale[:180], "scale_shape": tensor_shapes[scale],
+                              "weight_shape": tensor_shapes[weight]}
+                             for scale, weight in paired[:12]],
+            "convention": "unverified",
+        }
         # Detect Qwen-like encoder weights from structure, never filename.
         normalized_keys = {
             key.removeprefix("text_encoder.").removeprefix("language_model.")
@@ -131,6 +158,13 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
                         for key in tensor_keys)
         )
         if encoder_signature:
+            result["encoder_evidence"] = {
+                "architecture": "qwen_like_unverified",
+                "layer_count": len({int(k.split(".")[2]) for k in normalized_keys
+                                   if k.startswith("model.layers.") and len(k.split(".")) > 3
+                                   and k.split(".")[2].isdigit()}),
+                "quantization": result["quantization_evidence"],
+            }
             result["status"] = "auxiliary"
             result["component_type"] = "text_encoder"
             result["reason"] = (
@@ -187,8 +221,6 @@ def inspect_zimage_checkpoint(path: str | Path) -> dict[str, Any]:
                 if key.endswith((".weight", ".bias")) and shape and any(dim == 0 for dim in shape):
                     invalid_matrix.append(key[:180])
             quantized = [dtype for dtype in dtypes if dtype.startswith("F8_") or dtype == "F4"]
-            scale_keys = [key for key in tensor_keys
-                          if key.endswith((".scale", ".weight_scale", ".scale_inv", ".weight_scale_inv"))]
             result["tensor_validation"] = {
                 "blocks": numbered,
                 "zero_sized_parameters": invalid_matrix[:20],
