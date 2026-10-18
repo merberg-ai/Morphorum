@@ -10,6 +10,34 @@ MAX_HEADER = 16 * 1024 * 1024
 MAX_SCALARS = 8
 SUFFIX = ".scale_weight"
 
+# Reference: Comfy-Org/ComfyUI comfy/utils.py convert_old_quants;
+# Comfy-Org/comfy-kitchen comfy_kitchen/backends/eager/quantization.py.
+def _decode_e4m3fn_byte(raw: int) -> float | None:
+    """Decode one finite E4M3FN sample; None denotes the reserved NaN code."""
+    sign = -1.0 if raw & 0x80 else 1.0
+    exponent = (raw >> 3) & 0x0F
+    mantissa = raw & 0x07
+    if exponent == 15 and mantissa == 7:
+        return None
+    if exponent == 0:
+        return sign * mantissa * (2.0 ** -9)
+    return sign * (1.0 + mantissa / 8.0) * (2.0 ** (exponent - 7))
+
+
+def _bounded_json(path: Path, limit: int = 1024 * 1024) -> dict[str, Any] | None:
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        size = path.stat().st_size
+        if size <= 1 or size > limit:
+            return None
+        with path.open("rb") as stream:
+            value = json.loads(stream.read(limit + 1))
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError, UnicodeError):
+        return None
+
+
 
 def probe_fp8_scalars(path: str | Path) -> dict[str, Any]:
     """Read at most one marker and eight scalar scales from a valid header.
@@ -61,10 +89,53 @@ def probe_fp8_scalars(path: str | Path) -> dict[str, Any]:
             report["marker"] = {"dtype": marker.get("dtype"),
                                 "shape": marker.get("shape"),
                                 "scalar": read_scalar("scaled_fp8")}
+        if isinstance(marker, dict):
+            shape = marker.get("shape")
+            dtype = marker.get("dtype")
+            marker_report = report["marker"]
+            # ComfyUI convert_old_quants: shape [2] requests FP32 matmul;
+            # empty [0] marker does not. Marker *values* are not used.
+            if dtype == "F8_E4M3" and shape in ([0], [2]):
+                count = shape[0]
+                offsets = marker["data_offsets"]
+                stream.seek(base + offsets[0])
+                raw = stream.read(count)
+                marker_report["raw_hex"] = raw.hex()
+                marker_report["decoded_values"] = [_decode_e4m3fn_byte(b) for b in raw]
+                marker_report["comfyui_full_precision_matrix_mult"] = count == 2
+                marker_report["interpretation"] = "reference_shape_semantics_only"
         names = sorted(k for k in header if k.endswith(SUFFIX))
         report["sample_scales"] = [v for name in names[:MAX_SCALARS]
                                     if (v := read_scalar(name)) is not None]
         report["scale_count"] = len(names)
+        samples = []
+        for name in names[:4]:
+            scale = read_scalar(name)
+            weight_name = name[:-len(SUFFIX)] + ".weight"
+            spec = header.get(weight_name)
+            if (not scale or scale.get("positive") is not True
+                    or not isinstance(spec, dict) or spec.get("dtype") != "F8_E4M3"):
+                continue
+            start, end = spec["data_offsets"]
+            count = min(4, end - start)
+            stream.seek(base + start)
+            raw = stream.read(count)
+            if len(raw) != count:
+                continue
+            decoded = [_decode_e4m3fn_byte(b) for b in raw]
+            samples.append({
+                "weight": weight_name, "scale": name, "raw_fp8_hex": raw.hex(),
+                "decoded_fp8": decoded, "scale_value": scale["value"],
+                "reference_dequantized": [
+                    v * scale["value"] if v is not None else None for v in decoded
+                ],
+            })
+        report["numerical_samples"] = samples
+        report["scale_reference"] = {
+            "rule": "fp8_float_times_scale",
+            "source": "Comfy-Org/comfy-kitchen/backends/eager/quantization.py",
+            "runtime_verified": False,
+        }
     report["status"] = "evidence_collected"
     return report
 
@@ -89,5 +160,29 @@ def inspect_managed_auxiliaries(destination: str | Path) -> dict[str, Any]:
                 present = False
             checks.append({"file": part, "present": present})
         result["components"][key] = {"files": checks, "present": all(c["present"] for c in checks)}
-    result["status"] = "file_presence_checked"
+    # Read small, bounded JSON configs only. Do not read tokenizer vocab/weights.
+    configs = {
+        "pipeline": ("model_index.json", ("_class_name", "scheduler", "text_encoder",
+                                         "tokenizer", "vae", "transformer")),
+        "tokenizer": ("tokenizer/tokenizer_config.json",
+                      ("tokenizer_class", "model_max_length", "add_bos_token",
+                       "add_eos_token")),
+        "vae": ("vae/config.json", ("_class_name", "scaling_factor", "shift_factor",
+                                    "latent_channels")),
+        "scheduler": ("scheduler/scheduler_config.json",
+                       ("_class_name", "num_train_timesteps", "shift")),
+        "text_encoder": ("text_encoder/config.json",
+                         ("model_type", "hidden_size", "num_hidden_layers",
+                          "num_attention_heads", "intermediate_size")),
+    }
+    result["configuration"] = {}
+    for name, (relative, fields) in configs.items():
+        data = _bounded_json(root / relative)
+        result["configuration"][name] = {
+            "readable": data is not None,
+            "summary": {key: data[key] for key in fields
+                        if data is not None and key in data
+                        and isinstance(data[key], (str, int, float, bool, list))}
+        }
+    result["status"] = "configurations_inspected"
     return result
