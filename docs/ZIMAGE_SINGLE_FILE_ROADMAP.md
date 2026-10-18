@@ -366,3 +366,16 @@ Do not run the encoder in the same process. When ready, launch another fresh CLI
 First explicit transformer CPU bind returned `blocked` after successful artifact/integrity and memory gating (`available_ram_gib=50.94`, `required_available_ram_gib=34.93`, `cuda_used=false`): Diffusers `ModelMixin.from_pretrained` searched the intentionally weights-only scratch transformer directory for `config.json`, even though a managed config dict was provided. This is a **loader packaging/API mismatch**, not evidence that the converted weights are invalid.
 
 Corrected the *experimental transformer-only* loading path to instantiate `ZImageTransformer2DModel.from_config(managed_config)` under `torch.device("meta")`, followed by `accelerate.load_checkpoint_and_dispatch` with an explicit scratch `.safetensors` file, `device_map={"": "cpu"}`, `dtype=torch.bfloat16`, and `strict=True`. Encoder loader path and production model handling are unchanged. This is not yet physically verified and might reveal further model-loader compatibility issues. Re-run the same masked-CUDA transformer CLI from the previous section. Do not copy configs into scratch, change managed components, or enable external model selection.
+
+
+### Z2.20b4 transformer Windows acceptance (2026-10-18)
+
+**PASS for transformer CPU weight binding.** With `CUDA_VISIBLE_DEVICES=-1`, the explicit `accelerate_meta_to_cpu_strict` route successfully bound all **521 parameter tensors / 6,154,908,736 parameter elements** using the converted standalone transformer scratch artifact. Available RAM at start: 50.9 GiB, minimum configured available RAM: 34.93 GiB. The safetensors metadata fallback warning ("Defaulting to 'pt' metadata") was nonfatal. `status=cpu_weights_bound_unverified`, `cuda_used=false`, `inference_attempted=false`, `runtime_verified=false`, `loadable=false`.
+
+**Next physical gate: encoder only**, in a separate fresh CPU-only process. The current encoder loader uses Transformers `Qwen3Model.from_pretrained` with explicit managed `Qwen3Config` and scratch encoder directory. It has not been physically validated and could require the same kind of config/weight-path separation fix as the transformer. Do not infer encoder acceptance from the transformer result or enable application selection.
+
+```powershell
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_cpu_binding --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --family encoder --execute-cpu-binding
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
