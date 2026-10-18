@@ -70,7 +70,7 @@ def plan_conversion(checkpoint: str | Path, cache_root: str | Path) -> dict[str,
     }
 
 
-def stage_verified_tensor_copy(
+def _stage_verified_tensor_copy(
     checkpoint: str | Path,
     cache_root: str | Path,
     *,
@@ -208,7 +208,7 @@ def plan_original_tensor_mapping(
     }
 
 
-def convert_original_checkpoint(
+def _convert_original_checkpoint(
     checkpoint: str | Path,
     cache_root: str | Path,
     *,
@@ -319,3 +319,33 @@ def convert_original_checkpoint(
         **plan, "state": "converted_unverified", "staged_file": str(destination / target.name),
         "ready": False, "loadable": False, "conversion_enabled": False,
     }
+
+
+def stage_verified_tensor_copy(
+    checkpoint: str | Path, cache_root: str | Path, *,
+    expected_tensor_shapes: dict[str, tuple[int, ...]],
+) -> dict[str, Any]:
+    """Reserve destination across processes before staging; verify publication."""
+    from .zimage_cache import ExclusiveCacheReservation, verify_staged_cache
+    plan = plan_conversion(checkpoint, cache_root)
+    with ExclusiveCacheReservation(plan["cache_destination"]):
+        result = _stage_verified_tensor_copy(
+            checkpoint, cache_root, expected_tensor_shapes=expected_tensor_shapes
+        )
+        verify_staged_cache(plan["cache_destination"])
+        return result
+
+
+def convert_original_checkpoint(
+    checkpoint: str | Path, cache_root: str | Path, *,
+    expected_output_shapes: dict[str, tuple[int, ...]],
+) -> dict[str, Any]:
+    """Reserve conversion destination and independently verify published weights."""
+    from .zimage_cache import ExclusiveCacheReservation, verify_staged_cache
+    plan = plan_conversion(checkpoint, cache_root)
+    with ExclusiveCacheReservation(plan["cache_destination"]):
+        result = _convert_original_checkpoint(
+            checkpoint, cache_root, expected_output_shapes=expected_output_shapes
+        )
+        verify_staged_cache(plan["cache_destination"])
+        return result
