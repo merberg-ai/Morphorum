@@ -280,3 +280,13 @@ This pass is intentionally separate from release/merge acceptance. The feature b
 The Civitai queue supports **Remove** for completed, failed, interrupted and cancelled entries. Removal updates the persisted queue manifest and cleans partial `.part` files for unfinished jobs, but **never deletes installed `.safetensors` weights**. A queued or still-running job must first be cancelled, and removal waits for the worker to exit to avoid a race with the downloader. Interrupted jobs remain resumable until they are removed.
 
 The explicit `DELETE /api/civitai/downloads/{job_id}` endpoint requires Civitai Hub enabled, returns 409 for active jobs, and returns 404 for nonexistent entries. Regression tests check protected model files, interrupted partial cleanup, and rejection of running jobs.
+
+## Standalone Civitai Z-Image checkpoint discovery
+
+Civitai chooses the **first configured** `models.zimage.checkpoints` folder when present. For a fresh installation without such a custom folder, standalone Z-Image checkpoint downloads now go under the configured managed Z-Image location in `civitai-checkpoints/` (by default `ckpts/z-image/civitai-checkpoints/`). The official `Z-Image-Turbo` Diffusers snapshot lives separately and is never overwritten.
+
+The model scanner includes both the explicitly configured standalone checkpoint locations and the dedicated Civitai location. Previously completed files in a custom configured Z-Image checkpoint path become visible after clicking **Scan Models**. To determine the path of a previous completed download, inspect its `destination` in the host-local `data/civitai-downloads.json` manifest. Do not share that manifest unredacted because it also contains private download information.
+
+**Compatibility boundary:** An indexed standalone Civitai `.safetensors` file is not necessarily a complete Diffusers pipeline. Morphorum's current Z-Image generation backend only supports the managed full Diffusers snapshot; standalone Civitai checkpoints appear in Models as **Indexed only** and are disabled for generation until a tested single-file loader/conversion workflow exists. This is intentionally not a claim of runtime support.
+
+Acceptance: restart, Scan Models, verify a previously downloaded Z-Image file in the Models library under Z-Image, confirm the full managed Z-Image-Turbo remains loadable, and verify standalone checkpoint **Use** is unavailable rather than causing a rendering error.

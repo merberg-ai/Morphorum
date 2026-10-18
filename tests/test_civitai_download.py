@@ -103,3 +103,27 @@ def test_remove_rejects_still_running_cancelled_job(monkeypatch, tmp_path):
     monkeypatch.setattr(dl, "_RUNNING", {ident})
     with pytest.raises(ValueError, match="wait"):
         dl.remove_download(ident)
+
+def test_zimage_civitai_destination_defaults_to_separate_managed_subfolder(monkeypatch, tmp_path):
+    from morphorum import civitai_download as dl
+    import hashlib
+    import threading
+    monkeypatch.setattr(dl, "_initialize", lambda: None)
+    monkeypatch.setattr(dl, "_save", lambda: None)
+    monkeypatch.setattr(dl, "_dispatch", lambda: None)
+    monkeypatch.setattr(dl, "_check_space", lambda job, existing=0: None)
+    monkeypatch.setattr(dl, "_JOBS", {})
+    monkeypatch.setattr(dl, "_RUNNING", set())
+    monkeypatch.setattr(dl, "managed_model_location", lambda family, cfg: tmp_path / "managed-zimage")
+    monkeypatch.setattr(dl, "load_settings", lambda: {"civitai": {"enabled": True}, "models": {"zimage": {"checkpoints": []}}})
+    monkeypatch.setattr(dl, "model_details", lambda _: {"type": "Checkpoint", "versions": [{
+        "id": 12, "base_model": "ZImageTurbo", "files": [{
+            "id": 17, "name": "civitai-zimage.safetensors", "size_kb": 1024,
+            "sha256": "f" * 64
+        }]
+    }]})
+    job = dl.start_download(10, 12, "civitai-zimage.safetensors")
+    assert job["status"] == "queued"
+    full = dl._JOBS[job["id"]]
+    assert full["destination"] == str(tmp_path / "managed-zimage" / "civitai-checkpoints" / "civitai-zimage.safetensors")
+    assert (tmp_path / "managed-zimage" / "civitai-checkpoints").is_dir()
