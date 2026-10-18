@@ -1473,6 +1473,11 @@
           <div class="console-status"><span class="status-dot" id="console-dot"></span><span id="console-status">Connecting…</span></div>
         </div>
 
+        <div class="console-inner-tabs" role="tablist" aria-label="Console views">
+          <button type="button" class="console-inner-tab active" id="console-tab-logs" data-console-inner-tab="logs" role="tab" aria-controls="console-panel-logs" aria-selected="true">›_ Console logs</button>
+          <button type="button" class="console-inner-tab" id="console-tab-diagnostics" data-console-inner-tab="diagnostics" role="tab" aria-controls="console-panel-diagnostics" aria-selected="false">◈ Diagnostics</button>
+        </div>
+        <div id="console-panel-logs" role="tabpanel" aria-labelledby="console-tab-logs">
         <article class="card glass console-card">
           <div class="console-toolbar">
             <div class="filter-group" id="level-filters">
@@ -1513,6 +1518,29 @@
           <div class="console-count" id="console-count" aria-live="off">0 messages</div>
           <div class="console-window" id="console-window" role="log" aria-live="polite"></div>
         </article>
+        </div>
+        <div id="console-panel-diagnostics" role="tabpanel" aria-labelledby="console-tab-diagnostics" hidden>
+          <article class="card glass diagnostic-card">
+            <div class="diagnostic-heading">
+              <div><p class="eyebrow">CHECKPOINT INSPECTION</p><h2>Z-Image diagnostics</h2><p class="muted">Read-only checks, model mapping and FP8 evidence. No generation or conversion is started.</p></div>
+              <div class="diagnostic-actions">
+                <button type="button" class="primary-button compact" id="diagnostic-refresh">Run diagnostics</button>
+                <button type="button" class="secondary-button compact" id="diagnostic-copy-json" disabled>Copy JSON</button>
+                <button type="button" class="secondary-button compact" id="diagnostic-copy-filtered" disabled>Copy filtered</button>
+              </div>
+            </div>
+            <div class="diagnostic-controls">
+              <label><span>Z-Image checkpoint</span><select id="diagnostic-model-select" aria-label="Select standalone Z-Image checkpoint"><option value="">Loading model index…</option></select></label>
+              <label><span>Section</span><select id="diagnostic-section"><option value="">All sections</option></select></label>
+              <label><span>Status</span><select id="diagnostic-status"><option value="">All values</option><option value="issue">Issues / blocked</option><option value="pass">Passes / verified</option><option value="unverified">Unverified / disabled</option></select></label>
+              <label><span>Search paths and values</span><input type="search" id="diagnostic-search" placeholder="e.g. scale_input, QKV, mismatches…" /></label>
+            </div>
+            <div class="diagnostic-status-line muted" id="diagnostic-status-line" role="status">Select an indexed external Z-Image checkpoint and run diagnostics.</div>
+            <div class="diagnostic-summary" id="diagnostic-summary"></div>
+            <div class="diagnostic-results-heading"><strong id="diagnostic-results-count">No diagnostic loaded</strong><span class="muted">Showing matching leaf fields, limited to 350 visible rows.</span></div>
+            <div id="diagnostic-results" class="diagnostic-results" role="region" aria-label="Searchable diagnostic results"><p class="muted">No results loaded.</p></div>
+          </article>
+        </div>
       </section>
     </main>
   </div>
@@ -1546,6 +1574,7 @@
   <script src="/assets/civitai.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/loras.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/diagnostics.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-visual.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-recording.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-frame-player.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
