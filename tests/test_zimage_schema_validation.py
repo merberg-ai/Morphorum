@@ -25,6 +25,8 @@ def _safetensors(path, entries):
             length *= dimension
         if dtype == "F32":
             values = struct.pack("<f", value)
+        elif dtype == "BF16" and value == 1.0:
+            values = struct.pack("<H", 0x3F80) * (length // 2)
         else:
             values = bytes([0x38 if dtype == "F8_E4M3" else 0] * length)
         assert len(values) == length
@@ -93,6 +95,7 @@ def _encoder(tmp_path):
     for name in list(weights)[1:]:
         entries[name] = ("F8_E4M3", weights[name], 0)
         entries[name[:-len(".weight")] + ".scale_weight"] = ("F32", (1,), 2.0)
+        entries[name[:-len(".weight")] + ".scale_input"] = ("BF16", (1,), 1.0)
     entries["scaled_fp8"] = ("F8_E4M3", (0,), 0)
     _safetensors(source, entries)
     return source, weights
@@ -125,6 +128,7 @@ def test_z217_separate_qwen_encoder_exact_schema(tmp_path):
     assert result["status"] == "schema_matches", result
     assert result["source_parameter_count"] == 3
     assert result["fused_qkv_splits"] == 0
+    assert result["discarded_unit_input_scale_count"] == 2
     assert result["schema_verified"] is True
     assert result["loadable"] is False
 
@@ -184,3 +188,42 @@ def test_z217_rejects_unindexed_extra_tensor_in_managed_shard(tmp_path):
     index.write_text(json.dumps({"weight_map": {"nonexistent": "weights-00001-of-00001.safetensors"}}))
     with pytest.raises(SchemaInspectionError, match="unindexed"):
         read_managed_component_schema(root, "transformer")
+
+
+def test_z217_nonunit_encoder_input_scale_blocks_reconciliation(tmp_path):
+    pytest.importorskip("torch")
+    source, expected = _encoder(tmp_path)
+    root = tmp_path / "managed"
+    _managed(root, "encoder", expected)
+    raw = bytearray(source.read_bytes())
+    hsize = struct.unpack("<Q", raw[:8])[0]
+    header = json.loads(raw[8:8 + hsize])
+    spec = header["model.layers.0.self_attn.q_proj.scale_input"]
+    offset = 8 + hsize + spec["data_offsets"][0]
+    raw[offset:offset + 2] = struct.pack("<H", 0x4000)  # BF16 2.0
+    source.write_bytes(raw)
+    result = validate_complete_tensor_schema(source, root, family="encoder")
+    assert result["status"] == "blocked"
+    assert "Non-unit" in result["reason"]
+    assert not result["schema_verified"]
+    assert not result["loadable"]
+
+
+def test_z217_orphan_unit_input_scale_blocks_even_if_value_is_one(tmp_path):
+    pytest.importorskip("torch")
+    source, expected = _encoder(tmp_path)
+    root = tmp_path / "managed"
+    _managed(root, "encoder", expected)
+    raw = source.read_bytes()
+    hsize = struct.unpack("<Q", raw[:8])[0]
+    header = json.loads(raw[8:8 + hsize])
+    orphan_spec = dict(header["model.layers.0.self_attn.q_proj.scale_input"])
+    # Replace a legal paired name with a seemingly harmless orphan name.
+    header.pop("model.layers.0.self_attn.q_proj.scale_input")
+    header["orphan.scale_input"] = orphan_spec
+    new_header = json.dumps(header).encode()
+    source.write_bytes(struct.pack("<Q", len(new_header)) + new_header + raw[8 + hsize:])
+    result = validate_complete_tensor_schema(source, root, family="encoder")
+    assert result["status"] == "blocked"
+    assert "Orphan input scale" in result["reason"]
+    assert not result["schema_verified"]
