@@ -504,3 +504,10 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Success: `transformer_cpu_forward_verified_nonloadable`, `output_finite=true`, `parameter_tensors_bound=521`, `loadable=false`. If blocked, preserve diagnostics before modifying code or proceeding. CI and physical acceptance remain pending. `main` and the managed Z-Image model remain unchanged.
+
+
+### Z2.20c2d2 Windows physical acceptance (2026-10-18)
+
+**PASS:** `transformer_cpu_forward_verified_nonloadable`. The converted BF16 standalone transformer loaded and executed a real CPU forward with all 521 parameter tensors bound. Input latent [16,1,4,4], synthetic caption [1,2560], timestep 0.5; finite BF16 output [16,1,4,4]. CPU-only, no image inference. Available RAM 50.9 GiB, required guarded RAM 38.93 GiB. Process RSS before load 733.49 MiB, after load 745.62 MiB, after forward 12503.03 MiB. The small post-load RSS despite 11.466 GiB of weights likely reflects memory mapping or lazy resident-page accounting; these observations do not establish peak RAM usage or GPU offload feasibility. Safetensors missing metadata fallback warning was nonfatal. `loadable=false`, `runtime_verified=false`, `inference_attempted=false`.
+
+**Gate completed:** independent real forward computation now passed for converted external Qwen3 encoder, converted external Z-Image transformer, and unchanged managed VAE. Next is a separate full-pipeline composition and offload compatibility phase, not automatic approval to expose external checkpoints in normal generation or merge to main.
