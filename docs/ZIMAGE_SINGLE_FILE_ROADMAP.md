@@ -400,3 +400,10 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Next only after successful physical acceptance: Z2.20c2 explicitly gated tiny-model forward and real-memory telemetry; Z2.20c3 the isolated minimal image generation smoke test. The production managed pipeline and `main` remain unchanged.
+
+
+### Z2.20c1 physical Windows acceptance (2026-10-18)
+
+**PASS:** `auxiliary_components_structurally_verified`. Managed Qwen2Tokenizer encoded/decoded a six-token prompt. Managed FlowMatchEulerDiscreteScheduler returned two CPU timesteps (1000.0, 8.928571701049805). Managed AutoencoderKL constructed on meta with 244 parameter tensors and 83,819,683 elements. `cuda_used=false`, `vae_weights_loaded=false`, `inference_attempted=false`, `loadable=false`. This verifies component construction, not the correctness of conditioning embeddings, VAE decoding or an image-generation pipeline.
+
+Z2.20c2 should begin with isolated, explicitly CPU-only low-memory scheduler numerical stepping (real finite tensors and read-only RSS telemetry) before full multi-billion-parameter model forward passes. Later full forward tests require bounded dimensions, limited timesteps and deliberate GPU-offload planning.
