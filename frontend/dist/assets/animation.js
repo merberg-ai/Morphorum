@@ -11964,8 +11964,8 @@
     if (!settings || typeof settings !== 'object') return {ok:false, message:'No Image settings supplied.'};
     const model = modelById(settings.modelId);
     if (!model || model.kind !== 'checkpoints') return {ok:false, message:'The selected Image checkpoint is not indexed in Project Editor.'};
-    const width = Number(settings.width), height = Number(settings.height), seed = Number(settings.seed);
-    if (![width,height,seed].every(Number.isFinite) || width < 64 || height < 64 || width > 4096 || height > 4096 || !Number.isInteger(seed) || seed < -1)
+    const width = Number(settings.width), height = Number(settings.height), seed = Number(settings.seed), steps = Number(settings.steps);
+    if (![width,height,seed,steps].every(Number.isFinite) || !Number.isInteger(steps) || steps < 1 || steps > 150 || width < 64 || height < 64 || width > 4096 || height > 4096 || !Number.isInteger(seed) || seed < -1)
       return {ok:false, message:'Image resolution or seed is invalid.'};
     if (!['fixed','increment','random'].includes(settings.seedMode))
       return {ok:false, message:'Unsupported seed mode.'};
@@ -11978,6 +11978,7 @@
     qs('#animation-model').value = model.id;
     qs('#animation-width').value = String(width);
     qs('#animation-height').value = String(height);
+    qs('#animation-steps').value = '0:(' + String(steps) + ')';
     syncAnimationResolutionPreset();
     populateSamplerSelect(sampler);
     if (qs('#animation-sampler').value !== sampler) return {ok:false, message:'Sampler could not be applied.'};
