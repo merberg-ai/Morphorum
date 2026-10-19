@@ -645,3 +645,8 @@ git pull
 ```
 
 Expected `encoder_cuda_forward_verified_nonloadable`, `forward_attempted=true` and `finite=true`. Stop on failures. CI and Windows acceptance pending. Next stage: bounded GPU transformer forward or layer-offload validation before the first full pipeline image. `main` remains untouched.
+
+
+### Z2.20c3b6 Windows physical acceptance (2026-10-18)
+
+**PASS:** `encoder_cuda_forward_verified_nonloadable`. Six-token prompt on RTX 4080 SUPER yielded finite BF16 hidden state [1,6,2560] from all 398 converted standalone Qwen3 parameter tensors. Free VRAM before load 14.708 GiB, after load 7.161 GiB, after forward 7.087 GiB; allocated after forward 7.553 GiB, peak 7.554 GiB. This is a real CUDA encoder neural forward, but `generation_attempted=false`, `runtime_verified=false`, `loadable=false`. Next is a tightly gated, tiny synthetic standalone transformer CUDA forward. Given transformer placement yielded only 2.496 GiB free, ensure live post-load memory reserve gate and explicit opt-in.
