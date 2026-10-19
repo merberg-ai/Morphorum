@@ -52,3 +52,7 @@ An isolated experimental single-file Z-Image path was owner-tested through miles
 - **Responsive navigation and Help:** Expanded phone navigation is bounded. Desktop Help or phone More → Help reads bundled Markdown documentation inside the application.
 
 Developer note: deferred SDXL LoRA console/alpha-pattern follow-up is tracked in [TODO.MD](https://github.com/merberg-ai/Morphorum/blob/main/TODO.MD). Standalone Z-Image scratch inference milestones remain *research-only*, not product model compatibility.
+
+## Project archive tools (dev-webui, pending physical acceptance)
+
+Project Manager offers validated **Export ZIP**, **Import Project ZIP** with explicit overwrite confirmation and Load Project prompt, and **Save Project As** (also available from Project Editor). Project settings and attached input media are included. Generated media and caches are not included. See [Project archive guide](PROJECT_ARCHIVES.md). These features are in active testing on dev-webui; archive size limits and external model references apply.
