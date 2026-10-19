@@ -31,7 +31,7 @@ The size limits are **256 MiB compressed**, **512 MiB expanded**, **128 entries*
 
 If an import encounters the same project ID, Morphorum requires typing the exact project name before overwrite. The previous folder is moved to managed project Trash with an archive-backup suffix; existing generated outputs outside the project are untouched. Validation failure must leave existing projects intact.
 
-## Windows and mobile acceptance
+## Verification and acceptance
 
 1. Save a project with prompts, source image, soundtrack and Motion Lab WAV. Export ZIP and confirm no rendered outputs are present.
 2. Import on an installation without that ID. Confirm all project settings and media restore correctly; accept or decline the **Load Project** prompt.
@@ -39,4 +39,6 @@ If an import encounters the same project ID, Morphorum requires typing the exact
 4. Use **Save Project As** from both Manager and Editor, including with unsaved prompt edits. Check the original is unchanged and the new project has the expected media.
 5. Attempt a generic ZIP and a tampered archive. Both should fail without altering projects.
 
-Automated coverage: tests/test_project_archive.py and frontend Project Manager regression tests. Physical Windows and mobile acceptance remain pending before merging to main.
+**Status (October 19, 2026):** The project owner tested the new export/import and Save Project As workflows on Windows and reported that all worked as expected. GitHub Actions backend and frontend regression suites passed. This does not establish independent physical testing of every malformed archive or all mobile layouts. Automated coverage: `tests/test_project_archive.py` and `tests/frontend_project_archive.test.cjs`.
+
+**Recovery reminder:** The archive backup in managed Trash preserves an existing project folder during overwrite. Render outputs, installed model files and LoRAs are separate and must be backed up independently. Importing does not magically install the original machine's external model libraries.
