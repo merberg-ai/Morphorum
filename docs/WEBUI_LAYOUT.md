@@ -45,3 +45,21 @@ feature rules may have additional breakpoints appropriate to their controls.
 
 Use the [Testing guide](TESTING.md) to run current frontend and backend checks. The same shared browser code and API contracts must work at phone, tablet, and desktop widths; avoid fixing one layout by creating a second application pathway.
 
+
+
+## UX polish on `dev-webui` (2026-10-18; Windows/mobile acceptance pending)
+
+The development UI adds `assets/ux-polish.css` after the responsive breakpoint styles. The narrow Project and Motion Lab dropdowns are bounded and appear in a positioned overlay above the phone bottom-navigation bar instead of expanding its flex row. The desktop sidebar still uses its original layout. Help is in the left desktop navigation and in the phone More menu. Verify 320, 375, 390, 640, 768, and desktop widths with both menu groups expanded; no horizontal page scroll or hidden controls.
+
+The Image Generation pane now includes **Apply Image Settings to Project**, which copies model, width/height, steps, sampler, schedule type, seed, seed mode and seed increment into the **already open Project Editor draft**. It deliberately does **not** copy positive/negative prompts or CFG/guidance. The user must still press **Save Project** in Project Editor; the Image action does not write to disk. The Image generation progress component has been moved without changing its DOM IDs into the Results card, directly above preview content. Both in-progress and history/empty preview must remain readable.
+
+Help is a normal application view, backed by read-only `/api/help/docs` and `/api/help/docs/{name}`, exposing only regular top-level `docs/*.md` files from the installed repository. The client fetches pages in-place and renders a constrained/sanitized subset of Markdown. It makes no remote network request or navigation away from the WebUI; the FastAPI interactive API documentation route at `/docs` remains reserved for its preexisting purpose. This Help browser is a local documentation reader, not a GitHub live sync. Back-end only mode does not expose it.
+
+Tests: `tests/frontend_webui_quick_tweaks.test.cjs`; run alongside existing `frontend_responsive_styles.test.cjs`, `frontend_project_navigation.test.cjs`, and project editor tests. CI and owner phone/Windows acceptance are pending. Changes stay in `dev-webui`; the stable Z-Image c3c4 checkpoint and `main` remain untouched.
+
+
+## Prompt keyframe distribution (dev-webui, pending Windows acceptance)
+
+Project Editor → **Prompt Keyframes** offers **+ Keyframe** and **Evenly Space**. Adding a prompt automatically reassigns the existing prompt rows and the new blank row across frames 0 through `max_frames - 1` in their existing order. Evenly Space reassigns only frame numbers, without inserting a row. For `max_frames=543`: 4 prompts → `0, 181, 361, 542`; 5 prompts → `0, 136, 271, 407, 542`. Uses rounded `index*(max_frames-1)/(count-1)`, first frame always zero. If there are more prompts than frames, the action refuses to introduce duplicate keyframes.
+
+Positive prompt text, negative prompt text, LoRA insertion controls, and row order remain unchanged. Manual frame edits are still allowed after redistribution. Both actions mark the **Project Editor draft as unsaved**; users must press **Save Project**. No animation schema or backend rendering behavior changed. Unit regression: `tests/frontend_prompt_even_spacing.test.cjs`. Verify manually on Windows with unsaved prompt text and after saving/reloading the project.

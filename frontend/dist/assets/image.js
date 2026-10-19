@@ -568,13 +568,19 @@
     node.textContent = warnings.join(' ');
   }
 
+  const LORA_VERIFICATION_OPEN_KEY = 'morphorum.image.loraVerificationOpen.v1';
+  function loraVerificationOpen() {
+    try { return localStorage.getItem(LORA_VERIFICATION_OPEN_KEY) === 'true'; }
+    catch (_) { return false; }
+  }
+
   function renderImageLoraVerification(job) {
     const panel = qs('#image-lora-verification');
     if (!panel) return;
     const adapters = job?.lora_diagnostic?.adapters;
     panel.hidden = !Array.isArray(adapters) || adapters.length === 0;
     if (panel.hidden) { panel.textContent = ''; return; }
-    const title = document.createElement('strong');
+    const title = document.createElement('summary');
     title.textContent = 'SDXL LoRA verification · ' + adapters.length + ' active';
     const list = document.createElement('div');
     list.className = 'lora-verification-items';
@@ -971,7 +977,45 @@
     }
   }
 
+  function updateProjectTransferAvailability() {
+    const button = qs('#image-apply-to-project');
+    if (button) button.disabled = !window.MorphorumAnimation?.hasOpenProject?.();
+  }
+
+  function applyCurrentImageSettingsToProject() {
+    const button = qs('#image-apply-to-project');
+    const status = qs('#image-project-transfer-status');
+    const read = id => qs('#' + id)?.value;
+    const result = window.MorphorumAnimation?.applyImageSettingsToProject?.({
+      modelId:read('image-model-select'),
+      width:read('image-width'),
+      height:read('image-height'),
+      steps:read('image-steps'),
+      sampler:read('image-sampler'),
+      scheduleType:read('image-schedule-type') || 'normal',
+      seed:read('image-seed'),
+      seedMode:read('image-seed-mode') || 'fixed',
+      seedIncrement:read('image-seed-increment'),
+    }) || {ok:false,message:'Project Editor is not ready.'};
+    if (status) status.textContent = result.message;
+    window.MorphorumToast?.(result.ok ? 'Project draft updated' : 'Could not apply Image settings',
+      result.message, result.ok ? 'success' : 'warning');
+    if (result.ok && button) button.title = 'Open Project Editor and Save Project to persist.';
+    updateProjectTransferAvailability();
+  }
+
   function bind() {
+    const verification = qs('#image-lora-verification');
+    if (verification) {
+      verification.open = loraVerificationOpen();
+      verification.addEventListener('toggle', () => {
+        try { localStorage.setItem(LORA_VERIFICATION_OPEN_KEY, String(verification.open)); }
+        catch (_) { /* Optional storage. */ }
+      });
+    }
+    qs('#image-apply-to-project')?.addEventListener('click', applyCurrentImageSettingsToProject);
+    window.addEventListener('morphorum:active-project-changed', updateProjectTransferAvailability);
+    updateProjectTransferAvailability();
     qs('#image-model-select')?.addEventListener('change', configureModel);
     for (const id of ['#image-prompt', '#image-negative-prompt']) {
       qs(id)?.addEventListener('input', previewImagePromptLength);

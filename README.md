@@ -142,3 +142,15 @@ The usual launcher provides both a **web interface and generation API**, typical
 Morphorum is independent software inspired by Deforum-style creative workflows; it is **not** a copy of Deforum or a guarantee of output compatibility. Some features are experimental, and large renders depend on GPU and model capabilities. Visit [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues) to report bugs or request improvements.
 
 Contributions are welcome: [Contributing](CONTRIBUTING.md) · [License](LICENSE) · [Third-party acknowledgments](THIRD_PARTY.md) · [Notices](NOTICE.md).
+
+### Experimental standalone Z-Image checkpoints (development only)
+
+The isolated Z-Image single-file research track has **owner-tested the isolated conversion/inference diagnostics through Z2.20c3c4**: converted BF16 transformer and Qwen3 encoder, native prompt encoding, two guarded CUDA denoising steps and CPU VAE numerical decoding to a 32 × 32 RGB tensor. **This does not mean external Z-Image checkpoints are supported for normal generation.** No diagnostic image file has been saved, and the current managed Z-Image-Turbo pipeline remains unchanged. The next step, [Z2.20c3c5 diagnostic PNG](docs/ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md), is **planned, not implemented**. See [the detailed research roadmap](docs/ZIMAGE_SINGLE_FILE_ROADMAP.md). These are contributor-only experiments; do not run them as installation steps.
+
+## Latest WebUI usability improvements
+
+The Image Studio keeps generation progress directly above the Results preview, and the empty preview stays uncluttered until images are generated. The **SDXL LoRA verification** report is collapsed by default, expands on demand, and remembers your preference. In **Image**, **Apply Image Settings to Project** transfers the selected checkpoint, image dimensions, step count, sampler, schedule and seed settings to the currently open animation project's **unsaved editor draft**. It does **not** overwrite either prompt or CFG; press **Save Project** to persist the edits.
+
+Project Editor's **Prompt Keyframes** now offers **+ Keyframe** with automatic even redistribution, alongside **Evenly Space** to redistribute existing prompts. Positive and negative prompt text is retained in order; frame numbers remain manually editable. For a 543-frame animation, five prompts are positioned at 0, 136, 271, 407 and 542. The sidebar's expanding menus have bounded mobile layouts. **Help** opens the installed `docs/` guides within the WebUI, from the desktop sidebar or mobile More menu. See [WebUI layout details](docs/WEBUI_LAYOUT.md).
+
+The SDXL LoRA follow-up diagnostic investigation is deferred in [TODO.MD](https://github.com/merberg-ai/Morphorum/blob/main/TODO.MD); current reports must not be mistaken for independent verification of all UNet scaling factors. Experimental external single-file Z-Image remains unavailable for regular generation.

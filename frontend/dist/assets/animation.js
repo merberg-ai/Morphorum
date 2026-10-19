@@ -774,6 +774,7 @@
 
     for (const id of [
       'animation-add-prompt',
+      'animation-evenly-space-prompts',
       'animation-save',
       'animation-reload',
       'animation-validate-schedules',
@@ -2227,23 +2228,50 @@
     }
   }
 
-  function addPromptKeyframe() {
-    if (!state.project) return;
-    const rows = qsa('.animation-prompt-frame');
-    const frames = rows
-      .map(input => Number(input.value))
-      .filter(Number.isFinite);
-    const maxFrames = Math.max(1, Number(qs('#animation-max-frames')?.value || 120));
-    const last = frames.length ? Math.max(...frames) : 0;
-    const candidate = Math.min(
-      maxFrames - 1,
-      Math.max(1, last + Math.max(1, Math.round(maxFrames / 4)))
-    );
+  function evenlySpacedPromptFrames(count, totalFrames) {
+    const total = Math.max(1, Math.trunc(Number(totalFrames) || 1));
+    const n = Math.max(0, Math.trunc(Number(count) || 0));
+    if (n === 0) return [];
+    if (n > total) return null; // Never generate duplicate or out-of-range keyframes.
+    if (n === 1) return [0];
+    return Array.from({length:n}, (_, index) => Math.round(index * (total - 1) / (n - 1)));
+  }
 
+  function redistributePromptKeyframes({append = false} = {}) {
+    if (!state.project) return false;
     const list = qs('#animation-prompt-list');
-    list?.appendChild(createPromptRow(candidate, '', ''));
-    markDirty();
-    list?.lastElementChild?.querySelector('.animation-prompt-text')?.focus();
+    if (!list) return false;
+    const rows = qsa('.animation-prompt-row', list);
+    const totalFrames = Number(qs('#animation-max-frames')?.value || 120);
+    const frames = evenlySpacedPromptFrames(rows.length + Number(append), totalFrames);
+    if (!frames) {
+      toast('Cannot add keyframe', 'The animation has fewer frames than prompt keyframes. Increase Max Frames first.', 'warning');
+      return false;
+    }
+    // Reassign only frame positions. Keep DOM nodes so text, LoRA tools and
+    // unsaved positive/negative prompts survive unchanged and in order.
+    if (append) rows.push(createPromptRow(0, '', ''));
+    rows.forEach((row, index) => {
+      const input = qs('.animation-prompt-frame', row);
+      if (input) {
+        input.value = String(frames[index]);
+        input.max = String(Math.max(0, Math.trunc(totalFrames) - 1));
+      }
+      const remove = qs('.animation-remove-prompt', row);
+      if (remove) remove.disabled = frames[index] === 0;
+      if (append && index === rows.length - 1) list.appendChild(row);
+    });
+    markDirty({validate:true});
+    if (append) rows[rows.length-1]?.querySelector('.animation-prompt-text')?.focus();
+    return true;
+  }
+
+  function addPromptKeyframe() {
+    redistributePromptKeyframes({append:true});
+  }
+
+  function evenlySpacePromptKeyframes() {
+    redistributePromptKeyframes();
   }
 
   function inspectorFrameMax() {
@@ -2330,6 +2358,7 @@
     // Reload limits even when the user refreshes the same project ID.
     motionLabSyncRecordingLimits();
     state.loading = true;
+    window.dispatchEvent(new CustomEvent('morphorum:active-project-changed', {detail:{projectId:project?.id || ''}}));
     try {
       renderProjectSelect();
       setEditorEnabled(Boolean(project));
@@ -11537,6 +11566,7 @@
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
     qs('#animation-add-prompt')?.addEventListener('click', addPromptKeyframe);
+    qs('#animation-evenly-space-prompts')?.addEventListener('click', evenlySpacePromptKeyframes);
     qs('#animation-validate-schedules')?.addEventListener('click', () => validateSchedules(true));
     qs('#animation-timeline-refresh')?.addEventListener('click', async () => {
       try {
@@ -11958,7 +11988,58 @@
     return {ok:true, message:'LoRA inserted into the first prompt keyframe. Save Project to persist.'};
   }
 
+  function applyImageSettingsToProject(settings) {
+    if (!state.project?.id) return {ok:false, message:'Open an animation project first.'};
+    if (!settings || typeof settings !== 'object') return {ok:false, message:'No Image settings supplied.'};
+    const model = modelById(settings.modelId);
+    if (!model || model.kind !== 'checkpoints') return {ok:false, message:'The selected Image checkpoint is not indexed in Project Editor.'};
+    const width = Number(settings.width), height = Number(settings.height), seed = Number(settings.seed), steps = Number(settings.steps);
+    if (![width,height,seed,steps].every(Number.isFinite) || !Number.isInteger(steps) || steps < 1 || steps > 150 || width < 64 || height < 64 || width > 4096 || height > 4096 || !Number.isInteger(seed) || seed < -1)
+      return {ok:false, message:'Image resolution or seed is invalid.'};
+    if (!['fixed','increment','random'].includes(settings.seedMode))
+      return {ok:false, message:'Unsupported seed mode.'};
+    const sampler = String(settings.sampler || '');
+    const samplerOptions = effectiveCapability(model).samplers?.options || [];
+    if (!samplerOptions.some(option => option.id === sampler))
+      return {ok:false, message:'Selected Image sampler is not available for this project model.'};
+    const modelSelect = qs('#animation-model');
+    if (!modelSelect || ![...modelSelect.options].some(option => option.value === model.id))
+      return {ok:false, message:'Project Editor model options are not ready. Refresh the model index.'};
+    const scheduleType = String(settings.scheduleType || 'normal');
+    if (model.family === 'sdxl') {
+      const schedules = effectiveCapability(model).schedule_types?.options || [];
+      if (!schedules.some(option => option.id === scheduleType))
+        return {ok:false, message:'Selected Image scheduler is unavailable for this model.'};
+      if (sampler === 'ddim' && scheduleType !== 'normal')
+        return {ok:false, message:'DDIM only supports the normal schedule.'};
+      if (scheduleType === 'trailing' && !['euler','euler_a','dpmpp_2m','dpmpp_2m_sde','lms','heun','unipc'].includes(sampler))
+        return {ok:false, message:'Trailing schedule is incompatible with this sampler.'};
+      if (['exponential','beta'].includes(scheduleType) && !['euler','dpmpp_2m','dpmpp_2m_sde','unipc'].includes(sampler))
+        return {ok:false, message:'Selected schedule is incompatible with this sampler.'};
+    }
+    const currentGuidance = qs('#animation-guidance')?.value;
+    const promptRowsBefore = collectPromptMaps();
+    qs('#animation-model').value = model.id;
+    qs('#animation-width').value = String(width);
+    qs('#animation-height').value = String(height);
+    qs('#animation-steps').value = '0:(' + String(steps) + ')';
+    syncAnimationResolutionPreset();
+    populateSamplerSelect(sampler);
+    if (qs('#animation-sampler').value !== sampler) return {ok:false, message:'Sampler could not be applied.'};
+    populateAnimationScheduleTypes(scheduleType);
+    qs('#animation-seed').value = String(seed);
+    qs('#animation-seed-behavior').value = settings.seedMode;
+    qs('#animation-seed-increment').value = String(Number.isInteger(Number(settings.seedIncrement)) ? settings.seedIncrement : 1);
+    // Deliberately leave CFG and prompt maps untouched. Only edit open project draft.
+    if (qs('#animation-guidance')?.value !== currentGuidance || JSON.stringify(collectPromptMaps()) !== JSON.stringify(promptRowsBefore))
+      throw new Error('Image transfer unexpectedly altered prompt or CFG.');
+    markDirty({validate:true});
+    return {ok:true,message:'Image settings applied to the open project draft. Use Save Project to persist them.'};
+  }
+
   window.MorphorumAnimation = {
+    applyImageSettingsToProject,
+    hasOpenProject: () => Boolean(state.project?.id),
     openSavedProjectFromSetup,
     selectInstalledCivitaiCheckpoint,
     insertInstalledCivitaiLora,

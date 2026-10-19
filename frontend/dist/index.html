@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="/assets/animation.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/tablet.css?v=__MORPHORUM_ASSET_VERSION__" media="(min-width: 641px) and (max-width: 1180px), (min-width: 1181px) and (pointer: coarse)">
   <link rel="stylesheet" href="/assets/desktop.css?v=__MORPHORUM_ASSET_VERSION__" media="(min-width: 1181px) and (hover: hover) and (pointer: fine)">
+  <link rel="stylesheet" href="/assets/ux-polish.css?v=__MORPHORUM_ASSET_VERSION__">
 </head>
 <body>
   <div class="app-shell">
@@ -124,10 +125,12 @@
       <button class="nav-button" data-view="loras"><span class="nav-icon">◇</span><span>LoRAs</span></button>
       <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
       <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
+      <button class="nav-button" data-view="help"><span class="nav-icon">?</span><span>Help</span></button>
       <button class="nav-more-toggle" type="button" id="nav-more-toggle" aria-expanded="false" aria-controls="nav-more-menu"><span class="nav-icon">⋯</span><span>More</span></button>
       <div class="nav-more-menu" id="nav-more-menu" hidden>
         <button type="button" data-more-view="settings">⚙ Settings</button>
         <button type="button" data-more-view="console">›_ Console</button>
+        <button type="button" data-more-view="help">? Help</button>
       </div>
     </nav>
 
@@ -190,32 +193,33 @@
             </div>
             <p class="field-help" id="image-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
 
+            <div class="image-project-transfer">
+              <button class="secondary-button" type="button" id="image-apply-to-project" disabled>Apply Image Settings to Project</button>
+              <span class="field-help" id="image-project-transfer-status" role="status" aria-live="polite">Open an animation project to copy model, resolution, sampler, scheduler and seed. Prompt and CFG stay unchanged.</span>
+            </div>
             <div class="generation-actions">
               <button class="primary-button busy-button full-width" id="generate-image" disabled><span class="spinner"></span><span class="button-label">Generate</span></button>
               <button class="secondary-button danger" id="cancel-generation" type="button" hidden>Cancel</button>
               <button class="secondary-button busy-button" id="unload-model" type="button" disabled><span class="spinner"></span><span class="button-label">Unload Model</span></button>
             </div>
 
+          </article>
+
+          <article class="card glass preview-card image-preview-card">
+            <div class="card-header"><div><h2 id="image-results-heading">Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
             <div class="generation-progress" id="generation-progress" hidden>
               <div class="progress-heading"><span id="generation-status">Preparing…</span><span id="generation-percent">0%</span></div>
               <div class="progress-track"><div class="progress-fill" id="generation-progress-fill"></div></div>
               <div class="progress-meta"><span id="generation-step">Waiting for worker</span><span id="generation-eta"></span></div>
               <p id="image-conditioning-diagnostic" class="field-help sdxl-conditioning-diagnostic" role="status" hidden></p>
-              <div id="image-lora-verification" class="lora-verification-report" role="status" hidden></div>
+              <details id="image-lora-verification" class="lora-verification-report" hidden></details>
             </div>
-          </article>
 
-          <article class="card glass preview-card image-preview-card">
-            <div class="card-header"><div><h2 id="image-results-heading">Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
             <div class="image-history-controls"><label for="image-job-history">Recent jobs</label><select id="image-job-history" aria-label="Recent Image Generation jobs"><option value="">No recent jobs</option></select><button class="secondary-button compact busy-button" id="image-history-refresh" type="button"><span class="spinner"></span><span class="button-label">Refresh</span></button></div>
             <div class="preview-placeholder" id="image-empty-preview">
               <div class="preview-glyph">◇</div>
               <strong>No images yet</strong>
               <span>Add model folders in Settings, scan Models, and choose one to get started.</span>
-              <div class="button-row">
-                <button class="secondary-button" data-jump="settings">Settings</button>
-                <button class="secondary-button" data-jump="models">Models</button>
-              </div>
             </div>
             <div class="image-gallery" id="image-gallery" hidden></div>
             <dialog id="image-result-lightbox" class="image-result-lightbox" aria-label="Generated image preview">
@@ -546,7 +550,7 @@
           <article class="card glass animation-prompts-card">
             <div class="card-header">
               <div><h2>Prompt Keyframes</h2><p class="muted">Set prompts at different frames to change the scene over time.</p></div>
-              <button class="secondary-button compact" id="animation-add-prompt" type="button" disabled>+ Keyframe</button>
+              <div class="animation-prompt-actions"><button class="secondary-button compact" id="animation-evenly-space-prompts" type="button" disabled>Evenly Space</button><button class="secondary-button compact" id="animation-add-prompt" type="button" disabled>+ Keyframe</button></div>
             </div>
             <div class="animation-prompt-list" id="animation-prompt-list">
               <div class="animation-empty">Create or load a project to edit prompt keyframes.</div>
@@ -1467,12 +1471,22 @@
         <div id="model-path-cards" class="settings-grid" hidden></div>
       </section>
 
+      <section class="view" id="view-help">
+        <div class="page-heading"><div><p class="eyebrow">MORPHORUM GUIDES</p><h1>Help</h1><p class="muted">Browse the documentation bundled with this installation without leaving Morphorum.</p></div></div>
+        <div class="help-layout"><aside class="card glass help-sidebar"><label for="help-document-select" class="field-label">Documentation</label><select id="help-document-select" aria-label="Help document"></select><div id="help-document-list" class="help-document-list" role="navigation" aria-label="Documentation pages"></div></aside><article class="card glass help-article" id="help-content" aria-live="polite"><p class="muted">Choose a guide to begin.</p></article></div>
+      </section>
+
       <section class="view" id="view-console">
         <div class="page-heading console-heading">
           <div><p class="eyebrow">LIVE SERVER ACTIVITY</p><h1>Console</h1><p class="muted">See generation activity and errors. Use the filters to find a message or copy logs for troubleshooting.</p></div>
           <div class="console-status"><span class="status-dot" id="console-dot"></span><span id="console-status">Connecting…</span></div>
         </div>
 
+        <div class="console-inner-tabs" role="tablist" aria-label="Console views">
+          <button type="button" class="console-inner-tab active" id="console-tab-logs" data-console-inner-tab="logs" role="tab" aria-controls="console-panel-logs" aria-selected="true">›_ Console logs</button>
+          <button type="button" class="console-inner-tab" id="console-tab-diagnostics" data-console-inner-tab="diagnostics" role="tab" aria-controls="console-panel-diagnostics" aria-selected="false">◈ Diagnostics</button>
+        </div>
+        <div id="console-panel-logs" role="tabpanel" aria-labelledby="console-tab-logs">
         <article class="card glass console-card">
           <div class="console-toolbar">
             <div class="filter-group" id="level-filters">
@@ -1513,6 +1527,30 @@
           <div class="console-count" id="console-count" aria-live="off">0 messages</div>
           <div class="console-window" id="console-window" role="log" aria-live="polite"></div>
         </article>
+        </div>
+        <div id="console-panel-diagnostics" role="tabpanel" aria-labelledby="console-tab-diagnostics" hidden>
+          <article class="card glass diagnostic-card">
+            <div class="diagnostic-heading">
+              <div><p class="eyebrow">CHECKPOINT INSPECTION</p><h2>Z-Image diagnostics</h2><p class="muted">Read-only checks, model mapping and FP8 evidence. No generation or conversion is started.</p></div>
+              <div class="diagnostic-actions">
+                <button type="button" class="primary-button compact" id="diagnostic-refresh">Run diagnostics</button>
+                <button type="button" class="secondary-button compact" id="diagnostic-copy-json" disabled>Copy JSON</button>
+                <button type="button" class="secondary-button compact" id="diagnostic-download-json" disabled>Download JSON</button>
+                <button type="button" class="secondary-button compact" id="diagnostic-copy-filtered" disabled>Copy filtered</button>
+              </div>
+            </div>
+            <div class="diagnostic-controls">
+              <label><span>Z-Image checkpoint</span><select id="diagnostic-model-select" aria-label="Select standalone Z-Image checkpoint"><option value="">Loading model index…</option></select></label>
+              <label><span>Section</span><select id="diagnostic-section"><option value="">All sections</option></select></label>
+              <label><span>Status</span><select id="diagnostic-status"><option value="">All values</option><option value="issue">Issues / blocked</option><option value="pass">Passes / verified</option><option value="unverified">Unverified / disabled</option></select></label>
+              <label><span>Search paths and values</span><input type="search" id="diagnostic-search" placeholder="e.g. scale_input, QKV, mismatches…" /></label>
+            </div>
+            <div class="diagnostic-status-line muted" id="diagnostic-status-line" role="status">Select an indexed external Z-Image checkpoint and run diagnostics.</div>
+            <div class="diagnostic-summary" id="diagnostic-summary"></div>
+            <div class="diagnostic-results-heading"><strong id="diagnostic-results-count">No diagnostic loaded</strong><span class="muted">Showing matching leaf fields, limited to 350 visible rows.</span></div>
+            <div id="diagnostic-results" class="diagnostic-results" role="region" aria-label="Searchable diagnostic results"><p class="muted">No results loaded.</p></div>
+          </article>
+        </div>
       </section>
     </main>
   </div>
@@ -1542,10 +1580,12 @@
   <script src="/assets/ui-services.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/resolution.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/app.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/help.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/civitai.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/loras.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/diagnostics.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-visual.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-recording.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/motion-lab-frame-player.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>

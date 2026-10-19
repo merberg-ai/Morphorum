@@ -177,6 +177,7 @@
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
     refreshNavMore(name);
     if (name === 'console') renderConsole();
+    if (name === 'help') window.MorphorumHelp?.activate?.();
     const projectToggle = qs('#project-nav-toggle');
     if (projectToggle) projectToggle.classList.toggle('active', name === 'animation' && !qs('.main-nav.motion-section-active [data-motion-nav].active'));
     if (name === 'civitai') window.MorphorumCivitai?.activate?.();
@@ -1308,14 +1309,14 @@
       headingWrap.append(heading, code);
       const count = document.createElement('span');
       count.className = 'badge';
-      const modelCount = source === 'external' ? familyData.checkpoints.length : 0;
+      const modelCount = (source === 'external' || family === 'zimage') ? familyData.checkpoints.length : 0;
       const loraCount = supportsLoras && loraSource === 'external' ? familyData.loras.length : 0;
       count.textContent = `${modelCount} model path${modelCount === 1 ? '' : 's'} · ${loraCount} LoRA path${loraCount === 1 ? '' : 's'}`;
       header.append(headingWrap, count);
       card.appendChild(header);
 
-      if (source === 'external') {
-        card.appendChild(createPathSection(family, 'checkpoints', 'Model / checkpoint directories'));
+      if (source === 'external' || family === 'zimage') {
+        card.appendChild(createPathSection(family, 'checkpoints', family === 'zimage' ? 'Standalone checkpoint directories (Civitai)' : 'Model / checkpoint directories'));
       }
       if (supportsLoras && loraSource === 'external') {
         card.appendChild(createPathSection(family, 'loras', 'LoRA directories'));
@@ -1392,7 +1393,7 @@
     for (const [family, , familySource, loraSource, supportsLoras] of FAMILY_DEFS) {
       const source = ensureFamily(family);
       const familyPayload = {};
-      if (familySource === 'external') {
+      if (familySource === 'external' || family === 'zimage') {
         familyPayload.checkpoints = (source.checkpoints || []).map(value => String(value).trim()).filter(Boolean);
       }
       if (supportsLoras && loraSource === 'external') {
@@ -1931,7 +1932,7 @@
     document.addEventListener('focusout', () => window.setTimeout(syncMobileViewport, 120));
     syncMobileViewport();
     const requested = location.hash.replace('#', '');
-    if (['image', 'animation', 'models', 'loras', 'civitai', 'settings', 'console'].includes(requested)) switchView(requested);
+    if (['image', 'animation', 'models', 'loras', 'civitai', 'settings', 'console', 'help'].includes(requested)) switchView(requested);
   }
 
   async function start() {

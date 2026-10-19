@@ -120,6 +120,8 @@ from .civitai_library import cached_metadata, sync_metadata, preview_path
 from .civitai_installed import installed_versions
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
+from .zimage_standalone import resolve_standalone_dependencies
+from .zimage_diagnostics import diagnose_standalone_checkpoint
 from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
 from .ffmpeg_tools import ffmpeg_status, normalize_ffmpeg_settings
@@ -261,6 +263,37 @@ def root():
 
 if not BACKEND_ONLY:
     app.add_api_route("/", root, methods=["GET"], include_in_schema=False)
+
+
+# In-app Help reads only bundled repository markdown; never executes it.
+HELP_DOC_ROOT = (ROOT / "docs").resolve()
+
+@app.get("/api/help/docs", include_in_schema=False)
+def help_document_index() -> dict:
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=404, detail="Help is available in WebUI mode.")
+    if not HELP_DOC_ROOT.is_dir():
+        return {"documents": []}
+    return {"documents": [
+        {"name": entry.name, "title": entry.stem.replace("_", " ").title()}
+        for entry in sorted(HELP_DOC_ROOT.glob("*.md"))
+        if entry.is_file() and not entry.is_symlink()
+    ]}
+
+@app.get("/api/help/docs/{name}", include_in_schema=False)
+def help_document_content(name: str) -> dict:
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=404, detail="Help is available in WebUI mode.")
+    if not name.endswith(".md") or name.startswith(".") or not all(
+        char.isalnum() or char in "._-" for char in name
+    ):
+        raise HTTPException(status_code=400, detail="Invalid documentation filename.")
+    target = (HELP_DOC_ROOT / name).resolve()
+    if target.parent != HELP_DOC_ROOT or not target.is_file() or target.is_symlink():
+        raise HTTPException(status_code=404, detail="Documentation page not found.")
+    if target.stat().st_size > 512_000:
+        raise HTTPException(status_code=413, detail="Documentation page too large.")
+    return {"name": name, "markdown": target.read_text(encoding="utf-8")}
 
 
 @app.get("/api/health")
@@ -2271,6 +2304,26 @@ def api_models_summary() -> dict[str, Any]:
 @app.post("/api/models/scan")
 def api_models_scan() -> dict[str, Any]:
     return scan_models()
+
+
+@app.get("/api/models/{model_id}/zimage-diagnostics")
+def api_zimage_diagnostics(model_id: str) -> dict[str, Any]:
+    """Inspect indexed external checkpoints and supporting encoders, read-only."""
+    model = get_model(model_id)
+    if not model or model.get("family") != "zimage" or model.get("kind") != "checkpoints" or model.get("source") != "external":
+        raise HTTPException(status_code=404, detail="External Z-Image checkpoint not found.")
+    candidates = list_models(family="zimage", kind="components", limit=2000)
+    return diagnose_standalone_checkpoint(model["path"], candidates)
+
+
+@app.get("/api/models/{model_id}/standalone-dependencies")
+def api_zimage_standalone_dependencies(model_id: str) -> dict[str, Any]:
+    """Read-only Z2 dependency inventory. Never approves generation."""
+    model = get_model(model_id)
+    if not model or model.get("family") != "zimage" or model.get("kind") != "checkpoints" or model.get("source") != "external":
+        raise HTTPException(status_code=404, detail="External Z-Image checkpoint not found.")
+    components = list_models(family="zimage", kind="components", limit=2000)
+    return resolve_standalone_dependencies(model["path"], components)
 
 
 @app.get("/api/models/{model_id}")

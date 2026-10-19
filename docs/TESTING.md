@@ -70,3 +70,11 @@ This uses disposable synthetic media to verify both encoders, FFprobe, PNG extra
 Use [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues) for reproducible bugs. Include OS, GPU, checkpoint family, version, relevant commands and the first error. Never publish tokens, credential files or private data.
 
 [Return to documentation index](README.md).
+
+## Experimental Z-Image single-file checkpoint acceptance
+
+Owner-supplied Windows physical test results through **Z2.20c3c4** show passing converted BF16 scratch model binding, isolated CPU/CUDA neural forwards, native Diffusers prompt processing, two numerical scheduler steps, and a managed VAE output tensor [1,3,32,32]. This does **not** prove image quality, a saved PNG, full-resolution GPU inference, normal model-loader compatibility, or CI health. Converted external checkpoints remain disabled for normal selection. The next step is the [c3c5 diagnostic PNG implementation plan](ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md), which is **documented but not implemented**; follow its opt-in, exclusive-file creation and negative/positive test requirements before hardware testing. Refer to [the full roadmap](ZIMAGE_SINGLE_FILE_ROADMAP.md). Do not treat owner-provided console JSON as a GitHub Actions run.
+
+## WebUI prompt/keyframe and navigation acceptance
+
+Recent frontend coverage includes `tests/frontend_prompt_even_spacing.test.cjs` (543-frame examples, even spacing, unique frames, no prompt text replacement) and `tests/frontend_webui_quick_tweaks.test.cjs` (responsive menu constraints, Image-to-Project UI, in-page Help, preview placement and persistent SDXL LoRA report). On a Windows physical test, open a long animation project, add and redistribute several prompts, verify positive/negative text is unchanged, then **Save Project**, reload and compare frame numbers. Check Image → Project transfers generation settings without changing project CFG or prompts. Expand and collapse LoRA verification and refresh to confirm persistence. Test phone menus for horizontal overflow, and desktop/mobile in-app documentation without leaving the UI. The owner reported the prompt spacing and recent WebUI interactions working; not every individual device-width/edge case has been physically certified. Running CI is not a substitute for manual GPU rendering.

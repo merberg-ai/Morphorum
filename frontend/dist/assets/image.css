@@ -190,3 +190,19 @@
 @media(max-width:380px) {
   #view-image .result-actions {grid-template-columns:minmax(0,1fr);}
 }
+
+/* Collapsible SDXL LoRA verification: compact default, expandable diagnostics. */
+#image-lora-verification > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 750;
+  line-height: 1.45;
+  padding: 1px 0;
+}
+#image-lora-verification > summary::marker { color: var(--accent); }
+#image-lora-verification > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+#image-lora-verification[open] > summary { margin-bottom: 8px; }

@@ -188,3 +188,15 @@
   #view-settings .ffmpeg-install-actions {display:grid;grid-template-columns:minmax(0,1fr);}
   #view-settings .ffmpeg-install-actions button {width:100%;}
 }
+
+/* Console Diagnostics phone layout (owned by mobile.css) */
+
+  .diagnostic-controls { grid-template-columns:minmax(0,1fr); }
+  .diagnostic-actions { width:100%; }
+  .diagnostic-actions button { flex:1; }
+  .diagnostic-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .diagnostic-result-row { display:block; }
+  .diagnostic-path,.diagnostic-value { display:block; padding:6px 10px; }
+  .diagnostic-path { border-right:0; padding-bottom:2px; }
+  .diagnostic-value { padding-top:2px; }
+
