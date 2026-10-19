@@ -48,3 +48,11 @@ test('UX4 Help navigation is internal and consumes only bundled documents', () =
   assert.match(help, /\/api\/help\/docs/);
   assert.match(help, /window\.MorphorumHelp=/);
 });
+
+test('UX4 documentation reader preserves existing contextual Help API', () => {
+  const shared = read('assets/ui-services.js');
+  assert.match(shared, /MorphorumHelp = \{refresh: refreshHelp, setEnabled: setHelpEnabled\}/);
+  assert.match(help, /Object\.assign\(window\.MorphorumHelp \|\| \{\}, \{activate, markdownToHtml\}\)/);
+  assert.doesNotMatch(help, /window\.MorphorumHelp\s*=\s*\{activate, markdownToHtml\}/);
+  assert.match(app, /MorphorumHelp\?\.setEnabled/);
+});
