@@ -630,3 +630,18 @@ Expected `sequential_cuda_placement_verified_nonloadable` with `encoder_gpu_veri
 ### Z2.20c3b5 Windows physical acceptance (2026-10-18)
 
 **PASS:** `sequential_cuda_placement_verified_nonloadable` on RTX 4080 SUPER. Available host RAM 50.161 GiB (gate 34.959 GiB); measured initial VRAM free 14.708 GiB. Qwen3 encoder allocated 7.545 GiB leaving 7.161 GiB free; after moving encoder back to CPU and cache release, torch allocated 0.0 GiB and free VRAM recovered to 14.708 GiB. Converted transformer subsequently allocated 11.564 GiB (reported peak 11.564 GiB), free VRAM 2.496 GiB. All 398 encoder and 521 transformer tensors verified at their respective GPU stages. `forward_attempted=false`, `generation_attempted=false`, `loadable=false`, `runtime_verified=false`. The safetensors missing metadata warning was nonfatal. This proves explicit manual component transfer and eviction, **not** model GPU forward, automatic hooks, activation/attention memory headroom or full-pipeline generation. Next stage: guarded 6-token GPU encoder forward, separately from the transformer and without generation.
+
+
+### Z2.20c3b6: standalone Qwen3 BF16 GPU neural forward (Windows test pending)
+
+Added `backend/morphorum/zimage_encoder_cuda_forward_probe.py` and opt-in/preflight unit tests. This isolated CLI validates standalone encoder SHA-256, managed schema, host RAM and live GPU free VRAM (converted weight file plus >=3 GiB reserve); binds all 398 BF16 tensors to CPU, moves to CUDA, rechecks GPU headroom, tokenizes a six-token sample via unchanged managed tokenizer, and executes exactly one `use_cache=False` Qwen3 forward on CUDA. It validates finite BF16 last hidden states and reports CUDA allocator peaks and remaining free VRAM. This does not load the transformer, produce an image, or verify automated Diffusers CPU offloading. `loadable=false`, `runtime_verified=false`, `generation_attempted=false` remain.
+
+Windows physical test with other AI GPU jobs idle, CUDA **enabled**:
+
+```powershell
+cd D:\Morphorum-test
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_encoder_cuda_forward_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-encoder-gpu-forward --reserve-gib 3
+```
+
+Expected `encoder_cuda_forward_verified_nonloadable`, `forward_attempted=true` and `finite=true`. Stop on failures. CI and Windows acceptance pending. Next stage: bounded GPU transformer forward or layer-offload validation before the first full pipeline image. `main` remains untouched.
