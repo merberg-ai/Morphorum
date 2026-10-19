@@ -670,3 +670,20 @@ Expected `transformer_cuda_forward_verified_nonloadable` with `forward_attempted
 ### Z2.20c3b7 Windows physical acceptance (2026-10-18)
 
 **PASS:** `transformer_cuda_forward_verified_nonloadable`: real external BF16 transformer ran a tiny CUDA forward with x [16,1,4,4], synthetic cap_feats [1,2560] and finite BF16 output [16,1,4,4]. All 521 tensors bound. RTX 4080 SUPER free VRAM 14.708 GiB before load, 2.496 GiB after load, 2.414 GiB after forward; allocator 11.572 GiB post-forward, 11.581 GiB peak. `forward_attempted=true`, `generation_attempted=false`, `loadable=false`. Missing safetensors metadata was nonfatal. This proves tiny transformer GPU math but not real caption conditioning, image resolution activation budgets or full pipeline. Next: isolate a real tokenizer→Qwen3 hidden-state→transformer input contract using both models on CPU, then test GPU offload with a proven contract.
+
+
+### Z2.20c3b8: isolated CPU Qwen3 output → standalone transformer (Windows testing pending)
+
+Committed `backend/morphorum/zimage_conditioned_cpu_probe.py` and fail-closed unit guards to `dev-webui`. This new strictly CPU-only diagnostic requires `CUDA_VISIBLE_DEVICES=-1`, an explicit `--execute-conditioned-cpu-forward`, schema and full scratch SHA-256 verification, and live free host RAM exceeding both converted weight sizes plus 18 GiB. It uses the unchanged managed tokenizer to encode a short six-ish-token prompt, runs the **real converted BF16 Qwen3** with `use_cache=False`, converts its per-image hidden states into the `cap_feats` list observed in transformer-forward probes, and runs a single tiny forward of the **real converted BF16 transformer** using latent [16,1,4,4], t=0.5 on CPU. Verifies finite tensor shapes and reports process RSS. This is an **interface smoke test, not validated production prompt-conditioning semantics** (including Z-Image chat templates, empty/unconditional prompts, CFG or actual scheduler timesteps). No diffusion loop, VAE or generated file. Normal UI remains unable to load this checkpoint.
+
+Windows physical test with CPU RAM available, competing jobs idle:
+
+```powershell
+cd D:\Morphorum-test
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_conditioned_cpu_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-conditioned-cpu-forward
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Expected `real_caption_cpu_transformer_forward_verified_nonloadable` with both forward flags true, finite output and `loadable=false`. This deliberately tests integration on CPU prior to adding GPU offload complexity. **CI and physical acceptance pending**, `main` and managed files unchanged.
