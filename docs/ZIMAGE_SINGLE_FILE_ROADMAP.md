@@ -692,3 +692,18 @@ Expected `real_caption_cpu_transformer_forward_verified_nonloadable` with both f
 ### Z2.20c3b8 Windows physical acceptance (2026-10-18)
 
 **PASS:** `real_caption_cpu_transformer_forward_verified_nonloadable`. CPU-only integrated converted standalone Qwen3 encoder and Z-Image transformer: token count 6, encoder hidden state [1,6,2560], per-image caption features [6,2560], transformer finite BF16 output [16,1,4,4]. All 398 encoder and 521 transformer parameter tensors bound; process RSS after forward 20284.56 MiB; available RAM 50.207 GiB, guarded RAM 36.959 GiB. `encoder_forward_attempted=true`, `transformer_forward_attempted=true`, `cuda_used=false`, `generation_attempted=false`, `loadable=false`. Nonfatal safetensors metadata fallback noted. This validates elementary network interface compatibility, not production text processing, actual denoising, full pipeline or image quality. Next: opt-in encoder CUDA forward → move its tiny BF16 caption features to CPU → evict encoder GPU → transformer CUDA forward using those features; require live VRAM gates at each transfer and no generation.
+
+
+### Z2.20c3b9: real caption sequential CUDA neural forwards (physical testing pending)
+
+Added `backend/morphorum/zimage_sequential_conditioned_gpu_probe.py` with fail-closed test guards. This experimental CLI requires `--execute-sequential-conditioned-gpu`, passing managed config and both full BF16 scratch SHA-256 integrity checks, enough free RAM (both files +18 GiB), and measured free VRAM exceeding the larger model file plus a >=3 GiB reserve. It loads standalone Qwen3 on CPU, moves encoder to CUDA, performs one real short-prompt BF16 forward, copies finite per-image caption features [6,2560] to CPU, removes the encoder from CUDA and verifies VRAM recovery, then loads standalone BF16 Z-Image transformer onto CUDA and performs one tiny [16,1,4,4] latent forward conditioned by **actual** Qwen3 features. It requires >=1.5 GiB free after transformer load for this tiny forward and collects stage-wise VRAM. `loadable=false`, `runtime_verified=false`, `generation_attempted=false`. Still not production Z-Image chat-template conditioning, automatic model offload, multi-step denoising, VAE or actual image synthesis.
+
+Windows physical acceptance (CUDA **enabled**, idle other AI jobs):
+
+```powershell
+cd D:\Morphorum-test
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_sequential_conditioned_gpu_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-sequential-conditioned-gpu --reserve-gib 3 --headroom-gib 1.5
+```
+
+Expected `sequential_real_caption_cuda_forwards_verified_nonloadable` with `encoder_forward_attempted=true`, `encoder_evicted=true`, `transformer_forward_attempted=true`, output finite, no generation. If blocked, inspect rather than relaxing guards. CI and Windows acceptance pending; `main` and managed Z-Image files unchanged.
