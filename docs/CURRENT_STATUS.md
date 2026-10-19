@@ -39,3 +39,7 @@ Owner Windows testing reported a successful 237-frame, 24 FPS animation with H.2
 Read [Getting started](GETTING_STARTED.md) for a small first render, [Motion Studio](MOTION_STUDIO.md) for synchronized audio motion, [Installation](INSTALLATION.md) for setup requirements, and [Troubleshooting](TROUBLESHOOTING.md) if anything fails.
 
 Report reproducible issues at [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues). Please share your OS, GPU, Morphorum version, and error message, **never authentication tokens or private files**.
+
+## Standalone Z-Image research boundary (dev-webui)
+
+An isolated experimental single-file Z-Image path was owner-tested through milestone **Z2.20c3c4** on Windows: converted external BF16 encoder/transformer weights, native prompt processing, two guarded CUDA denoising steps and a finite 32×32 RGB tensor decoded with the existing managed VAE. **No image file was generated or saved.** These scratch checkpoints are deliberately `loadable=false` and `runtime_verified=false`, and are **not supported by the normal Z-Image image-generation UI**. The managed Z-Image-Turbo package remains the supported path. See [milestone history](ZIMAGE_SINGLE_FILE_ROADMAP.md) and the [planned c3c5 PNG test](ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md).
