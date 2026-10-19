@@ -70,3 +70,7 @@ This uses disposable synthetic media to verify both encoders, FFprobe, PNG extra
 Use [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues) for reproducible bugs. Include OS, GPU, checkpoint family, version, relevant commands and the first error. Never publish tokens, credential files or private data.
 
 [Return to documentation index](README.md).
+
+## Experimental Z-Image single-file checkpoint acceptance (dev-webui)
+
+Owner-supplied Windows physical test results through **Z2.20c3c4** show passing converted BF16 scratch model binding, isolated CPU/CUDA neural forwards, native Diffusers prompt processing, two numerical scheduler steps, and a managed VAE output tensor [1,3,32,32]. This does **not** prove image quality, a saved PNG, full-resolution GPU inference, normal model-loader compatibility, or CI health. Converted external checkpoints remain disabled for normal selection. The next step is the [c3c5 diagnostic PNG implementation plan](ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md), which is **documented but not implemented**; follow its opt-in, exclusive-file creation and negative/positive test requirements before hardware testing. Refer to [the full roadmap](ZIMAGE_SINGLE_FILE_ROADMAP.md). Do not treat owner-provided console JSON as a GitHub Actions run.
