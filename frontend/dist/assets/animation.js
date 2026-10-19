@@ -774,6 +774,7 @@
 
     for (const id of [
       'animation-add-prompt',
+      'animation-evenly-space-prompts',
       'animation-save',
       'animation-reload',
       'animation-validate-schedules',
@@ -2227,23 +2228,50 @@
     }
   }
 
-  function addPromptKeyframe() {
-    if (!state.project) return;
-    const rows = qsa('.animation-prompt-frame');
-    const frames = rows
-      .map(input => Number(input.value))
-      .filter(Number.isFinite);
-    const maxFrames = Math.max(1, Number(qs('#animation-max-frames')?.value || 120));
-    const last = frames.length ? Math.max(...frames) : 0;
-    const candidate = Math.min(
-      maxFrames - 1,
-      Math.max(1, last + Math.max(1, Math.round(maxFrames / 4)))
-    );
+  function evenlySpacedPromptFrames(count, totalFrames) {
+    const total = Math.max(1, Math.trunc(Number(totalFrames) || 1));
+    const n = Math.max(0, Math.trunc(Number(count) || 0));
+    if (n === 0) return [];
+    if (n > total) return null; // Never generate duplicate or out-of-range keyframes.
+    if (n === 1) return [0];
+    return Array.from({length:n}, (_, index) => Math.round(index * (total - 1) / (n - 1)));
+  }
 
+  function redistributePromptKeyframes({append = false} = {}) {
+    if (!state.project) return false;
     const list = qs('#animation-prompt-list');
-    list?.appendChild(createPromptRow(candidate, '', ''));
-    markDirty();
-    list?.lastElementChild?.querySelector('.animation-prompt-text')?.focus();
+    if (!list) return false;
+    const rows = qsa('.animation-prompt-row', list);
+    const totalFrames = Number(qs('#animation-max-frames')?.value || 120);
+    const frames = evenlySpacedPromptFrames(rows.length + Number(append), totalFrames);
+    if (!frames) {
+      toast('Cannot add keyframe', 'The animation has fewer frames than prompt keyframes. Increase Max Frames first.', 'warning');
+      return false;
+    }
+    // Reassign only frame positions. Keep DOM nodes so text, LoRA tools and
+    // unsaved positive/negative prompts survive unchanged and in order.
+    if (append) rows.push(createPromptRow(0, '', ''));
+    rows.forEach((row, index) => {
+      const input = qs('.animation-prompt-frame', row);
+      if (input) {
+        input.value = String(frames[index]);
+        input.max = String(Math.max(0, Math.trunc(totalFrames) - 1));
+      }
+      const remove = qs('.animation-remove-prompt', row);
+      if (remove) remove.disabled = frames[index] === 0;
+      if (append && index === rows.length - 1) list.appendChild(row);
+    });
+    markDirty({validate:true});
+    if (append) rows[rows.length-1]?.querySelector('.animation-prompt-text')?.focus();
+    return true;
+  }
+
+  function addPromptKeyframe() {
+    redistributePromptKeyframes({append:true});
+  }
+
+  function evenlySpacePromptKeyframes() {
+    redistributePromptKeyframes();
   }
 
   function inspectorFrameMax() {
@@ -11538,6 +11566,7 @@
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-reload')?.addEventListener('click', reloadProject);
     qs('#animation-add-prompt')?.addEventListener('click', addPromptKeyframe);
+    qs('#animation-evenly-space-prompts')?.addEventListener('click', evenlySpacePromptKeyframes);
     qs('#animation-validate-schedules')?.addEventListener('click', () => validateSchedules(true));
     qs('#animation-timeline-refresh')?.addEventListener('click', async () => {
       try {
