@@ -32,3 +32,10 @@ Project Manager, New Project Wizard and Project Editor are direct main-menu dest
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for source contributions and [Testing](TESTING.md) for the public test workflow.
 
 Historical research and internal milestones remain available in the [earlier development archive](https://github.com/merberg-ai/Morphorum/tree/archive/development-notes-pre-public-cleanup-20261014) and the [Motion Studio / first-run release checkpoint](https://github.com/merberg-ai/Morphorum/tree/archive/motion-studio-ms6-pre-main-20261015). These are **not** installation instructions. Public-facing guides in this directory describe the supported user experience.
+
+## Experimental standalone Z-Image research (developers)
+
+- [Z-Image single-file milestone history](ZIMAGE_SINGLE_FILE_ROADMAP.md): physical Windows acceptance through Z2.20c3c4, still non-loadable in production
+- [Z2.20c3c5 implementation plan](ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md): next planned strictly gated 32×32 diagnostic PNG, not yet implemented
+
+These are research notes, not user installation or normal model-selection instructions. Managed Z-Image remains unchanged.
