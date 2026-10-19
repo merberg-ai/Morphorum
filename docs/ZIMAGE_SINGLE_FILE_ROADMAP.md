@@ -733,3 +733,20 @@ Expected `pipeline_source_contract_inspected_nonloadable`, with method signature
 ### Z2.20c3c0 Windows physical acceptance (2026-10-18)
 
 **PASS:** `pipeline_source_contract_inspected_nonloadable` with installed `diffusers==0.40.0`. Discovered `diffusers.pipelines.z_image.pipeline_z_image.ZImagePipeline`. The installed `__call__` accepts `prompt`, `prompt_embeds: list[Tensor]`, `negative_prompt_embeds`, `guidance_scale`, `sigmas`, `latents` and an explicit output type; calls `encode_prompt` unless embeddings are provided, uses scheduler `step(noise_pred.float(), t, latents)`, then applies VAE inverse scaling and shift before decode. `prepare_latents` samples noise when not provided. Confirmed `encode_prompt` delegates to `_encode_prompt`; source probe omitted the latter because only a fixed selection of helper names was inspected. `cuda_initialized=false`, `model_weights_loaded=false`, `generation_attempted=false`, `loadable=false`. Next: call the installed pipeline's own actual `encode_prompt` with the converted external Qwen3 on CPU and managed tokenizer. This will assess template/token handling without transformer loading, denoising or image generation. 
+
+
+### Z2.20c3c1: native ZImagePipeline prompt encoding with converted Qwen3 (Windows test pending)
+
+Added `backend/morphorum/zimage_pipeline_prompt_probe.py` and fail-closed regression guards to `dev-webui`. The probe requires explicit `--execute-pipeline-prompt-encoding`, masked CUDA, passing scratch schema preflight and full encoder SHA-256, plus at least 2x encoder file size +12 GiB currently available RAM. It binds 398 converted BF16 standalone Qwen3 tensors on CPU, instantiates the **installed Diffusers 0.40.0 ZImagePipeline** with unchanged managed tokenizer/scheduler, but intentionally omits transformer and VAE. It calls the pipeline's own `encode_prompt` with a short prompt and CFG disabled, then validates that exactly one finite, CPU, 2560-channel caption tensor was returned. `transformer_forward_attempted=false`, `generation_attempted=false`, `loadable=false`, `runtime_verified=false`. This checks authentic installed Z-Image prompt formatting and token selection, not final picture output or denoising.
+
+Windows physical test, idle CPU-heavy jobs:
+
+```powershell
+cd D:\Morphorum-test
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_pipeline_prompt_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-pipeline-prompt-encoding
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Expected `pipeline_prompt_encoding_cpu_verified_nonloadable` with `prompt_encoding_attempted=true` and `finite=true`. If the installed pipeline constructor or prompt helper rejects absent transformer/VAE, report its exact error and adjust the diagnostic without modifying managed assets. CI and physical test pending; `main` unchanged. If this passes, the next stage is one tightly gated real pipeline scheduler/denoising step with sequential CPU/GPU placement; do not expose standalone checkpoints in normal UI yet.
