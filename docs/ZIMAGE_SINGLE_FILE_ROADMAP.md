@@ -755,3 +755,17 @@ Expected `pipeline_prompt_encoding_cpu_verified_nonloadable` with `prompt_encodi
 ### Z2.20c3c1 Windows physical acceptance (2026-10-18)
 
 **PASS:** `pipeline_prompt_encoding_cpu_verified_nonloadable`. The installed Diffusers 0.40.0 ZImagePipeline native `encode_prompt` method used the converted standalone Qwen3 encoder (398 bound parameter tensors) and the unchanged managed tokenizer to produce one finite BF16 prompt embedding [14,2560]. With CFG disabled no negative embeddings were returned. Available RAM 50.875 GiB versus guarded 26.985 GiB; process RSS 8540.51 MiB. CUDA unused, transformer forward and generation not attempted, `loadable=false`, `runtime_verified=false`. **The native prompt produces 14 tokens rather than the six tokens from the earlier manual tokenization test**, making pipeline-native formatting essential for the next denoising stage.
+
+
+### Z2.20c3c2: one isolated native-caption denoising/scheduler step (Windows test pending)
+
+Added `backend/morphorum/zimage_single_step_probe.py` and regression guards to `dev-webui`. This experimental diagnostic requires explicit `--execute-single-step`, full encoder+transformer scratch integrity and schema checks, currently available host RAM greater than both BF16 files plus 18 GiB and measured free VRAM covering whole transformer file plus 3 GiB reserve; >=1.5 GiB must remain after GPU transformer loading. The installed Diffusers 0.40.0 ZImagePipeline native `encode_prompt` produces the actual caption tensor using converted standalone Qwen3 weights on CPU; it then creates a **one-step** managed FlowMatchEulerDiscreteScheduler, runs one tiny [16,1,4,4] BF16 standalone transformer CUDA forward with the native caption (time input set to scheduler timestep / 1000), and calls exactly one `scheduler.step` on CPU float32 latents. Checks all shapes/numerical finiteness and reports GPU memory. It **does not execute `ZImagePipeline.__call__`, perform VAE decode, save files or generate an image**. As with all manual probes, validating one numeric integration step does not yet establish exact full pipeline parity, multi-step scheduling, image quality, or production safety.
+
+From `D:\Morphorum-test` with other GPU jobs idle and CUDA enabled:
+
+```powershell
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_single_step_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-single-step --reserve-gib 3 --headroom-gib 1.5
+```
+
+Expected `native_caption_single_scheduler_step_verified_nonloadable` with `prompt_encoding_attempted=true`, `transformer_forward_attempted=true`, `scheduler_step_attempted=true`, `finite=true`, `generation_attempted=false` and `loadable=false`. This remains an isolated diagnostic; stop and inspect errors before next phase. CI and Windows physical acceptance pending; `main` and managed Z-Image installation untouched.
