@@ -750,3 +750,8 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Expected `pipeline_prompt_encoding_cpu_verified_nonloadable` with `prompt_encoding_attempted=true` and `finite=true`. If the installed pipeline constructor or prompt helper rejects absent transformer/VAE, report its exact error and adjust the diagnostic without modifying managed assets. CI and physical test pending; `main` unchanged. If this passes, the next stage is one tightly gated real pipeline scheduler/denoising step with sequential CPU/GPU placement; do not expose standalone checkpoints in normal UI yet.
+
+
+### Z2.20c3c1 Windows physical acceptance (2026-10-18)
+
+**PASS:** `pipeline_prompt_encoding_cpu_verified_nonloadable`. The installed Diffusers 0.40.0 ZImagePipeline native `encode_prompt` method used the converted standalone Qwen3 encoder (398 bound parameter tensors) and the unchanged managed tokenizer to produce one finite BF16 prompt embedding [14,2560]. With CFG disabled no negative embeddings were returned. Available RAM 50.875 GiB versus guarded 26.985 GiB; process RSS 8540.51 MiB. CUDA unused, transformer forward and generation not attempted, `loadable=false`, `runtime_verified=false`. **The native prompt produces 14 tokens rather than the six tokens from the earlier manual tokenization test**, making pipeline-native formatting essential for the next denoising stage.
