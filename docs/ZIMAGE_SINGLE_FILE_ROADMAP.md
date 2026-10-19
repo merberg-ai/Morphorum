@@ -789,3 +789,8 @@ git pull
 ```
 
 Expected `native_caption_multi_scheduler_steps_verified_nonloadable`, `steps_completed=2`, two finite updates, `generation_attempted=false`, `loadable=false`. CI and Windows acceptance pending; main and managed installation unchanged. Next checkpoint after Windows PASS: isolated VAE decoding of the updated latent with proper scaling/shift, but still separate from regular UI.
+
+
+### Z2.20c3c3 Windows physical acceptance (2026-10-18)
+
+**PASS:** `native_caption_multi_scheduler_steps_verified_nonloadable`. Both scheduled iterations completed using pipeline-native caption [14,2560], real converted transformer BF16 prediction, and FlowMatchEulerDiscreteScheduler. Timesteps 1000.0 (normalized 1.0) and 8.928571701049805 (normalized 0.0089285718). Updated latent [1,16,4,4] finite at both steps, CUDA peak 11.582 GiB and free GPU memory after forward 2.414 GiB, available RAM 50.334 GiB. `prompt_encoding_attempted=true`, `scheduler_step_attempted=true`, `transformer_forward_attempted=true`, `generation_attempted=false`, `loadable=false`, `runtime_verified=false`. The nonfatal safetensors metadata fallback warning persists. This verifies a **two-step numerical denoising diagnostic**, not generated image quality, pipeline parity or full-size render feasibility. Next: gated isolated VAE decode on the updated latent, with correct managed VAE scaling/shift and no file output.
