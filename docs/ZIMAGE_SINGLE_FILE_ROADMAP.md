@@ -548,3 +548,8 @@ git pull
 ```
 
 Expected `offload_plan_unverified`; `full_pipeline_cuda_resident_safe=false`. Optionally supply `--free-vram-gib` from a separately measured idle GPU reading; do not treat total GPU capacity as simultaneously free. Physical testing and CI pending. Next c3b2 requires separately authorized and monitored GPU placement tests; c3c is an actual image smoke test. Keep `main` and managed installation unchanged.
+
+
+### Z2.20c3b1 Windows physical acceptance (2026-10-18)
+
+**PASS for static planning only:** `offload_plan_unverified`, both scratch hashes verified. Transformer 11.466 GiB, encoder 7.492 GiB, combined 18.959 GiB. A hypothetical 16 GiB GPU with fixed 3 GiB reserve yields 13.0 GiB weight-only budget; either component's static weights fit separately, but the full pipeline does not. `cuda_initialized=false`, `gpu_weights_loaded=false`, `generation_attempted=false`, `loadable=false`. No *free* VRAM reading supplied (`vram_free_input_gib=null`). This is not an actual CUDA placement acceptance; attention workspaces, activations, transfer spikes and VAE remain unverified.
