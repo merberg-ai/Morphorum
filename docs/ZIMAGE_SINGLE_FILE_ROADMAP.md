@@ -591,3 +591,17 @@ Do not disable CUDA. Physical Windows test and CI pending. If free VRAM is insuf
 ### Z2.20c3b3 Windows physical acceptance (2026-10-18)
 
 **PASS:** `encoder_cuda_placement_verified_nonloadable`. All 398 standalone Qwen3 encoder parameter tensors placed on RTX 4080 SUPER CUDA; PyTorch allocated/peak 7.545 GiB, GPU free after placement 7.161 GiB, free before 14.708 GiB, total 15.992 GiB, required free including 3 GiB reserve 10.492 GiB. No encoder forward or generation (`forward_attempted=false`, `generation_attempted=false`, `loadable=false`). This establishes single-component placement, not combined pipeline viability or correctly functioning GPU neural inference. Next: independently gated transformer placement with conservative real free VRAM and a larger activation reserve.
+
+
+### Z2.20c3b4: isolated real transformer CUDA placement (physical test pending)
+
+Added `backend/morphorum/zimage_transformer_gpu_probe.py` and isolated guard tests on `dev-webui`. This CLI explicitly requires `--execute-transformer-gpu-placement`, config/schema validation, complete SHA-256 transformer scratch verification, enough available host RAM, and live CUDA free memory exceeding the 11.466 GiB converted transformer file plus a default 3 GiB reserve. It repeats the free VRAM gate just before transfer, loads all 521 transformer parameters onto CPU using the previously accepted Accelerate strict route, then attempts entire-model CUDA placement **without** forward or image generation. It reports allocated and peak VRAM and leaves cleanup to process termination rather than copying 11.47 GiB back to CPU. This is a *placement-only* test; an allocation success is not proof of sufficient inference activation headroom. If a VRAM gate blocks, stop and report the numbers rather than reducing the reserve.
+
+Windows physical test with Morphorum/other GPU loads idle, from `D:\Morphorum-test`:
+
+```powershell
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_transformer_gpu_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-transformer-gpu-placement --reserve-gib 3
+```
+
+CI and physical acceptance remain pending. No changes to `main` or managed package.
