@@ -121,5 +121,6 @@
       if (content()) content().textContent = 'Help documentation is unavailable: '+error.message;
     }
   }
-  window.MorphorumHelp={activate, markdownToHtml};
+  // Extend the existing contextual field-help service. Never replace its API.
+  window.MorphorumHelp = Object.assign(window.MorphorumHelp || {}, {activate, markdownToHtml});
 })();
