@@ -567,3 +567,8 @@ git pull
 ```
 
 Expected `bounded_gpu_transfer_verified_nonloadable` with real available GPU memory numbers. Do not set `CUDA_VISIBLE_DEVICES=-1` for this experiment. CI and physical test pending; `main` remains unchanged. Next only after acceptance: genuine model-component GPU/offload path testing before c3c image smoke.
+
+
+### Z2.20c3b2 Windows physical acceptance (2026-10-18)
+
+**PASS:** `bounded_gpu_transfer_verified_nonloadable` on NVIDIA GeForce RTX 4080 SUPER. Total VRAM 15.992 GiB, free before transfer 14.708 GiB, free during test 14.597 GiB; 16 MiB BF16 synthetic transfer and arithmetic finite, PyTorch allocator peak 56.0 MiB (baseline 0). CUDA initialized, no model weights loaded, no generation. These measurements do **not** prove model GPU placement or offloading feasibility. Continue to independent experimental encoder placement after strictly checking free VRAM and reserve.
