@@ -444,3 +444,8 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Expected success: `vae_cpu_forward_verified_nonloadable` with `forward_attempted=true`, `output_finite=true`, `cuda_used=false`, `loadable=false`, `runtime_verified=false`. Windows acceptance and CI are still pending. Subsequent stage: explicitly guarded external encoder/transformer forward with real memory and shape diagnostics before assembling an isolated image-generation pipeline. No changes to `main` or managed model artifacts.
+
+
+### Z2.20c2b Windows physical acceptance (2026-10-18)
+
+**PASS:** `vae_cpu_forward_verified_nonloadable`. With CUDA masked and 50.75 GiB RAM available, the unchanged managed AutoencoderKL VAE decoded a CPU float32 latent [1,16,8,8] to finite float32 RGB [1,3,64,64] with numerical minimum -0.4819101393 and maximum 0.3444057107. All 244 parameter tensors were bound. Process RSS went from 738.65 MiB before VAE loading to 1096.39 MiB after decode (these readings include model loading and computation; they are **not** an isolated decode-memory delta). `forward_attempted=true`, `inference_attempted=false`, `cuda_used=false`, `loadable=false`. This establishes a managed VAE neural forward, not standalone transformer/encoder conditioning or image generation. Next: isolated experimental Qwen3 encoder forward, then transformer.
