@@ -57,7 +57,7 @@ def _input_files(project_id: str) -> dict[str, Path]:
     """Enumerate only verified project-owned inputs, never arbitrary files."""
     project = projects.load_animation_project(project_id)
     root = projects.animation_project_directory(project_id)
-    if root.is_symlink() or not root.is_dir():
+    if (projects.PROJECTS_DIR / project_id).is_symlink() or not root.is_dir():
         raise ProjectArchiveError("Project directory is unsafe or missing.")
     inventory = catalog_with_warnings(project_id, project)
     if inventory["warnings"]:
@@ -265,7 +265,7 @@ def import_project_archive(data: bytes, *, overwrite: bool = False) -> dict[str,
         destination = projects.animation_project_directory(project_id)
         if destination.exists() and not overwrite:
             raise ProjectArchiveConflict("This project already exists. Confirm overwrite to replace it.")
-        if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
+        if (root / project_id).is_symlink() or (destination.exists() and not destination.is_dir()):
             raise ProjectArchiveError("Existing project folder is unsafe.")
         stage = root / (".archive-stage-" + uuid.uuid4().hex)
         backup: Path | None = None
