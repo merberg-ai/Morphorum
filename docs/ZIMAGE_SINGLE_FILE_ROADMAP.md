@@ -774,3 +774,18 @@ Expected `native_caption_single_scheduler_step_verified_nonloadable` with `promp
 ### Z2.20c3c2 Windows physical acceptance (2026-10-18)
 
 **PASS:** `native_caption_single_scheduler_step_verified_nonloadable`. Native pipeline caption embedding [14,2560] from converted Qwen3, transformer CUDA prediction [1,16,4,4], true FlowMatchEulerDiscreteScheduler step at scheduler timestep 1000.0 with transformer timestep input 1.0, finite updated latent [1,16,4,4]. Transformer 521 parameter tensors bound, CUDA peak allocated 11.582 GiB; free VRAM before model load 14.708 GiB, after load 2.514 GiB, after forward 2.432 GiB. Available host RAM 50.371 GiB. `prompt_encoding_attempted=true`, `transformer_forward_attempted=true`, `scheduler_step_attempted=true`, `generation_attempted=false`, `loadable=false`. No image output or VAE. This confirms a single manually orchestrated numeric update, **not** multi-step stability or exact full pipeline parity. Next: guarded tiny multi-step diagnostic (2-3 scheduler iterations) with native captions and strict VRAM gates; no generation.
+
+
+### Z2.20c3c3: bounded native-caption multi-step diagnostic (physical test pending)
+
+Implemented `backend/morphorum/zimage_multi_step_probe.py` with guard tests. It extends physically accepted Z2.20c3c2 using installed pipeline-native CPU prompt encoding, both verified converted checkpoints, isolated BF16 CUDA transformer, and a `FlowMatchEulerDiscreteScheduler` loop of **only 2 or 3 steps**. The next prediction consumes the prior CPU float32 scheduler latent. Checks each timestep, output, and updated latent for finiteness, reports actual per-step VRAM and CUDA peak. It retains the full scratch hashes, host RAM gate, live pre-transfer VRAM reserve >=3 GiB and post-load headroom >=1.5 GiB. Explicit `--execute-multi-step` required. **No VAE, image output, production model registration or `ZImagePipeline.__call__`.** This numerical diagnostic does not establish full-size image feasibility or exact pipeline parity.
+
+Windows physical test, GPU jobs idle, CUDA enabled:
+
+```powershell
+cd D:\Morphorum-test
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_multi_step_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-multi-step --steps 2 --reserve-gib 3 --headroom-gib 1.5
+```
+
+Expected `native_caption_multi_scheduler_steps_verified_nonloadable`, `steps_completed=2`, two finite updates, `generation_attempted=false`, `loadable=false`. CI and Windows acceptance pending; main and managed installation unchanged. Next checkpoint after Windows PASS: isolated VAE decoding of the updated latent with proper scaling/shift, but still separate from regular UI.
