@@ -769,3 +769,8 @@ git pull
 ```
 
 Expected `native_caption_single_scheduler_step_verified_nonloadable` with `prompt_encoding_attempted=true`, `transformer_forward_attempted=true`, `scheduler_step_attempted=true`, `finite=true`, `generation_attempted=false` and `loadable=false`. This remains an isolated diagnostic; stop and inspect errors before next phase. CI and Windows physical acceptance pending; `main` and managed Z-Image installation untouched.
+
+
+### Z2.20c3c2 Windows physical acceptance (2026-10-18)
+
+**PASS:** `native_caption_single_scheduler_step_verified_nonloadable`. Native pipeline caption embedding [14,2560] from converted Qwen3, transformer CUDA prediction [1,16,4,4], true FlowMatchEulerDiscreteScheduler step at scheduler timestep 1000.0 with transformer timestep input 1.0, finite updated latent [1,16,4,4]. Transformer 521 parameter tensors bound, CUDA peak allocated 11.582 GiB; free VRAM before model load 14.708 GiB, after load 2.514 GiB, after forward 2.432 GiB. Available host RAM 50.371 GiB. `prompt_encoding_attempted=true`, `transformer_forward_attempted=true`, `scheduler_step_attempted=true`, `generation_attempted=false`, `loadable=false`. No image output or VAE. This confirms a single manually orchestrated numeric update, **not** multi-step stability or exact full pipeline parity. Next: guarded tiny multi-step diagnostic (2-3 scheduler iterations) with native captions and strict VRAM gates; no generation.
