@@ -11973,6 +11973,21 @@
     const samplerOptions = effectiveCapability(model).samplers?.options || [];
     if (!samplerOptions.some(option => option.id === sampler))
       return {ok:false, message:'Selected Image sampler is not available for this project model.'};
+    const modelSelect = qs('#animation-model');
+    if (!modelSelect || ![...modelSelect.options].some(option => option.value === model.id))
+      return {ok:false, message:'Project Editor model options are not ready. Refresh the model index.'};
+    const scheduleType = String(settings.scheduleType || 'normal');
+    if (model.family === 'sdxl') {
+      const schedules = effectiveCapability(model).schedule_types?.options || [];
+      if (!schedules.some(option => option.id === scheduleType))
+        return {ok:false, message:'Selected Image scheduler is unavailable for this model.'};
+      if (sampler === 'ddim' && scheduleType !== 'normal')
+        return {ok:false, message:'DDIM only supports the normal schedule.'};
+      if (scheduleType === 'trailing' && !['euler','euler_a','dpmpp_2m','dpmpp_2m_sde','lms','heun','unipc'].includes(sampler))
+        return {ok:false, message:'Trailing schedule is incompatible with this sampler.'};
+      if (['exponential','beta'].includes(scheduleType) && !['euler','dpmpp_2m','dpmpp_2m_sde','unipc'].includes(sampler))
+        return {ok:false, message:'Selected schedule is incompatible with this sampler.'};
+    }
     const currentGuidance = qs('#animation-guidance')?.value;
     const promptRowsBefore = collectPromptMaps();
     qs('#animation-model').value = model.id;
@@ -11982,9 +11997,7 @@
     syncAnimationResolutionPreset();
     populateSamplerSelect(sampler);
     if (qs('#animation-sampler').value !== sampler) return {ok:false, message:'Sampler could not be applied.'};
-    populateAnimationScheduleTypes(String(settings.scheduleType || 'normal'));
-    if (model.family === 'sdxl' && qs('#animation-schedule-type').value !== String(settings.scheduleType || 'normal'))
-      return {ok:false, message:'Selected Image scheduler is incompatible with the project sampler.'};
+    populateAnimationScheduleTypes(scheduleType);
     qs('#animation-seed').value = String(seed);
     qs('#animation-seed-behavior').value = settings.seedMode;
     qs('#animation-seed-increment').value = String(Number.isInteger(Number(settings.seedIncrement)) ? settings.seedIncrement : 1);
