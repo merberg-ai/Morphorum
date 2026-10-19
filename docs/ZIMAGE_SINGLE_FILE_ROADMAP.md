@@ -449,3 +449,19 @@ Expected success: `vae_cpu_forward_verified_nonloadable` with `forward_attempted
 ### Z2.20c2b Windows physical acceptance (2026-10-18)
 
 **PASS:** `vae_cpu_forward_verified_nonloadable`. With CUDA masked and 50.75 GiB RAM available, the unchanged managed AutoencoderKL VAE decoded a CPU float32 latent [1,16,8,8] to finite float32 RGB [1,3,64,64] with numerical minimum -0.4819101393 and maximum 0.3444057107. All 244 parameter tensors were bound. Process RSS went from 738.65 MiB before VAE loading to 1096.39 MiB after decode (these readings include model loading and computation; they are **not** an isolated decode-memory delta). `forward_attempted=true`, `inference_attempted=false`, `cuda_used=false`, `loadable=false`. This establishes a managed VAE neural forward, not standalone transformer/encoder conditioning or image generation. Next: isolated experimental Qwen3 encoder forward, then transformer.
+
+
+### Z2.20c2c: standalone Qwen3 CPU neural forward (Windows test pending)
+
+Added `backend/morphorum/zimage_encoder_forward_probe.py` and guard tests. After exact scratch/schema validation and **full encoder scratch hash verification**, this standalone CLI checks available RAM (2× encoder file bytes + 12 GiB), requires masked CUDA and explicit `--execute-encoder-forward`, loads the standalone BF16 398-tensor Qwen3Model weights using managed config, and performs a single six-ish-token short-prompt CPU forward with `use_cache=False`. It validates finite hidden states, output shape/device and reports RSS before load, after load and after forward. This is **not** end-to-end image inference, transformer execution, or proof of correct prompt conditioning. The managed tokenizer/config are read from their existing directories; no managed files are overwritten.
+
+Windows command from `D:\Morphorum-test`:
+
+```powershell
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_encoder_forward_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-encoder-forward
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Expected `encoder_cpu_forward_verified_nonloadable`, `forward_attempted=true`, `finite=true`, `loadable=false`. This is a RAM-intensive isolated experiment; close competing generation workloads beforehand. Stop and diagnose any failure before an experimental transformer forward. CI and physical testing pending; `main` unchanged.
