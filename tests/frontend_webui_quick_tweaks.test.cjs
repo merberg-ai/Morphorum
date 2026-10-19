@@ -56,3 +56,13 @@ test('UX4 documentation reader preserves existing contextual Help API', () => {
   assert.doesNotMatch(help, /window\.MorphorumHelp\s*=\s*\{activate, markdownToHtml\}/);
   assert.match(app, /MorphorumHelp\?\.setEnabled/);
 });
+
+test('SDXL LoRA verification collapses by default and remembers user choice', () => {
+  assert.match(html, /<details id="image-lora-verification"[^>]*hidden><\/details>/);
+  assert.match(image, /LORA_VERIFICATION_OPEN_KEY = 'morphorum\.image\.loraVerificationOpen\.v1'/);
+  assert.match(image, /verification\.open = loraVerificationOpen\(\)/);
+  assert.match(image, /verification\.addEventListener\('toggle'/);
+  assert.match(image, /localStorage\.setItem\(LORA_VERIFICATION_OPEN_KEY, String\(verification\.open\)\)/);
+  assert.match(image, /document\.createElement\('summary'\)/);
+  assert.match(image, /panel\.replaceChildren\(title, list\)/);
+});
