@@ -984,6 +984,7 @@
       modelId:read('image-model-select'),
       width:read('image-width'),
       height:read('image-height'),
+      steps:read('image-steps'),
       sampler:read('image-sampler'),
       scheduleType:read('image-schedule-type') || 'normal',
       seed:read('image-seed'),
