@@ -56,3 +56,10 @@ The Image Generation pane now includes **Apply Image Settings to Project**, whic
 Help is a normal application view, backed by read-only `/api/help/docs` and `/api/help/docs/{name}`, exposing only regular top-level `docs/*.md` files from the installed repository. The client fetches pages in-place and renders a constrained/sanitized subset of Markdown. It makes no remote network request or navigation away from the WebUI; the FastAPI interactive API documentation route at `/docs` remains reserved for its preexisting purpose. This Help browser is a local documentation reader, not a GitHub live sync. Back-end only mode does not expose it.
 
 Tests: `tests/frontend_webui_quick_tweaks.test.cjs`; run alongside existing `frontend_responsive_styles.test.cjs`, `frontend_project_navigation.test.cjs`, and project editor tests. CI and owner phone/Windows acceptance are pending. Changes stay in `dev-webui`; the stable Z-Image c3c4 checkpoint and `main` remain untouched.
+
+
+## Prompt keyframe distribution (dev-webui, pending Windows acceptance)
+
+Project Editor → **Prompt Keyframes** offers **+ Keyframe** and **Evenly Space**. Adding a prompt automatically reassigns the existing prompt rows and the new blank row across frames 0 through `max_frames - 1` in their existing order. Evenly Space reassigns only frame numbers, without inserting a row. For `max_frames=543`: 4 prompts → `0, 181, 361, 542`; 5 prompts → `0, 136, 271, 407, 542`. Uses rounded `index*(max_frames-1)/(count-1)`, first frame always zero. If there are more prompts than frames, the action refuses to introduce duplicate keyframes.
+
+Positive prompt text, negative prompt text, LoRA insertion controls, and row order remain unchanged. Manual frame edits are still allowed after redistribution. Both actions mark the **Project Editor draft as unsaved**; users must press **Save Project**. No animation schema or backend rendering behavior changed. Unit regression: `tests/frontend_prompt_even_spacing.test.cjs`. Verify manually on Windows with unsaved prompt text and after saving/reloading the project.
