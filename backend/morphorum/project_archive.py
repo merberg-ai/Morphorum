@@ -9,11 +9,9 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import os
 import re
 import shutil
 import stat
-import tempfile
 import uuid
 import zipfile
 from copy import deepcopy
@@ -200,8 +198,20 @@ def _verified_archive(data: bytes) -> tuple[dict, dict[str, bytes]]:
             raise ProjectArchiveError("Project identity in archive is invalid.")
         if project_id != manifest.get("project_id") or name != manifest.get("project_name"):
             raise ProjectArchiveError("Project identity does not match archive manifest.")
-        if ("assets/source.png" in files) != bool((project.get("animation") or {}).get("source_image")):
+        image_reference = (project.get("animation") or {}).get("source_image")
+        if image_reference not in ("", None, "assets/source.png") or (
+                ("assets/source.png" in files) != bool(image_reference)):
             raise ProjectArchiveError("Start image reference and included file do not match.")
+        if "assets/source.png" in files:
+            import io as image_io
+            from PIL import Image, UnidentifiedImageError
+            try:
+                with Image.open(image_io.BytesIO(files["assets/source.png"])) as image:
+                    if image.format != "PNG" or not all(1 <= size <= 8192 for size in image.size):
+                        raise ProjectArchiveError("Invalid PNG start image.")
+                    image.verify()
+            except (UnidentifiedImageError, OSError, ValueError) as exc:
+                raise ProjectArchiveError("Invalid PNG start image.") from exc
         if "imported_soundtrack/attachment.json" in files:
             attachment = json.loads(files["imported_soundtrack/attachment.json"])
             if not isinstance(attachment, dict) or not _DIGEST.fullmatch(str(attachment.get("sha256") or "")):
@@ -209,11 +219,26 @@ def _verified_archive(data: bytes) -> tuple[dict, dict[str, bytes]]:
             media = "imported_soundtrack/" + attachment["sha256"] + "." + str(attachment.get("format") or "")
             if media not in files or _sha(files[media]) != attachment["sha256"]:
                 raise ProjectArchiveError("Attached soundtrack is missing or damaged.")
+            raw_audio = files[media]
+            fmt = attachment["format"]
+            valid_audio = (
+                (fmt == "wav" and raw_audio[:4] == b"RIFF" and raw_audio[8:12] == b"WAVE")
+                or (fmt == "flac" and raw_audio.startswith(b"fLaC"))
+                or (fmt == "ogg" and raw_audio.startswith(b"OggS"))
+                or (fmt == "mp3" and (
+                    raw_audio.startswith(b"ID3") or (
+                        len(raw_audio) > 2 and raw_audio[0] == 0xff
+                        and raw_audio[1] & 0xe0 == 0xe0)))
+            )
+            if not valid_audio:
+                raise ProjectArchiveError("Attached soundtrack does not match its format.")
         elif any(n.startswith("imported_soundtrack/") for n in files):
             raise ProjectArchiveError("Soundtrack metadata is missing.")
         for path, raw in files.items():
-            if _MOTION_FILE.fullmatch(path) and _sha(raw) != Path(path).stem:
-                raise ProjectArchiveError("Motion Lab WAV checksum mismatch.")
+            if _MOTION_FILE.fullmatch(path) and (
+                    _sha(raw) != Path(path).stem or
+                    raw[:4] != b"RIFF" or raw[8:12] != b"WAVE"):
+                raise ProjectArchiveError("Motion Lab WAV checksum or format mismatch.")
     except (ValueError, KeyError, TypeError) as exc:
         if isinstance(exc, ProjectArchiveError):
             raise
