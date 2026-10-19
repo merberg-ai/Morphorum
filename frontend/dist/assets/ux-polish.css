@@ -46,3 +46,8 @@
     grid-template-columns:minmax(0,1fr); min-width:0;
   }
 }
+
+.help-article table { width:100%; border-collapse:collapse; display:block; max-width:100%; overflow-x:auto; margin:12px 0; }
+.help-article th, .help-article td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--border-strong); vertical-align:top; }
+.help-article th { color:var(--text); font-weight:700; }
+.help-article blockquote { border-left:3px solid var(--accent); padding-left:13px; margin-left:0; }
