@@ -423,3 +423,8 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Success status `cpu_scheduler_steps_verified`; inspect two-step numerical and RSS report. CI and physical validation pending. Z2.20c2b will be a distinct, explicitly gated neural forward experiment after accepting this step. Keep `main` and managed Z-Image untouched.
+
+
+### Z2.20c2a Windows physical acceptance (2026-10-18)
+
+**PASS:** `cpu_scheduler_steps_verified`; managed FlowMatchEulerDiscreteScheduler performed two numerical steps on a CPU float32 tensor of shape [1,16,8,8] with finite output. Process RSS before 675.01 MiB, after 676.94 MiB (delta +1.93 MiB). `cuda_used=false`, `inference_attempted=false`, `transformer_forward_attempted=false`, `loadable=false`. This is not a network forward pass or image generation. Proceed to separately guarded Z2.20c2b CPU VAE smoke tests, then larger components as justified by physical results.
