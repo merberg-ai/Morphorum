@@ -527,3 +527,10 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 CI and Windows physical acceptance pending. Keep `main`, production managed package and original FP8 checkpoints unchanged.
+
+
+### Z2.20c3a Windows physical acceptance (2026-10-18)
+
+**PASS:** `pipeline_assembled_nonloadable`. Combined isolated CPU `ZImagePipeline` constructed with managed FlowMatchEulerDiscreteScheduler, Qwen2Tokenizer, AutoencoderKL and converted scratch Qwen3Model and ZImageTransformer2DModel. Parameter tensors bound: encoder 398, transformer 521, VAE 244 (total 1,163); available RAM at preflight 50.68 GiB, minimum guarded 36.96 GiB. Process RSS before assembly 738.53 MiB and after 8838.98 MiB. That snapshot likely does not fully capture memory-mapped transformer pages or peak allocations. `cuda_used=false`, `generation_attempted=false`, `loadable=false`, `runtime_verified=false`. Safetensors metadata fallback warning was nonfatal.
+
+Next: Z2.20c3b **non-executing** device-placement/offload planning for the 16 GiB RTX 4080 SUPER, followed by a separately gated physical GPU test and only then a standalone inference smoke test. The existing managed pipeline is unchanged.
