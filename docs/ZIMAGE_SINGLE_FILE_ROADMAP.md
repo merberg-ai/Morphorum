@@ -712,3 +712,19 @@ Expected `sequential_real_caption_cuda_forwards_verified_nonloadable` with `enco
 ### Z2.20c3b9 Windows physical acceptance (2026-10-18)
 
 **PASS:** `sequential_real_caption_cuda_forwards_verified_nonloadable`. Converted standalone Qwen3 generated real caption features [6,2560] via GPU forward; free GPU VRAM at encoder forward 7.087 GiB. After moving encoder to CPU, CUDA allocator retained only 0.008 GiB and available VRAM recovered to 14.634 GiB. The converted BF16 transformer then accepted those features and completed finite CUDA forward with output [16,1,4,4], allocated 11.572 GiB, peak 11.582 GiB, remaining free 2.414 GiB. Initial GPU free 14.708 GiB; host available RAM 50.279 GiB. `encoder_forward_attempted=true`, `encoder_evicted=true`, `transformer_forward_attempted=true`, `generation_attempted=false`, `loadable=false`. Missing safetensors metadata warning was nonfatal. The combined GPU computation works under manual sequential placement, **but** production chat template/caption processing, timestep/scheduler flow, VAE decoding on actual denoised latents, and automated Diffusers offload remain unverified. Next: inspect managed Diffusers ZImagePipeline exact conditioning and scheduler contract with a read-only source/metadata probe before designing isolated multi-step generation.
+
+
+### Z2.20c3c0: inspect installed Diffusers Z-Image pipeline source contract (Windows pending)
+
+Added `backend/morphorum/zimage_pipeline_contract_probe.py` and guards to `dev-webui`. This **read-only, CPU-isolated** inspection checks the existing standalone schema/config gate, imports only `ZImagePipeline` from the installed Diffusers library, prints `encode_prompt`, `prepare_latents`, `__call__` and available helper signatures plus relevant numbered code lines to reveal prompt formatting, caption transforms, scheduler interactions, diffusion loop and VAE decode hooks. It never loads weights, calls the pipeline, initializes CUDA or generates an image. Do not treat code inspection as proof the scratch models produce proper images. The source excerpt limits matched lines to 55 per method; use installed package source itself if needed.
+
+Windows command from `D:\Morphorum-test`:
+
+```powershell
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_pipeline_contract_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder"
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Expected `pipeline_source_contract_inspected_nonloadable`, with method signatures and source lines for planning a guarded complete inference workflow. CI and physical acceptance pending; no change to `main` or managed Z-Image package.
