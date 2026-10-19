@@ -610,3 +610,18 @@ CI and physical acceptance remain pending. No changes to `main` or managed packa
 ### Z2.20c3b4 Windows physical acceptance (2026-10-18)
 
 **PASS:** `transformer_cuda_placement_verified_nonloadable`. All 521 external BF16 transformer parameter tensors placed on RTX 4080 SUPER. GPU memory allocated and peak 11.564 GiB; free before transfer 14.708 GiB, free afterward 2.496 GiB, total 15.992 GiB. Guard threshold was 14.466 GiB free before transfer. `forward_attempted=false`, `generation_attempted=false`, `loadable=false`. Missing safetensors metadata warning is nonfatal. **Caution:** only 2.496 GiB reported free after model placement, less than the 3 GiB heuristic reserve due to overhead. Inference activations and memory spikes remain unverified. Next isolated experiment must demonstrate sequential encoder→CPU/transformer→GPU transitions with measured VRAM, ideally without running actual model forward.
+
+
+### Z2.20c3b5: sequential encoder/transformer GPU placement (Windows test pending)
+
+Added `backend/morphorum/zimage_sequential_placement_probe.py` and fail-closed tests to `dev-webui`. The CLI requires explicit opt-in, revalidates schema and full scratch hashes, ensures available RAM exceeds combined BF16 scratch file sizes +16 GiB, and requires actual measured free VRAM sufficient for **either** model plus minimum 3 GiB reserve. It loads converted Qwen3 weights on CPU, transfers encoder to CUDA, verifies placement, moves encoder back to CPU and frees GPU cache, checks VRAM recovered enough to transfer the BF16 transformer, then loads it via strict meta-to-CPU dispatch and transfers it to GPU. Reports VRAM at each stage, but **never calls forward or generates an image**. This is manual sequential placement, not validated automated Diffusers offload hooks.
+
+Physical Windows test with AI jobs idle and **CUDA enabled**:
+
+```powershell
+cd D:\Morphorum-test
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_sequential_placement_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-sequential-placement --reserve-gib 3
+```
+
+Expected `sequential_cuda_placement_verified_nonloadable` with `encoder_gpu_verified=true`, `encoder_evicted=true`, `transformer_gpu_verified=true`; `forward_attempted=false`, `generation_attempted=false`, `loadable=false`. Model weights and filesystem remain unchanged. Treat any insufficient-RAM/VRAM block as genuine, do not relax the reserve to force the experiment. **CI and Windows acceptance pending**, `main` unchanged.
