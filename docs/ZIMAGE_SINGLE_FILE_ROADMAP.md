@@ -572,3 +572,17 @@ Expected `bounded_gpu_transfer_verified_nonloadable` with real available GPU mem
 ### Z2.20c3b2 Windows physical acceptance (2026-10-18)
 
 **PASS:** `bounded_gpu_transfer_verified_nonloadable` on NVIDIA GeForce RTX 4080 SUPER. Total VRAM 15.992 GiB, free before transfer 14.708 GiB, free during test 14.597 GiB; 16 MiB BF16 synthetic transfer and arithmetic finite, PyTorch allocator peak 56.0 MiB (baseline 0). CUDA initialized, no model weights loaded, no generation. These measurements do **not** prove model GPU placement or offloading feasibility. Continue to independent experimental encoder placement after strictly checking free VRAM and reserve.
+
+
+### Z2.20c3b3: real standalone encoder GPU placement (physical acceptance pending)
+
+Committed `backend/morphorum/zimage_encoder_gpu_probe.py` with opt-in guards. After config/schema and complete encoder scratch SHA-256 validation, it requires available RAM for the CPU load and actual *measured* free CUDA VRAM exceeding the 7.492 GiB encoder file plus 3 GiB reserve (configurable 2–8 GiB). It loads the 398-tensor BF16 external Qwen3Model from scratch on CPU, checks that all parameters are bound, rechecks free VRAM, moves the encoder to GPU, verifies all parameters on CUDA, collects PyTorch CUDA allocated/peak and free VRAM, then attempts to move back to CPU and release CUDA cache. It runs **no text forward, transformer inference or generation**; successful status `encoder_cuda_placement_verified_nonloadable` is only a component placement proof. This remains experimental, not permission to enable standalone models in Morphorum.
+
+From `D:\Morphorum-test` on `dev-webui`, with other GPU jobs stopped:
+
+```powershell
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_encoder_gpu_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-encoder-gpu-placement --reserve-gib 3
+```
+
+Do not disable CUDA. Physical Windows test and CI pending. If free VRAM is insufficient or CUDA reports out-of-memory, stop instead of reducing reserve blindly. Subsequent transformer GPU placement/offload is a separate gate. `main` and managed Z-Image untouched.
