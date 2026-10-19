@@ -5665,10 +5665,16 @@
       const result = await archiveRequest('/api/animation/projects/archive/import', file,
         {'X-Morphorum-Overwrite': overwrite ? 'true' : 'false'});
       if (state.project?.id === result.project.id) {
-        // Never leave stale in-memory editor state after a confirmed replacement.
+        // Never leave stale previews or editor state after a confirmed replacement.
+        clearMotionPreviewResult();
+        resetRenderUi();
         state.project = null;
         state.path = '';
+        state.timeline = null;
+        state.timelineSelection = null;
+        state.depthPreview = null;
         state.dirty = false;
+        resetHybridForProject();
         fillForm();
       }
       await loadProjectList();
