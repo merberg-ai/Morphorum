@@ -27,26 +27,46 @@
   function markdownToHtml(markdown) {
     const lines = String(markdown).split(/\r?\n/);
     const out = [];
-    let inCode = false, inList = false;
+    let inCode = false, inList = false, inTable = false;
     const closeList = () => { if (inList) {out.push('</ul>'); inList = false;} };
-    for (const line of lines) {
+    const closeTable = () => { if (inTable) {out.push('</tbody></table>'); inTable = false;} };
+    const rowCells = line => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+    const isTableDivider = line => /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       if (/^\s*```/.test(line)) {
-        closeList();
+        closeList(); closeTable();
         out.push(inCode ? '</code></pre>' : '<pre><code>');
         inCode = !inCode;
         continue;
       }
       if (inCode) { out.push(escapeHtml(line)+'\n'); continue; }
-      if (!line.trim()) { closeList(); continue; }
+      if (!line.trim()) { closeList(); closeTable(); continue; }
+      if (!inTable && line.includes('|') && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
+        closeList();
+        out.push('<table><thead><tr>');
+        rowCells(line).forEach(cell => out.push('<th>'+inline(cell)+'</th>'));
+        out.push('</tr></thead><tbody>');
+        inTable = true; i++;
+        continue;
+      }
+      if (inTable && line.includes('|')) {
+        out.push('<tr>');
+        rowCells(line).forEach(cell => out.push('<td>'+inline(cell)+'</td>'));
+        out.push('</tr>');
+        continue;
+      }
+      closeTable();
       const head = /^(#{1,6})\s+(.+)$/.exec(line);
-      if (head) {closeList();const n=head[1].length;out.push('<h'+n+'>'+inline(head[2])+'</h'+n+'>');continue;}
+      if (head) {closeList(); const n = head[1].length; out.push('<h'+n+'>'+inline(head[2])+'</h'+n+'>'); continue;}
       const bullet = /^\s*[-*]\s+(.+)$/.exec(line);
-      if (bullet) {if (!inList) {out.push('<ul>');inList=true;}out.push('<li>'+inline(bullet[1])+'</li>');continue;}
+      if (bullet) {if (!inList) {out.push('<ul>');inList = true;}out.push('<li>'+inline(bullet[1])+'</li>');continue;}
       closeList();
       if (/^>\s?/.test(line)) out.push('<blockquote>'+inline(line.replace(/^>\s?/,''))+'</blockquote>');
+      else if (/^---+\s*$/.test(line)) out.push('<hr>');
       else out.push('<p>'+inline(line)+'</p>');
     }
-    closeList();
+    closeList(); closeTable();
     if (inCode) out.push('</code></pre>');
     return out.join('\n');
   }
