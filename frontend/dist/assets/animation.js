@@ -5639,6 +5639,8 @@
       const name = inspected.project.name;
       let overwrite = false;
       if (inspected.conflict) {
+        const existing = state.projects.find(project => project.id === inspected.project.id);
+        const existingName = existing?.name || name;
         if (state.project?.id === inspected.project.id &&
           (state.dirty || motionLabRecorder?.active || motionLabBusy ||
            state.motionJobId || motionPreviewStarting || renderIsActive() || animationRenderStarting)) {
@@ -5646,12 +5648,12 @@
         }
         const typed = await window.MorphorumDialog.prompt({
           title: 'Overwrite existing project?',
-          message: 'A project with this ID already exists. Replacing "' + name +
-            '" will move its previous project folder into managed Trash for recovery. ' +
-            'Type the exact project name to confirm.',
+          message: 'Archive "' + name + '" has the same ID as existing project "' +
+            existingName + '". Its previous folder will be moved to managed Trash. ' +
+            'Type the EXISTING project name to confirm.',
           inputLabel: 'Type project name', initialValue: '', maxLength: 120,
           confirmText: 'Overwrite Project',
-          validate: value => String(value || '') === name ? '' : 'Enter the exact project name.',
+          validate: value => String(value || '') === existingName ? '' : 'Enter the exact project name.',
         });
         if (typed === null) return;
         overwrite = true;
