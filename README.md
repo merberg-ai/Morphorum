@@ -154,3 +154,7 @@ The Image Studio keeps generation progress directly above the Results preview, a
 Project Editor's **Prompt Keyframes** now offers **+ Keyframe** with automatic even redistribution, alongside **Evenly Space** to redistribute existing prompts. Positive and negative prompt text is retained in order; frame numbers remain manually editable. For a 543-frame animation, five prompts are positioned at 0, 136, 271, 407 and 542. The sidebar's expanding menus have bounded mobile layouts. **Help** opens the installed `docs/` guides within the WebUI, from the desktop sidebar or mobile More menu. See [WebUI layout details](docs/WEBUI_LAYOUT.md).
 
 The SDXL LoRA follow-up diagnostic investigation is deferred in [TODO.MD](https://github.com/merberg-ai/Morphorum/blob/main/TODO.MD); current reports must not be mistaken for independent verification of all UNet scaling factors. Experimental external single-file Z-Image remains unavailable for regular generation.
+
+## Portable animation projects
+
+In **Project Manager**, export a complete project settings and input-media ZIP, import a validated Morphorum project archive with optional confirmed overwrite, or use **Save Project As** to duplicate a project with its start image, attached soundtrack and Motion Lab WAV inputs. **Save Project As** is also available in Project Editor and includes its current unsaved configuration in the new copy. Generated images and videos are never bundled. Overwritten project folders are retained in managed Trash. [Project archive guide](docs/PROJECT_ARCHIVES.md).
