@@ -728,3 +728,8 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Expected `pipeline_source_contract_inspected_nonloadable`, with method signatures and source lines for planning a guarded complete inference workflow. CI and physical acceptance pending; no change to `main` or managed Z-Image package.
+
+
+### Z2.20c3c0 Windows physical acceptance (2026-10-18)
+
+**PASS:** `pipeline_source_contract_inspected_nonloadable` with installed `diffusers==0.40.0`. Discovered `diffusers.pipelines.z_image.pipeline_z_image.ZImagePipeline`. The installed `__call__` accepts `prompt`, `prompt_embeds: list[Tensor]`, `negative_prompt_embeds`, `guidance_scale`, `sigmas`, `latents` and an explicit output type; calls `encode_prompt` unless embeddings are provided, uses scheduler `step(noise_pred.float(), t, latents)`, then applies VAE inverse scaling and shift before decode. `prepare_latents` samples noise when not provided. Confirmed `encode_prompt` delegates to `_encode_prompt`; source probe omitted the latter because only a fixed selection of helper names was inspected. `cuda_initialized=false`, `model_weights_loaded=false`, `generation_attempted=false`, `loadable=false`. Next: call the installed pipeline's own actual `encode_prompt` with the converted external Qwen3 on CPU and managed tokenizer. This will assess template/token handling without transformer loading, denoising or image generation. 
