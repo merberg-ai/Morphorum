@@ -586,3 +586,8 @@ git pull
 ```
 
 Do not disable CUDA. Physical Windows test and CI pending. If free VRAM is insufficient or CUDA reports out-of-memory, stop instead of reducing reserve blindly. Subsequent transformer GPU placement/offload is a separate gate. `main` and managed Z-Image untouched.
+
+
+### Z2.20c3b3 Windows physical acceptance (2026-10-18)
+
+**PASS:** `encoder_cuda_placement_verified_nonloadable`. All 398 standalone Qwen3 encoder parameter tensors placed on RTX 4080 SUPER CUDA; PyTorch allocated/peak 7.545 GiB, GPU free after placement 7.161 GiB, free before 14.708 GiB, total 15.992 GiB, required free including 3 GiB reserve 10.492 GiB. No encoder forward or generation (`forward_attempted=false`, `generation_attempted=false`, `loadable=false`). This establishes single-component placement, not combined pipeline viability or correctly functioning GPU neural inference. Next: independently gated transformer placement with conservative real free VRAM and a larger activation reserve.
