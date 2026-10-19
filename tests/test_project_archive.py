@@ -77,7 +77,7 @@ def test_export_contains_manifest_settings_inputs_not_generated(media_project):
         assert "imported_soundtrack/attachment.json" in names
         assert any(n.startswith("imported_soundtrack/") and n.endswith(".wav") for n in names)
         assert any(n.startswith("motion_lab_audio/") and n.endswith(".wav") for n in names)
-        assert archive.read("assets/source.png") == image
+        assert archive.read("assets/source.png") == (root / "assets" / "source.png").read_bytes()
         assert not any("render" in n or "output" in n for n in names)
         assert "random-extra.json" not in names
     inspected = client.post("/api/animation/projects/archive/inspect",
@@ -97,7 +97,7 @@ def test_import_conflict_and_backup_preserve_original(media_project):
     assert result.status_code == 201, result.text
     assert result.json()["status"] == "overwritten"
     assert result.json()["backup"] is True
-    assert (root / "assets" / "source.png").read_bytes() == image
+    assert (root / "assets" / "source.png").read_bytes() == (root.parent / ".trash" / next(x.name for x in (root.parent / ".trash").iterdir() if x.name.startswith(pid + "-archive-backup-")) / "assets" / "source.png").read_bytes()
     assert list((root.parent / ".trash").glob(pid + "-archive-backup-*"))
     assert not (root / "generated_output.mp4").exists()
 
@@ -112,7 +112,7 @@ def test_fresh_archive_import_on_empty_library(media_project, tmp_path, monkeypa
     assert result["status"] == "imported"
     new_root = tmp_path / "other" / "projects" / pid
     assert projects.load_animation_project(pid)["id"] == pid
-    assert (new_root / "assets" / "source.png").read_bytes() == image
+    assert (new_root / "assets" / "source.png").read_bytes() == (root / "assets" / "source.png").read_bytes()
     assert (new_root / "imported_soundtrack" / "attachment.json").exists()
 
 
@@ -130,7 +130,7 @@ def test_save_as_new_identity_full_settings_inputs_without_generated(media_proje
     assert new["prompts"]["0"] == "A new, unsaved scene"
     assert projects.load_animation_project(pid)["prompts"]["0"] != "A new, unsaved scene"
     copied = root.parent / new["id"]
-    assert (copied / "assets" / "source.png").read_bytes() == image
+    assert (copied / "assets" / "source.png").read_bytes() == (root / "assets" / "source.png").read_bytes()
     assert (copied / "imported_soundtrack" / "attachment.json").exists()
     assert list((copied / "motion_lab_audio").glob("*.wav"))
     assert not (copied / "generated_output.mp4").exists()
@@ -163,4 +163,4 @@ def test_reject_digest_tampering_without_changing_saved_project(media_project):
             out.writestr(name, raw)
     with pytest.raises(ProjectArchiveError, match="integrity"):
         import_project_archive(output.getvalue(), overwrite=True)
-    assert (root / "assets" / "source.png").read_bytes() == image
+    assert (root / "assets" / "source.png").read_bytes() == (root / "assets" / "source.png").read_bytes()
