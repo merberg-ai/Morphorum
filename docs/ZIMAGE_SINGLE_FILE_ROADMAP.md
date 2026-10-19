@@ -1,6 +1,14 @@
 # Z-Image single-file checkpoint support roadmap (dev-webui)
 
-Status: **Z1 initial inspection complete; Z2.1 dependency inventory and Z2.2 preliminary architecture fingerprint and Z2.3 structural/precision diagnostics and Z2.4 guarded encoder bundle diagnostics implemented. Z2.5 isolated conversion preflight and Z2.6 exact-schema staging and Z2.7 mapping validation/integrity and Z2.8 gated streaming conversion and Z2.9 cache integrity/concurrency protection and Z2.10 read-only diagnostics and Z2.11 real FP8 scale/encoder evidence added. Native loading remains disabled.** Initial bounded, read-only safetensors inspector and synthetic tests committed to dev-webui. Main remains unchanged. No standalone checkpoint is runtime-ready.
+Status: **Owner-tested Windows acceptance through Z2.20c3c4 (experimental, non-loadable). Z2.20c3c5 PNG smoke-test implementation planned but not coded.** Managed Z-Image runtime remains the only supported Z-Image generation path; `main` remains unchanged.
+
+
+## Current checkpoint: Z2.20c3c4 owner-verified (2026-10-18)
+
+**Status: physical Windows acceptance PASS through Z2.20c3c4; Z2.20c3c5 is planned, not implemented.** Standalone FP8 source checkpoints were converted into hashed, isolated BF16 scratch artifacts. Individually validated: 398-tensor Qwen3 encoder, 521-tensor Z-Image transformer, 244-tensor managed VAE, and FlowMatch scheduler. Then validated combined pipeline object assembly, manual sequential RTX 4080 SUPER placement, real native ZImagePipeline 14-token prompt embeddings, two CUDA transformer/scheduler updates, and a CPU VAE decode of the final latent to finite float32 RGB [1,3,32,32]. Physical result at c3c4: peak CUDA allocation 11.582 GiB, free after forward 2.414 GiB, managed VAE scaling 0.3611 and shift 0.1159. This is a 32×32 **numerical smoke test using zero-initialized latents**, not a recognizable image-quality or full inference proof. Nothing has been saved as an image.
+
+**Safety and release boundary:** The scratch standalone checkpoints remain `loadable=false`, `runtime_verified=false` and are **not** selectable for production image generation. The existing managed Z-Image installation, its weights and app loader must remain untouched; no merge into `main` is authorized. Windows owner acceptance above is not equivalent to CI. For exact next-stage scope and acceptance criteria, see [Z2.20c3c5 implementation plan](ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md).
+
 
 ## Diagnosis: unexpected Wan2GP directory
 
@@ -809,3 +817,11 @@ git pull
 ```
 
 Expected `native_caption_vae_decoded_nonloadable`, `vae_decode_attempted=true`, finite [1,3,32,32] RGB tensor, `image_file_saved=false`, `loadable=false`. If blocked, inspect diagnostics and keep previous acceptances intact. CI and Windows physical acceptance pending; `main` and managed Z-Image untouched.
+
+### Z2.20c3c4 Windows physical acceptance (2026-10-18)
+
+**PASS:** `native_caption_vae_decoded_nonloadable`. The user reported successful pipeline-native BF16 prompt encoding [14,2560], two finite standalone transformer CUDA denoising/scheduler steps (timesteps 1000.0 and 8.9285717) with latent shape [1,16,4,4], and subsequent CPU managed VAE decode to finite float32 RGB [1,3,32,32]. VAE 244 weight tensors, scaling_factor 0.3611, shift_factor 0.1159, output range [-1.2214201689, 1.1136091948]; peak transformer VRAM allocation 11.582 GiB, free 2.414 GiB after forward, host RAM available 50.343 GiB. `vae_decode_attempted=true`, `image_file_saved=false`, `generation_attempted=false`, `loadable=false`, `runtime_verified=false`. Missing safetensors metadata remains a nonfatal fallback warning. **No PNG created, image quality not demonstrated.** The numeric smoke's zero initial latent and tiny size mean the next PNG test must be labeled diagnostic, not a valid natural-image generation result.
+
+### Z2.20c3c5 planning freeze (2026-10-18)
+
+Implementation **not started**. Exact interface, required input changes, postprocessing semantics, sandboxed output policy, metadata and unit/Windows acceptance are specified in [ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md](ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md). This is the planned continuation point after the c3c4 checkpoint. No change to production loaders, `main`, original checkpoints or managed assets.
