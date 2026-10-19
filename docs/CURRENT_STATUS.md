@@ -51,4 +51,4 @@ An isolated experimental single-file Z-Image path was owner-tested through miles
 - **Prompt Keyframes:** **+ Keyframe** adds a prompt and automatically evens frame assignments; **Evenly Space** evens existing prompt rows. Prompt text/order is retained, frame numbers can still be edited manually, and duplicate/out-of-range automatic assignments are refused.
 - **Responsive navigation and Help:** Expanded phone navigation is bounded. Desktop Help or phone More → Help reads bundled Markdown documentation inside the application.
 
-Developer note: deferred SDXL LoRA console/alpha-pattern follow-up is tracked in [TODO.MD](../TODO.MD). Standalone Z-Image scratch inference milestones remain *research-only*, not product model compatibility.
+Developer note: deferred SDXL LoRA console/alpha-pattern follow-up is tracked in [TODO.MD](https://github.com/merberg-ai/Morphorum/blob/main/TODO.MD). Standalone Z-Image scratch inference milestones remain *research-only*, not product model compatibility.
