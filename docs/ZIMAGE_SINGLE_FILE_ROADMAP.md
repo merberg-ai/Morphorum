@@ -511,3 +511,19 @@ Success: `transformer_cpu_forward_verified_nonloadable`, `output_finite=true`, `
 **PASS:** `transformer_cpu_forward_verified_nonloadable`. The converted BF16 standalone transformer loaded and executed a real CPU forward with all 521 parameter tensors bound. Input latent [16,1,4,4], synthetic caption [1,2560], timestep 0.5; finite BF16 output [16,1,4,4]. CPU-only, no image inference. Available RAM 50.9 GiB, required guarded RAM 38.93 GiB. Process RSS before load 733.49 MiB, after load 745.62 MiB, after forward 12503.03 MiB. The small post-load RSS despite 11.466 GiB of weights likely reflects memory mapping or lazy resident-page accounting; these observations do not establish peak RAM usage or GPU offload feasibility. Safetensors missing metadata fallback warning was nonfatal. `loadable=false`, `runtime_verified=false`, `inference_attempted=false`.
 
 **Gate completed:** independent real forward computation now passed for converted external Qwen3 encoder, converted external Z-Image transformer, and unchanged managed VAE. Next is a separate full-pipeline composition and offload compatibility phase, not automatic approval to expose external checkpoints in normal generation or merge to main.
+
+
+### Z2.20c3a: isolated standalone pipeline assembly (implementation, Windows acceptance pending)
+
+Committed `backend/morphorum/zimage_pipeline_assembly_probe.py` and regression guards to `dev-webui`. Requires explicit `--execute-pipeline-assembly`, a new process with masked CUDA, scratch configuration/schema verification, complete SHA-256 verification for both BF16 artifacts and available RAM at least both weight files plus 18 GiB reserve. Loads existing managed tokenizer/scheduler/VAE read-only and binds both converted scratch models on CPU through the earlier independently accepted techniques; verifies all CPU model parameters and constructs an isolated `ZImagePipeline` object. **No call to the pipeline, no image generation, no saved output, no model registration/UI loader changes.** Status `pipeline_assembled_nonloadable` still means `loadable=false` and `runtime_verified=false`. Full integration and offload require separate physical tests.
+
+On Windows, with Morphorum/ComfyUI jobs idle, run:
+
+```powershell
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_pipeline_assembly_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-pipeline-assembly
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+CI and Windows physical acceptance pending. Keep `main`, production managed package and original FP8 checkpoints unchanged.
