@@ -74,8 +74,7 @@ def probe_multi_step(transformer,encoder,managed_root,*,execute=False,reserve_gi
         finally:
             del enc
         gc.collect()
-        # Correct physical validation is a one-step scheduler numerical integration,
-        # not image generation or a claim of complete scheduler pipeline parity.
+        # Bounded numerical integration, not image generation or full pipeline parity.
         scheduler.set_timesteps(steps,device="cpu")
         timestep=scheduler.timesteps[0]
         if not bool(torch.isfinite(timestep).item()):
@@ -99,9 +98,7 @@ def probe_multi_step(transformer,encoder,managed_root,*,execute=False,reserve_gi
             if free_loaded<headroom_gib*GIB:
                 raise ValueError("Post-load GPU memory below forward headroom.")
             # Z-Image forward takes a list of individual [C,F,H,W] inputs.
-            sample_gpu=[latent[0].to("cuda:0",dtype=torch.bfloat16).unsqueeze(1)]
             cap_gpu=[caption_cpu.to("cuda:0",dtype=torch.bfloat16)]
-            normalized_t=(timestep.to(device="cuda:0",dtype=torch.float32)/1000.0).reshape(1)
             torch.cuda.reset_peak_memory_stats(0)
             stage_results=[]
             r["transformer_forward_attempted"]=True
@@ -149,11 +146,12 @@ def probe_multi_step(transformer,encoder,managed_root,*,execute=False,reserve_gi
     return r
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description="Z2.20c3c2 one isolated Z-Image-style scheduler step")
+    p=argparse.ArgumentParser(description="Z2.20c3c3 bounded native-caption scheduler steps")
     p.add_argument("--transformer",required=True)
     p.add_argument("--encoder",required=True)
     p.add_argument("--managed-root")
-    p.add_argument("--execute-multi-step",action="store_true")\n    p.add_argument("--steps",type=int,default=2)
+    p.add_argument("--execute-multi-step",action="store_true")
+    p.add_argument("--steps",type=int,default=2)
     p.add_argument("--reserve-gib",type=float,default=3)
     p.add_argument("--headroom-gib",type=float,default=1.5)
     a=p.parse_args(argv)
