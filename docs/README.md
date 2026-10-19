@@ -11,6 +11,8 @@ Welcome! You do not need to know Python or Git to use Morphorum. Start with the 
 | **[Getting started](GETTING_STARTED.md)** | Download/select a model, generate an image, create an animation, export video |
 | **[First-Run Setup](GETTING_STARTED.md#first-run-setup-wizard)** | Initial seven-step setup, checkpoint folders, optional managed-model download and 3D starter projects |
 | **[New Project Wizard](NEW_PROJECT_WIZARD.md)** | Guided animation setup and explanations of the seven wizard steps |
+| **[Project archives & Save Project As](PROJECT_ARCHIVES.md)** | Portable project ZIP import/export, full-input copies, overwrite recovery and safety limits |
+| **[Saved project media](PROJECT_MEDIA.md)** | How start images and soundtrack/Motion Lab WAVs persist and restore |
 | **[Motion Studio](MOTION_STUDIO.md)** | Six-stage WAV workflow, beat assignment and cleanup, frequency channels, continuous motion and project camera tracks |
 | **[FFmpeg Manager](FFMPEG_MANAGER.md)** | Auto-detect, custom paths, verified local install, update/removal, media acceptance test and GPL terms |
 | **[Troubleshooting](TROUBLESHOOTING.md)** | Fix browser, installer, model, CUDA, LAN, project and video problems |
@@ -43,7 +45,7 @@ These are research notes, not user installation or normal model-selection instru
 
 ## In-app Help
 
-The desktop WebUI's left-hand **Help** entry (phone: **More → Help**) opens the locally bundled `docs/` Markdown guides within the same WebUI. It reads files via restricted, read-only Help endpoints and doesn't redirect to GitHub or replace FastAPI's existing `/docs` API console. source documentation updates appear after the next `git pull` and app restart. See [WebUI layout architecture](WEBUI_LAYOUT.md) for implementation boundaries.
+The desktop WebUI's left-hand **Help** entry (phone: **More → Help**) opens the locally bundled `docs/` Markdown guides within the same WebUI. It reads files via restricted, read-only Help endpoints and doesn't redirect to GitHub or replace FastAPI's existing `/docs` API console. Source documentation updates appear after the next `git pull` and app restart. See [WebUI layout architecture](WEBUI_LAYOUT.md) for implementation boundaries.
 
 ## Recent editor workflow changes
 
@@ -51,4 +53,4 @@ The Project Editor now supports **+ Keyframe** with automatic even spacing and a
 
 ## Portable project settings and media
 
-[Project archive import/export and Save Project As](PROJECT_ARCHIVES.md) explains how to transfer complete project settings and attached input media, confirm overwrite while preserving a Trash backup, and exclude generated renders.
+[Project archive import/export and Save Project As](PROJECT_ARCHIVES.md) explains how to transfer complete project settings and project-owned input media, confirm overwrite while preserving a Trash backup, and exclude generated renders. The owner reported successful Windows acceptance on October 19, 2026.
