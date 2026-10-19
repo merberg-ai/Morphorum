@@ -41,6 +41,10 @@ Historical research and internal milestones remain available in the [earlier dev
 These are research notes, not user installation or normal model-selection instructions. Managed Z-Image remains unchanged.
 
 
-## In-app Help on `dev-webui`
+## In-app Help
 
-The desktop WebUI's left-hand **Help** entry (phone: **More → Help**) opens the locally bundled `docs/` Markdown guides within the same WebUI. It reads files via restricted, read-only Help endpoints and doesn't redirect to GitHub or replace FastAPI's existing `/docs` API console. This is a development-branch feature pending mobile/Windows acceptance; source documentation updates appear after the next `git pull` and app restart. See [WebUI layout architecture](WEBUI_LAYOUT.md) for implementation boundaries.
+The desktop WebUI's left-hand **Help** entry (phone: **More → Help**) opens the locally bundled `docs/` Markdown guides within the same WebUI. It reads files via restricted, read-only Help endpoints and doesn't redirect to GitHub or replace FastAPI's existing `/docs` API console. source documentation updates appear after the next `git pull` and app restart. See [WebUI layout architecture](WEBUI_LAYOUT.md) for implementation boundaries.
+
+## Recent editor workflow changes
+
+The Project Editor now supports **+ Keyframe** with automatic even spacing and an explicit **Evenly Space** control; frames start at zero and the last prompt may land on `max_frames - 1`. Existing positive and negative prompt text is preserved. The Image Studio's **Apply Image Settings to Project** copies model, dimensions, steps, sampler, schedule and seed settings to the open project's draft, while deliberately preserving prompts and CFG; **Save Project** persists changes. SDXL LoRA verification is a collapsed-by-default, locally persistent disclosure. The Results progress bar is just above the preview, and the empty-image placeholder has no redundant Settings/Models shortcuts. Expanded phone menus are constrained to the screen, and Help reads these bundled guides within the application. [WebUI layout details](WEBUI_LAYOUT.md) · [Deferred LoRA diagnostics](../TODO.MD).
