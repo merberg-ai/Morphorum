@@ -71,8 +71,6 @@ def _input_files(project_id: str) -> dict[str, Path]:
         if asset["kind"] == "source_image":
             relative = "assets/source.png"
         elif asset["kind"] == "soundtrack":
-            relative = "imported_soundtrack/" + asset["sha256"] + "." + (
-                asset["filename"].rsplit(".", 1)[-1].lower())
             # Original user filename may have a different extension case;
             # stored metadata is the authoritative format.
             from .imported_soundtrack import read_soundtrack
@@ -202,7 +200,7 @@ def _verified_archive(data: bytes) -> tuple[dict, dict[str, bytes]]:
             raise ProjectArchiveError("Project identity in archive is invalid.")
         if project_id != manifest.get("project_id") or name != manifest.get("project_name"):
             raise ProjectArchiveError("Project identity does not match archive manifest.")
-        if "assets/source.png" in files != bool((project.get("animation") or {}).get("source_image")):
+        if ("assets/source.png" in files) != bool((project.get("animation") or {}).get("source_image")):
             raise ProjectArchiveError("Start image reference and included file do not match.")
         if "imported_soundtrack/attachment.json" in files:
             attachment = json.loads(files["imported_soundtrack/attachment.json"])
@@ -281,7 +279,7 @@ def save_project_as(source_id: str, new_name: str, *,
     with projects._PROJECT_SAVE_LOCK:
         existing = projects.load_animation_project(source_id)
         project = (projects.normalize_animation_project(
-            draft, existing=existing, project_id=source_id, prefer_tracks=True)
+            draft, existing=existing, project_id=source_id, prefer_tracks=None)
             if draft is not None else deepcopy(existing))
         new_id = projects._slugify(title) + "-" + uuid.uuid4().hex[:8]
         project["id"] = new_id
