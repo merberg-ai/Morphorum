@@ -470,3 +470,19 @@ Expected `encoder_cpu_forward_verified_nonloadable`, `forward_attempted=true`, `
 ### Z2.20c2c Windows physical acceptance (2026-10-18)
 
 **PASS:** isolated standalone BF16 Qwen3 encoder CPU forward successfully computed finite `torch.bfloat16` hidden states shape [1,6,2560] from a six-token prompt. All 398 parameter tensors bound; scratch full-hash validation passed. Process RSS before load 784.23 MiB, after load 8465.21 MiB, after forward 8477.86 MiB (+12.65 MiB over post-load). Available RAM 50.94 GiB, configured minimum 26.98 GiB. `cuda_used=false`, `loadable=false`, `runtime_verified=false`, `inference_attempted=false`. This is genuine neural computation by converted standalone encoder, but not proof of Z-Image pipeline conditioning semantics, transformer execution or image synthesis. Next phase should verify actual ZImageTransformer2DModel forward API and develop a deliberately gated low-token CPU/GPU experiment, without modifying the managed runtime.
+
+
+### Z2.20c2d1: standalone transformer forward API contract probe (physical test pending)
+
+Added `backend/morphorum/zimage_transformer_contract_probe.py` and isolation tests. Constructs only a **meta-device** ZImageTransformer2DModel using the existing managed transformer config and inspects its actual installed `forward` signature and selected dimension fields. Requires masked CUDA and passing b1 scratch/schema config inspection. It does not load any weight tensor or execute a forward call, and always reports `weights_loaded=false`, `forward_attempted=false`, `loadable=false`. This intermediate gate is needed to shape a safe, low-token, explicitly bounded **real** standalone transformer forward call for the installed Diffusers version, rather than guessing an API or allocating 11.47 GiB of weights blindly.
+
+Windows command from `D:\Morphorum-test`:
+
+```powershell
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_transformer_contract_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder"
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Expected `transformer_forward_contract_inspected`. Review `forward_parameters` and `config_fields` before developing the separately gated full transformer forward. CI and physical acceptance pending. `main` remains unchanged.
