@@ -66,3 +66,9 @@ test('SDXL LoRA verification collapses by default and remembers user choice', ()
   assert.match(image, /document\.createElement\('summary'\)/);
   assert.match(image, /panel\.replaceChildren\(title, list\)/);
 });
+
+test('empty Image preview contains no redundant navigation shortcuts', () => {
+  const preview = html.match(/<div class="preview-placeholder" id="image-empty-preview">([\s\S]*?)<\/div>\s*<div class="image-gallery"/)?.[1] || '';
+  assert.match(preview, /No images yet/);
+  assert.doesNotMatch(preview, /data-jump="(?:settings|models)"/);
+});
