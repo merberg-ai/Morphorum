@@ -124,10 +124,12 @@
       <button class="nav-button" data-view="loras"><span class="nav-icon">◇</span><span>LoRAs</span></button>
       <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
       <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
+      <button class="nav-button" data-view="help"><span class="nav-icon">?</span><span>Help</span></button>
       <button class="nav-more-toggle" type="button" id="nav-more-toggle" aria-expanded="false" aria-controls="nav-more-menu"><span class="nav-icon">⋯</span><span>More</span></button>
       <div class="nav-more-menu" id="nav-more-menu" hidden>
         <button type="button" data-more-view="settings">⚙ Settings</button>
         <button type="button" data-more-view="console">›_ Console</button>
+        <button type="button" data-more-view="help">? Help</button>
       </div>
     </nav>
 
@@ -190,12 +192,20 @@
             </div>
             <p class="field-help" id="image-resolution-help" aria-live="polite">Choose a model to see recommended sizes. Width and height can also be entered manually.</p>
 
+            <div class="image-project-transfer">
+              <button class="secondary-button" type="button" id="image-apply-to-project" disabled>Apply Image Settings to Project</button>
+              <span class="field-help" id="image-project-transfer-status" role="status" aria-live="polite">Open an animation project to copy model, resolution, sampler, scheduler and seed. Prompt and CFG stay unchanged.</span>
+            </div>
             <div class="generation-actions">
               <button class="primary-button busy-button full-width" id="generate-image" disabled><span class="spinner"></span><span class="button-label">Generate</span></button>
               <button class="secondary-button danger" id="cancel-generation" type="button" hidden>Cancel</button>
               <button class="secondary-button busy-button" id="unload-model" type="button" disabled><span class="spinner"></span><span class="button-label">Unload Model</span></button>
             </div>
 
+          </article>
+
+          <article class="card glass preview-card image-preview-card">
+            <div class="card-header"><div><h2 id="image-results-heading">Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
             <div class="generation-progress" id="generation-progress" hidden>
               <div class="progress-heading"><span id="generation-status">Preparing…</span><span id="generation-percent">0%</span></div>
               <div class="progress-track"><div class="progress-fill" id="generation-progress-fill"></div></div>
@@ -203,10 +213,7 @@
               <p id="image-conditioning-diagnostic" class="field-help sdxl-conditioning-diagnostic" role="status" hidden></p>
               <div id="image-lora-verification" class="lora-verification-report" role="status" hidden></div>
             </div>
-          </article>
 
-          <article class="card glass preview-card image-preview-card">
-            <div class="card-header"><div><h2 id="image-results-heading">Results</h2><p class="muted">Images appear as soon as each one finishes.</p></div><span class="badge" id="result-count-badge">0 images</span></div>
             <div class="image-history-controls"><label for="image-job-history">Recent jobs</label><select id="image-job-history" aria-label="Recent Image Generation jobs"><option value="">No recent jobs</option></select><button class="secondary-button compact busy-button" id="image-history-refresh" type="button"><span class="spinner"></span><span class="button-label">Refresh</span></button></div>
             <div class="preview-placeholder" id="image-empty-preview">
               <div class="preview-glyph">◇</div>
@@ -1467,6 +1474,11 @@
         <div id="model-path-cards" class="settings-grid" hidden></div>
       </section>
 
+      <section class="view" id="view-help">
+        <div class="page-heading"><div><p class="eyebrow">MORPHORUM GUIDES</p><h1>Help</h1><p class="muted">Browse the documentation bundled with this installation without leaving Morphorum.</p></div></div>
+        <div class="help-layout"><aside class="card glass help-sidebar"><label for="help-document-select" class="field-label">Documentation</label><select id="help-document-select" aria-label="Help document"></select><div id="help-document-list" class="help-document-list" role="navigation" aria-label="Documentation pages"></div></aside><article class="card glass help-article" id="help-content" aria-live="polite"><p class="muted">Choose a guide to begin.</p></article></div>
+      </section>
+
       <section class="view" id="view-console">
         <div class="page-heading console-heading">
           <div><p class="eyebrow">LIVE SERVER ACTIVITY</p><h1>Console</h1><p class="muted">See generation activity and errors. Use the filters to find a message or copy logs for troubleshooting.</p></div>
@@ -1571,6 +1583,7 @@
   <script src="/assets/ui-services.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/resolution.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/app.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/help.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/civitai.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/image.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
