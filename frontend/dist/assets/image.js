@@ -568,13 +568,19 @@
     node.textContent = warnings.join(' ');
   }
 
+  const LORA_VERIFICATION_OPEN_KEY = 'morphorum.image.loraVerificationOpen.v1';
+  function loraVerificationOpen() {
+    try { return localStorage.getItem(LORA_VERIFICATION_OPEN_KEY) === 'true'; }
+    catch (_) { return false; }
+  }
+
   function renderImageLoraVerification(job) {
     const panel = qs('#image-lora-verification');
     if (!panel) return;
     const adapters = job?.lora_diagnostic?.adapters;
     panel.hidden = !Array.isArray(adapters) || adapters.length === 0;
     if (panel.hidden) { panel.textContent = ''; return; }
-    const title = document.createElement('strong');
+    const title = document.createElement('summary');
     title.textContent = 'SDXL LoRA verification · ' + adapters.length + ' active';
     const list = document.createElement('div');
     list.className = 'lora-verification-items';
@@ -999,6 +1005,14 @@
   }
 
   function bind() {
+    const verification = qs('#image-lora-verification');
+    if (verification) {
+      verification.open = loraVerificationOpen();
+      verification.addEventListener('toggle', () => {
+        try { localStorage.setItem(LORA_VERIFICATION_OPEN_KEY, String(verification.open)); }
+        catch (_) { /* Optional storage. */ }
+      });
+    }
     qs('#image-apply-to-project')?.addEventListener('click', applyCurrentImageSettingsToProject);
     window.addEventListener('morphorum:active-project-changed', updateProjectTransferAvailability);
     updateProjectTransferAvailability();
