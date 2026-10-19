@@ -20,7 +20,9 @@ def probe_multi_step(transformer,encoder,managed_root,*,execute=False,reserve_gi
         r["status"]="needs_explicit_execute"
         return r
     try:
-        if type(steps) is not int or not 2<=steps<=3:\n            raise ValueError("Steps must be 2 or 3.")\n        if not 3<=reserve_gib<=8 or not 1.5<=headroom_gib<=4:
+        if type(steps) is not int or not 2<=steps<=3:
+            raise ValueError("Steps must be 2 or 3.")
+        if not 3<=reserve_gib<=8 or not 1.5<=headroom_gib<=4:
             raise ValueError("Reserve 3..8 GiB and headroom 1.5..4 GiB required.")
         check=probe_configuration(transformer,encoder,managed_root)
         if check["status"]!="config_shape_candidate_unverified":
