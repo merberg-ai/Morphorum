@@ -265,6 +265,37 @@ if not BACKEND_ONLY:
     app.add_api_route("/", root, methods=["GET"], include_in_schema=False)
 
 
+# In-app Help reads only bundled repository markdown; never executes it.
+HELP_DOC_ROOT = (ROOT / "docs").resolve()
+
+@app.get("/api/help/docs", include_in_schema=False)
+def help_document_index() -> dict:
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=404, detail="Help is available in WebUI mode.")
+    if not HELP_DOC_ROOT.is_dir():
+        return {"documents": []}
+    return {"documents": [
+        {"name": entry.name, "title": entry.stem.replace("_", " ").title()}
+        for entry in sorted(HELP_DOC_ROOT.glob("*.md"))
+        if entry.is_file() and not entry.is_symlink()
+    ]}
+
+@app.get("/api/help/docs/{name}", include_in_schema=False)
+def help_document_content(name: str) -> dict:
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=404, detail="Help is available in WebUI mode.")
+    if not name.endswith(".md") or name.startswith(".") or not all(
+        char.isalnum() or char in "._-" for char in name
+    ):
+        raise HTTPException(status_code=400, detail="Invalid documentation filename.")
+    target = (HELP_DOC_ROOT / name).resolve()
+    if target.parent != HELP_DOC_ROOT or not target.is_file() or target.is_symlink():
+        raise HTTPException(status_code=404, detail="Documentation page not found.")
+    if target.stat().st_size > 512_000:
+        raise HTTPException(status_code=413, detail="Documentation page too large.")
+    return {"name": name, "markdown": target.read_text(encoding="utf-8")}
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {
