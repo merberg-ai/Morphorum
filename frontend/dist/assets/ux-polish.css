@@ -1,0 +1,34 @@
+
+/* UX polish: keep expanded desktop sidebar and mobile flyouts bounded. */
+.main-nav, .main-nav *, .workspace, .view, .card { min-width: 0; box-sizing: border-box; }
+.main-nav [id="project-nav-submenu"] button,
+.main-nav [id="motion-lab-sidebar"] button { max-width: 100%; min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.image-project-transfer { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:12px 0; }
+.image-project-transfer .field-help { flex:1 1 220px; margin:0; }
+.image-preview-card .generation-progress { margin:10px 0 15px; }
+.help-layout { display:grid; grid-template-columns:minmax(210px,280px) minmax(0,1fr); gap:18px; max-width:1260px; margin:auto; align-items:start; }
+.help-sidebar, .help-article { min-width:0; }
+.help-document-list { display:grid; gap:4px; margin-top:12px; max-height:70vh; overflow:auto; }
+.help-document-list button { border:0; border-radius:8px; padding:9px; text-align:left; color:var(--text); background:transparent; cursor:pointer; overflow-wrap:anywhere; }
+.help-document-list button.active, .help-document-list button:hover { background:var(--button-secondary-hover); }
+.help-article { overflow-wrap:anywhere; line-height:1.65; }
+.help-article pre { max-width:100%; overflow:auto; padding:12px; background:rgba(0,0,0,.2); border-radius:8px; }
+.help-article code { overflow-wrap:anywhere; }
+.help-article img { max-width:100%; height:auto; }
+@media(max-width:1180px) {
+  .main-nav { min-width:0; max-width:100%; }
+  #project-nav-submenu:not([hidden]), #motion-lab-sidebar:not([hidden]) { max-width:min(90vw,320px); max-height:55vh; overflow-x:hidden; overflow-y:auto; }
+  .help-layout { grid-template-columns:minmax(0,1fr); }
+  .help-document-list { max-height:180px; }
+}
+@media(max-width:640px) {
+  .main-nav { flex-wrap:nowrap; min-width:0; }
+  #project-nav-submenu:not([hidden]), #motion-lab-sidebar:not([hidden]) {
+    position:absolute; left:0; right:0; bottom:100%; width:auto; max-width:100%;
+    max-height:min(60vh,420px); margin:0 0 8px; padding:10px;
+    border-radius:12px; background:var(--surface, #181b24); border:1px solid var(--border-strong);
+    box-shadow:0 12px 30px rgba(0,0,0,.5); overflow:auto; z-index:90;
+  }
+  #project-nav-submenu:not([hidden]) button, #motion-lab-sidebar:not([hidden]) button { display:block; width:100%; text-align:left; padding:9px 12px; }
+  .image-project-transfer button { width:100%; }
+}
