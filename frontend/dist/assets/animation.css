@@ -4205,3 +4205,11 @@ dialog#animation-deforum-dialog {
 @media (prefers-reduced-motion:reduce) {
   .animation-p5-summary-grid > div {transition:none;}
 }
+
+/* Prompt/keyframe toolbar stays usable on phones and narrow editors. */
+.animation-prompt-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; min-width:0; }
+.animation-prompts-card > .card-header { flex-wrap:wrap; gap:10px; }
+@media(max-width:640px) {
+  .animation-prompt-actions { width:100%; justify-content:flex-start; }
+  .animation-prompt-actions button { flex:1 1 120px; }
+}
