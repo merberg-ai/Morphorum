@@ -165,3 +165,42 @@ def test_reject_digest_tampering_without_changing_saved_project(media_project):
     with pytest.raises(ProjectArchiveError, match="integrity"):
         import_project_archive(output.getvalue(), overwrite=True)
     assert (root / "assets" / "source.png").read_bytes() == original_stored_image
+
+
+def test_reject_correctly_rehashed_but_invalid_png(media_project):
+    _, pid, root, wav, image = media_project
+    base = export_project_archive(pid)
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(base)) as source:
+        manifest = json.loads(source.read("manifest.json"))
+        fake_image = b"this is not a PNG"
+        for entry in manifest["files"]:
+            if entry["path"] == "assets/source.png":
+                entry["sha256"] = hashlib.sha256(fake_image).hexdigest()
+                entry["size"] = len(fake_image)
+        with zipfile.ZipFile(output, "w") as target:
+            for name in source.namelist():
+                raw = (json.dumps(manifest).encode() if name == "manifest.json"
+                       else fake_image if name == "assets/source.png"
+                       else source.read(name))
+                target.writestr(name, raw)
+    with pytest.raises(ProjectArchiveError, match="Invalid PNG"):
+        import_project_archive(output.getvalue(), overwrite=True)
+    assert (root / "assets" / "source.png").is_file()
+
+
+def test_reject_project_folder_symlink_on_export_and_overwrite(media_project):
+    _, pid, root, wav, image = media_project
+    bundle = export_project_archive(pid)
+    other = root.parent / "other-project-folder"
+    root.rename(other)
+    root.symlink_to(other, target_is_directory=True)
+    try:
+        with pytest.raises(ProjectArchiveError):
+            export_project_archive(pid)
+        with pytest.raises(ProjectArchiveError):
+            import_project_archive(bundle, overwrite=True)
+        assert (other / "project.json").exists()
+    finally:
+        root.unlink()
+        other.rename(root)
