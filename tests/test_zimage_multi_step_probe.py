@@ -18,3 +18,11 @@ def test_failed_schema_prevents_execution(tmp_path):
         r=probe_multi_step(tmp_path,tmp_path,tmp_path,execute=True,steps=2)
     assert r["status"]=="blocked"
     assert not r["scheduler_step_attempted"]
+
+
+def test_module_compiles_from_source():
+    import ast
+    from pathlib import Path
+    from morphorum import zimage_multi_step_probe
+    module_path = Path(zimage_multi_step_probe.__file__)
+    ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
