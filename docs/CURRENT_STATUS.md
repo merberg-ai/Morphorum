@@ -40,6 +40,15 @@ Read [Getting started](GETTING_STARTED.md) for a small first render, [Motion Stu
 
 Report reproducible issues at [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues). Please share your OS, GPU, Morphorum version, and error message, **never authentication tokens or private files**.
 
-## Standalone Z-Image research boundary (dev-webui)
+## Standalone Z-Image research boundary
 
 An isolated experimental single-file Z-Image path was owner-tested through milestone **Z2.20c3c4** on Windows: converted external BF16 encoder/transformer weights, native prompt processing, two guarded CUDA denoising steps and a finite 32×32 RGB tensor decoded with the existing managed VAE. **No image file was generated or saved.** These scratch checkpoints are deliberately `loadable=false` and `runtime_verified=false`, and are **not supported by the normal Z-Image image-generation UI**. The managed Z-Image-Turbo package remains the supported path. See [milestone history](ZIMAGE_SINGLE_FILE_ROADMAP.md) and the [planned c3c5 PNG test](ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md).
+
+## Current WebUI and Project Editor controls
+
+- **Image:** Generation progress is above the preview in Results; the empty-preview shortcut buttons were removed. The optional SDXL LoRA verification report expands/collapses, defaults closed on first use, and persists locally in the browser.
+- **Image → open animation project:** Apply Image Settings to Project copies model, resolution, step count, sampler, scheduler/schedule type, and seed mode/seed values to the active **unsaved** Project Editor draft. It preserves positive and negative prompts and CFG. Explicit **Save Project** is required.
+- **Prompt Keyframes:** **+ Keyframe** adds a prompt and automatically evens frame assignments; **Evenly Space** evens existing prompt rows. Prompt text/order is retained, frame numbers can still be edited manually, and duplicate/out-of-range automatic assignments are refused.
+- **Responsive navigation and Help:** Expanded phone navigation is bounded. Desktop Help or phone More → Help reads bundled Markdown documentation inside the application.
+
+Developer note: deferred SDXL LoRA console/alpha-pattern follow-up is tracked in [TODO.MD](../TODO.MD). Standalone Z-Image scratch inference milestones remain *research-only*, not product model compatibility.
