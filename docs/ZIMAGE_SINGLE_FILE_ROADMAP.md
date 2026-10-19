@@ -665,3 +665,8 @@ git pull
 ```
 
 Expected `transformer_cuda_forward_verified_nonloadable` with `forward_attempted=true` and `finite=true`, while `generation_attempted=false`, `loadable=false`. CI and Windows physical acceptance pending; `main` and managed model unchanged. Next: validate actual pipeline CPU/GPU offload and end-to-end conditioning before c3c image generation.
+
+
+### Z2.20c3b7 Windows physical acceptance (2026-10-18)
+
+**PASS:** `transformer_cuda_forward_verified_nonloadable`: real external BF16 transformer ran a tiny CUDA forward with x [16,1,4,4], synthetic cap_feats [1,2560] and finite BF16 output [16,1,4,4]. All 521 tensors bound. RTX 4080 SUPER free VRAM 14.708 GiB before load, 2.496 GiB after load, 2.414 GiB after forward; allocator 11.572 GiB post-forward, 11.581 GiB peak. `forward_attempted=true`, `generation_attempted=false`, `loadable=false`. Missing safetensors metadata was nonfatal. This proves tiny transformer GPU math but not real caption conditioning, image resolution activation budgets or full pipeline. Next: isolate a real tokenizer→Qwen3 hidden-state→transformer input contract using both models on CPU, then test GPU offload with a proven contract.
