@@ -794,3 +794,18 @@ Expected `native_caption_multi_scheduler_steps_verified_nonloadable`, `steps_com
 ### Z2.20c3c3 Windows physical acceptance (2026-10-18)
 
 **PASS:** `native_caption_multi_scheduler_steps_verified_nonloadable`. Both scheduled iterations completed using pipeline-native caption [14,2560], real converted transformer BF16 prediction, and FlowMatchEulerDiscreteScheduler. Timesteps 1000.0 (normalized 1.0) and 8.928571701049805 (normalized 0.0089285718). Updated latent [1,16,4,4] finite at both steps, CUDA peak 11.582 GiB and free GPU memory after forward 2.414 GiB, available RAM 50.334 GiB. `prompt_encoding_attempted=true`, `scheduler_step_attempted=true`, `transformer_forward_attempted=true`, `generation_attempted=false`, `loadable=false`, `runtime_verified=false`. The nonfatal safetensors metadata fallback warning persists. This verifies a **two-step numerical denoising diagnostic**, not generated image quality, pipeline parity or full-size render feasibility. Next: gated isolated VAE decode on the updated latent, with correct managed VAE scaling/shift and no file output.
+
+
+### Z2.20c3c4: isolated final-latent VAE CPU decode (Windows acceptance pending)
+
+Added `backend/morphorum/zimage_vae_decode_probe.py` and fail-closed tests on `dev-webui`. This extends the physically accepted two-step experimental diagnostic: it uses managed ZImagePipeline native prompt encoding with standalone BF16 encoder weights on CPU, two or three guarded transformer BF16 CUDA forwards, and corresponding CPU FlowMatch scheduler updates. After verifying the final latent is finite, it loads the **unchanged managed VAE on CPU**, applies the Z-Image pipeline inverse normalization `(latents / scaling_factor) + shift_factor` and decodes the tiny [1,16,4,4] latent into a finite [1,3,32,32] RGB float tensor. It records numerical min/max, VAE scaling and shifting values, tensor shapes and memory. There is **no PIL processing or saved image**, no call to `ZImagePipeline.__call__`, and no normal UI loader permission; `image_file_saved=false`, `loadable=false`, `runtime_verified=false`. This is an experimental component chain rather than a validated image-quality test.
+
+Physical Windows command, CUDA enabled, other GPU workloads idle:
+
+```powershell
+cd D:\Morphorum-test
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_vae_decode_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-vae-decode --steps 2 --reserve-gib 3 --headroom-gib 1.5
+```
+
+Expected `native_caption_vae_decoded_nonloadable`, `vae_decode_attempted=true`, finite [1,3,32,32] RGB tensor, `image_file_saved=false`, `loadable=false`. If blocked, inspect diagnostics and keep previous acceptances intact. CI and Windows physical acceptance pending; `main` and managed Z-Image untouched.
