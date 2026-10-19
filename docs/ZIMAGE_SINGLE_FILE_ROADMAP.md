@@ -407,3 +407,19 @@ Next only after successful physical acceptance: Z2.20c2 explicitly gated tiny-mo
 **PASS:** `auxiliary_components_structurally_verified`. Managed Qwen2Tokenizer encoded/decoded a six-token prompt. Managed FlowMatchEulerDiscreteScheduler returned two CPU timesteps (1000.0, 8.928571701049805). Managed AutoencoderKL constructed on meta with 244 parameter tensors and 83,819,683 elements. `cuda_used=false`, `vae_weights_loaded=false`, `inference_attempted=false`, `loadable=false`. This verifies component construction, not the correctness of conditioning embeddings, VAE decoding or an image-generation pipeline.
 
 Z2.20c2 should begin with isolated, explicitly CPU-only low-memory scheduler numerical stepping (real finite tensors and read-only RSS telemetry) before full multi-billion-parameter model forward passes. Later full forward tests require bounded dimensions, limited timesteps and deliberate GPU-offload planning.
+
+
+### Z2.20c2a: isolated numerical scheduler step (physical test pending)
+
+Added `backend/morphorum/zimage_scheduler_step_probe.py` and gated tests. This is a *real CPU numerical computation* using the existing managed FlowMatchEulerDiscreteScheduler. It operates on a tiny (1,16,8,8) synthetic float32 latent, performs two scheduler steps with bounded synthetic predictions, checks shape/finiteness, and records process RSS before/after. It requires masked CUDA and passing scratch/managed config preflight. It loads **no transformer, encoder or VAE weights**, executes **no neural-network forward pass**, and does not generate images or enable standalone loading.
+
+From `D:\Morphorum-test` on `dev-webui`:
+
+```powershell
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_scheduler_step_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder"
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Success status `cpu_scheduler_steps_verified`; inspect two-step numerical and RSS report. CI and physical validation pending. Z2.20c2b will be a distinct, explicitly gated neural forward experiment after accepting this step. Keep `main` and managed Z-Image untouched.
