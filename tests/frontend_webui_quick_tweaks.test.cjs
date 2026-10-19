@@ -72,3 +72,17 @@ test('empty Image preview contains no redundant navigation shortcuts', () => {
   assert.match(preview, /No images yet/);
   assert.doesNotMatch(preview, /data-jump="(?:settings|models)"/);
 });
+
+test('Motion Lab narrow-menu buttons inherit Morphorum theme instead of browser defaults', () => {
+  const desktop = read('assets/desktop.css');
+  assert.match(html, /id="motion-lab-sidebar"[^>]*hidden/);
+  assert.match(css, /@media \(max-width: 1180px\), \(min-width: 1181px\) and \(pointer: coarse\)/);
+  assert.match(css, /\.main-nav #motion-lab-sidebar > button\s*\{/);
+  assert.match(css, /appearance: none;/);
+  assert.match(css, /background: transparent;/);
+  assert.match(css, /color: var\(--muted\);/);
+  assert.match(css, /#motion-lab-sidebar > button\.active,/);
+  assert.match(css, /#motion-lab-sidebar > button:focus-visible/);
+  assert.match(css, /#motion-lab-sidebar:not\(\[hidden\]\)\s*\{/);
+  assert.match(desktop, /\.main-nav\.motion-section-active #motion-lab-sidebar/);
+});
