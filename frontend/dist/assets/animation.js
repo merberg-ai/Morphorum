@@ -776,6 +776,7 @@
       'animation-add-prompt',
       'animation-evenly-space-prompts',
       'animation-save',
+      'animation-save-as',
       'animation-reload',
       'animation-validate-schedules',
       'animation-generate-motion-preview',
@@ -11731,6 +11732,7 @@
     });
     qs('#animation-new')?.addEventListener('click', createProject);
     qs('#animation-save')?.addEventListener('click', saveProject);
+    qs('#animation-save-as')?.addEventListener('click', () => void projectManagerSaveAs({editor:true}));
     qs('#animation-reload')?.addEventListener('click', reloadProject);
     qs('#animation-add-prompt')?.addEventListener('click', addPromptKeyframe);
     qs('#animation-evenly-space-prompts')?.addEventListener('click', evenlySpacePromptKeyframes);
