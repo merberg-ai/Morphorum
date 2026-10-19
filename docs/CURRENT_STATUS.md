@@ -14,12 +14,13 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 | Onboarding | Seven-step First-Run Setup Wizard with diagnostics, model/LoRA folders, optional Z-Image and 512 × 512 sample projects; separate seven-step New Project Wizard |
 | Audio / video | Motion Studio manual beat cues, soundtrack reuse, independent frequency channels, spectrum selection and continuous camera presets; optional audio attachment, FFmpeg MP4/WebM exports |
 | FFmpeg Manager | System detection or custom FFmpeg/FFprobe paths; optional SHA-256-verified managed FFmpeg install/update/remove on supported Windows/Linux hosts; host-side encoder checks |
-| Import | Compatible Deforum Motion Studio camera schedules into existing 3D projects |
+| Project archives | Verified full-configuration and input-media ZIP export/import, explicit overwrite and recoverable backup, Save Project As in Manager and Editor |
+| Import motion settings | Compatible Deforum Motion Studio camera schedules into existing 3D projects |
 | Remote operation | Authenticated API-only server, versioned client capabilities, project assets, telemetry, previews and job recovery |
 
 ## Current workflow and tested milestone
 
-The main menu includes Project Manager, New Project Wizard, and Project Editor directly. Project Editor groups its controls into five sections. Motion Lab Overview displays a read-only project/motion summary and workflow navigation for Preview, Apply, Save, Render, and Export. Motion Studio offers guided WAV analysis, beat detection, assignment, continuous/channel motion, and preview/apply stages. The project manager can move selected projects to Trash with confirmation; this is not permanent deletion.
+The main menu includes Project Manager, New Project Wizard, and Project Editor directly. Project Editor groups its controls into five sections. Motion Lab Overview displays a read-only project/motion summary and workflow navigation for Preview, Apply, Save, Render, and Export. Motion Studio offers guided WAV analysis, beat detection, assignment, continuous/channel motion, and preview/apply stages. The Project Manager can move selected projects to Trash with confirmation, export/import portable project ZIPs, and create full-input-media project copies via **Save Project As**; this is also accessible from Project Editor.
 
 Owner Windows testing reported a successful 237-frame, 24 FPS animation with H.264 video and AAC audio export. On 2026-10-17, the owner also reported **G5.5 SDXL acceptance passed** and explicitly approved promotion of the G1–G5 SDXL improvements to `main`. The candidate's automated Backend, Syntax, and Windows/Linux Installer checks passed. The changes include expanded SDXL sampler/schedule selection, dual-CLIP long-prompt and negative-prompt handling, LoRA validation, animation cache/performance telemetry, and clearer render diagnostics. Individual G5 acceptance-matrix results were not provided separately; treat this as owner acceptance rather than independent verification of every scenario. Physical mobile testing is deferred, and the remaining P5.3 soundtrack provenance, P5.4 consistency, and P5.5 closeout are not complete.
 
@@ -52,3 +53,7 @@ An isolated experimental single-file Z-Image path was owner-tested through miles
 - **Responsive navigation and Help:** Expanded phone navigation is bounded. Desktop Help or phone More → Help reads bundled Markdown documentation inside the application.
 
 Developer note: deferred SDXL LoRA console/alpha-pattern follow-up is tracked in [TODO.MD](https://github.com/merberg-ai/Morphorum/blob/main/TODO.MD). Standalone Z-Image scratch inference milestones remain *research-only*, not product model compatibility.
+
+## Portable project archives and duplication (owner Windows acceptance: 2026-10-19)
+
+Project Manager offers validated **Export ZIP**, **Import Project ZIP** with explicit overwrite confirmation and Load Project prompt, and **Save Project As** (also available from Project Editor). Project settings and attached input media are included. Generated media and caches are not included. See [Project archive guide](PROJECT_ARCHIVES.md). The owner reported the import/export and Save As workflows working as expected on Windows (October 19, 2026). Backend and frontend regression suites passed. This is user acceptance, not a claim that every import edge case or mobile device has been physically tested. The archive limits are 256 MiB compressed, 512 MiB expanded and 128 entries; model/LoRA assets remain external references. Overwrites move the previous project folder into managed Trash.

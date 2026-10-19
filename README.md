@@ -71,7 +71,7 @@ For step-by-step screenshots-free guidance, see [Your first image and animation]
 
 ## Current Motion Lab and project workflow
 
-The main navigation offers **Project Manager**, **New Project**, and **Project Editor** directly. Project Editor groups controls into **Setup**, **Sources & Media**, **Timeline & Prompts**, **Camera & Motion**, and **Generation Settings**. The Project Manager supports choosing multiple visible projects and moving them to Trash with confirmation; the operation is not permanent deletion.
+The main navigation offers **Project Manager**, **New Project**, and **Project Editor** directly. Project Editor groups controls into **Setup**, **Sources & Media**, **Timeline & Prompts**, **Camera & Motion**, and **Generation Settings**. The Project Manager supports searching, bulk selection, moving projects to Trash with confirmation, **exporting/importing verified project ZIPs**, and **Save Project As** for duplicating a project with its attached input media. Project Editor also offers **Save Project As**. Rendered images and videos are excluded from these portable project copies.
 
 **Motion Lab → Overview** presents a live read-only project summary and a guided **Preview Draft → Apply Motion → Save Project → Render Animation → Export Video** workflow. Previewing does not save or apply camera movement. Applying Motion Lab layers updates the project's camera schedules, and the workflow's Save Project action calls the existing save operation. A render uses the applied project schedule, not an unapplied draft. Check Camera Preview and any preflight warnings before expensive 3D renders.
 
@@ -91,6 +91,7 @@ The main navigation offers **Project Manager**, **New Project**, and **Project E
 | Motion Studio | Guided six-stage WAV workflow, beat detection, batch beat-cue assignments and cleanup, frequency channels, continuous presets, preview and apply |
 | Animation & Outputs | Frame rendering, progress monitoring, SDXL long-prompt blending/cache telemetry, completed-frame previews, MP4/WebM export with FFmpeg |
 | FFmpeg Manager | Auto-detect host FFmpeg/FFprobe, choose a custom executable, or opt in to a verified local managed download, update and removal |
+| Project transfer & duplication | Verified ZIP export/import of full project settings and attached input media; explicit overwrite confirmation and recoverable Trash backup; Save Project As from Manager or Editor |
 | Import Motion Settings | Compatible Deforum Motion Studio camera schedules, optional soundtrack attachment |
 | Interface | Responsive browser layout, built-in console and telemetry, themes: **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite** |
 
@@ -154,3 +155,9 @@ The Image Studio keeps generation progress directly above the Results preview, a
 Project Editor's **Prompt Keyframes** now offers **+ Keyframe** with automatic even redistribution, alongside **Evenly Space** to redistribute existing prompts. Positive and negative prompt text is retained in order; frame numbers remain manually editable. For a 543-frame animation, five prompts are positioned at 0, 136, 271, 407 and 542. The sidebar's expanding menus have bounded mobile layouts. **Help** opens the installed `docs/` guides within the WebUI, from the desktop sidebar or mobile More menu. See [WebUI layout details](docs/WEBUI_LAYOUT.md).
 
 The SDXL LoRA follow-up diagnostic investigation is deferred in [TODO.MD](https://github.com/merberg-ai/Morphorum/blob/main/TODO.MD); current reports must not be mistaken for independent verification of all UNet scaling factors. Experimental external single-file Z-Image remains unavailable for regular generation.
+
+## Portable animation projects
+
+In **Project Manager**, use **Export ZIP** for saved settings and project-owned inputs (starting image, soundtrack and Motion Lab WAVs). **Import Project ZIP** validates the archive before writing and asks whether to load the imported project. If the same project ID already exists, you must confirm replacement by typing its current name; Morphorum backs up the old project folder to managed Trash. **Save Project As** creates an independent project with the complete configuration and attached input media, leaving the original unchanged. It is also available in Project Editor, where it carries the current unsaved Editor configuration into the **new copy only**.
+
+**No generated images, animation frames, rendered videos, model weights or LoRA files are included.** Archives are currently limited to 256 MiB compressed / 512 MiB expanded. The owner reported successful Windows acceptance of these workflows on October 19, 2026; additional device-specific testing is welcome. [Project archive guide](docs/PROJECT_ARCHIVES.md) · [Project media restoration](docs/PROJECT_MEDIA.md).

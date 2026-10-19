@@ -45,8 +45,7 @@ projects/<project-id>/
     <sha256>.wav                       (optional, multiple supported)
 ```
 
-These are **separate files**, not embedded into `project.json`. Backups and
-manual transfers must include the complete project directory.
+These are **separate files**, not embedded into `project.json`. For a manual filesystem backup, copy the entire project directory. For **portable settings plus attached inputs**, use **Project Manager → Export ZIP**, which includes these owned files with a verified manifest while intentionally excluding renders and caches. The reverse **Import Project ZIP** restores them into the managed project library. See [Project archives & Save As](PROJECT_ARCHIVES.md).
 
 ## Failure and concurrency behavior
 
@@ -58,8 +57,9 @@ manual transfers must include the complete project directory.
 - Stored WAV analysis validates current project FPS and frame count. Editing
   frame count does not silently rewrite existing audio motion layers.
 - The start image and audio files are only available while the Morphorum host
-  still has the project directory. **An export of project.json alone is not a
-  portable media backup.**
+  still has the project directory or a complete portable project archive. **An export of project.json alone is not a portable media backup.**
+- **Save Project As** duplicates project settings and attached inputs under a new project ID. It does not duplicate generated renders and does not change the original project.
+- Importing a conflicting project ID requires confirmation and moves the replaced project folder into managed Trash for recovery; render output remains separate.
 - Save/attach operations keep their original explicit behavior; simply
   opening a project never creates another render or changes its camera tracks.
 

@@ -776,6 +776,7 @@
       'animation-add-prompt',
       'animation-evenly-space-prompts',
       'animation-save',
+      'animation-save-as',
       'animation-reload',
       'animation-validate-schedules',
       'animation-generate-motion-preview',
@@ -5445,6 +5446,8 @@
     if (selectVisible) selectVisible.disabled = projectManagerState.busy || !filtered.length;
     const clearBulk = qs('#animation-project-manager-clear-selection');
     if (clearBulk) clearBulk.disabled = projectManagerState.busy || !projectManagerState.bulkIds.size;
+    const importButton = qs('#animation-project-manager-import');
+    if (importButton) importButton.disabled = projectManagerState.busy;
     list.replaceChildren();
     if (!filtered.length) {
       const empty = document.createElement('p');
@@ -5491,7 +5494,7 @@
     }
     details.replaceChildren();
     const selected = state.projects.find(p => p.id === projectManagerState.selectedId);
-    for (const id of ['open', 'rename', 'trash']) {
+    for (const id of ['open', 'rename', 'save-as', 'export', 'trash']) {
       const button = qs('#animation-project-manager-' + id);
       if (button) button.disabled = projectManagerState.busy ||
         (id === 'trash' ? !selected && !projectManagerState.bulkIds.size : !selected);
@@ -5537,6 +5540,163 @@
     }
   }
 
+
+  const ARCHIVE_UPLOAD_MAX = 256 * 1024 * 1024;
+
+  async function archiveRequest(url, file, headers = {}) {
+    const response = await fetch(url, {
+      method: 'POST', headers: {'Content-Type': 'application/zip', ...headers},
+      body: file,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || response.statusText || 'Archive request failed.');
+    return result;
+  }
+
+  async function projectManagerExport() {
+    const item = state.projects.find(p => p.id === projectManagerState.selectedId);
+    if (!item || projectManagerState.busy) return;
+    if (item.id === state.project?.id && state.dirty) {
+      toast('Save before exporting', 'Save the project to include your latest Editor changes.', 'warning', 7000);
+      return;
+    }
+    projectManagerState.busy = true;
+    renderProjectManager();
+    try {
+      const response = await fetch('/api/animation/projects/' + encodeURIComponent(item.id) + '/archive');
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || 'Project archive export failed.');
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = 'morphorum-' + item.id + '.zip';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      toast('Project archive exported', 'Saved project settings and attached inputs only. Rendered outputs are excluded.', 'success');
+    } catch (error) {
+      toast('Could not export project', error.message, 'error', 8500);
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
+
+  async function projectManagerSaveAs({editor = false} = {}) {
+    const item = editor ? state.project : state.projects.find(p => p.id === projectManagerState.selectedId);
+    if (!item?.id || projectManagerState.busy) return;
+    const requested = await window.MorphorumDialog.prompt({
+      title: 'Save Project As', message: 'Create a new, independent project with all settings, start image, attached soundtrack and Motion Lab WAV inputs. Rendered outputs are not copied.',
+      initialValue: item.name + ' Copy', inputLabel: 'New project name',
+      maxLength: 120, confirmText: 'Save As New Project',
+      validate: value => String(value || '').trim() ? '' : 'Enter a project name.',
+    });
+    if (requested === null) return;
+    projectManagerState.busy = true;
+    renderProjectManager();
+    try {
+      const result = await api('/api/animation/projects/' + encodeURIComponent(item.id) + '/save-as', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: String(requested).trim(),
+          // Copy unsaved Editor configuration when cloning the open project.
+          ...(item.id === state.project?.id ? {project: collectProject()} : {}),
+        }),
+      });
+      await loadProjectList();
+      projectManagerState.selectedId = result.project.id;
+      renderProjectManager();
+      toast('Project copy created', result.project.name + ' includes its input media.', 'success');
+      if (await window.MorphorumDialog.confirm({
+        title: 'Open the new project?',
+        message: 'Load "' + result.project.name + '" into Project Editor now?',
+        confirmText: 'Load Project', cancelText: 'Stay Here',
+      })) {
+        if (await loadProject(result.project.id)) showAnimationTab('editor');
+      }
+    } catch (error) {
+      toast('Save Project As failed', error.message, 'error', 8000);
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
+
+  async function projectManagerImport(file) {
+    if (!file || projectManagerState.busy) return;
+    if (!/\.zip$/i.test(file.name) || file.size < 1 || file.size > ARCHIVE_UPLOAD_MAX) {
+      toast('Invalid project archive', 'Select a Morphorum project ZIP no larger than 256 MiB.', 'warning', 7000);
+      return;
+    }
+    projectManagerState.busy = true;
+    renderProjectManager();
+    try {
+      const inspected = await archiveRequest('/api/animation/projects/archive/inspect', file);
+      const name = inspected.project.name;
+      let overwrite = false;
+      if (inspected.conflict) {
+        const existing = state.projects.find(project => project.id === inspected.project.id);
+        const existingName = existing?.name || name;
+        if (state.project?.id === inspected.project.id &&
+          (state.dirty || motionLabRecorder?.active || motionLabBusy ||
+           state.motionJobId || motionPreviewStarting || renderIsActive() || animationRenderStarting)) {
+          throw new Error('Finish the active project edits and jobs before replacing it.');
+        }
+        const typed = await window.MorphorumDialog.prompt({
+          title: 'Overwrite existing project?',
+          message: 'Archive "' + name + '" has the same ID as existing project "' +
+            existingName + '". Its previous folder will be moved to managed Trash. ' +
+            'Type the EXISTING project name to confirm.',
+          inputLabel: 'Type project name', initialValue: '', maxLength: 120,
+          confirmText: 'Overwrite Project',
+          validate: value => String(value || '') === existingName ? '' : 'Enter the exact project name.',
+        });
+        if (typed === null) return;
+        overwrite = true;
+      } else if (!(await window.MorphorumDialog.confirm({
+        title: 'Import verified Morphorum project?',
+        message: 'Import "' + name + '" with ' + inspected.input_files +
+          ' input files. Generated images and videos are not part of the archive.',
+        confirmText: 'Import Project', cancelText: 'Cancel',
+      }))) return;
+
+      const result = await archiveRequest('/api/animation/projects/archive/import', file,
+        {'X-Morphorum-Overwrite': overwrite ? 'true' : 'false'});
+      if (state.project?.id === result.project.id) {
+        // Never leave stale previews or editor state after a confirmed replacement.
+        clearMotionPreviewResult();
+        resetRenderUi();
+        state.project = null;
+        state.path = '';
+        state.timeline = null;
+        state.timelineSelection = null;
+        state.depthPreview = null;
+        state.dirty = false;
+        resetHybridForProject();
+        fillForm();
+      }
+      await loadProjectList();
+      projectManagerState.selectedId = result.project.id;
+      renderProjectManager();
+      toast('Project archive imported', name + (overwrite ? ' replaced (old copy in Trash).' : ' added.'), 'success');
+      if (await window.MorphorumDialog.confirm({
+        title: 'Load imported project?',
+        message: 'Open "' + name + '" in Project Editor now?',
+        confirmText: 'Load Project', cancelText: 'Stay in Manager',
+      })) {
+        if (await loadProject(result.project.id)) showAnimationTab('editor');
+      }
+    } catch (error) {
+      toast('Project import failed', error.message, 'error', 8500);
+    } finally {
+      projectManagerState.busy = false;
+      renderProjectManager();
+    }
+  }
 
   async function projectManagerOpen() {
     const id = projectManagerState.selectedId;
@@ -5727,6 +5887,10 @@
       '<label><span>Sort</span><select id="animation-project-manager-sort">',
       '<option value="updated">Recently updated</option><option value="name">Name A–Z</option>',
       '<option value="oldest">Least recently updated</option></select></label></div>',
+      '<div class="animation-project-manager-archive-tools">',
+      '<button type="button" id="animation-project-manager-import" class="secondary-button compact">Import Project ZIP</button>',
+      '<input id="animation-project-manager-import-file" type="file" accept=".zip,application/zip" hidden>',
+      '</div>',
       '<div class="animation-project-manager-count-row"><strong>Projects</strong>',
       '<span id="animation-project-manager-count" class="muted"></span>',
       '<button type="button" id="animation-project-manager-refresh" class="secondary-button compact">Refresh</button></div>',
@@ -5743,6 +5907,8 @@
       '<div class="animation-project-manager-actions">',
       '<button type="button" id="animation-project-manager-open" class="primary-button" disabled>Open in Editor</button>',
       '<button type="button" id="animation-project-manager-rename" class="secondary-button" disabled>Rename</button>',
+      '<button type="button" id="animation-project-manager-save-as" class="secondary-button" disabled>Save Project As</button>',
+      '<button type="button" id="animation-project-manager-export" class="secondary-button" disabled>Export ZIP</button>',
       '<button type="button" id="animation-project-manager-trash" class="secondary-button animation-project-manager-danger" disabled>Move to Trash</button>',
       '</div><p class="muted animation-project-manager-help">Trash keeps the managed project folder for manual recovery.',
       ' Rendered frames and video exports live separately and are not removed.</p></section></div>',
@@ -5764,6 +5930,16 @@
     });
     qs('#animation-project-manager-open')?.addEventListener('click', () => void projectManagerOpen());
     qs('#animation-project-manager-rename')?.addEventListener('click', () => void projectManagerRename());
+    qs('#animation-project-manager-save-as')?.addEventListener('click', () => void projectManagerSaveAs());
+    qs('#animation-project-manager-export')?.addEventListener('click', () => void projectManagerExport());
+    qs('#animation-project-manager-import')?.addEventListener('click', () => {
+      if (!projectManagerState.busy) qs('#animation-project-manager-import-file')?.click();
+    });
+    qs('#animation-project-manager-import-file')?.addEventListener('change', event => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (file) void projectManagerImport(file);
+    });
     qs('#animation-project-manager-trash')?.addEventListener('click', () => void projectManagerTrash());
     qs('#animation-project-manager-new')?.addEventListener('click', async () => {
       if (projectManagerState.busy) return;
@@ -11564,6 +11740,7 @@
     });
     qs('#animation-new')?.addEventListener('click', createProject);
     qs('#animation-save')?.addEventListener('click', saveProject);
+    qs('#animation-save-as')?.addEventListener('click', () => void projectManagerSaveAs({editor:true}));
     qs('#animation-reload')?.addEventListener('click', reloadProject);
     qs('#animation-add-prompt')?.addEventListener('click', addPromptKeyframe);
     qs('#animation-evenly-space-prompts')?.addEventListener('click', evenlySpacePromptKeyframes);

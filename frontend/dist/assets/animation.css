@@ -4213,3 +4213,16 @@ dialog#animation-deforum-dialog {
   .animation-prompt-actions { width:100%; justify-content:flex-start; }
   .animation-prompt-actions button { flex:1 1 120px; }
 }
+
+/* Project archive import is always available, even without a selected project. */
+.animation-project-manager-archive-tools {
+  display:flex; align-items:center; flex-wrap:wrap; gap:8px;
+  margin:8px 0 12px;
+}
+.animation-project-manager-archive-tools > button {
+  min-height:36px;
+  border-color:var(--border-strong);
+}
+@media(max-width:540px) {
+  .animation-project-manager-archive-tools > button { width:100%; }
+}

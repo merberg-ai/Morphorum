@@ -717,6 +717,70 @@ def api_animation_projects() -> dict[str, Any]:
     return {"projects": list_animation_projects()}
 
 
+@app.get("/api/animation/projects/{project_id}/archive")
+def api_export_project_archive(project_id: str):
+    """Download saved project settings and verified attached inputs, no renders."""
+    from .project_archive import export_project_archive, ProjectArchiveError
+    try:
+        archive = export_project_archive(project_id)
+        filename = "morphorum-" + project_id + ".zip"
+        return Response(content=archive, media_type="application/zip", headers={
+            "Content-Disposition": 'attachment; filename="' + filename + '"',
+            "Cache-Control": "private, no-store",
+        })
+    except (AnimationProjectError, ProjectArchiveError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/archive/inspect")
+async def api_inspect_project_archive(request: Request) -> dict[str, Any]:
+    from .project_archive import (
+        inspect_project_archive, MAX_ARCHIVE_BYTES, ProjectArchiveError,
+    )
+    try:
+        body = await read_bounded(request.stream(), limit=MAX_ARCHIVE_BYTES)
+        return inspect_project_archive(body)
+    except ProjectAssetTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except (ProjectAssetError, ProjectArchiveError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/archive/import", status_code=201)
+async def api_import_project_archive(request: Request) -> dict[str, Any]:
+    from .project_archive import (
+        import_project_archive, MAX_ARCHIVE_BYTES, ProjectArchiveError,
+        ProjectArchiveConflict,
+    )
+    overwrite = request.headers.get("x-morphorum-overwrite") == "true"
+    try:
+        body = await read_bounded(request.stream(), limit=MAX_ARCHIVE_BYTES)
+        result = import_project_archive(body, overwrite=overwrite)
+        emit_console("info", "animation",
+                     "Project archive " + result["status"] + ": " + result["project"]["id"])
+        return result
+    except ProjectAssetTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except ProjectArchiveConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (ProjectAssetError, ProjectArchiveError, AnimationProjectError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/save-as", status_code=201)
+def api_project_save_as(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from .project_archive import save_project_as, ProjectArchiveError
+    try:
+        project = save_project_as(
+            project_id, payload.get("name"), draft=payload.get("project"),
+        )
+        emit_console("info", "animation", "Saved project copy " + project["id"])
+        return {"status": "created", "project": project,
+                "path": animation_project_path(project["id"])}
+    except (AnimationProjectError, ProjectArchiveError, ProjectAssetError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/animation/projects/{project_id}/motion-import/preview")
 def api_preview_project_motion_import(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Read-only Deforum motion inspection; never changes project or loads WAV paths."""

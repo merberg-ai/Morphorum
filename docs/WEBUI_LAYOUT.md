@@ -47,7 +47,7 @@ Use the [Testing guide](TESTING.md) to run current frontend and backend checks. 
 
 
 
-## UX polish on `dev-webui` (2026-10-18; Windows/mobile acceptance pending)
+## Responsive WebUI usability improvements (October 2026)
 
 The development UI adds `assets/ux-polish.css` after the responsive breakpoint styles. The narrow Project and Motion Lab dropdowns are bounded and appear in a positioned overlay above the phone bottom-navigation bar instead of expanding its flex row. The desktop sidebar still uses its original layout. Help is in the left desktop navigation and in the phone More menu. Verify 320, 375, 390, 640, 768, and desktop widths with both menu groups expanded; no horizontal page scroll or hidden controls.
 
@@ -58,8 +58,17 @@ Help is a normal application view, backed by read-only `/api/help/docs` and `/ap
 Tests: `tests/frontend_webui_quick_tweaks.test.cjs`; run alongside existing `frontend_responsive_styles.test.cjs`, `frontend_project_navigation.test.cjs`, and project editor tests. CI and owner phone/Windows acceptance are pending. Changes stay in `dev-webui`; the stable Z-Image c3c4 checkpoint and `main` remain untouched.
 
 
-## Prompt keyframe distribution (dev-webui, pending Windows acceptance)
+## Prompt keyframe distribution (owner-accepted)
 
 Project Editor → **Prompt Keyframes** offers **+ Keyframe** and **Evenly Space**. Adding a prompt automatically reassigns the existing prompt rows and the new blank row across frames 0 through `max_frames - 1` in their existing order. Evenly Space reassigns only frame numbers, without inserting a row. For `max_frames=543`: 4 prompts → `0, 181, 361, 542`; 5 prompts → `0, 136, 271, 407, 542`. Uses rounded `index*(max_frames-1)/(count-1)`, first frame always zero. If there are more prompts than frames, the action refuses to introduce duplicate keyframes.
 
 Positive prompt text, negative prompt text, LoRA insertion controls, and row order remain unchanged. Manual frame edits are still allowed after redistribution. Both actions mark the **Project Editor draft as unsaved**; users must press **Save Project**. No animation schema or backend rendering behavior changed. Unit regression: `tests/frontend_prompt_even_spacing.test.cjs`. Verify manually on Windows with unsaved prompt text and after saving/reloading the project.
+
+### Motion Lab popup styling on touch layouts (2026-10-19)
+
+Motion Lab's `#motion-lab-sidebar` buttons previously received their custom styling from `desktop.css` alone. On mobile, the `ux-polish.css` popup layout made the buttons visible without those rules, leaving the browser's default gray button backgrounds. A responsive, theme-token-based style now applies to narrow and coarse-pointer popups: transparent buttons, muted/active accent text, selection/hover/focus states, and preserved scroll limits. The fine-pointer desktop sidebar remains untouched. Verify on phone with all available UI themes and confirm the adjacent Project popup still behaves normally. Regression: `tests/frontend_webui_quick_tweaks.test.cjs`.
+
+
+### Touch submenu dismissal
+
+On compact and coarse-pointer layouts, selecting a **Project** or **Motion Lab** submenu destination now navigates to the requested workspace and then closes both nav popups. The menu toggles' `aria-expanded` attributes return to `false`, keeping the underlying editor unobstructed. On wide fine-pointer desktops the sidebar remains open as before. Both behaviors are covered by the WebUI regression suite.

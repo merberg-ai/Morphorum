@@ -184,6 +184,8 @@ The most important folders inside the installation directory are:
 | `cache/` | Download caches |
 | `backups/` | Selected updater backup and rollback information |
 
+For portable **individual animation projects**, **Project Manager → Export ZIP** saves the complete project configuration plus uploaded start image, soundtrack and Motion Lab WAV inputs. **Import Project ZIP** restores those project-owned files, and **Save Project As** creates a separate copy. These ZIPs intentionally **exclude generated frames/videos, checkpoints, LoRAs, application settings, and caches**. Keep separate backups of `outputs/`, `data/` and your model libraries. [Project archive guide](PROJECT_ARCHIVES.md) · [Saved project media](PROJECT_MEDIA.md).
+
 **Protect `data/`** because it can contain authentication material. Do not post the entire folder or its contents in bug reports. The updater's own backups are **not** full backups of all projects, renders or checkpoints. Copy important user data somewhere separate before substantial changes.
 
 ## Need help?

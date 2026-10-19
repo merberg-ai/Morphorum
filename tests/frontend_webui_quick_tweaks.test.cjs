@@ -72,3 +72,55 @@ test('empty Image preview contains no redundant navigation shortcuts', () => {
   assert.match(preview, /No images yet/);
   assert.doesNotMatch(preview, /data-jump="(?:settings|models)"/);
 });
+
+test('Motion Lab narrow-menu buttons inherit Morphorum theme instead of browser defaults', () => {
+  const desktop = read('assets/desktop.css');
+  assert.match(html, /id="motion-lab-sidebar"[^>]*hidden/);
+  assert.match(css, /@media \(max-width: 1180px\), \(min-width: 1181px\) and \(pointer: coarse\)/);
+  assert.match(css, /\.main-nav #motion-lab-sidebar > button\s*\{/);
+  assert.match(css, /appearance: none;/);
+  assert.match(css, /background: transparent;/);
+  assert.match(css, /color: var\(--muted\);/);
+  assert.match(css, /#motion-lab-sidebar > button\.active,/);
+  assert.match(css, /#motion-lab-sidebar > button:focus-visible/);
+  assert.match(css, /#motion-lab-sidebar:not\(\[hidden\]\)\s*\{/);
+  assert.match(desktop, /\.main-nav\.motion-section-active #motion-lab-sidebar/);
+});
+
+test('touch popup selection closes both menus and updates aria-expanded', () => {
+  const start = app.indexOf('  function closeTouchSubmenus() {');
+  const end = app.indexOf('  function switchView(name) {', start);
+  assert.ok(start >= 0 && end > start);
+  const helper = app.slice(start, end);
+  const nodes = {
+    '#project-nav-submenu': {hidden:false},
+    '#motion-lab-sidebar': {hidden:false},
+    '#project-nav-toggle': {attributes:{}, setAttribute(name,value){this.attributes[name]=value;}},
+    '#motion-nav-toggle': {attributes:{}, setAttribute(name,value){this.attributes[name]=value;}},
+  };
+  const build = match => Function('window','qs',helper+'; return closeTouchSubmenus;')(
+    {matchMedia: query => {
+      assert.match(query,/max-width: 1180px/);
+      return {matches:match};
+    }},
+    selector => nodes[selector]
+  );
+  build(true)();
+  assert.equal(nodes['#project-nav-submenu'].hidden,true);
+  assert.equal(nodes['#motion-lab-sidebar'].hidden,true);
+  assert.equal(nodes['#project-nav-toggle'].attributes['aria-expanded'],'false');
+  assert.equal(nodes['#motion-nav-toggle'].attributes['aria-expanded'],'false');
+  nodes['#project-nav-submenu'].hidden=false;
+  nodes['#motion-lab-sidebar'].hidden=false;
+  build(false)();
+  assert.equal(nodes['#project-nav-submenu'].hidden,false, 'desktop sidebar must remain open');
+  assert.equal(nodes['#motion-lab-sidebar'].hidden,false, 'desktop sidebar must remain open');
+});
+
+test('Project and Motion Lab destinations dismiss popups after changing tabs', () => {
+  const project = app.match(/qsa\('\.main-nav \[data-project-nav\]'\)[\s\S]*?(?=qsa\('#motion-lab-sidebar \[data-motion-nav\]'\))/)?.[0] || '';
+  const motion = app.match(/qsa\('#motion-lab-sidebar \[data-motion-nav\]'\)[\s\S]*?(?=const moreToggle)/)?.[0] || '';
+  assert.match(project,/switchView\('animation'\)/);
+  assert.match(project,/button\.dataset\.projectNav\)\?\.click\(\);\s*closeTouchSubmenus\(\)/);
+  assert.match(motion,/button\.dataset\.motionNav\)\?\.click\(\);\s*closeTouchSubmenus\(\)/);
+});

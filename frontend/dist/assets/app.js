@@ -167,6 +167,21 @@
     closeNavMore();
   }
 
+  // Phone/tablet submenus are popups over the workspace, unlike the persistent
+  // fine-pointer desktop sidebar. Dismiss them after choosing a destination.
+  function closeTouchSubmenus() {
+    const popupLayout = '(max-width: 1180px), (min-width: 1181px) and (pointer: coarse)';
+    if (!window.matchMedia?.(popupLayout).matches) return;
+    for (const [menuId, toggleId] of [
+      ['project-nav-submenu', 'project-nav-toggle'],
+      ['motion-lab-sidebar', 'motion-nav-toggle'],
+    ]) {
+      const menu = qs('#' + menuId);
+      if (menu) menu.hidden = true;
+      qs('#' + toggleId)?.setAttribute('aria-expanded', 'false');
+    }
+  }
+
   function switchView(name) {
     qsa('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === name));
     if (name !== 'animation') qsa('.main-nav [data-project-nav]').forEach(button => {
@@ -1859,14 +1874,12 @@
     qsa('.main-nav [data-project-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
       qs('#animation-tab-' + button.dataset.projectNav)?.click();
-      qs('#project-nav-submenu').hidden = false;
-      qs('#project-nav-toggle').setAttribute('aria-expanded', 'true');
+      closeTouchSubmenus();
     }));
     qsa('#motion-lab-sidebar [data-motion-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');
       qs('#animation-tab-' + button.dataset.motionNav)?.click();
-      qs('#motion-lab-sidebar').hidden = false;
-      qs('#motion-nav-toggle').setAttribute('aria-expanded', 'true');
+      closeTouchSubmenus();
     }));
     const moreToggle = qs('#nav-more-toggle');
     moreToggle?.addEventListener('click', () => {
