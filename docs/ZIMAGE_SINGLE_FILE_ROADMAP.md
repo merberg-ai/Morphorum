@@ -553,3 +553,17 @@ Expected `offload_plan_unverified`; `full_pipeline_cuda_resident_safe=false`. Op
 ### Z2.20c3b1 Windows physical acceptance (2026-10-18)
 
 **PASS for static planning only:** `offload_plan_unverified`, both scratch hashes verified. Transformer 11.466 GiB, encoder 7.492 GiB, combined 18.959 GiB. A hypothetical 16 GiB GPU with fixed 3 GiB reserve yields 13.0 GiB weight-only budget; either component's static weights fit separately, but the full pipeline does not. `cuda_initialized=false`, `gpu_weights_loaded=false`, `generation_attempted=false`, `loadable=false`. No *free* VRAM reading supplied (`vram_free_input_gib=null`). This is not an actual CUDA placement acceptance; attention workspaces, activations, transfer spikes and VAE remain unverified.
+
+
+### Z2.20c3b2: bounded CUDA placement telemetry (Windows test pending)
+
+Implemented `backend/morphorum/zimage_gpu_placement_probe.py` with opt-in and limit regression tests. This separate diagnostic **does not load either Z-Image model or assemble a pipeline**. It requires explicit `--execute-gpu-probe`, checks current free/total VRAM and a configurable reserve (default 3 GiB), transfers 16 MiB of synthetic BF16 data CPU→GPU, performs finite CUDA arithmetic, synchronizes, and reports device, allocator peak and free-memory readings. It limits transfers to 1–64 MiB and rejects processes with CUDA explicitly masked. This tests **CUDA allocation/transfer only**, not layerwise/offload hooks, model execution, transformer fit or successful pipeline inference. A passing result does not authorize normal model selection.
+
+On Windows with heavy GPU jobs idle, from `D:\Morphorum-test`:
+
+```powershell
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_gpu_placement_probe --execute-gpu-probe --max-mib 16 --reserve-gib 3
+```
+
+Expected `bounded_gpu_transfer_verified_nonloadable` with real available GPU memory numbers. Do not set `CUDA_VISIBLE_DEVICES=-1` for this experiment. CI and physical test pending; `main` remains unchanged. Next only after acceptance: genuine model-component GPU/offload path testing before c3c image smoke.
