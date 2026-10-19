@@ -177,6 +177,7 @@
     qsa('.view').forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
     refreshNavMore(name);
     if (name === 'console') renderConsole();
+    if (name === 'help') window.MorphorumHelp?.activate?.();
     const projectToggle = qs('#project-nav-toggle');
     if (projectToggle) projectToggle.classList.toggle('active', name === 'animation' && !qs('.main-nav.motion-section-active [data-motion-nav].active'));
     if (name === 'civitai') window.MorphorumCivitai?.activate?.();
@@ -1931,7 +1932,7 @@
     document.addEventListener('focusout', () => window.setTimeout(syncMobileViewport, 120));
     syncMobileViewport();
     const requested = location.hash.replace('#', '');
-    if (['image', 'animation', 'models', 'loras', 'civitai', 'settings', 'console'].includes(requested)) switchView(requested);
+    if (['image', 'animation', 'models', 'loras', 'civitai', 'settings', 'console', 'help'].includes(requested)) switchView(requested);
   }
 
   async function start() {
