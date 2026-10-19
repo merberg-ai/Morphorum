@@ -67,3 +67,8 @@ Positive prompt text, negative prompt text, LoRA insertion controls, and row ord
 ### Motion Lab popup styling on touch layouts (2026-10-19)
 
 Motion Lab's `#motion-lab-sidebar` buttons previously received their custom styling from `desktop.css` alone. On mobile, the `ux-polish.css` popup layout made the buttons visible without those rules, leaving the browser's default gray button backgrounds. A responsive, theme-token-based style now applies to narrow and coarse-pointer popups: transparent buttons, muted/active accent text, selection/hover/focus states, and preserved scroll limits. The fine-pointer desktop sidebar remains untouched. Verify on phone with all available UI themes and confirm the adjacent Project popup still behaves normally. Regression: `tests/frontend_webui_quick_tweaks.test.cjs`.
+
+
+### Touch submenu dismissal
+
+On compact and coarse-pointer layouts, selecting a **Project** or **Motion Lab** submenu destination now navigates to the requested workspace and then closes both nav popups. The menu toggles' `aria-expanded` attributes return to `false`, keeping the underlying editor unobstructed. On wide fine-pointer desktops the sidebar remains open as before. Both behaviors are covered by the WebUI regression suite.
