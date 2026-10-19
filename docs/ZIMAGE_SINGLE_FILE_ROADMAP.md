@@ -625,3 +625,8 @@ git pull
 ```
 
 Expected `sequential_cuda_placement_verified_nonloadable` with `encoder_gpu_verified=true`, `encoder_evicted=true`, `transformer_gpu_verified=true`; `forward_attempted=false`, `generation_attempted=false`, `loadable=false`. Model weights and filesystem remain unchanged. Treat any insufficient-RAM/VRAM block as genuine, do not relax the reserve to force the experiment. **CI and Windows acceptance pending**, `main` unchanged.
+
+
+### Z2.20c3b5 Windows physical acceptance (2026-10-18)
+
+**PASS:** `sequential_cuda_placement_verified_nonloadable` on RTX 4080 SUPER. Available host RAM 50.161 GiB (gate 34.959 GiB); measured initial VRAM free 14.708 GiB. Qwen3 encoder allocated 7.545 GiB leaving 7.161 GiB free; after moving encoder back to CPU and cache release, torch allocated 0.0 GiB and free VRAM recovered to 14.708 GiB. Converted transformer subsequently allocated 11.564 GiB (reported peak 11.564 GiB), free VRAM 2.496 GiB. All 398 encoder and 521 transformer tensors verified at their respective GPU stages. `forward_attempted=false`, `generation_attempted=false`, `loadable=false`, `runtime_verified=false`. The safetensors missing metadata warning was nonfatal. This proves explicit manual component transfer and eviction, **not** model GPU forward, automatic hooks, activation/attention memory headroom or full-pipeline generation. Next stage: guarded 6-token GPU encoder forward, separately from the transformer and without generation.
