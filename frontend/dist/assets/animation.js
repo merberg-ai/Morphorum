@@ -2330,6 +2330,7 @@
     // Reload limits even when the user refreshes the same project ID.
     motionLabSyncRecordingLimits();
     state.loading = true;
+    window.dispatchEvent(new CustomEvent('morphorum:active-project-changed', {detail:{projectId:project?.id || ''}}));
     try {
       renderProjectSelect();
       setEditorEnabled(Boolean(project));
@@ -11958,7 +11959,44 @@
     return {ok:true, message:'LoRA inserted into the first prompt keyframe. Save Project to persist.'};
   }
 
+  function applyImageSettingsToProject(settings) {
+    if (!state.project?.id) return {ok:false, message:'Open an animation project first.'};
+    if (!settings || typeof settings !== 'object') return {ok:false, message:'No Image settings supplied.'};
+    const model = modelById(settings.modelId);
+    if (!model || model.kind !== 'checkpoints') return {ok:false, message:'The selected Image checkpoint is not indexed in Project Editor.'};
+    const width = Number(settings.width), height = Number(settings.height), seed = Number(settings.seed);
+    if (![width,height,seed].every(Number.isFinite) || width < 64 || height < 64 || width > 4096 || height > 4096 || !Number.isInteger(seed) || seed < -1)
+      return {ok:false, message:'Image resolution or seed is invalid.'};
+    if (!['fixed','increment','random'].includes(settings.seedMode))
+      return {ok:false, message:'Unsupported seed mode.'};
+    const sampler = String(settings.sampler || '');
+    const samplerOptions = effectiveCapability(model).samplers?.options || [];
+    if (!samplerOptions.some(option => option.id === sampler))
+      return {ok:false, message:'Selected Image sampler is not available for this project model.'};
+    const currentGuidance = qs('#animation-guidance')?.value;
+    const promptRowsBefore = collectPromptMaps();
+    qs('#animation-model').value = model.id;
+    qs('#animation-width').value = String(width);
+    qs('#animation-height').value = String(height);
+    syncAnimationResolutionPreset();
+    populateSamplerSelect(sampler);
+    if (qs('#animation-sampler').value !== sampler) return {ok:false, message:'Sampler could not be applied.'};
+    populateAnimationScheduleTypes(String(settings.scheduleType || 'normal'));
+    if (model.family === 'sdxl' && qs('#animation-schedule-type').value !== String(settings.scheduleType || 'normal'))
+      return {ok:false, message:'Selected Image scheduler is incompatible with the project sampler.'};
+    qs('#animation-seed').value = String(seed);
+    qs('#animation-seed-behavior').value = settings.seedMode;
+    qs('#animation-seed-increment').value = String(Number.isInteger(Number(settings.seedIncrement)) ? settings.seedIncrement : 1);
+    // Deliberately leave CFG and prompt maps untouched. Only edit open project draft.
+    if (qs('#animation-guidance')?.value !== currentGuidance || JSON.stringify(collectPromptMaps()) !== JSON.stringify(promptRowsBefore))
+      throw new Error('Image transfer unexpectedly altered prompt or CFG.');
+    markDirty({validate:true});
+    return {ok:true,message:'Image settings applied to the open project draft. Use Save Project to persist them.'};
+  }
+
   window.MorphorumAnimation = {
+    applyImageSettingsToProject,
+    hasOpenProject: () => Boolean(state.project?.id),
     openSavedProjectFromSetup,
     selectInstalledCivitaiCheckpoint,
     insertInstalledCivitaiLora,
