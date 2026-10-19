@@ -707,3 +707,8 @@ git pull
 ```
 
 Expected `sequential_real_caption_cuda_forwards_verified_nonloadable` with `encoder_forward_attempted=true`, `encoder_evicted=true`, `transformer_forward_attempted=true`, output finite, no generation. If blocked, inspect rather than relaxing guards. CI and Windows acceptance pending; `main` and managed Z-Image files unchanged.
+
+
+### Z2.20c3b9 Windows physical acceptance (2026-10-18)
+
+**PASS:** `sequential_real_caption_cuda_forwards_verified_nonloadable`. Converted standalone Qwen3 generated real caption features [6,2560] via GPU forward; free GPU VRAM at encoder forward 7.087 GiB. After moving encoder to CPU, CUDA allocator retained only 0.008 GiB and available VRAM recovered to 14.634 GiB. The converted BF16 transformer then accepted those features and completed finite CUDA forward with output [16,1,4,4], allocated 11.572 GiB, peak 11.582 GiB, remaining free 2.414 GiB. Initial GPU free 14.708 GiB; host available RAM 50.279 GiB. `encoder_forward_attempted=true`, `encoder_evicted=true`, `transformer_forward_attempted=true`, `generation_attempted=false`, `loadable=false`. Missing safetensors metadata warning was nonfatal. The combined GPU computation works under manual sequential placement, **but** production chat template/caption processing, timestep/scheduler flow, VAE decoding on actual denoised latents, and automated Diffusers offload remain unverified. Next: inspect managed Diffusers ZImagePipeline exact conditioning and scheduler contract with a read-only source/metadata probe before designing isolated multi-step generation.
