@@ -534,3 +534,17 @@ CI and Windows physical acceptance pending. Keep `main`, production managed pack
 **PASS:** `pipeline_assembled_nonloadable`. Combined isolated CPU `ZImagePipeline` constructed with managed FlowMatchEulerDiscreteScheduler, Qwen2Tokenizer, AutoencoderKL and converted scratch Qwen3Model and ZImageTransformer2DModel. Parameter tensors bound: encoder 398, transformer 521, VAE 244 (total 1,163); available RAM at preflight 50.68 GiB, minimum guarded 36.96 GiB. Process RSS before assembly 738.53 MiB and after 8838.98 MiB. That snapshot likely does not fully capture memory-mapped transformer pages or peak allocations. `cuda_used=false`, `generation_attempted=false`, `loadable=false`, `runtime_verified=false`. Safetensors metadata fallback warning was nonfatal.
 
 Next: Z2.20c3b **non-executing** device-placement/offload planning for the 16 GiB RTX 4080 SUPER, followed by a separately gated physical GPU test and only then a standalone inference smoke test. The existing managed pipeline is unchanged.
+
+
+### Z2.20c3b1: read-only offload strategy preflight (Windows acceptance pending)
+
+Added `backend/morphorum/zimage_offload_plan.py` plus safety tests. It checks existing component/weights manifests and (unless `--skip-hashes`) full scratch SHA-256 using the physically verified Z2.19 verifier, then reports the two BF16 weight footprints versus a user-provided VRAM budget with a 3 GiB *heuristic* reserve. It imports no Torch/CUDA and loads no weights, never exposes a selectable standalone checkpoint and does not run generation. On 16 GiB VRAM it assesses component-at-a-time CPU offload as a *candidate*, not a verified runtime strategy; model hooks, allocator spikes, activation peaks, decoder memory, and numerical correctness remain unverified.
+
+Windows read-only preflight:
+
+```powershell
+git pull
+.\.venv\Scripts\python.exe -m morphorum.zimage_offload_plan --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --vram-gib 16 --ram-gib 63.59
+```
+
+Expected `offload_plan_unverified`; `full_pipeline_cuda_resident_safe=false`. Optionally supply `--free-vram-gib` from a separately measured idle GPU reading; do not treat total GPU capacity as simultaneously free. Physical testing and CI pending. Next c3b2 requires separately authorized and monitored GPU placement tests; c3c is an actual image smoke test. Keep `main` and managed installation unchanged.
