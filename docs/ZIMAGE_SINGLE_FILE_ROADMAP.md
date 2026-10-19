@@ -428,3 +428,19 @@ Success status `cpu_scheduler_steps_verified`; inspect two-step numerical and RS
 ### Z2.20c2a Windows physical acceptance (2026-10-18)
 
 **PASS:** `cpu_scheduler_steps_verified`; managed FlowMatchEulerDiscreteScheduler performed two numerical steps on a CPU float32 tensor of shape [1,16,8,8] with finite output. Process RSS before 675.01 MiB, after 676.94 MiB (delta +1.93 MiB). `cuda_used=false`, `inference_attempted=false`, `transformer_forward_attempted=false`, `loadable=false`. This is not a network forward pass or image generation. Proceed to separately guarded Z2.20c2b CPU VAE smoke tests, then larger components as justified by physical results.
+
+
+### Z2.20c2b: guarded managed VAE CPU neural-network forward (awaiting Windows test)
+
+Added `backend/morphorum/zimage_vae_forward_probe.py` and fail-closed unit guards in `tests/test_zimage_vae_forward_probe.py`. This is the first **actual learned-weight neural-network forward** in this inference program: it constructs a real CPU float32 AutoencoderKL from the *unchanged* managed Z-Image VAE, then decodes a tiny all-zero latent [1, configured_latent_channels, 8, 8], validates RGB output shape/finiteness, and reports process RSS, output min/max and weight tensor count. It enforces an explicit `--execute-vae-forward` opt-in, masked CUDA, passing standalone scratch/managed schema preflight, and at least 12 GiB available RAM. It does not bind the experimental standalone transformer or Qwen3 encoder, run a diffusion pipeline, save an image, or allow production loadability. Network forward success is **not** proof the standalone checkpoint generates a correct image.
+
+Run from `D:\Morphorum-test` with idle AI workloads, and inspect the JSON output:
+
+```powershell
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_vae_forward_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-vae-forward
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Expected success: `vae_cpu_forward_verified_nonloadable` with `forward_attempted=true`, `output_finite=true`, `cuda_used=false`, `loadable=false`, `runtime_verified=false`. Windows acceptance and CI are still pending. Subsequent stage: explicitly guarded external encoder/transformer forward with real memory and shape diagnostics before assembling an isolated image-generation pipeline. No changes to `main` or managed model artifacts.
