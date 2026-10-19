@@ -605,3 +605,8 @@ git pull
 ```
 
 CI and physical acceptance remain pending. No changes to `main` or managed package.
+
+
+### Z2.20c3b4 Windows physical acceptance (2026-10-18)
+
+**PASS:** `transformer_cuda_placement_verified_nonloadable`. All 521 external BF16 transformer parameter tensors placed on RTX 4080 SUPER. GPU memory allocated and peak 11.564 GiB; free before transfer 14.708 GiB, free afterward 2.496 GiB, total 15.992 GiB. Guard threshold was 14.466 GiB free before transfer. `forward_attempted=false`, `generation_attempted=false`, `loadable=false`. Missing safetensors metadata warning is nonfatal. **Caution:** only 2.496 GiB reported free after model placement, less than the 3 GiB heuristic reserve due to overhead. Inference activations and memory spikes remain unverified. Next isolated experiment must demonstrate sequential encoder→CPU/transformer→GPU transitions with measured VRAM, ideally without running actual model forward.
