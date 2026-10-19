@@ -32,3 +32,17 @@
   #project-nav-submenu:not([hidden]) button, #motion-lab-sidebar:not([hidden]) button { display:block; width:100%; text-align:left; padding:9px 12px; }
   .image-project-transfer button { width:100%; }
 }
+
+/* The hidden attribute must win at every viewport size. */
+#project-nav-submenu[hidden], #motion-lab-sidebar[hidden] { display:none !important; }
+@media(max-width:1180px) {
+  #motion-lab-sidebar:not([hidden]) { display:grid; }
+  #project-nav-submenu:not([hidden]) { display:grid; }
+}
+@media(max-width:640px) {
+  /* Help is accessible through More, preserving the compact bottom bar. */
+  .main-nav > .nav-button[data-view="help"] { display:none; }
+  #project-nav-submenu:not([hidden]), #motion-lab-sidebar:not([hidden]) {
+    grid-template-columns:minmax(0,1fr); min-width:0;
+  }
+}
