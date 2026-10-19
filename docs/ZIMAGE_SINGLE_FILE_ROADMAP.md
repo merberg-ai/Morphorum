@@ -486,3 +486,21 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Expected `transformer_forward_contract_inspected`. Review `forward_parameters` and `config_fields` before developing the separately gated full transformer forward. CI and physical acceptance pending. `main` remains unchanged.
+
+
+### Z2.20c2d1 Windows acceptance and Z2.20c2d2 transformer CPU forward
+
+**c2d1 PASS (2026-10-18):** `transformer_forward_contract_inspected`; actual installed signature requires `x, t, cap_feats`; config `in_channels=16`, `all_patch_size=[2]`. Meta construction counted 521 parameter tensors and 6,154,908,736 elements. All weights remained unloaded and CUDA masked.
+
+**c2d2 implemented, physical testing pending:** `backend/morphorum/zimage_transformer_forward_probe.py` runs only as an explicitly authorized isolated process. It checks scratch config/schema and the full converted transformer artifact hash, verifies free RAM is at least 2x weight file + 16 GiB, enforces masked CUDA, loads 521 BF16 transformer weights onto CPU using strict Accelerate meta binding (the already physically verified Z2.20b4 method), then calls forward on a minimal synthetic latent `[16,1,4,4]` (C,F,H,W) and a one-token synthetic caption embedding `[1,2560]` using `t=[0.5]`. This is a **mathematical forward test only**; zero captions are not actual prompt conditioning. Inspect return container, finite outputs, expected shape, and process RSS. No pipeline, VAE, generation, GPU offloading, files written, or application loader authorization.
+
+Run on Windows with competing AI jobs stopped:
+
+```powershell
+git pull
+$env:CUDA_VISIBLE_DEVICES="-1"
+.\.venv\Scripts\python.exe -m morphorum.zimage_transformer_forward_probe --transformer "D:\Morphorum-z219-test\transformer" --encoder "D:\Morphorum-z219-test\encoder" --execute-transformer-forward
+Remove-Item Env:CUDA_VISIBLE_DEVICES
+```
+
+Success: `transformer_cpu_forward_verified_nonloadable`, `output_finite=true`, `parameter_tensors_bound=521`, `loadable=false`. If blocked, preserve diagnostics before modifying code or proceeding. CI and physical acceptance remain pending. `main` and the managed Z-Image model remain unchanged.
