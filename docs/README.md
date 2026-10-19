@@ -39,3 +39,8 @@ Historical research and internal milestones remain available in the [earlier dev
 - [Z2.20c3c5 implementation plan](ZIMAGE_C3C5_IMPLEMENTATION_PLAN.md): next planned strictly gated 32×32 diagnostic PNG, not yet implemented
 
 These are research notes, not user installation or normal model-selection instructions. Managed Z-Image remains unchanged.
+
+
+## In-app Help on `dev-webui`
+
+The desktop WebUI's left-hand **Help** entry (phone: **More → Help**) opens the locally bundled `docs/` Markdown guides within the same WebUI. It reads files via restricted, read-only Help endpoints and doesn't redirect to GitHub or replace FastAPI's existing `/docs` API console. This is a development-branch feature pending mobile/Windows acceptance; source documentation updates appear after the next `git pull` and app restart. See [WebUI layout architecture](WEBUI_LAYOUT.md) for implementation boundaries.
