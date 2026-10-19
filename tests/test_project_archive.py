@@ -154,6 +154,7 @@ def test_reject_plain_zip_and_traversal_and_unlisted_members(media_project):
 def test_reject_digest_tampering_without_changing_saved_project(media_project):
     _, pid, root, wav, image = media_project
     base = export_project_archive(pid)
+    original_stored_image = (root / "assets" / "source.png").read_bytes()
     output = io.BytesIO()
     with zipfile.ZipFile(io.BytesIO(base)) as inp, zipfile.ZipFile(output, "w") as out:
         for name in inp.namelist():
@@ -163,4 +164,4 @@ def test_reject_digest_tampering_without_changing_saved_project(media_project):
             out.writestr(name, raw)
     with pytest.raises(ProjectArchiveError, match="integrity"):
         import_project_archive(output.getvalue(), overwrite=True)
-    assert (root / "assets" / "source.png").read_bytes() == (root / "assets" / "source.png").read_bytes()
+    assert (root / "assets" / "source.png").read_bytes() == original_stored_image
