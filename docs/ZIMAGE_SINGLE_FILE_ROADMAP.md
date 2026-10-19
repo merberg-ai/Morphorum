@@ -465,3 +465,8 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Expected `encoder_cpu_forward_verified_nonloadable`, `forward_attempted=true`, `finite=true`, `loadable=false`. This is a RAM-intensive isolated experiment; close competing generation workloads beforehand. Stop and diagnose any failure before an experimental transformer forward. CI and physical testing pending; `main` unchanged.
+
+
+### Z2.20c2c Windows physical acceptance (2026-10-18)
+
+**PASS:** isolated standalone BF16 Qwen3 encoder CPU forward successfully computed finite `torch.bfloat16` hidden states shape [1,6,2560] from a six-token prompt. All 398 parameter tensors bound; scratch full-hash validation passed. Process RSS before load 784.23 MiB, after load 8465.21 MiB, after forward 8477.86 MiB (+12.65 MiB over post-load). Available RAM 50.94 GiB, configured minimum 26.98 GiB. `cuda_used=false`, `loadable=false`, `runtime_verified=false`, `inference_attempted=false`. This is genuine neural computation by converted standalone encoder, but not proof of Z-Image pipeline conditioning semantics, transformer execution or image synthesis. Next phase should verify actual ZImageTransformer2DModel forward API and develop a deliberately gated low-token CPU/GPU experiment, without modifying the managed runtime.
