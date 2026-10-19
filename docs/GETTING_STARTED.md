@@ -110,6 +110,16 @@ A fresh installation with no existing projects also includes a **Default** anima
 
 Open **Motion Lab → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. The Project Editor explains why controls are locked until a project opens and provides shortcuts to Project Manager and the New Project Wizard. The browser remembers your last opened project when it is still available. Still-image model selection does not automatically select a model for an animation project. For an early GPU test, try fewer frames and a model-supported resolution.
 
+### Save, duplicate or move an animation project
+
+After saving your first animation, open **Project → Project Manager** to manage portable projects:
+
+- **Export ZIP** downloads the selected project's saved configuration and attached inputs, including a start image, soundtrack, and Motion Lab WAVs. Save any unsaved Editor changes first.
+- **Import Project ZIP** accepts a verified Morphorum archive, confirms the project name and input count, and offers to load it in Project Editor. If its project ID already exists, you must confirm replacement by typing the **existing project's name**; the old folder moves to managed Trash.
+- **Save Project As** makes an independent copy under a new name, including attached inputs. It also appears beside **Save Project** in Project Editor, where it copies unsaved Editor configuration into the **new** project without modifying the original.
+
+Generated images/videos and installed models/LoRAs are never part of the archive. For the ZIP's format, integrity checks and size limits, see [Project archives and Save As](PROJECT_ARCHIVES.md).
+
 ## 5. Explore the Motion Lab workspaces
 
 Motion Lab divides the animation workflow into separate pages so the editing tools have enough room:
@@ -118,7 +128,7 @@ Motion Lab divides the animation workflow into separate pages so the editing too
 | --- | --- |
 | **Overview** | Choose what to do next. |
 | **New Project Wizard** | Create a new project through seven explained setup and review steps. |
-| **Project Manager** | Find, rename, inspect, or move projects to Trash. |
+| **Project Manager** | Find, rename, inspect, export/import project ZIPs, duplicate with Save As, or move projects to Trash. |
 | **Project Editor** | Edit prompts, timing, resolution, schedules, and model. |
 | **Camera Composer** | Build six-axis camera movement with presets and layers. |
 | **Live Recording** | Record camera motion with keyboard/touch or a compatible gamepad. |
