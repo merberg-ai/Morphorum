@@ -53,9 +53,9 @@
 .help-article blockquote { border-left:3px solid var(--accent); padding-left:13px; margin-left:0; }
 
 /* Motion Lab's original button theme only existed in desktop.css.
-   The narrow-screen popup needs its own theme-aware controls, just like
-   the Project popup. Do not change the desktop sidebar presentation. */
-@media (max-width: 1180px) {
+   Narrow-screen and coarse-pointer popups need their own theme-aware
+   controls; the fine-pointer desktop sidebar remains unchanged. */
+@media (max-width: 1180px), (min-width: 1181px) and (pointer: coarse) {
   .main-nav #motion-lab-sidebar:not([hidden]) {
     background: var(--panel-strong);
     border-color: var(--border);
@@ -99,7 +99,8 @@
     outline-offset: 2px;
     box-shadow: 0 0 0 4px var(--button-focus-ring);
   }
-  @media (prefers-reduced-motion: reduce) {
-    .main-nav #motion-lab-sidebar > button { transition: none; }
-  }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 1180px),
+       (prefers-reduced-motion: reduce) and (min-width: 1181px) and (pointer: coarse) {
+  .main-nav #motion-lab-sidebar > button { transition: none; }
 }
