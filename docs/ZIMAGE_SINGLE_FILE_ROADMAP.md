@@ -687,3 +687,8 @@ Remove-Item Env:CUDA_VISIBLE_DEVICES
 ```
 
 Expected `real_caption_cpu_transformer_forward_verified_nonloadable` with both forward flags true, finite output and `loadable=false`. This deliberately tests integration on CPU prior to adding GPU offload complexity. **CI and physical acceptance pending**, `main` and managed files unchanged.
+
+
+### Z2.20c3b8 Windows physical acceptance (2026-10-18)
+
+**PASS:** `real_caption_cpu_transformer_forward_verified_nonloadable`. CPU-only integrated converted standalone Qwen3 encoder and Z-Image transformer: token count 6, encoder hidden state [1,6,2560], per-image caption features [6,2560], transformer finite BF16 output [16,1,4,4]. All 398 encoder and 521 transformer parameter tensors bound; process RSS after forward 20284.56 MiB; available RAM 50.207 GiB, guarded RAM 36.959 GiB. `encoder_forward_attempted=true`, `transformer_forward_attempted=true`, `cuda_used=false`, `generation_attempted=false`, `loadable=false`. Nonfatal safetensors metadata fallback noted. This validates elementary network interface compatibility, not production text processing, actual denoising, full pipeline or image quality. Next: opt-in encoder CUDA forward → move its tiny BF16 caption features to CPU → evict encoder GPU → transformer CUDA forward using those features; require live VRAM gates at each transfer and no generation.
