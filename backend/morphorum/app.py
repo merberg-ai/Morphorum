@@ -333,7 +333,7 @@ def _about_local_host(request: Request) -> bool:
 
 
 def _about_work_busy() -> bool:
-    if generation_manager.model_status().get("active"):
+    if generation_manager.model_status().get("busy"):
         return True
     with animation_render_manager._lock:
         return any(job.status not in {"completed", "failed", "cancelled"}
