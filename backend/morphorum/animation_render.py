@@ -223,11 +223,10 @@ def _inference_only_conditioning(function):
     retain a whole CLIP forward graph in conditioning_cache each frame.
     """
     @wraps(function)
-    def wrapped(*args, **kwargs):
-        import torch
-
-        with torch.inference_mode():
-            return function(*args, **kwargs)
+    def wrapped(pipe, family, *args, **kwargs):
+        # Z-Image prompt encoding also runs group-offloaded PEFT components.
+        with GenerationManager.inference_context(family):
+            return function(pipe, family, *args, **kwargs)
 
     return wrapped
 
@@ -1777,7 +1776,7 @@ class AnimationRenderManager:
                         f"SDXL conditioning frame 0: {mode}, embeddings={report.get('shape')}.",
                     )
 
-                with torch.inference_mode():
+                with GenerationManager.inference_context(family):
                     result = pipe(**call_args)
                 if job.cancel_requested:
                     self._cancel(job)
@@ -2200,7 +2199,7 @@ class AnimationRenderManager:
                         )
 
                 diffusion_started = time.monotonic()
-                with torch.inference_mode():
+                with GenerationManager.inference_context(family):
                     result = pipe(**call_args)
                 timings["diffusion"] = max(
                     0.0,
