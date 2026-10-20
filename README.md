@@ -142,7 +142,7 @@ The usual launcher provides both a **web interface and generation API**, typical
 
 The **About** page (desktop navigation, or **More → About** on mobile) introduces Morphorum, credits Deforum and SD WebUI Forge plus community members including **chicodog530**, and links the GitHub repository. It also displays your **installed version, checked-out branch and commit**, with an on-demand **Check for updates** action that fetches only the checked-out branch.
 
-When a clean working copy is behind its remote, **Update current branch** runs the existing backup/rollback installer from a browser on the **host computer only**; remote LAN browsers can check but cannot apply updates because the regular WebUI is unauthenticated. Never update while rendering; restart Morphorum afterward. The real project logo can be added later to the About page without altering update behavior.
+When a clean working copy is behind its remote, **Update current branch** runs the existing backup/rollback installer from a browser on the **host computer only**; remote LAN browsers can check but cannot apply updates because the regular WebUI is unauthenticated. Never update while rendering; restart Morphorum afterward. The About page now includes the optimized blue-and-purple Morphorum skull logo, sized to preserve its full artwork on desktop and mobile.
 
 [About and update safeguards](docs/ABOUT_AND_UPDATES.md)
 
