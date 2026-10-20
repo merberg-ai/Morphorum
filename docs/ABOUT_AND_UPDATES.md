@@ -47,8 +47,13 @@ communities. The About page includes a special acknowledgment for
 `chicodog530`; these acknowledgments are **not** endorsement claims and do
 not imply that upstream source code was copied into Morphorum.
 
-The About logo is intentionally replaceable. When the project owner provides
-the approved artwork, place a converted, optimized PNG at
-`frontend/dist/assets/morphorum-about-logo.png`. The About page already
-contains the image slot and falls back to the letter **M** if no asset exists.
-Do not assume third-party artwork is approved for redistribution.
+The approved, user-provided Morphorum artwork is installed as an optimized
+**960 × 640 WebP** image at
+`frontend/dist/assets/morphorum-about-logo.webp`. The original supplied
+1536 × 1024 design was resized and encoded for the WebUI without cropping or
+removing visual elements. The About page displays the complete 3:2 image in a
+responsive hero, alongside project details on desktop and stacked on narrow
+screens. The letter **M** remains a graceful fallback if the asset fails to load.
+
+The logo is project-specific artwork; these credits do not grant permission to
+reuse unrelated third-party artwork.
