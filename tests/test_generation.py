@@ -2076,6 +2076,57 @@ def test_managed_zimage_inference_context_does_not_poison_peft_parameters() -> N
         assert torch.is_inference_mode_enabled()
 
 
+def test_managed_zimage_reuses_and_reweights_adapter_across_offloaded_frames(tmp_path) -> None:
+    """Several inference calls, LoRA toggles, and weight changes must remain legal."""
+    path = tmp_path / "Horror Style ZIT.safetensors"
+    path.write_bytes(b"fake-lora")
+    model = fake_model(create_zimage_layout(tmp_path / "Z-Image-Turbo"), "zimage")
+    adapter_name = "morphorum_horror-zit"
+    manager = GenerationManager()
+
+    class OffloadingLoRAPipe(FakeTrackedLoRAPipe):
+        def __init__(self):
+            super().__init__()
+            self.adapter_parameter = torch.nn.Parameter(torch.ones(2), requires_grad=False)
+
+        def enable_lora(self):
+            # PEFT adapter enabling may change requires_grad on a cached parameter.
+            self.adapter_parameter.requires_grad_(True)
+            super().enable_lora()
+
+        def disable_lora(self):
+            self.adapter_parameter.requires_grad_(False)
+            self.active_adapters = []
+            super().disable_lora()
+
+        def forward_with_group_offload(self):
+            with manager.inference_context("zimage"):
+                self.adapter_parameter.data = torch.empty_like(self.adapter_parameter.data)
+
+    pipe = OffloadingLoRAPipe()
+    adapter = {
+        "id": "horror-zit", "name": "Horror Style ZIT",
+        "family": "zimage", "adapter_name": adapter_name,
+        "path": str(path), "weight": 1.0,
+    }
+    for requested, expected_enabled in [
+        ([adapter], True), ([adapter], True), ([], False),
+        ([{**adapter, "weight": 0.35}], True),
+        ([], False), ([adapter], True),
+    ]:
+        manager.configure_loras(pipe, model, requested)
+        assert pipe.adapter_parameter.requires_grad is expected_enabled
+        assert not pipe.adapter_parameter.is_inference()
+        pipe.forward_with_group_offload()
+        assert not pipe.adapter_parameter.is_inference()
+
+    assert len(pipe.loads) == 1
+    assert [weights for _names, weights in pipe.adapter_calls] == [
+        [1.0], [0.35], [1.0],
+    ]
+    assert manager._active_lora_signature == ((adapter_name, 1.0),)
+
+
 def test_zimage_img2img_reuses_official_turbo_checkpoint_and_call_contract(tmp_path) -> None:
     checkpoint = create_zimage_layout(tmp_path / "Z-Image-Turbo")
     model = fake_model(checkpoint, "zimage", "turbo")
