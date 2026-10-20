@@ -336,8 +336,12 @@ def _about_work_busy() -> bool:
     if generation_manager.model_status().get("busy"):
         return True
     with animation_render_manager._lock:
-        return any(job.status not in {"completed", "failed", "cancelled"}
-                   for job in animation_render_manager._jobs.values())
+        if any(job.status not in {"completed", "failed", "cancelled"}
+               for job in animation_render_manager._jobs.values()):
+            return True
+    with video_export_manager._lock:
+        return any(job.status in {"queued", "encoding"}
+                   for job in video_export_manager._jobs.values())
 
 
 @app.get("/api/about/git", include_in_schema=False)
