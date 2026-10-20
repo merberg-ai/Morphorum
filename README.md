@@ -138,6 +138,14 @@ The usual launcher provides both a **web interface and generation API**, typical
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)**: installer, model, CUDA, networking and export problems
 - **[Documentation index](docs/README.md)**: all maintained user and contributor guides
 
+## About & built-in updater
+
+The **About** page (desktop navigation, or **More → About** on mobile) introduces Morphorum, credits Deforum and SD WebUI Forge plus community members including **chicodog530**, and links the GitHub repository. It also displays your **installed version, checked-out branch and commit**, with an on-demand **Check for updates** action that fetches only the checked-out branch.
+
+When a clean working copy is behind its remote, **Update current branch** runs the existing backup/rollback installer from a browser on the **host computer only**; remote LAN browsers can check but cannot apply updates because the regular WebUI is unauthenticated. Never update while rendering; restart Morphorum afterward. The real project logo can be added later to the About page without altering update behavior.
+
+[About and update safeguards](docs/ABOUT_AND_UPDATES.md)
+
 ## Project information
 
 Morphorum is independent software inspired by Deforum-style creative workflows; it is **not** a copy of Deforum or a guarantee of output compatibility. Some features are experimental, and large renders depend on GPU and model capabilities. Visit [GitHub Issues](https://github.com/merberg-ai/Morphorum/issues) to report bugs or request improvements.
