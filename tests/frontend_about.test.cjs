@@ -36,9 +36,15 @@ test('About updater is current-branch only and remains disabled by default',()=>
   assert.match(about,/restart Morphorum/i);
 });
 
-test('Logo fallback has a safe later-asset slot and layout handles narrow displays',()=>{
+test('Real optimized logo is committed and keeps its full landscape aspect ratio',()=>{
   assert.match(html,/id="about-logo-fallback"/);
   assert.match(html,/id="about-logo"/);
+  assert.match(html,/src="\/assets\/morphorum-about-logo\.webp"/);
+  const file=fs.readFileSync(path.join(root,'assets','morphorum-about-logo.webp'));
+  assert.equal(file.toString('ascii',0,4),'RIFF');
+  assert.equal(file.toString('ascii',8,12),'WEBP');
+  assert.ok(file.length<100000,'Logo should be small enough to load quickly');
   assert.match(about,/naturalWidth > 0/);
+  assert.match(css,/aspect-ratio:3 \/ 2/);
   assert.match(css,/@media\(max-width:640px\)/);
 });
