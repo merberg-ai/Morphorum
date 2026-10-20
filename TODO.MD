@@ -4,7 +4,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## Z-Image Turbo LoRA stability and animation coherence (reported 2026-10-19)
 
-**Status:** Open. Physical Windows testing found a reproducible functional failure with a Z-Image LoRA, plus a separate animation quality concern. Investigate and validate on `dev-webui` before merging a fix. **Priority:** ZL1 correctness first; ZT1 quality second.
+**Status:** ZL1 candidate fix on `dev-webui` awaiting physical Windows GPU verification; ZT1 remains open and untouched. A CPU-only PyTorch reproduction verified the inference-tensor failure mechanism, but this does **not** prove the production Z-Image failure has been resolved. **Priority:** ZL1 correctness first; ZT1 quality second.
 
 ### ZL1: Managed Z-Image + LoRA inference stability (bug)
 
@@ -13,6 +13,8 @@ Deferred investigations and improvements. These entries are **not** release bloc
 ```text
 Setting requires_grad=True on inference tensor outside InferenceMode is not allowed.
 ```
+
+**Candidate fix (2026-10-20):** Keep managed Z-Image group offloading, but run its still-image, animation-anchor, and blended-prompt conditioning calls under `torch.no_grad()` instead of `torch.inference_mode()`. When Diffusers offload replaces PEFT `Parameter.data` during inference mode, a later adapter `requires_grad_(True)` operation can raise exactly the reported error. SDXL and FLUX retain their previous inference contexts. Lightweight CPU regression tests cover parameter mutability and Z-Image prompt conditioning; GPU confirmation is outstanding.
 
 **Investigation / proposed work:**
 - Reproduce with single-image generations/batches and animation, with/without LoRA. Collect full Python tracebacks and record the exact stage (LoRA load, adapter enable/weight update, task conversion, prompt encoding, offload transfer, or inference).
