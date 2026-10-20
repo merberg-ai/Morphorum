@@ -2,6 +2,18 @@
 
 Deferred investigations and improvements. These entries are **not** release blockers unless a later test demonstrates a functional failure.
 
+## PQ: Parseq hosted-manifest URL integration (planned 2026-10-20)
+
+**Status:** Roadmap only, **NOT IMPLEMENTED**. Owner selected **Option A**: use the external Parseq editor and a saved, stable hosted JSON URL rather than rebuilding Parseq. The authoritative staged plan is [PQ Parseq URL Integration Roadmap](docs/PARSEQ_URL_INTEGRATION_ROADMAP.md), phases **PQ0–PQ7**.
+
+- Keep work on `dev-webui`; `main` unchanged. Start implementation only when owner explicitly requests PQ0.
+- Save the Parseq URL once per Morphorum project; fetch/validate the latest published JSON before each new automatic render; **freeze a verified immutable manifest per render/resume**. No silent fallback to old JSON when source is unavailable.
+- Reuse existing Morphorum frame resolver, motion previews, SDXL/FLUX/managed Z-Image renderer, save/conflict rules and project archives. Map supported fields with explicit ownership; do not execute Parseq expressions or replace native tracks.
+- Safeguard HTTP fetching (SSRF, private DNS/redirects, size/time limits, token redaction), cross-model guidance/retention semantics, 2D/3D delta conversions, prompt/LoRA handling, FPS/frame counts, and source provenance.
+- Require golden fixtures, automated regressions, owner Windows GPU gates and explicit approval before any main merge. Mobile physical testing cannot be marked PASS unless performed.
+
+**Next step when authorized:** PQ0 upstream contract/fixtures/threat-model baseline only. Do not implement PQ1+ preemptively.
+
 ## Z-Image Turbo LoRA stability and animation coherence (reported 2026-10-19)
 
 **Status:** **ZL1 passed / resolved on `dev-webui`** (user physical Windows GPU verification reported 2026-10-20): repeated managed Z-Image single-image generations with and without LoRAs, plus a Z-Image animation, no longer raise the inference-tensor exception. **ZT1 remains open** for animation temporal coherence and has not been modified. No merge to `main` yet.
