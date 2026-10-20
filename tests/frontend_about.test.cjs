@@ -33,7 +33,7 @@ test('About updater is current-branch only and remains disabled by default',()=>
   assert.match(about,/remote_head:selected\.remote_head/);
   assert.match(about,/!latestStatus\?\.host_local/);
   assert.match(about,/window\.MorphorumDialog\?\.confirm/);
-  assert.match(about,/Restart Morphorum/);
+  assert.match(about,/restart Morphorum/i);
 });
 
 test('Logo fallback has a safe later-asset slot and layout handles narrow displays',()=>{
