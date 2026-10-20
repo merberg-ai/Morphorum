@@ -58,3 +58,5 @@ The Project Editor now supports **+ Keyframe** with automatic even spacing and a
 ## Portable project settings and media
 
 [Project archive import/export and Save Project As](PROJECT_ARCHIVES.md) explains how to transfer complete project settings and project-owned input media, confirm overwrite while preserving a Trash backup, and exclude generated renders. The owner reported successful Windows acceptance on October 19, 2026.
+
+- **[About Morphorum & Git updates](ABOUT_AND_UPDATES.md)**: project credits, live branch status, host-only apply, restart and logo instructions
