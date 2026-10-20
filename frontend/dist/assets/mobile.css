@@ -90,7 +90,7 @@
   .telemetry-track {display:none;}
   .global-job-status {grid-column:1/-1;grid-row:3;padding:7px 9px;}
   .main-nav {padding:4px;bottom:max(8px,env(safe-area-inset-bottom,0px));}
-  .main-nav > .nav-button[data-view="settings"], .main-nav > .nav-button[data-view="console"] {display:none;}
+  .main-nav > .nav-button[data-view="settings"], .main-nav > .nav-button[data-view="console"], .main-nav > .nav-button[data-view="about"] {display:none;}
   .nav-more-toggle {display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;min-width:0;padding:9px 4px;gap:2px;font-size:.67rem;border:0;border-radius:10px;color:var(--muted);background:transparent;cursor:pointer;}
   .nav-more-toggle.active {color:var(--accent);background:var(--button-secondary-active);}
   .nav-more-toggle .nav-icon {font-size:1.2rem;}
