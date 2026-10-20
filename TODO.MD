@@ -4,7 +4,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## Z-Image Turbo LoRA stability and animation coherence (reported 2026-10-19)
 
-**Status:** ZL1 Windows GPU still-image verification **passed** on `dev-webui` (user report 2026-10-20): multiple managed Z-Image generations both with and without LoRAs completed without the prior inference-tensor error. Multi-anchor animation with LoRA remains a separate acceptance check; ZT1 animation coherence is still open and untouched. **Priority:** Finish ZL1 animation verification before ZT1.
+**Status:** **ZL1 passed / resolved on `dev-webui`** (user physical Windows GPU verification reported 2026-10-20): repeated managed Z-Image single-image generations with and without LoRAs, plus a Z-Image animation, no longer raise the inference-tensor exception. **ZT1 remains open** for animation temporal coherence and has not been modified. No merge to `main` yet.
 
 ### ZL1: Managed Z-Image + LoRA inference stability (bug)
 
@@ -14,17 +14,9 @@ Deferred investigations and improvements. These entries are **not** release bloc
 Setting requires_grad=True on inference tensor outside InferenceMode is not allowed.
 ```
 
-**Candidate fix (2026-10-20):** Keep managed Z-Image group offloading, but run its still-image, animation-anchor, and blended-prompt conditioning calls under `torch.no_grad()` instead of `torch.inference_mode()`. When Diffusers offload replaces PEFT `Parameter.data` during inference mode, a later adapter `requires_grad_(True)` operation can raise exactly the reported error. SDXL and FLUX retain their previous inference contexts. CPU regression tests cover repeated activation/disable/reweight cycles and Z-Image blended prompt encoding. GitHub Actions backend tests passed on 2026-10-20 (run 39421028500, commit e0c88ee). User subsequently confirmed successful physical Windows GPU testing of multiple managed Z-Image generations with and without LoRAs; animation-specific physical verification remains outstanding.
+**Fix and verification (2026-10-20):** Managed Z-Image keeps group offloading, but its still-image inference, animation-anchor inference, and blended prompt encoding use `torch.no_grad()` instead of `torch.inference_mode()`. The inferred failure mechanism is that Diffusers offloading can create inference tensors in PEFT adapter parameters, conflicting with a later `requires_grad_(True)` operation. SDXL and FLUX retain their previous inference contexts. CPU regression coverage exercises repeated adapter activation/disable/reweight cycles and blended Z-Image conditioning. GitHub Actions backend tests passed (run 39421028500, commit e0c88ee). User verified on physical Windows GPU: multiple managed Z-Image generations both with and without LoRAs, and an animation, without recurrence of the reported error.
 
-**Investigation / proposed work:**
-- Reproduce with single-image generations/batches and animation, with/without LoRA. Collect full Python tracebacks and record the exact stage (LoRA load, adapter enable/weight update, task conversion, prompt encoding, offload transfer, or inference).
-- Audit `backend/morphorum/generation.py` shared `configure_loras()`, model reuse and txt2img/img2img conversion, and `backend/morphorum/animation_render.py` inference and conditioning contexts. The single-image failure means the task switch cannot be the only suspect.
-- On 16 GB GPUs, inspect PEFT adapter parameter lifecycle with Diffusers Z-Image BF16 group offloading and `torch.inference_mode()`. Confirm the cause before changing behavior; evaluate `torch.no_grad()` selectively where inference tensors might later undergo parameter/adapter operations.
-- Ensure loaded adapter identity, weight, enabled state and valid tensors survive subsequent generations and task changes without stale adapters or unintended LoRA effects. Preserve memory-safe offloading: do not solve by forcing the managed Z-Image model entirely into 16 GB VRAM.
-- Add regression coverage for repeated Z-Image single-image/batch generations, txt2img-to-img2img animation, LoRA enable/disable/reweight, and generation without LoRA; run automated tests and Windows GPU physical verification.
-- Keep SDXL, FLUX, managed model installation and existing project behavior unchanged unless a separately tested shared fix is necessary.
-
-**Acceptance:** Same settings complete several consecutive single-image generations and a multi-anchor animation with the Z-Image LoRA; without-LoRA baseline still succeeds; no inference tensor exception, stale adapter influence, or new CUDA out-of-memory regression.
+**Acceptance:** **Passed by user report** for repeated physical Windows GPU still-image generation with and without LoRAs, and an animation without recurrence of the reported error. Automated CPU tests passed. The exact animation length, number of diffusion anchors, and LoRA scheduling variations were not separately recorded, so this is not a claim of exhaustive coverage. Keep the regression tests in place and reopen if the exception recurs.
 
 ### ZT1: Z-Image animation temporal coherence (quality improvement)
 
