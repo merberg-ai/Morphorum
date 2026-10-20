@@ -4,7 +4,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## Z-Image Turbo LoRA stability and animation coherence (reported 2026-10-19)
 
-**Status:** ZL1 candidate fix on `dev-webui` awaiting physical Windows GPU verification; ZT1 remains open and untouched. A CPU-only PyTorch reproduction verified the inference-tensor failure mechanism, but this does **not** prove the production Z-Image failure has been resolved. **Priority:** ZL1 correctness first; ZT1 quality second.
+**Status:** ZL1 Windows GPU still-image verification **passed** on `dev-webui` (user report 2026-10-20): multiple managed Z-Image generations both with and without LoRAs completed without the prior inference-tensor error. Multi-anchor animation with LoRA remains a separate acceptance check; ZT1 animation coherence is still open and untouched. **Priority:** Finish ZL1 animation verification before ZT1.
 
 ### ZL1: Managed Z-Image + LoRA inference stability (bug)
 
@@ -14,7 +14,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 Setting requires_grad=True on inference tensor outside InferenceMode is not allowed.
 ```
 
-**Candidate fix (2026-10-20):** Keep managed Z-Image group offloading, but run its still-image, animation-anchor, and blended-prompt conditioning calls under `torch.no_grad()` instead of `torch.inference_mode()`. When Diffusers offload replaces PEFT `Parameter.data` during inference mode, a later adapter `requires_grad_(True)` operation can raise exactly the reported error. SDXL and FLUX retain their previous inference contexts. CPU regression tests cover repeated activation/disable/reweight cycles and Z-Image blended prompt encoding. GitHub Actions backend tests passed on 2026-10-20 (run 39421028500, commit e0c88ee); physical Windows GPU confirmation is outstanding.
+**Candidate fix (2026-10-20):** Keep managed Z-Image group offloading, but run its still-image, animation-anchor, and blended-prompt conditioning calls under `torch.no_grad()` instead of `torch.inference_mode()`. When Diffusers offload replaces PEFT `Parameter.data` during inference mode, a later adapter `requires_grad_(True)` operation can raise exactly the reported error. SDXL and FLUX retain their previous inference contexts. CPU regression tests cover repeated activation/disable/reweight cycles and Z-Image blended prompt encoding. GitHub Actions backend tests passed on 2026-10-20 (run 39421028500, commit e0c88ee). User subsequently confirmed successful physical Windows GPU testing of multiple managed Z-Image generations with and without LoRAs; animation-specific physical verification remains outstanding.
 
 **Investigation / proposed work:**
 - Reproduce with single-image generations/batches and animation, with/without LoRA. Collect full Python tracebacks and record the exact stage (LoRA load, adapter enable/weight update, task conversion, prompt encoding, offload transfer, or inference).
