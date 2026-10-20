@@ -14,7 +14,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 Setting requires_grad=True on inference tensor outside InferenceMode is not allowed.
 ```
 
-**Candidate fix (2026-10-20):** Keep managed Z-Image group offloading, but run its still-image, animation-anchor, and blended-prompt conditioning calls under `torch.no_grad()` instead of `torch.inference_mode()`. When Diffusers offload replaces PEFT `Parameter.data` during inference mode, a later adapter `requires_grad_(True)` operation can raise exactly the reported error. SDXL and FLUX retain their previous inference contexts. Lightweight CPU regression tests cover parameter mutability and Z-Image prompt conditioning; GPU confirmation is outstanding.
+**Candidate fix (2026-10-20):** Keep managed Z-Image group offloading, but run its still-image, animation-anchor, and blended-prompt conditioning calls under `torch.no_grad()` instead of `torch.inference_mode()`. When Diffusers offload replaces PEFT `Parameter.data` during inference mode, a later adapter `requires_grad_(True)` operation can raise exactly the reported error. SDXL and FLUX retain their previous inference contexts. CPU regression tests cover repeated activation/disable/reweight cycles and Z-Image blended prompt encoding. GitHub Actions backend tests passed on 2026-10-20 (run 39421028500, commit e0c88ee); physical Windows GPU confirmation is outstanding.
 
 **Investigation / proposed work:**
 - Reproduce with single-image generations/batches and animation, with/without LoRA. Collect full Python tracebacks and record the exact stage (LoRA load, adapter enable/weight update, task conversion, prompt encoding, offload transfer, or inference).
