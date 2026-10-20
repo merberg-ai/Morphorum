@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="/assets/animation.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/tablet.css?v=__MORPHORUM_ASSET_VERSION__" media="(min-width: 641px) and (max-width: 1180px), (min-width: 1181px) and (pointer: coarse)">
   <link rel="stylesheet" href="/assets/desktop.css?v=__MORPHORUM_ASSET_VERSION__" media="(min-width: 1181px) and (hover: hover) and (pointer: fine)">
+  <link rel="stylesheet" href="/assets/about.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/ux-polish.css?v=__MORPHORUM_ASSET_VERSION__">
 </head>
 <body>
@@ -126,11 +127,13 @@
       <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
       <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
       <button class="nav-button" data-view="help"><span class="nav-icon">?</span><span>Help</span></button>
+      <button class="nav-button" data-view="about"><span class="nav-icon">ⓘ</span><span>About</span></button>
       <button class="nav-more-toggle" type="button" id="nav-more-toggle" aria-expanded="false" aria-controls="nav-more-menu"><span class="nav-icon">⋯</span><span>More</span></button>
       <div class="nav-more-menu" id="nav-more-menu" hidden>
         <button type="button" data-more-view="settings">⚙ Settings</button>
         <button type="button" data-more-view="console">›_ Console</button>
         <button type="button" data-more-view="help">? Help</button>
+        <button type="button" data-more-view="about">ⓘ About</button>
       </div>
     </nav>
 
@@ -1477,6 +1480,62 @@
         <div class="help-layout"><aside class="card glass help-sidebar"><label for="help-document-select" class="field-label">Documentation</label><select id="help-document-select" aria-label="Help document"></select><div id="help-document-list" class="help-document-list" role="navigation" aria-label="Documentation pages"></div></aside><article class="card glass help-article" id="help-content" aria-live="polite"><p class="muted">Choose a guide to begin.</p></article></div>
       </section>
 
+
+      <section class="view" id="view-about">
+        <div class="page-heading">
+          <div><p class="eyebrow">THE PROJECT</p><h1>About Morphorum</h1>
+            <p class="muted">An independent, open-source studio for local AI images and camera-driven animation.</p></div>
+        </div>
+        <div class="about-layout">
+          <article class="card glass about-identity">
+            <div class="about-hero">
+              <div class="about-logo-slot" aria-label="Morphorum project logo">
+                <span class="about-logo-fallback" id="about-logo-fallback" aria-hidden="true">M</span>
+                <img id="about-logo" src="/assets/morphorum-about-logo.png" alt="Morphorum logo" hidden>
+              </div>
+              <div class="about-brand-copy">
+                <p class="eyebrow">LOCAL • CREATIVE • OPEN SOURCE</p>
+                <h2>Morphorum</h2>
+                <p>Generate images with SDXL, FLUX and Z-Image, then bring them to life with prompt scheduling, 2D/3D camera motion, audio-reactive Motion Studio and video export. Work in your own browser, with models running on your computer.</p>
+                <p class="muted">Early alpha • Windows and Linux • The Unlicense</p>
+                <div class="about-link-row">
+                  <a class="secondary-button" href="https://github.com/merberg-ai/Morphorum" target="_blank" rel="noopener noreferrer">View GitHub repository ↗</a>
+                  <a href="https://github.com/merberg-ai/Morphorum/issues" target="_blank" rel="noopener noreferrer">Issues &amp; ideas ↗</a>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="card glass about-update-card">
+            <div class="card-header"><div><h2>GitHub &amp; updates</h2><p class="muted">Check and update only the branch installed on this machine.</p></div></div>
+            <div class="about-git-grid">
+              <div><span>Installed version</span><strong id="about-version">Checking…</strong></div>
+              <div><span>Current branch</span><code id="about-branch">Checking…</code></div>
+              <div><span>Local commit</span><code id="about-commit">Checking…</code></div>
+              <div><span>Update status</span><strong id="about-update-state">Not checked</strong></div>
+            </div>
+            <p id="about-update-message" class="about-update-message muted" role="status" aria-live="polite">Updates do not switch branches or run automatically.</p>
+            <div class="about-update-actions">
+              <button type="button" class="secondary-button busy-button" id="about-check-update"><span class="spinner"></span><span class="button-label">Check for updates</span></button>
+              <button type="button" class="primary-button busy-button" id="about-apply-update" disabled><span class="spinner"></span><span class="button-label">Update current branch</span></button>
+            </div>
+            <p class="muted about-update-safety" id="about-update-safety">Updating requires a clean Git worktree and an idle renderer. Only a browser on the Morphorum host can apply changes. Restart Morphorum after updating.</p>
+            <div class="about-command-row"><span>Manual update (after stopping Morphorum)</span><code id="about-update-command">update.bat / ./update.sh</code><button type="button" class="secondary-button compact" id="about-copy-command">Copy</button></div>
+            <pre id="about-update-log" class="about-update-log" hidden aria-label="Update script log"></pre>
+          </article>
+          <article class="card glass about-credits">
+            <div class="card-header"><div><h2>Inspiration &amp; acknowledgments</h2><p class="muted">Credit where credit is due.</p></div></div>
+            <p>Morphorum is an independently implemented project inspired by the creative tools and communities that helped shape open-source AI art.</p>
+            <div class="about-credit-grid">
+              <div><strong>Deforum</strong><span>For pioneering prompt-scheduled diffusion animations and camera-driven creative workflows.</span><a href="https://github.com/deforum/sd-webui-deforum" target="_blank" rel="noopener noreferrer">Deforum project ↗</a></div>
+              <div><strong>Stable Diffusion WebUI Forge</strong><span>For ideas in performance-focused, accessible local diffusion workflows.</span><a href="https://github.com/lllyasviel/stable-diffusion-webui-forge" target="_blank" rel="noopener noreferrer">Forge project ↗</a></div>
+              <div><strong>chicodog530</strong><span>Special appreciation and recognition within the AI art and animation community.</span></div>
+              <div><strong>Open-source ecosystem</strong><span>Thanks to Stable Diffusion, Diffusers, PyTorch, FFmpeg, creators and community contributors.</span><a href="https://github.com/merberg-ai/Morphorum/blob/main/THIRD_PARTY.md" target="_blank" rel="noopener noreferrer">Third-party notices ↗</a></div>
+            </div>
+            <p class="muted about-attribution-note">These are acknowledgments, not claims of endorsement or of third-party source code being bundled into Morphorum.</p>
+          </article>
+        </div>
+      </section>
+
       <section class="view" id="view-console">
         <div class="page-heading console-heading">
           <div><p class="eyebrow">LIVE SERVER ACTIVITY</p><h1>Console</h1><p class="muted">See generation activity and errors. Use the filters to find a message or copy logs for troubleshooting.</p></div>
@@ -1581,6 +1640,7 @@
   <script src="/assets/ui-services.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/resolution.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/app.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/about.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/help.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/models.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/civitai.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
