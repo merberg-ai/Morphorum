@@ -29,6 +29,10 @@ Project Manager, New Project Wizard and Project Editor are direct main-menu dest
 | **[Import Deforum Motion Settings](DEFORUM_MOTION_SETTINGS_IMPORT.md)** | Bring compatible camera schedules into an existing 3D project |
 | **[Features & limitations](CURRENT_STATUS.md)** | See supported workflows and current alpha boundaries |
 
+## Planned integrations (not yet supported)
+
+- **[PQ Parseq URL Integration Roadmap](PARSEQ_URL_INTEGRATION_ROADMAP.md)**: proposed phased work to consume Parseq's Auto-uploaded JSON via a saved URL, validate and apply supported per-frame controls, freeze each render's manifest, and retain Morphorum's native backend. **Planning only; not implemented.** Development is gated on owner approval and restricted to `dev-webui`.
+
 ## Contributing
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for source contributions and [Testing](TESTING.md) for the public test workflow.
