@@ -2057,6 +2057,25 @@ def test_sdxl_task_conversion_requires_explicit_source_precision(monkeypatch) ->
         )
 
 
+def test_managed_zimage_inference_context_does_not_poison_peft_parameters() -> None:
+    """Reproduce the exact PyTorch offload/PEFT failure without loading a GPU model."""
+    parameter = torch.nn.Parameter(torch.ones(2), requires_grad=False)
+    with GenerationManager.inference_context("zimage"):
+        assert not torch.is_grad_enabled()
+        assert not torch.is_inference_mode_enabled()
+        # Diffusers group offloading can replace Parameter.data in forward.
+        parameter.data = torch.empty_like(parameter)
+    assert not parameter.is_inference()
+    parameter.requires_grad_(True)  # PEFT activation must remain legal.
+    assert parameter.requires_grad
+
+    # Do not change the unrelated model-family inference policy.
+    with GenerationManager.inference_context("sdxl"):
+        assert torch.is_inference_mode_enabled()
+    with GenerationManager.inference_context("flux"):
+        assert torch.is_inference_mode_enabled()
+
+
 def test_zimage_img2img_reuses_official_turbo_checkpoint_and_call_contract(tmp_path) -> None:
     checkpoint = create_zimage_layout(tmp_path / "Z-Image-Turbo")
     model = fake_model(checkpoint, "zimage", "turbo")
