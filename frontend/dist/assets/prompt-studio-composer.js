@@ -186,6 +186,7 @@ function mount({panel,getDraft,onChange,onCommit,onNotice}={}){
         }catch(_){/* Civitai caching disabled or unavailable: local LoRAs still usable. */}
       }
       if(draft()?.snapshot.projectId!==contextId)return;
+      refresh();selectLoRA();
       message(records.length+' indexed '+family+' LoRA(s) available. Triggers are user-selected suggestions.');
     }catch(e){records=[];cached={};message('LoRA catalog: '+e.message,true);}
     finally{loading=false;refresh();}
