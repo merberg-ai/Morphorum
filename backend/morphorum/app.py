@@ -803,6 +803,13 @@ def api_animation_projects() -> dict[str, Any]:
 
 
 
+# PS5.1: versioned authoring guidance, not renderer/CLIP capability claims.
+@app.get("/api/prompt-studio/profiles")
+def api_prompt_studio_profiles() -> dict[str, Any]:
+    from .prompt_studio_profiles import profile_catalog
+    return profile_catalog()
+
+
 # PS4: local Ollama storyboard proposals, never a render/project write.
 @app.post("/api/prompt-studio/ollama/models")
 async def api_prompt_studio_ollama_models(payload: dict[str, Any]) -> dict[str, Any]:

@@ -109,6 +109,10 @@ def validate_story_request(payload: Any) -> dict[str, Any]:
         if scenes > frames:
             raise OllamaStoryError("Scene count exceeds the number of available frames.")
         scene_frames = [(i * frames) // scenes for i in range(scenes)]
+    from .prompt_studio_profiles import validate_options
+    options = validate_options(payload, family, mode, scene_frames)
+    if options["target_frame"] is not None:
+        scene_frames = [options["target_frame"]]
     negatives = payload.get("include_negative", False)
     if type(negatives) is not bool:
         raise OllamaStoryError("Negative prompt generation must be enabled explicitly.")
@@ -116,6 +120,8 @@ def validate_story_request(payload: Any) -> dict[str, Any]:
         "idea": idea.strip(), "mode": mode, "family": family, "max_frames": frames,
         "fps": float(fps), "tracks": tracks, "scene_frames": scene_frames,
         "include_negative": negatives, "model": model_id(payload.get("model")),
+        "profile": options["profile"], "continuity": options["continuity"],
+        "target_frame": options["target_frame"],
         "endpoint": endpoint_url(payload.get("endpoint", DEFAULT_ENDPOINT),
                                  payload.get("allow_lan") is True),
     }
@@ -123,11 +129,8 @@ def validate_story_request(payload: Any) -> dict[str, Any]:
 
 def _prompt_messages(plan: dict[str, Any]) -> list[dict[str, str]]:
     family = plan["family"]
-    profile = {
-        "sdxl": "Use clear visual attributes and subjects. Avoid claiming fixed CLIP token limits.",
-        "flux": "Use coherent concrete visual scenes and motion progression; no special CFG claims.",
-        "zimage": "Use concise, concrete visual prompts suitable for Z-Image Turbo; avoid CFG or negative-support promises.",
-    }[family]
+    from .prompt_studio_profiles import PROFILE_DESCRIPTIONS
+    profile = PROFILE_DESCRIPTIONS[family]["guidance"]
     existing = [
         {"frame": p["frame"], "positive": p["value"]}
         for p in plan["tracks"]["positive"]["keyframes"]
@@ -153,6 +156,9 @@ def _prompt_messages(plan: dict[str, Any]) -> list[dict[str, str]]:
             for i, frame in enumerate(plan["scene_frames"])
         ],
         "include_negative": plan["include_negative"],
+        "profile_id": plan["profile"],
+        "locked_continuity": plan["continuity"],
+        "target_frame": plan["target_frame"],
         "existing_positive": existing,
         "instructions": ("Refine the scene descriptions without adding or modifying LoRA directives. "
                          "Existing original LoRA tags are retained by the app after generation."
@@ -225,13 +231,14 @@ def compile_result(plan: dict, raw: dict) -> dict:
     scenes = raw.get("scenes")
     if not isinstance(scenes, list) or len(scenes) != len(plan["scene_frames"]):
         raise OllamaStoryError("Ollama returned the wrong number of scenes. Nothing was applied.", 422)
+    from .prompt_studio_profiles import continuity_prefix, diagnostics
     proposed = deepcopy(plan["tracks"])
     if plan["mode"] == "create":
         proposed["positive"]["keyframes"] = []
     generated_negative = []
     overview = []
     warnings = []
-    source_points = plan["tracks"]["positive"]["keyframes"]
+    source_points = {p["frame"]: p for p in plan["tracks"]["positive"]["keyframes"]}
     for i, (scene, frame) in enumerate(zip(scenes, plan["scene_frames"])):
         if not isinstance(scene, dict) or (
                 not set(scene).issubset({"title", "positive", "negative"}) or
@@ -248,15 +255,22 @@ def compile_result(plan: dict, raw: dict) -> dict:
             raise OllamaStoryError("Ollama attempted to add LoRA directives. No changes were applied.", 422)
         if plan["mode"] == "refine":
             # Preserve exact user-authored LoRA token bytes from original frame.
-            tokens = [match.group(0) for match in LORA_TAG.finditer(source_points[i]["value"])]
+            tokens = [match.group(0) for match in LORA_TAG.finditer(source_points[frame]["value"])]
             if tokens:
                 positive = " ".join(tokens) + ", " + positive
                 warnings.append("Existing LoRA tags were preserved verbatim and placed before refined scene text.")
+        locked = continuity_prefix(positive, plan["continuity"])
+        if locked:
+            positive = locked + ", " + positive
         if len(positive) > 32768:
             raise OllamaStoryError("Refined prompt exceeds the native text limit.", 422)
         entry = {"frame": frame, "value": positive}
         if plan["mode"] == "refine":
-            proposed["positive"]["keyframes"][i] = entry
+            index = next((j for j, value in enumerate(proposed["positive"]["keyframes"])
+                          if value["frame"] == frame), None)
+            if index is None:
+                raise OllamaStoryError("Selected keyframe disappeared before compilation.", 422)
+            proposed["positive"]["keyframes"][index] = entry
         else:
             proposed["positive"]["keyframes"].append(entry)
         if plan["include_negative"]:
@@ -267,7 +281,15 @@ def compile_result(plan: dict, raw: dict) -> dict:
             "positive": positive, "negative": negative if plan["include_negative"] else "",
         })
     if plan["include_negative"]:
-        proposed["negative"]["keyframes"] = generated_negative
+        if plan["mode"] == "refine":
+            merged = {p["frame"]: p["value"] for p in proposed["negative"]["keyframes"]}
+            for point in generated_negative:
+                merged[point["frame"]] = point["value"]
+            proposed["negative"]["keyframes"] = [
+                {"frame": f, "value": value} for f, value in sorted(merged.items())
+            ]
+        else:
+            proposed["negative"]["keyframes"] = generated_negative
     try:
         proposed = _validate_tracks(proposed, plan["max_frames"], "generated_tracks")
     except PromptDraftError as exc:
@@ -276,10 +298,16 @@ def compile_result(plan: dict, raw: dict) -> dict:
         "provider": "ollama", "model": plan["model"],
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "mode": plan["mode"], "scene_count": len(overview), "family": plan["family"],
-        "profile": "ps4-generic-v1",
+        "profile": plan["profile"],
     }
+    lengths, length_warnings = diagnostics(proposed, plan["family"])
+    if plan["include_negative"] and plan["family"] in ("flux", "zimage"):
+        warnings.append(
+            "Negative prompt support depends on the selected runtime pipeline; authoring does not verify inference."
+        )
     return {"tracks": proposed, "scenes": overview,
-            "warnings": sorted(set(warnings)), "provenance": provenance}
+            "warnings": sorted(set(warnings + length_warnings)),
+            "diagnostics": lengths, "provenance": provenance}
 
 
 async def generate(payload: dict) -> dict:

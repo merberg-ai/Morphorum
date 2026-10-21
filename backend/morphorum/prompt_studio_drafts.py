@@ -155,9 +155,10 @@ def _validate_ai_provenance(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or set(value) != {
             "provider", "model", "created_at", "mode", "scene_count", "family", "profile"}:
         raise PromptDraftError("Invalid AI storyboard provenance.")
+    from .prompt_studio_profiles import PROFILE_IDS
     if (value.get("provider") != "ollama" or value.get("mode") not in ("create", "refine")
             or value.get("family") not in ("sdxl", "flux", "zimage") or
-            value.get("profile") != "ps4-generic-v1" or
+            value.get("profile") not in ("ps4-generic-v1", PROFILE_IDS.get(value.get("family"))) or
             type(value.get("scene_count")) is not int or not 1 <= value["scene_count"] <= 16 or
             not isinstance(value.get("model"), str) or not 1 <= len(value["model"]) <= 160 or
             not isinstance(value.get("created_at"), str) or len(value["created_at"]) > 64):
