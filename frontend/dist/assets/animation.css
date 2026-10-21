@@ -4441,3 +4441,15 @@ dialog#animation-deforum-dialog {
 .ps4-empty h3{margin:0 0 .35rem}
 .ps4-empty p{margin:.2rem 0;font-size:.85rem;line-height:1.5}
 .ps4-empty[hidden],.ps4-director[hidden],.ps4-workspace[hidden]{display:none!important}
+
+/* PS4.1: observable Ollama generation. No fake percentage/ETA. */
+.ps4-activity{border:1px solid var(--border);border-radius:10px;
+ padding:.8rem;margin:.75rem 0;background:color-mix(in srgb,var(--accent,#57bfec) 5%,transparent)}
+.ps4-activity[hidden]{display:none!important}
+.ps4-activity-top{display:flex;align-items:center;justify-content:space-between;
+ gap:.55rem;flex-wrap:wrap;font-size:.87rem}
+.ps4-activity-top output{font-variant-numeric:tabular-nums;font-size:.82rem}
+.ps4-activity progress{display:block;width:100%;max-width:100%;height:8px;margin:.7rem 0;
+ accent-color:var(--accent,#57bfec)}
+.ps4-activity p{margin:.4rem 0;font-size:.81rem;overflow-wrap:anywhere}
+.ps4-activity .ps4-activity-note{opacity:.77;line-height:1.5}
