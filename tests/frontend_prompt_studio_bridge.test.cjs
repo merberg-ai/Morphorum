@@ -110,3 +110,15 @@ test('PS1.2 direct Motion Lab Apply shares the guarded project revision',()=>{
  assert.match(f,/\(apply \? guardedProjectWrite : api\)\(endpoint/);
  assert.match(f,/result = await guardedProjectWrite\(endpoint/);
 });
+
+test('PS1.3 Prompt Studio is a Project workspace, not a second renderer',()=>{
+ const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+ assert.match(html,/data-project-nav="prompt-studio"/);
+ assert.match(html,/id="animation-open-prompt-studio"/);
+ assert.match(html,/prompt-studio\.js[^"]*" defer/);
+ assert.match(animation,/window\.MorphorumPromptStudioWorkspace\.mount/);
+ assert.match(animation,/panels\['prompt-studio'\]/);
+ assert.match(animation,/input\.closest\('#animation-panel-prompt-studio'\)/);
+ assert.match(animation,/name === 'prompt-studio'\) promptStudioWorkspace/);
+ assert.match(animation,/context:\{name:project\.name,model:/);
+});

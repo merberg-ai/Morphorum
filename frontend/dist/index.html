@@ -108,6 +108,7 @@
         <button type="button" data-project-nav="projects">Project Manager</button>
         <button type="button" data-project-nav="wizard">New Project</button>
         <button type="button" data-project-nav="editor">Project Editor</button>
+        <button type="button" data-project-nav="prompt-studio">Prompt Studio</button>
       </div>
       <button class="nav-button" data-view="civitai" id="civitai-nav" hidden><span class="nav-icon">◈</span><span>Civitai Hub</span></button>
       <button class="nav-button" data-view="animation" id="motion-nav-toggle" type="button" aria-expanded="false" aria-controls="motion-lab-sidebar"><span class="nav-icon">◈</span><span>Motion Lab</span><span class="project-nav-chevron">▾</span></button>
@@ -554,7 +555,7 @@
           <article class="card glass animation-prompts-card">
             <div class="card-header">
               <div><h2>Prompt Keyframes</h2><p class="muted">Set prompts at different frames to change the scene over time.</p></div>
-              <div class="animation-prompt-actions"><button class="secondary-button compact" id="animation-evenly-space-prompts" type="button" disabled>Evenly Space</button><button class="secondary-button compact" id="animation-add-prompt" type="button" disabled>+ Keyframe</button></div>
+              <div class="animation-prompt-actions"><button class="secondary-button compact" id="animation-open-prompt-studio" type="button">Prompt Studio</button><button class="secondary-button compact" id="animation-evenly-space-prompts" type="button" disabled>Evenly Space</button><button class="secondary-button compact" id="animation-add-prompt" type="button" disabled>+ Keyframe</button></div>
             </div>
             <div class="animation-prompt-list" id="animation-prompt-list">
               <div class="animation-empty">Create or load a project to edit prompt keyframes.</div>
@@ -1659,6 +1660,7 @@
   <script src="/assets/first-run-examples.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/first-run-setup.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/prompt-studio-bridge.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
+  <script src="/assets/prompt-studio.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
   <script src="/assets/animation.js?v=__MORPHORUM_ASSET_VERSION__" defer></script>
 </body>
 </html>

@@ -16,7 +16,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
 
-**Status:** **PS0 documented, PS1.1 Project Editor communication bridge implemented on `dev-webui` for testing; not owner-accepted or merged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS1 remains gated on owner review.
+**Status:** **PS0 documented, PS1.1 bridge and PS1.2 guarded revision handling Windows-accepted; PS1.3 visible manual workspace implemented on `dev-webui` for testing, not merged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS1 remains gated on owner review.
 
 - Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
 - Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
@@ -85,3 +85,7 @@ Setting requires_grad=True on inference tensor outside InferenceMode is not allo
 ## Project Editor prompt/keyframe UX
 
 The planned Prompt Studio PS0–PS9 roadmap above supersedes this open-ended discussion item. No Prompt Studio implementation has been authorized; retain existing editor behavior until PS1+ acceptance gates.
+
+### PS1.3 Prompt Studio manual workspace (2026-10-21)
+
+Project → Prompt Studio and the Editor's Prompt Keyframes shortcut now open a **manual-only** Prompt Studio page. Import Existing Prompts snapshots live/unsaved Editor prompts; separate positive/negative lanes support text/frame/transition edits, frame-zero protection, add/remove/move with collisions refused. Preview Changes shows a diff before confirmation-gated Apply to Animation; Apply updates the unsaved Project Editor only, never project.json or camera/media/other schedules. Reset Draft restores the import; Studio drafts are **in memory only** (lost on browser reload) until later persistence work. No AI/LoRA composer, audio synchronization, or draggable timeline yet. User Windows/mobile acceptance needed before more phases.

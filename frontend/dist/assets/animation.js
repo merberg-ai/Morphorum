@@ -10465,7 +10465,7 @@
   // existing workspaces, never save, apply camera motion, or start a render.
   const MOTION_WORKFLOW_LABELS = Object.freeze({
     motion: 'Overview', wizard: 'New Project Wizard',
-    projects: 'Project Manager', editor: 'Project Editor',
+    projects: 'Project Manager', editor: 'Project Editor', 'prompt-studio': 'Prompt Studio',
     composer: 'Camera Composer', recording: 'Live Recording',
     curves: 'Motion Curves', preview: 'Camera Preview',
     'motion-import': 'Import Motion Settings', audio: 'Motion Studio',
@@ -10479,8 +10479,10 @@
       'Complete Save Project & Open Editor in the wizard before continuing.'],
     projects: ['Open Project Editor', 'editor', 'New Project Wizard', 'wizard',
       'Choose a project and use Open in Editor; switching tools does not open the selected project.'],
-    editor: ['Compose Camera Motion', 'composer', 'Render Monitor', 'monitor',
-      'Review project settings and save changes before rendering.'],
+    editor: ['Open Prompt Studio', 'prompt-studio', 'Render Monitor', 'monitor',
+      'Import and organize keyframed prompts in Prompt Studio or save project settings before rendering.'],
+    'prompt-studio': ['Project Editor', 'editor', 'Browse Projects', 'projects',
+      'Import the live Editor prompts, preview the changes, then Apply to its unsaved draft. Save Project in Editor afterward.'],
     composer: ['Review Motion Curves', 'curves', 'Camera Preview', 'preview',
       'Draft motion is not part of the saved camera timeline until you apply it.'],
     recording: ['Review Motion Curves', 'curves', 'Camera Composer', 'composer',
@@ -10550,10 +10552,11 @@
   }
 
   const ANIMATION_TAB_KEY = 'morphorum.animation.workspaceTab.v1';
-  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'];
+  const VISIBLE_ANIMATION_TABS = ['motion', 'wizard', 'projects', 'editor', 'prompt-studio', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'];
   const MOTION_LAB_TOOL_TABS = new Set(['motion', 'composer', 'recording', 'curves', 'preview']);
   let animationTab = 'motion';
   let projectWizard = null;
+  let promptStudioWorkspace = null;
   function showAnimationTab(name, { persist = true } = {}) {
     if (!VISIBLE_ANIMATION_TABS.includes(name)) name = 'motion';
     if (name !== 'curves') motionLabVisual?.pause();
@@ -10565,6 +10568,7 @@
       projects: ['PROJECTS / LIBRARY', 'Project Manager', 'Browse, organize, open and manage your animation projects.'],
       wizard: ['PROJECTS / CREATE', 'New Project Wizard', 'Create a new animation project with guided setup and sensible defaults.'],
       editor: ['PROJECTS / EDIT', 'Project Editor', 'Configure the selected project, prompts, generation settings and animation timeline.'],
+      'prompt-studio': ['PROJECTS / PROMPT STUDIO', 'Prompt Studio', 'Build a manual prompt sequence and apply it to the unsaved Project Editor after preview.'],
     }[name] || ['MOTION LAB / IMAGE ANIMATION', 'Motion Lab',
       'Compose camera movement, edit curves, preview animation and monitor renders in focused workspaces.'];
     const eyebrow = qs('#animation-page-eyebrow');
@@ -10592,7 +10596,8 @@
       panel.hidden = !selected;
       panel.classList.toggle('active', selected);
     });
-    const projectDestination = ['wizard','projects','editor'].includes(name);
+    const projectDestination = ['wizard','projects','editor','prompt-studio'].includes(name);
+    if (name === 'prompt-studio') promptStudioWorkspace?.onShow?.();
     qs('.main-nav .nav-button[data-view="animation"]')?.classList.toggle('active', !projectDestination);
     qsa('.main-nav [data-project-nav]').forEach(button => {
       const selected = button.dataset.projectNav === name;
@@ -11534,7 +11539,7 @@
     nav.setAttribute('role', 'tablist');
     const panels = {};
     const names = {
-      motion: 'Overview', wizard: 'New Project Wizard', projects: 'Project Manager', editor: 'Project Editor',
+      motion: 'Overview', wizard: 'New Project Wizard', projects: 'Project Manager', editor: 'Project Editor', 'prompt-studio': 'Prompt Studio',
       composer: 'Camera Composer', recording: 'Live Recording',
       curves: 'Motion Curves', preview: 'Camera Preview',
       'motion-import': 'Import Motion Settings', audio: 'Motion Studio', monitor: 'Render Monitor', outputs: 'Outputs',
@@ -11559,7 +11564,7 @@
       });
       // Retain programmatic workspace targets for primary-nav routing and older shortcuts.
       // The visible navigation for these three destinations lives in the main menu.
-      if (['wizard','projects','editor'].includes(name)) {
+      if (['wizard','projects','editor','prompt-studio'].includes(name)) {
         button.hidden = true;
         button.style.display = 'none';
         button.tabIndex = -1;
@@ -11578,7 +11583,7 @@
     layout.parentNode.insertBefore(panels.editor, layout);
     panels.editor.appendChild(layout);
     let last = panels.editor;
-    for (const name of ['motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs']) {
+    for (const name of ['prompt-studio', 'motion', 'wizard', 'projects', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs']) {
       last.after(panels[name]);
       last = panels[name];
     }
@@ -11620,6 +11625,12 @@
     }
 
     setupProjectEditorGroups(layout, panels.editor);
+    if (window.MorphorumPromptStudioWorkspace) {
+      promptStudioWorkspace = window.MorphorumPromptStudioWorkspace.mount({
+        panel: panels['prompt-studio'],
+        onEditor: () => showAnimationTab('editor'),
+      });
+    }
 
     // The landing page is a concise tool selector. Original controls live in
     // exactly one dedicated panel, never copied or recreated.
@@ -11901,6 +11912,7 @@
     qs('#animation-save')?.addEventListener('click', saveProject);
     qs('#animation-save-as')?.addEventListener('click', () => void projectManagerSaveAs({editor:true}));
     qs('#animation-reload')?.addEventListener('click', reloadProject);
+    qs('#animation-open-prompt-studio')?.addEventListener('click', () => showAnimationTab('prompt-studio'));
     qs('#animation-add-prompt')?.addEventListener('click', addPromptKeyframe);
     qs('#animation-evenly-space-prompts')?.addEventListener('click', evenlySpacePromptKeyframes);
     qs('#animation-validate-schedules')?.addEventListener('click', () => validateSchedules(true));
@@ -12200,6 +12212,7 @@
       '#view-animation input, #view-animation select, #view-animation textarea'
     ).forEach(input => {
       if (
+        input.closest('#animation-panel-prompt-studio') ||
         input.id === 'animation-project-select' ||
         input.id.startsWith('animation-deforum-') ||
         input.id.startsWith('animation-hybrid-') ||
@@ -12427,7 +12440,7 @@
     const project=collectProject();
     return {ok:true,projectId,revision,savedEtag:state.projectEtag,
       signature:promptStudioEditorSignature(),dirty:state.dirty,
-      context:{model:JSON.parse(JSON.stringify(project.model)),fps:project.animation.fps,
+      context:{name:project.name,model:JSON.parse(JSON.stringify(project.model)),fps:project.animation.fps,
         maxFrames:project.animation.max_frames,startMode:project.animation.start_mode,
         sourceImageName:project.animation.source_image_name||''},
       promptTracks:source.tracks};
