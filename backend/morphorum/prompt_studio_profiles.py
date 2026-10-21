@@ -65,7 +65,9 @@ def profile_catalog() -> dict[str, Any]:
 def validate_options(payload: dict, family: str, mode: str, frames: list[int]) -> dict:
     from .prompt_studio_ollama import OllamaStoryError
 
-    desired = payload.get("profile", PROFILE_IDS[family])
+    # Existing PS4 API callers keep their historical provenance unless they
+    # explicitly select a versioned PS5 family profile.
+    desired = payload.get("profile", "ps4-generic-v1")
     if desired not in (PROFILE_IDS[family], "ps4-generic-v1"):
         raise OllamaStoryError("Prompt profile must match the active model family.")
     original = payload.get("continuity", {})
