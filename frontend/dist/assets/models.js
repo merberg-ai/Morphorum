@@ -388,7 +388,7 @@
 
   function updateBulkControls() {
     const count = state.bulkSelected.size;
-    for (const [id, label] of [['model-bulk-identify','Identify Selected'],['model-bulk-updates','Check Updates']]) {
+    for (const [id, label] of [['model-bulk-identify','Identify Selected'],['model-bulk-updates','Check Updates'],['model-bulk-sync','Sync Civitai Info']]) {
       const button = qs('#' + id);
       if (button) { button.disabled = state.bulkBusy || !count; button.textContent = label + ' (' + count + ')'; }
     }
@@ -412,15 +412,20 @@
         const model = state.models.find(item => item.id === id);
         qs('#model-bulk-status').textContent = (index + 1) + '/' + selected.length + ' · ' + (model?.name || id);
         try {
-          const response = await api('/api/civitai/' + (mode === 'identify' ? 'identify/' : 'updates/') + encodeURIComponent(id), {method:'POST'});
-          if (mode === 'identify' ? response.found : response.status === 'newer_available') matched++;
+          const suffix = mode === 'identify' ? 'identify/' : mode === 'updates' ? 'updates/' : 'library/';
+          const response = await api('/api/civitai/' + suffix + encodeURIComponent(id) +
+            (mode === 'sync' ? '/sync' : ''), {method:'POST'});
+          if (mode === 'sync') window.MorphorumThumbnails?.set(id, response);
+          if (mode === 'identify' ? response.found : mode === 'sync' ? response.synced :
+            response.status === 'newer_available') matched++;
           else unmatched++;
         } catch (error) {
           failed++;
           if (errors.length < 3) errors.push((model?.name || id) + ': ' + error.message);
         }
       }
-      toast('Bulk Civitai ' + (mode === 'identify' ? 'identification' : 'update check') + ' completed',
+      if (mode === 'sync') renderModels();
+      toast('Bulk Civitai ' + (mode === 'identify' ? 'identification' : mode === 'sync' ? 'sync' : 'update check') + ' completed',
         matched + ' matches/newer · ' + unmatched + ' no match/no newer · ' + failed + ' failed.' + (errors.length ? ' ' + errors.join(' | ') : ''),
         failed ? 'warning' : 'success', 9000);
     } finally {
@@ -581,14 +586,7 @@
       const line = document.createElement('div');
       line.textContent = [data.creator, data.base_model, data.synced_at ? 'Synced ' + new Date(data.synced_at).toLocaleDateString() : ''].filter(Boolean).join(' · ');
       metadataResult.append(line);
-      if (data.preview) {
-        const image = document.createElement('img');
-        image.className = 'model-civitai-thumbnail';
-        image.src = '/api/civitai/library/' + encodeURIComponent(model.id) + '/preview';
-        image.alt = 'Cached Civitai preview for ' + model.name;
-        image.loading = 'lazy';
-        metadataResult.append(image);
-      }
+      // The prominent thumbnail lives on the card, not buried in this caption.
       if (data.trained_words?.length) {
         const words = document.createElement('div');
         words.textContent = 'Triggers: ' + data.trained_words.slice(0, 8).join(', ');
@@ -603,6 +601,9 @@
         const response = await fetch('/api/civitai/library/' + encodeURIComponent(model.id) + '/sync', {method:'POST'});
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'Metadata sync failed');
+        window.MorphorumThumbnails?.set(model.id, data);
+        const oldArt = row.querySelector('.library-artwork');
+        if (oldArt) oldArt.replaceWith(window.MorphorumThumbnails.create(model.id, model.name, 'model-entry-art'));
         showMetadata(data);
         toast('Civitai metadata cached', model.name + ' metadata saved to Morphorum cache.', 'success');
       } catch (error) { toast('Metadata sync failed', error.message, 'error'); }
@@ -617,6 +618,9 @@
         const response = await fetch('/api/civitai/library/' + encodeURIComponent(model.id));
         const data = await response.json();
         if (!response.ok) throw Error(data.detail || 'Cache unavailable');
+        window.MorphorumThumbnails?.set(model.id, data);
+        const oldArt = row.querySelector('.library-artwork');
+        if (oldArt) oldArt.replaceWith(window.MorphorumThumbnails.create(model.id, model.name, 'model-entry-art'));
         showMetadata(data);
         if (!data.synced) toast('No cached metadata', 'Use Sync Civitai Info first.', 'info');
       } catch (error) { toast('Cannot read Civitai cache', error.message, 'error'); }
@@ -632,7 +636,22 @@
       else state.bulkSelected.delete(model.id);
       updateBulkControls();
     });
-    row.append(checked, nameWrap, family, kind, pathDetails, size, action, identify, update, sync, viewCache);
+    // Four coherent regions: selection, artwork, summary, then actions.
+    const artwork = window.MorphorumThumbnails?.create(model.id, model.name, 'model-entry-art');
+    const summary = document.createElement('div');
+    summary.className = 'model-entry-summary';
+    const pills = document.createElement('div');
+    pills.className = 'model-entry-pills';
+    pills.append(family, kind, size);
+    summary.append(nameWrap, pills, pathDetails);
+    const actions = document.createElement('div');
+    actions.className = 'model-entry-actions';
+    actions.append(action, identify, update, sync, viewCache);
+    row.append(checked);
+    if (artwork) row.append(artwork);
+    row.append(summary, actions);
+    const cached = window.MorphorumThumbnails?.get(model.id);
+    if (cached?.synced) showMetadata(cached);
     return row;
   }
 
@@ -746,6 +765,9 @@
       }));
       updateSummary();
       renderModels();
+      // Display immediately, then populate previews from local disk only.
+      const ids = state.models.map(model => model.id);
+      void window.MorphorumThumbnails?.refresh(ids).then(() => renderModels());
       populateImageModelSelect();
       if (announce) toast('Model index loaded', `${state.models.length} file(s) available.`, 'success');
     } catch (error) {
@@ -813,6 +835,7 @@
     qs('#model-clear-selected')?.addEventListener('click', () => { state.bulkSelected.clear(); renderModels(); });
     qs('#model-bulk-identify')?.addEventListener('click', () => bulkCheck('identify'));
     qs('#model-bulk-updates')?.addEventListener('click', () => bulkCheck('updates'));
+    qs('#model-bulk-sync')?.addEventListener('click', () => bulkCheck('sync'));
     qs('#model-search')?.addEventListener('input', renderModels);
     qs('#model-family-filter')?.addEventListener('change', renderModels);
     qs('#model-kind-filter')?.addEventListener('change', renderModels);
