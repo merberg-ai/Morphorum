@@ -102,3 +102,11 @@ test('PS1.2 guarded saves cover core Editor and timeline writes',()=>{
  assert.match(animation,/const original = await promptStudioFetchSavedRevision\(item\.id\)/);
  assert.match(animation,/headers:\{'Content-Type':'application\/json','If-Match':original\.etag\}/);
 });
+
+test('PS1.2 direct Motion Lab Apply shares the guarded project revision',()=>{
+ const f=animation.slice(animation.indexOf('  async function motionLabPreviewOrApply('),
+   animation.indexOf('  async function ',animation.indexOf('  async function motionLabPreviewOrApply(')+10));
+ assert.match(f,/apply && state\.promptStudioPendingSaveEtag/);
+ assert.match(f,/\(apply \? guardedProjectWrite : api\)\(endpoint/);
+ assert.match(f,/result = await guardedProjectWrite\(endpoint/);
+});

@@ -142,3 +142,7 @@ For a Studio-staged editor draft, Save Project sends `If-Match` and `X-Morphorum
 - **While-save edits:** The browser tracks an `editorRevision`; newer form edits made during a slow network request are not automatically cleared/repainted. This is not a multi-workspace transaction.
 - **Remaining boundaries:** source-image media writes, independent project imports, Motion Lab direct Apply and other endpoints are not all revision-guarded by this milestone; concurrent external mutations still change the saved project ETag and block subsequent Editor guarded saves. Do not claim exhaustive concurrency hardening or physical Windows acceptance.
 - Tests: `tests/test_ps12_project_revision.py`, existing `tests/test_animation_projects.py`, `tests/frontend_prompt_studio_bridge.test.cjs`, CI. No standalone Prompt Studio UI in PS1.2.
+
+### PS1.2 Motion Lab direct Apply
+
+`POST /motion-lab/apply` now accepts an optional `If-Match` and uses the atomic backend mutation helper. The browser sends the project's loaded revision for Apply and camera rebase; preview remains read-only. Studio-staged prompt edits must be explicitly saved before Motion Lab Apply. Stale revisions return HTTP 412, separate from the existing camera conflict/rebase decision. Legacy clients may omit If-Match.

@@ -10314,6 +10314,8 @@
       });
     };
     try {
+      if (apply && state.promptStudioPendingSaveEtag)
+        throw new Error('Save Prompt Studio changes explicitly in Project Editor before Motion Lab Apply.');
       if (apply && state.dirty) {
         const approved = await window.MorphorumDialog.confirm({
           title: 'Save Editor changes before applying Motion Lab?',
@@ -10350,7 +10352,7 @@
       if (!apply) payload.project = collectProject(); // include unsaved edits non-destructively
       let result;
       try {
-        result = await api(endpoint, {
+        result = await (apply ? guardedProjectWrite : api)(endpoint, {
           method: 'POST', body: JSON.stringify(payload),
         });
       } catch (error) {
@@ -10368,9 +10370,9 @@
           return;
         }
         payload.rebase_current = true;
-        result = await api(endpoint, {
+        result = await guardedProjectWrite(endpoint, {
           method: 'POST', body: JSON.stringify(payload),
-        });
+        },projectId);
       }
       if (state.project?.id !== projectId) return;
       if (!apply && result.diagnostics?.series) {

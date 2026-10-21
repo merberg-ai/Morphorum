@@ -56,3 +56,18 @@ def test_ps12_invalid_etag_and_intervening_project_save_fail_closed(tmp_path, mo
         assert saved.status_code==200,saved.text
         assert client.put(url,headers={"If-Match":old},json=created).status_code==412
         assert client.get(url).json()["project"]["prompts"]["0"]=="another browser"
+
+
+def test_ps12_motion_lab_apply_rejects_stale_etag(tmp_path, monkeypatch):
+    monkeypatch.setattr(projects,"PROJECTS_DIR",tmp_path/"projects")
+    with TestClient(app) as client:
+        created=client.post("/api/animation/projects",json={"name":"Motion Lab ETag"}).json()["project"]
+        path=f"/api/animation/projects/{created['id']}"
+        etag=client.get(path).headers["etag"]
+        changed=client.put(path,headers={"If-Match":etag},
+                           json={**created,"notes":"concurrent note"})
+        assert changed.status_code==200,changed.text
+        refused=client.post(path+"/motion-lab/apply",
+            headers={"If-Match":etag},json={"layers":[]})
+        assert refused.status_code==412,refused.text
+        assert client.get(path).json()["project"]["notes"]=="concurrent note"

@@ -1282,20 +1282,31 @@ def api_motion_lab_compose_preview(project_id: str, payload: dict[str, Any]) -> 
 
 
 @app.post("/api/animation/projects/{project_id}/motion-lab/apply")
-def api_motion_lab_apply(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def api_motion_lab_apply(
+    project_id: str, payload: dict[str, Any], request: Request, response: Response,
+) -> dict[str, Any]:
+    expected = _timeline_expected_etag(request)
     try:
-        project = load_animation_project(project_id)
         layers = payload.get("layers")
         if not isinstance(layers, list):
             raise MotionLabError("Motion Lab apply requires a list of layers.")
-        compiled, diagnostics = compile_motion_lab(
-            project, layers=layers,
-            conflict_policy=("use-current" if payload.get("rebase_current") is True else "reject"),
+        diagnostics: dict[str, Any] = {}
+
+        def compile_current(project: dict[str, Any]) -> dict[str, Any]:
+            compiled, report = compile_motion_lab(
+                project, layers=layers,
+                conflict_policy=("use-current" if payload.get("rebase_current") is True else "reject"),
+            )
+            diagnostics.update(report)
+            return compiled
+
+        saved, etag = mutate_animation_project(
+            project_id, compile_current, expected_etag=expected, prefer_tracks=True,
         )
-        saved = save_animation_project(project_id, compiled, prefer_tracks=True)
-        return {
-            "status": "applied", "project": saved, "diagnostics": diagnostics,
-        }
+        response.headers["ETag"] = etag
+        return {"status": "applied", "project": saved, "diagnostics": diagnostics}
+    except AnimationProjectConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         status = 404 if "not found" in str(exc).lower() else 400
         raise HTTPException(status_code=status, detail=str(exc)) from exc
