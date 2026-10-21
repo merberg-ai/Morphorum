@@ -182,7 +182,12 @@ function mount({panel,getDraft,onChange,onCommit,onNotice}={}){
         try{
           const cache=await fetch('/api/civitai/library-catalog',{method:'POST',
             headers:{'Content-Type':'application/json'},body:JSON.stringify({model_ids:records.slice(i,i+120).map(x=>x.id)})});
-          if(cache.ok){const result=await cache.json();Object.assign(cached,result.entries||{});}
+          if(cache.ok){
+            const result=await cache.json();
+            Object.assign(cached,result.entries||{});
+            for(const [id,entry] of Object.entries(result.entries||{}))
+              root.MorphorumThumbnails?.set?.(id,entry);
+          }
         }catch(_){/* Civitai caching disabled or unavailable: local LoRAs still usable. */}
       }
       if(draft()?.snapshot.projectId!==contextId)return;
