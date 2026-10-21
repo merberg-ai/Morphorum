@@ -126,50 +126,80 @@ def sync_metadata(model_id: str, *, client: httpx.Client | None = None):
               "sha256": identity["sha256"],
               "synced_at": datetime.now(timezone.utc).isoformat(),
               "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
-    # Image previews are remote content and are only fetched following this explicit action.
+    # Keep a verified older preview when resyncing this exact file/version,
+    # even if today's Civitai image CDN is unavailable.
+    previous = _read(model_id)
+    if (previous.get("synced") and previous.get("sha256") == identity["sha256"]
+            and previous.get("version_id") == identity["version_id"]):
+        filename = previous.get("preview")
+        if filename in {"preview.jpg", "preview.png", "preview.webp"} and (
+                _directory(model_id) / filename).is_file():
+            result["preview"] = filename
+            result["preview_allowed_mature"] = previous.get("preview_allowed_mature", False)
+
+    # All remote downloads remain explicitly user-triggered and image-only.
     if cfg.get("load_previews", True) and version.get("images"):
-        url = version["images"][0]["url"]
-        hostname = urlsplit(url).hostname or ""
-        if urlsplit(url).scheme == "https" and (hostname == "image.civitai.com" or hostname.endswith(".civitai.com")):
-            owned = client is None
-            if owned:
-                client = httpx.Client(timeout=15, follow_redirects=False, trust_env=False)
-            try:
-                with client.stream("GET", url) as response:
-                    if response.status_code == 200 and response.headers.get("content-type", "").lower().split(";")[0] in ("image/jpeg", "image/png", "image/webp"):
-                        chunks, count = [], 0
+        owned = client is None
+        candidates = version["images"][:3]
+        if owned:
+            client = httpx.Client(timeout=15, follow_redirects=False, trust_env=False)
+        try:
+            for image in candidates:
+                url = image.get("url") if isinstance(image, dict) else ""
+                try:
+                    parsed = urlsplit(url)
+                    host = (parsed.hostname or "").lower()
+                except ValueError:
+                    continue
+                if parsed.scheme != "https" or (
+                        host != "image.civitai.com" and not host.endswith(".civitai.com")):
+                    continue
+                try:
+                    with client.stream("GET", url) as response:
+                        media = response.headers.get("content-type", "").lower().split(";")[0].strip()
+                        if response.status_code != 200 or media not in (
+                                "image/jpeg", "image/png", "image/webp"):
+                            continue
+                        chunks, count, oversized = [], 0, False
                         for chunk in response.iter_bytes():
                             count += len(chunk)
                             if count > MAX_IMAGE:
-                                raise CivitaiSearchError("Preview exceeds 4 MiB limit.", 502)
+                                oversized = True
+                                break
                             chunks.append(chunk)
+                        if oversized:
+                            result["preview_warning"] = "Civitai preview exceeded 4 MiB."
+                            continue
                         data = b"".join(chunks)
-                        media_type = response.headers["content-type"].lower().split(";")[0]
-                        valid_image = (
-                            (media_type == "image/jpeg" and data.startswith(b"\\xff\\xd8\\xff")) or
-                            (media_type == "image/png" and data.startswith(b"\\x89PNG\\r\\n\\x1a\\n")) or
-                            (media_type == "image/webp" and data.startswith(b"RIFF") and data[8:12] == b"WEBP")
-                        )
-                        if not valid_image:
-                            result["preview_warning"] = "Civitai returned an invalid preview image."
-                        else:
-                            ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[media_type]
-                            directory = _directory(model_id)
-                            directory.mkdir(parents=True, exist_ok=True)
-                            preview = directory / ("preview" + ext)
-                            fd, temporary = tempfile.mkstemp(prefix=".preview-", dir=str(directory))
-                            try:
-                                with os.fdopen(fd, "wb") as output:
-                                    output.write(data)
-                                os.replace(temporary, preview)
-                            finally:
-                                Path(temporary).unlink(missing_ok=True)
-                            result["preview"] = preview.name
-                            result["preview_allowed_mature"] = bool(cfg.get("allow_mature", False))
-            except httpx.RequestError:
-                result["preview_warning"] = "Preview download unavailable."
-            finally:
-                if owned: client.close()
+                    valid = (
+                        (media == "image/jpeg" and data.startswith(b"\\xff\\xd8\\xff")) or
+                        (media == "image/png" and data.startswith(b"\\x89PNG\\r\\n\\x1a\\n")) or
+                        (media == "image/webp" and data.startswith(b"RIFF") and data[8:12] == b"WEBP")
+                    )
+                    if not valid:
+                        result["preview_warning"] = "Civitai returned an invalid preview."
+                        continue
+                    ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[media]
+                    directory = _directory(model_id)
+                    directory.mkdir(parents=True, exist_ok=True)
+                    preview = directory / ("preview" + ext)
+                    fd, temporary = tempfile.mkstemp(prefix=".preview-", dir=str(directory))
+                    try:
+                        with os.fdopen(fd, "wb") as output:
+                            output.write(data)
+                        os.replace(temporary, preview)
+                    finally:
+                        Path(temporary).unlink(missing_ok=True)
+                    result["preview"] = preview.name
+                    result["preview_allowed_mature"] = bool(
+                        detail.get("mature") or image.get("mature"))
+                    result.pop("preview_warning", None)
+                    break
+                except (httpx.RequestError, httpx.TimeoutException):
+                    result["preview_warning"] = "Civitai preview download unavailable."
+        finally:
+            if owned:
+                client.close()
     latest = Path(record["path"]).stat()
     if latest.st_size != stat.st_size or latest.st_mtime_ns != stat.st_mtime_ns:
         raise CivitaiSearchError("Model file changed during synchronization; cache not committed.", 409)
