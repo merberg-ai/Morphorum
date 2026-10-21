@@ -1,6 +1,8 @@
-# Z-Image single-file checkpoint support roadmap (dev-webui)
+# Z-Image standalone checkpoint research roadmap
 
-Status: **Owner-tested Windows acceptance through Z2.20c3c4 (experimental, non-loadable). Z2.20c3c5 PNG smoke-test implementation planned but not coded.** Managed Z-Image runtime remains the only supported Z-Image generation path; `main` remains unchanged.
+**Publication note (2026-10-21):** This historical development roadmap is now available in published `main` documentation, but it **does not enable standalone Z-Image checkpoint generation**. The latest confirmed Windows research checkpoint is still Z2.20c3c4 (experimental, non-loadable); Z2.20c3c5 diagnostic PNG work is planned, not implemented. Production Z-Image generation continues to use the managed full Diffusers package. References below to the original `dev-webui` research branch, protected checkpoints, or keeping `main` unchanged are milestone-specific and do not imply the research loader was released. See [Current Status](CURRENT_STATUS.md).
+
+Status: **Owner-tested Windows acceptance through Z2.20c3c4 (experimental, non-loadable). Z2.20c3c5 PNG smoke-test implementation planned but not coded.**
 
 
 ## Current checkpoint: Z2.20c3c4 owner-verified (2026-10-18)

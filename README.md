@@ -79,7 +79,7 @@ The main navigation offers **Project Manager**, **New Project**, and **Project E
 
 **Release/testing note (October 2026):** Windows owner testing has confirmed successful animation generation and an MP4 with audio, plus acceptance of the G5 SDXL integration milestone (samplers and schedules, chunked prompt conditioning, LoRA verification, and diagnostics). Dedicated physical mobile acceptance is deferred, and remaining P5 work is tracked separately. This remains alpha software. See [SDXL generation](docs/SDXL_GENERATION.md) and [testing history](docs/TESTING.md).
 
-## Improved local Models & LoRA artwork (dev-webui)
+## Local Models & LoRA artwork (available on main)
 
 After explicitly synchronizing a verified installed checkpoint or LoRA using
 **Sync Civitai Info**, Morphorum keeps available Civitai still-image thumbnails
@@ -97,7 +97,7 @@ must be enabled and its thumbnail/mature-content preferences still apply.
 | Feature | What it provides |
 | --- | --- |
 | Image Generation | Text-to-image and supported image-to-image generation, model-aware presets, seeds, batches and progress; SDXL sampler/schedule controls, long positive/negative prompt chunking and conditioning diagnostics |
-| Models & LoRAs | Managed Z-Image-Turbo installation, external SDXL/FLUX folders, model-aware LoRA discovery, SDXL adapter integrity checks and verification status |
+| Models & LoRAs | Managed Z-Image-Turbo installation, external SDXL/FLUX folders, model-aware LoRA discovery, SDXL adapter integrity checks, explicit Civitai metadata/thumbnail sync and responsive cached preview cards |
 | First-Run Setup Wizard | Seven guided installation checks, optional Z-Image download, and two short 3D starter projects |
 | New Project Wizard | Seven guided pages from naming and model selection to motion, prompts and saving |
 | Motion Lab | Camera authoring, read-only project overview, guided preview/apply/save/render/export flow, six-axis composer, live recording, curves and previews |
@@ -106,7 +106,7 @@ must be enabled and its thumbnail/mature-content preferences still apply.
 | FFmpeg Manager | Auto-detect host FFmpeg/FFprobe, choose a custom executable, or opt in to a verified local managed download, update and removal |
 | Project transfer & duplication | Verified ZIP export/import of full project settings and attached input media; explicit overwrite confirmation and recoverable Trash backup; Save Project As from Manager or Editor |
 | Import Motion Settings | Compatible Deforum Motion Studio camera schedules, optional soundtrack attachment |
-| Interface | Responsive browser layout, built-in console and telemetry, themes: **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite** |
+| Interface | Responsive browser layout, built-in console and telemetry, About page with project credits and current-branch update checks, themes: **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite** |
 
 ### Video encoding: FFmpeg Manager
 
@@ -150,6 +150,8 @@ The usual launcher provides both a **web interface and generation API**, typical
 - **[Backend-only mode](docs/BACKEND_ONLY.md)**: LAN setup, per-client credentials, connection checks, security
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)**: installer, model, CUDA, networking and export problems
 - **[Documentation index](docs/README.md)**: all maintained user and contributor guides
+- **[Planned Prompt Studio](docs/PROMPT_STUDIO_ROADMAP.md)**: PS0–PS9 design, including required audio-to-storyboard synchronization; **not implemented**
+- **[Planned Parseq URL integration](docs/PARSEQ_URL_INTEGRATION_ROADMAP.md)**: PQ0–PQ7 hosted JSON workflow; **not implemented**
 
 ## About & built-in updater
 
@@ -158,6 +160,8 @@ The **About** page (desktop navigation, or **More → About** on mobile) introdu
 When a clean working copy is behind its remote, **Update current branch** runs the existing backup/rollback installer from a browser on the **host computer only**; remote LAN browsers can check but cannot apply updates because the regular WebUI is unauthenticated. Never update while rendering; restart Morphorum afterward. The About page now includes the optimized blue-and-purple Morphorum skull logo, sized to preserve its full artwork on desktop and mobile.
 
 [About and update safeguards](docs/ABOUT_AND_UPDATES.md)
+
+**Managed Z-Image LoRA stability (merged October 21, 2026):** The corrected Z-Image inference context avoids the previously observed inference-tensor/PEFT adapter error while preserving offloading. The owner verified multiple still generations with and without LoRAs and an animation without recurrence. This is not a claim that every LoRA combination was tested. The separate Z-Image animation continuity investigation (ZT1) remains open in [TODO.MD](TODO.MD).
 
 ## Project information
 

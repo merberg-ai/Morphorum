@@ -49,13 +49,13 @@ Use the [Testing guide](TESTING.md) to run current frontend and backend checks. 
 
 ## Responsive WebUI usability improvements (October 2026)
 
-The development UI adds `assets/ux-polish.css` after the responsive breakpoint styles. The narrow Project and Motion Lab dropdowns are bounded and appear in a positioned overlay above the phone bottom-navigation bar instead of expanding its flex row. The desktop sidebar still uses its original layout. Help is in the left desktop navigation and in the phone More menu. Verify 320, 375, 390, 640, 768, and desktop widths with both menu groups expanded; no horizontal page scroll or hidden controls.
+The published WebUI includes `assets/ux-polish.css` after the responsive breakpoint styles. The narrow Project and Motion Lab dropdowns are bounded and appear in a positioned overlay above the phone bottom-navigation bar instead of expanding its flex row. The desktop sidebar still uses its original layout. Help is in the left desktop navigation and in the phone More menu. Verify 320, 375, 390, 640, 768, and desktop widths with both menu groups expanded; no horizontal page scroll or hidden controls.
 
 The Image Generation pane now includes **Apply Image Settings to Project**, which copies model, width/height, steps, sampler, schedule type, seed, seed mode and seed increment into the **already open Project Editor draft**. It deliberately does **not** copy positive/negative prompts or CFG/guidance. The user must still press **Save Project** in Project Editor; the Image action does not write to disk. The Image generation progress component has been moved without changing its DOM IDs into the Results card, directly above preview content. Both in-progress and history/empty preview must remain readable.
 
 Help is a normal application view, backed by read-only `/api/help/docs` and `/api/help/docs/{name}`, exposing only regular top-level `docs/*.md` files from the installed repository. The client fetches pages in-place and renders a constrained/sanitized subset of Markdown. It makes no remote network request or navigation away from the WebUI; the FastAPI interactive API documentation route at `/docs` remains reserved for its preexisting purpose. This Help browser is a local documentation reader, not a GitHub live sync. Back-end only mode does not expose it.
 
-Tests: `tests/frontend_webui_quick_tweaks.test.cjs`; run alongside existing `frontend_responsive_styles.test.cjs`, `frontend_project_navigation.test.cjs`, and project editor tests. CI and owner phone/Windows acceptance are pending. Changes stay in `dev-webui`; the stable Z-Image c3c4 checkpoint and `main` remain untouched.
+Tests: `tests/frontend_webui_quick_tweaks.test.cjs`; run alongside existing `frontend_responsive_styles.test.cjs`, `frontend_project_navigation.test.cjs`, and project editor tests. These frontend changes were promoted to `main` in [PR #51](https://github.com/merberg-ai/Morphorum/pull/51), with Syntax, Backend and Installer CI passing. Owner accepted the relevant Windows WebUI interactions; dedicated physical phone/zoom acceptance remains deferred. The experimental standalone Z-Image c3c4 research remains non-production.
 
 
 ## Prompt keyframe distribution (owner-accepted)
@@ -73,7 +73,7 @@ Motion Lab's `#motion-lab-sidebar` buttons previously received their custom styl
 
 On compact and coarse-pointer layouts, selecting a **Project** or **Motion Lab** submenu destination now navigates to the requested workspace and then closes both nav popups. The menu toggles' `aria-expanded` attributes return to `false`, keeping the underlying editor unobstructed. On wide fine-pointer desktops the sidebar remains open as before. Both behaviors are covered by the WebUI regression suite.
 
-## Civitai artwork in local model managers (dev-webui)
+## Civitai artwork in local model managers (published main)
 
 The installed **Models** library uses an auto-fitting card grid in place of
 dense rows. Each card keeps its selection checkbox, thumbnail or NO PREVIEW
@@ -86,5 +86,7 @@ with miniature images in the selector and a larger fitted preview above Quick
 Use. On tablet/phone the detail stack remains single-column. Cache images are
 loaded with native lazy loading and use only the local preview endpoint.
 The selected adapter, prompt snippets and runtime diagnostics remain unchanged.
-Verify mobile click targets, disabled Civitai Hub behavior, 320px layouts and
-long filenames before merging. Regression: `frontend_cached_art.test.cjs`.
+The owner confirmed cached thumbnails appearing after sync; this does not
+certify every phone-width, maturity-filter or CDN-failure edge case. Continue
+testing mobile click targets, disabled Civitai Hub behavior, 320px layouts and
+long filenames. Regression: `tests/frontend_cached_art.test.cjs`.

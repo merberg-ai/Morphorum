@@ -1,12 +1,19 @@
-# Combined WebUI polish acceptance: P2.5–P3.3
+# Combined WebUI polish acceptance: P2.5–P3.3 (historical)
 
+> **Release reconciliation (2026-10-21):** These changes are present in
+> published `main`, following later acceptance and promotion. Historical
+> "do not merge" language and unmarked tests below refer to earlier
+> development gates. The owner reported combined Windows acceptance, but
+> dedicated mobile/device-width checks were not individually verified.
+>
 > **Milestone acceptance recorded · 2026-10-16.** The user reported testing
 > the changes through P3.3 and said they are working as expected. The
 > development head was `50101b146c3d502a61a59caba0f037438632268e`,
 > with frontend/backend CI passing. This is a **user-reported combined PASS**,
 > not independent verification that every checklist item and device size
 > below was tested. Unspecified checks remain unchecked for traceability.
-> **Do not merge to `main` without explicit authorization.**
+> **Historical gate only:** merge required authorization at that time;
+> the subsequent approved promotion is complete.
 
 Use the dedicated Windows test installation with a backed-up/sacrificial
 animation project. Do not intentionally corrupt primary model folders,
@@ -94,8 +101,9 @@ Do not share credentials or private filesystem contents.
 
 **Gate update (2026-10-16):** User-reported combined acceptance now covers
 P2.5–P3.3. Unreported device/edge-case checks remain unverified.
-Additional development may occur on `dev-webui`; the merge to `main`
-still requires separate, explicit authorization.
+Further work may continue on `dev-webui`; the original merge gate was
+subsequently satisfied. This checklist remains relevant for any deferred
+physical device/edge-case verification.
 
 ## P3.2: Models, Settings, LoRA Manager, Image Results
 

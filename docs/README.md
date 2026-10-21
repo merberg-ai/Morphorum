@@ -18,6 +18,9 @@ Welcome! You do not need to know Python or Git to use Morphorum. Start with the 
 | **[Troubleshooting](TROUBLESHOOTING.md)** | Fix browser, installer, model, CUDA, LAN, project and video problems |
 | **[SDXL generation](SDXL_GENERATION.md)** | Select SDXL samplers/schedules; understand chunked CLIP prompts, LoRA integrity and render diagnostics |
 | **[G5 release acceptance history](G5_RELEASE_ACCEPTANCE.md)** | Owner acceptance summary and reusable Windows SDXL regression checklist (not required for normal users) |
+| **[About & branch updates](ABOUT_AND_UPDATES.md)** | Project credits/logo, current Git branch/commit, host-only guarded updates and LAN restrictions |
+
+The October 21, 2026 [main promotion (PR #51)](https://github.com/merberg-ai/Morphorum/pull/51) includes the About/update page, locally cached Civitai model/LoRA previews and the managed Z-Image LoRA stability fix. The dedicated [release details](CURRENT_STATUS.md#october-21-2026-promotion-to-main) distinguish Windows user testing from automated CI; Prompt Studio and Parseq are still roadmap-only.
 
 Project Manager, New Project Wizard and Project Editor are direct main-menu destinations. Motion Lab Overview provides a read-only project summary and guided Preview → Apply → Save → Render → Export navigation. Older renders do not automatically acquire newly attached audio. See [current features and limitations](CURRENT_STATUS.md) for testing boundaries.
 

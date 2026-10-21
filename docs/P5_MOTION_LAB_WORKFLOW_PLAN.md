@@ -1,13 +1,12 @@
-# P5 · Motion Lab Workflow Clarity
+# P5 · Motion Lab Workflow Clarity (milestone plan/history)
 
-**Branch:** `dev-webui`  
-**Status:** P5.1 initial frontend implementation committed on `dev-webui`; Windows physical acceptance and CI pending. P5.2 initial navigation/clarity pass committed, not yet owner accepted. P5.3–P5.5 remain planned.  
-**Prerequisite:** UX5 Windows/GPU owner acceptance and green Syntax, Backend, Installer CI completed. Dedicated mobile physical testing explicitly deferred by owner and is not a P5 start blocker.  
-**Safety:** No merge to `main` without owner approval. Never silently save, overwrite, delete, or replace projects, original audio, generated PNGs, or exported videos.
+**Release reconciliation (2026-10-21):** The P5.1 Overview and P5.2 Preview/Apply/Save workflow improvements described here are on the published `main` branch, and owner feedback led to follow-up fixes. **P5.3–P5.5 are still open**; detailed soundtrack provenance and dedicated phone acceptance have not been marked complete. Historical checkpoints below retain their original unverified states rather than retroactively marking all test cases PASS. See [current status](CURRENT_STATUS.md) and [PR #51](https://github.com/merberg-ai/Morphorum/pull/51).
+
+**Original development branch:** `dev-webui`. **Prerequisite:** UX5 Windows/GPU owner acceptance and green Syntax, Backend, Installer CI completed. Dedicated mobile physical testing was deferred by owner. **Safety:** Never silently save, overwrite, delete, or replace projects, original audio, generated PNGs, or exported videos.
 
 ## Goal
 
-Make the path from an opened project to camera preview, applied camera tracks, full animation render, and soundtrack-inclusive video export understandable without hunting between workspaces. Preserve the existing Motion Studio five-stage workflow and Project Editor's five sections; build on their original controls rather than duplicate them.
+Make the path from an opened project to camera preview, applied camera tracks, full animation render, and soundtrack-inclusive video export understandable without hunting between workspaces. Preserve the existing Motion Studio **six-stage** workflow (including Assign Motion to Beats) and Project Editor's five sections; build on their original controls rather than duplicate them.
 
 ## P5.1 · Project and motion summary
 
@@ -56,7 +55,7 @@ Make the path from an opened project to camera preview, applied camera tracks, f
 
 ## Suggested sequence
 
-P5.1 → Windows checkpoint → P5.2 → Windows checkpoint → P5.3 → Windows checkpoint → P5.4 → combined P5.5 regression. Keep commits small and reversible; `main` remains unchanged.
+Historical plan: P5.1 → Windows checkpoint → P5.2 → Windows checkpoint → P5.3 → Windows checkpoint → P5.4 → combined P5.5 regression. Keep future work small and reversible; P5.1/P5.2 are already published, while P5.3–P5.5 require separate acceptance.
 
 ## P5.1 implementation checkpoint (2026-10-16)
 

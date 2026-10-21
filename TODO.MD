@@ -30,7 +30,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## Z-Image Turbo LoRA stability and animation coherence (reported 2026-10-19)
 
-**Status:** **ZL1 passed / resolved on `dev-webui`** (user physical Windows GPU verification reported 2026-10-20): repeated managed Z-Image single-image generations with and without LoRAs, plus a Z-Image animation, no longer raise the inference-tensor exception. **ZT1 remains open** for animation temporal coherence and has not been modified. No merge to `main` yet.
+**Status:** **ZL1 passed on Windows and released on `main` in PR #51 (2026-10-21)**. The owner reported successful managed Z-Image still generations with and without LoRAs and an animation without the previous inference-tensor exception. The fix preserves managed Z-Image group offloading; [release merge](https://github.com/merberg-ai/Morphorum/pull/51). **ZT1 remains open** for animation temporal coherence and has not been modified.
 
 ### ZL1: Managed Z-Image + LoRA inference stability (bug)
 

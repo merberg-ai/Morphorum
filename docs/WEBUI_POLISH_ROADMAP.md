@@ -1,6 +1,8 @@
-# WebUI polish plan (dev-webui)
+# WebUI polish plan and historical development record
 
-Working development backlog for the next Morphorum polish cycle.
+> **Release reconciliation (2026-10-21):** The completed WebUI improvements described in this historical roadmap are on the published `main` branch. [PR #51](https://github.com/merberg-ai/Morphorum/pull/51) promoted subsequent About, cached-artwork and managed Z-Image LoRA changes after Backend, Syntax and Installer checks passed. P5.3–P5.5 and dedicated physical mobile acceptance remain open; not every unchecked roadmap item is implemented or tested. References below to not merging, future gates and specific historical dev commits describe the status **at the original milestone**, not a current embargo on already-released features. [Current status](CURRENT_STATUS.md) | [Prompt Studio plan](PROMPT_STUDIO_ROADMAP.md).
+
+Original development backlog for Morphorum's polish cycle.
 Preserve projects, models, settings, outputs and render behavior.
 
 **Acceptance update · 2026-10-16:** User reported the combined changes
@@ -10,8 +12,9 @@ Treat P1–P3 as **user-accepted at milestone level**. Exact browser/device
 coverage and individual edge-case checklist items were not separately
 reported; do not fabricate their results. Earlier "deferred/pending"
 notes below document the historical development checkpoint and are
-superseded by this acceptance update. **Do not merge to `main` without
-separate, explicit authorization.** Next development phase: P4.
+superseded by the later acceptance and release history. **At this original
+checkpoint, a separate merge authorization was still required; that release
+gate has since been satisfied.** The next phase at that point was P4.
 
 | Pass | Scope | Acceptance |
 | --- | --- | --- |
@@ -36,8 +39,10 @@ separate, explicit authorization.** Next development phase: P4.
 
 ### UX1 + UX2 · Motion Studio flow and navigation
 
-- [x] Replace the long mixed-card stack with five focused workflow stages:
-  **Load Audio → Analyze WAV → Detect Beats → Create Motion → Preview & Apply**.
+- [x] Originally replaced the long mixed-card stack with five focused stages.
+  **Current shipped workflow adds dedicated Assign Motion to Beats**, making
+  six stages: Load Audio → Analyze WAV → Detect Beats → Assign Motion to Beats
+  → Create Motion → Preview & Apply. See [Motion Studio](MOTION_STUDIO.md).
 - [x] The Create Motion stage offers four authoring modes: **Beat Cues**,
   **Sound Channels**, **Continuous Motion**, and **Single-Band Pulse**.
   Continuous presets remain usable without an audio source.

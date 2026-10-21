@@ -29,7 +29,7 @@ Morphorum runs on your own computer. The browser is only the interface: closing 
 
 ## First-run setup wizard
 
-If this is a **fresh installation**, Morphorum opens a separate seven-step setup wizard when you first visit the WebUI. This is distinct from **Motion Lab → New Project Wizard**, which is for creating ordinary animation projects later.
+If this is a **fresh installation**, Morphorum opens a separate seven-step setup wizard when you first visit the WebUI. This is distinct from **Project → New Project**, which is for creating ordinary animation projects later.
 
 1. Review host diagnostics and the explanation of WebUI (the recommended default) versus authenticated backend-only mode.
 2. Add paths to existing **SDXL** or **FLUX** checkpoint folders on the computer running Morphorum. Check the folders and choose **Save Folders & Scan**. File detection is preliminary, not proof that every model will load.
@@ -81,7 +81,7 @@ Lower resolution, batch size, or the number of competing GPU applications first.
 
 ## 4. Create your first animation with the wizard
 
-The easiest way to start a new animation is **Motion Lab → New Project Wizard**, available in the desktop sidebar or Motion Lab workspace navigation.
+The easiest way to start a new animation is **Project → New Project** in the main desktop/phone navigation.
 
 The wizard has seven guided pages, with explanations and **?** hints beside individual settings:
 
@@ -108,7 +108,7 @@ A fresh installation with no existing projects also includes a **Default** anima
 - Two positive-prompt keyframes with cat/top-hat scenes
 - No model selected until you choose one
 
-Open **Motion Lab → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. The Project Editor explains why controls are locked until a project opens and provides shortcuts to Project Manager and the New Project Wizard. The browser remembers your last opened project when it is still available. Still-image model selection does not automatically select a model for an animation project. For an early GPU test, try fewer frames and a model-supported resolution.
+Open **Project → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. The Project Editor explains why controls are locked until a project opens and provides shortcuts to Project Manager and the New Project Wizard. The browser remembers your last opened project when it is still available. Still-image model selection does not automatically select a model for an animation project. For an early GPU test, try fewer frames and a model-supported resolution.
 
 ### Save, duplicate or move an animation project
 
@@ -202,7 +202,7 @@ checkpoint list until a later successful refresh.
 
 ## Animation checkpoint compatibility
 
-In **Motion Lab → Project Editor**, the **Checkpoint compatibility** panel
+In **Project → Project Editor**, the **Checkpoint compatibility** panel
 shows the indexed model's family and variant, currently selected sampler and
 render size. It compares the settings against the backend's published model
 capabilities. SDXL images must be aligned to 8 pixels; Flux and Z-Image use
@@ -269,9 +269,10 @@ inside the view, and last successfully measured coverage when available.
 The guidance explains which settings to soften. No camera values are
 automatically modified, and no synthetic replacement frames are inserted.
 
-Physical Windows/Android acceptance for P2.5 and P2.6 is bundled for the
-next available test session. Do not merge these development changes to
-main before that acceptance.
+The P2.5/P2.6 features are included in the published `main` branch. The
+owner reported combined Windows acceptance through P3.3 on October 16, 2026;
+specific camera edge cases and physical Android checks were not individually
+recorded. See [Testing](TESTING.md) for what remains unverified.
 
 ## Responsive Render Monitor controls (P3.1)
 
@@ -280,8 +281,8 @@ controls wrap on desktop; at phone widths they reorganize into a grid, with
 **Check Render** and **Render Animation** in full-width rows. On particularly
 narrow screens each control receives its own row. The preflight issue list,
 **Fix in Editor** button and 3D motion-safety guidance also wrap rather than
-requiring a horizontal page scroll. Actual device and browser-zoom acceptance
-is postponed to the combined physical test pass.
+requiring a horizontal page scroll. Combined Windows user acceptance was reported, but individual phone widths
+and browser zoom levels were not separately certified.
 
 ## Responsive Models, Settings, LoRAs and Image Results (P3.2)
 
@@ -305,8 +306,9 @@ frame scrubber for precise edits. Motion Curves, 3D Camera and Inspector
 inputs, charts, dialogs and action buttons wrap to the available space.
 Deforum Import keeps long mapping values inside its vertically scrollable
 dialog. None of these responsive changes modifies project settings.
-Physical Windows/Android acceptance through P3.3 is included in the
-combined test plan and still pending.
+The owner reported combined Windows acceptance through P3.3. Dedicated
+physical Android and individual zoom/width test outcomes remain deferred;
+see the historical [combined test checklist](COMBINED_POLISH_TEST_PLAN.md).
 
 ## Operation feedback (P4.1)
 
@@ -338,3 +340,28 @@ warnings, blocking errors and queue submission without inventing a GPU
 ETA. Detailed diffusion/frame metrics remain in **Render Monitor**.
 A queued render remains queued even if refreshing its history fails.
 The operation notice is dismissible and does not cancel background work.
+
+## About, local Civitai previews and updating the current branch
+
+**About** (desktop sidebar or phone **More → About**) shows the Morphorum logo,
+credits, Git branch/commit, repository link and a branch-specific **Check for
+updates** action. Applying an update through the page is allowed only from
+a browser running on the Morphorum host, not a remote LAN client; updates
+require a clean checkout and restart. See [About and updates](ABOUT_AND_UPDATES.md).
+
+In **Models** and **LoRAs**, explicitly use **Sync Civitai Info** on an
+identified local model/LoRA to cache available Civitai text metadata, trigger
+words and eligible still-image thumbnails. Reopening managers uses the local
+cache, not an automatic Civitai request. A **NO PREVIEW** placeholder means
+that no usable artwork is available or allowed for that model; see
+[Civitai guide](CIVITAI_MODEL_HUB.md#c51-no-preview-after-successful-metadata-sync)
+for diagnostic states. The Hub remains opt-in and disabled by default.
+
+The October 21, 2026 update also includes the owner-tested managed Z-Image
+LoRA stability fix. If an older installed version shows the inference-tensor
+error with a Z-Image LoRA, update the **currently checked-out branch** and
+restart Morphorum before reproducing it. The separate ZT1 continuity issue
+is still being investigated in [TODO.MD](../TODO.MD).
+
+[Prompt Studio](PROMPT_STUDIO_ROADMAP.md) and [Parseq URL integration](PARSEQ_URL_INTEGRATION_ROADMAP.md)
+are **planned**, not currently available as production workspaces.

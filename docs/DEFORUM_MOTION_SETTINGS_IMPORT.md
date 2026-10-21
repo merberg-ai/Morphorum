@@ -4,7 +4,7 @@ Morphorum can import **3D six-axis camera schedules** from a Deforum Motion Stud
 
 ## Import into an existing project
 
-1. Open **Motion Lab → Project Manager**, select or create a **3D** project, and save any unsaved editor changes.
+1. Open **Project → Project Manager**, select or create a **3D** project, and save any unsaved editor changes.
 2. Open **Motion Lab → Import Motion Settings** on desktop or in the Motion Lab workspace navigation.
 3. Choose the Deforum `.txt` or `.json` export. Review the source FPS, frame count, cadence, duration, six-axis graphs and any compatibility warnings. This preview **does not modify** the project.
 4. Select **Deforum compatible** camera conversion (default), or **Raw source values** for comparison. Adjust the separate **Translation strength** and **Rotation strength** sliders/percentage inputs from **0% to 400%**. **Reset 100%** restores the initial conversion baseline; **Tested 200%** recalls a working experimental setting, not a universal optimum.

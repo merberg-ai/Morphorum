@@ -130,7 +130,7 @@ Use the command only after stopping an already-running server. The option is inc
 1. Open **Models**.
 2. Download managed **Z-Image-Turbo** (approximately 33 GB), then choose **Use Model**, **or** specify your existing SDXL/FLUX folders in **Settings**, scan and select an available checkpoint.
 3. Use **Image Generation** to make one modest-resolution test image.
-4. For animation, choose the first-run Dolly In/Out example or **Motion Lab → New Project Wizard**.
+4. For animation, choose the first-run Dolly In/Out example or **Project → New Project**.
 
 A new installation with no saved projects may include the **Default** example animation: 120 frames at 24 FPS. It does not automatically have a model assigned, and a full 1024 × 1024 animation is not the best first GPU test.
 

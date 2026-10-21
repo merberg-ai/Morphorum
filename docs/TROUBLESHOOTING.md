@@ -65,7 +65,7 @@ Starting with `run.bat` or `./run.sh` permits local host access only. To use ano
 - **Z-Image transfer still active:** **Not Now** continues onboarding; interrupted files are incomplete, not a usable model. Resume/retry when space and network are available. The full package is about 33 GB plus a disk reserve.
 - **Example Animations cannot advance:** The catalog and model index may still be loading or unavailable. Refresh/reopen setup and inspect **Console**. If your selected checkpoint disappeared, choose another or **No model yet**.
 - **Project saved but the Editor did not open:** Resolve any unsaved-editor prompt or ongoing render/recording, then retry. The same project ID is reused without overwriting your changes.
-- **Finish Without Example:** Finishes onboarding with no model or render required. Create a normal project later through **Motion Lab → New Project Wizard**.
+- **Finish Without Example:** Finishes onboarding with no model or render required. Create a normal project later through **Project → New Project**.
 - **Backend-only:** Has no browser wizard. Do not combine `--setup-wizard` and `--backend-only`.
 
 If the saved setup-state JSON is corrupted, preserve a backup for diagnostics rather than deleting it or user projects.
@@ -77,6 +77,16 @@ If the saved setup-state JSON is corrupted, preserve a backup for diagnostics ra
 - Only supported model families can be loaded. The current runtime supports **SDXL**, **FLUX**, and **Z-Image**, not SD 1.x/2.x.
 - If you downloaded managed Z-Image-Turbo, wait for it to show **Installed** and **Use Model**.
 - Check that the model matches the intended family and file format.
+
+## Civitai model or LoRA thumbnail still says NO PREVIEW
+
+1. Confirm **Settings → Civitai Hub** is enabled, and **Load Previews** is on. Preview downloads are explicit, not background jobs.
+2. Use **Identify on Civitai** if necessary, then **Sync Civitai Info** for the installed checkpoint or LoRA. Metadata success alone does not mean an image was downloaded.
+3. Reopen **Models** or **LoRAs**. Their thumbnail cards use the local cache; they do not fetch images merely because the panel was opened.
+4. Check the displayed state: **PREVIEWS OFF** means the preference is disabled, **PREVIEW HIDDEN** means mature-content filtering, **CACHE MISSING / IMAGE LOAD FAILED** means missing or unreadable cached artwork, and **NO IMAGE AVAILABLE** means there was no eligible still or an upstream/CDN fetch failed.
+5. If the installed version has no example still, a clearly labeled representative preview from another version of the same SHA-verified Civitai model may be used. Never assume its example image was generated with your exact checkpoint version.
+
+See the [Civitai synchronization and diagnostics guide](CIVITAI_MODEL_HUB.md#c51-no-preview-after-successful-metadata-sync). If you still see older behavior after the October 21 release, stop Morphorum, update your **current branch**, restart it and retry. Do not delete checkpoints or LoRA files to fix a missing preview.
 
 ## "No generation models available" banner stays visible
 
@@ -92,7 +102,7 @@ The warning automatically disappears once the model index contains a usable chec
 
 ## New Project Wizard will not advance or save
 
-Open **Motion Lab → New Project Wizard** and check the message on the current step.
+Open **Project → New Project** and check the message on the current step.
 
 - **Step 1:** The project must have a nonempty name (up to 120 characters).
 - **Step 2:** Select an available generation checkpoint. Use **Refresh Models** after scanning, or open **Models / Download** or **Settings** from the wizard.
@@ -113,6 +123,10 @@ Open **Motion Lab → New Project Wizard** and check the message on the current 
 - Never delete or replace your entire `projects/` or `outputs/` directory while fixing a model download.
 
 The source package is published at [Tongyi-MAI/Z-Image-Turbo on Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo).
+
+## Managed Z-Image Turbo generation with a LoRA fails with an inference-tensor error
+
+On builds before the October 21, 2026 promotion, repeated Z-Image Turbo generations or animation with a LoRA could raise `Setting requires_grad=True on inference tensor outside InferenceMode is not allowed.` The fix now shipped on `main` uses the corrected managed Z-Image inference context while retaining model offloading. **Stop the server, update the checked-out branch and restart** before retrying with the same settings. The owner verified multiple still generations and an animation; this does not prove every LoRA setup is covered. If the exception still occurs, record the first complete traceback, model, LoRA name/weight and whether the same render succeeds without the LoRA, while excluding private paths and tokens. Do not solve it by forcing all managed model weights into limited GPU VRAM. See [TODO.MD](../TODO.MD) for the separate still-open ZT1 temporal-continuity investigation.
 
 ## CUDA is unavailable, or generation runs on the CPU
 
@@ -247,7 +261,7 @@ does not ask for administrator privileges.
 
 ## Project is missing or was moved to Trash
 
-Look under **Motion Lab → Project Manager**. The manager lists projects from the application-managed `projects/` directory.
+Look under **Project → Project Manager**. The manager lists projects from the application-managed `projects/` directory.
 
 - Moving a project to Trash relocates its managed files to the project's `.trash` area; it is **not** an automatic restore-button workflow.
 - Separately stored completed renders and exports are not removed by moving a project to Trash.
