@@ -59,3 +59,19 @@ PS3 adds **Structured Prompt Composer** above the PS2 timeline on `dev-webui`.
 8. Check SDXL/FLUX/Z-Image generation separately if testing actual LoRA behavior. An indexed-family label and Civitai trigger metadata are informative, not proof the LoRA applies correctly in the renderer.
 
 No AI provider is part of PS3. That remains the separate PS4 work.
+
+## PS4 AI Story Director acceptance (dev-webui, Windows + Android)
+
+**Prerequisite:** A local Ollama server with at least one installed text-capable model. `http://127.0.0.1:11434` is the default Ollama endpoint **on the Morphorum host**, not on the Android phone. For a different LAN computer, enter its numeric private IP address (for example `http://192.168.1.20:11434`) and explicitly tick **Allow my trusted private LAN IP**. Ollama must be configured by its owner to listen on that interface; do not expose Ollama to the public internet. The connection accepts no credentials and never fetches model weights.
+
+1. Open a project, import prompts into Studio, then **Test Connection / Models** in the AI Story Director. Select an installed Ollama model. If it has poor JSON-format support, choose a model that follows strict structured-output instructions reliably.
+2. In **Create storyboard**, enter a story, select 3–5 scenes and Generate. Frame positions must be deterministic, starting at 0, within `max_frames`. The proposed scene text must appear in a before/after panel. Studio timeline and Project Editor must still be unchanged.
+3. **Discard Proposal** and verify nothing changed. Generate again, **Accept into Studio Draft**, confirm, then inspect the timeline and Undo/Redo. Save Draft and reload to verify the accepted AI prompts and model/time provenance survived.
+4. Try **Refine existing positive keyframes**. Native frame positions must remain identical; existing literal LoRA tags should survive exactly, although the generated refinement reports their placement at the beginning of each revised prompt. Check that unrelated negative prompts/keyframes remain unchanged.
+5. Enable **Also generate negative prompts** only when you intend to replace the negative track. Review the negative-lane diff carefully before accepting.
+6. Test a wrong Ollama port, offline host, uninstalled model and a model returning invalid JSON; errors should be visible, with no changes to the Studio draft. Cancel a long request, then edit the draft: the old response must never be accepted.
+7. Check LAN restrictions: private host without the opt-in should be rejected. Public/DNS endpoints, `https://`, credentials, URL paths and redirects must fail.
+8. Verify ordinary Studio **Preview Changes → Apply to Animation → Save Project**, followed by project reload and a small SDXL/Z-Image test render. PS3 composer, PS2 undo/redo, and persistent ZIP/Save As should continue to work.
+9. On Android, verify connection fields, story editor, proposal diff, cancel and confirmation buttons work without horizontal overflow. No image/audio assets are transmitted to the LLM in PS4.
+
+**Important:** AI authoring can consume your local Ollama computer's GPU/VRAM. With an RTX 4080 SUPER 16 GB, avoid concurrent large Ollama models and diffusion renders. The Ollama request sends `keep_alive:0` to encourage model unloading after inference, but this does not forcibly evict all Ollama resources. Model-family prompt optimization and optional vision description come in PS5; audio-to-storyboard synchronization is still planned for PS6.

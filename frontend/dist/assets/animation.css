@@ -4394,3 +4394,36 @@ dialog#animation-deforum-dialog {
 .ps3-warning{color:var(--warning,#f0b15f);font-size:.82rem}
 @media(max-width:680px){.ps3-block{grid-template-columns:minmax(0,1fr)}.ps3-block-editor{grid-template-columns:minmax(0,1fr)}
 .ps3-block-controls button{min-height:42px}.ps3-actions button{flex:1 1 140px;min-height:44px}.ps3-lora-controls{grid-template-columns:minmax(0,1fr)}}
+
+/* PS4: Ollama storyboard director, isolated local/LAN authoring workspace. */
+.ps4-workspace{min-width:0;margin:1rem 0}
+.ps4-director{border:1px solid var(--border);border-radius:12px;padding:clamp(.75rem,1.7vw,1.1rem);min-width:0}
+.ps4-head{display:flex;flex-wrap:wrap;align-items:start;justify-content:space-between;gap:.7rem}
+.ps4-head h3{margin:0 0 .4rem}
+.ps4-head p{font-size:.86rem;max-width:80ch;line-height:1.5;margin:.2rem 0 .65rem}
+.ps4-provider{font-size:.78rem;border:1px solid var(--border);border-radius:10px;padding:.3rem .6rem}
+.ps4-settings,.ps4-options{display:flex;align-items:end;gap:.7rem;flex-wrap:wrap;margin:.85rem 0}
+.ps4-settings label,.ps4-options label{display:flex;flex:1 1 200px;min-width:0;flex-direction:column;gap:.3rem;font-size:.83rem}
+.ps4-settings label:first-child{flex:2 1 270px}
+.ps4-settings input,.ps4-settings select,.ps4-options select,.ps4-options input{width:100%;min-width:0;max-width:100%}
+.ps4-settings .ps4-lan,.ps4-options .ps4-negatives{flex:1 1 255px;display:flex;flex-direction:row;align-items:center;gap:.45rem;line-height:1.45}
+.ps4-settings input[type=checkbox],.ps4-options input[type=checkbox]{width:auto;flex:none}
+.ps4-settings button{min-height:40px}
+.ps4-story>label{display:flex;flex-direction:column;gap:.35rem;font-size:.84rem}
+.ps4-story textarea{width:100%;min-width:0;max-width:100%;resize:vertical;font:inherit;min-height:120px}
+.ps4-options input[type=number]{max-width:105px}
+.ps4-privacy{font-size:.79rem;line-height:1.6}
+.ps4-actions{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
+.ps4-actions button{min-height:40px}
+.ps4-status{font-size:.84rem;border-left:3px solid var(--accent,#57bfec);padding:.55rem .7rem}
+.ps4-status[data-error="1"]{border-left-color:var(--warning,#f0b15f)}
+.ps4-review{border-top:1px solid var(--border);padding-top:.8rem;margin-top:.8rem;min-width:0}
+.ps4-review h4{margin:0 0 .35rem}
+.ps4-review details{padding:.6rem 0;border-bottom:1px solid var(--border)}
+.ps4-review summary{cursor:pointer}
+.ps4-review pre{font-family:inherit;font-size:.82rem;white-space:pre-wrap;overflow-wrap:anywhere;max-height:230px;overflow:auto}
+.ps4-warning{font-size:.83rem;color:var(--warning,#f0b15f)}
+@media(max-width:600px){
+ .ps4-settings label,.ps4-options label{flex-basis:100%}
+ .ps4-settings button,.ps4-actions button{min-height:44px;flex:1 1 150px}
+}
