@@ -12500,6 +12500,7 @@
 
   window.MorphorumAnimation = {
     getPromptStudioEditorSnapshot,
+    getPromptStudioProjectId: () => state.project?.id || '',
     previewPromptStudioTransfer,
     applyPromptStudioTransfer,
     applyImageSettingsToProject,

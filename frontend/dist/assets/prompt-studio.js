@@ -69,10 +69,59 @@
     }
     return changes;
   }
+
+  // PS1.4 draft format is independent of ephemeral Editor revision/ETag.
+  function serializeDraft(draft,name,bridge) {
+    if(!draft?.ok) return problem('NO_DRAFT','Import or load a draft before saving.');
+    const title=String(name||'').trim();
+    if(!title || title.length>120) return problem('INVALID_NAME','Enter a draft name (1–120 characters).');
+    const frames=Number(draft.snapshot?.context?.maxFrames);
+    const original=bridge.validateTracks(draft.original,frames);
+    const edited=bridge.validateTracks(draft.tracks,frames);
+    if(!original.ok)return original;
+    if(!edited.ok)return edited;
+    const context=draft.snapshot.context;
+    return {ok:true,record:{
+      format:'morphorum.prompt-studio-draft',schema_version:1,
+      project_id:draft.snapshot.projectId,name:title,
+      project_context:{model:clone(context.model),max_frames:frames,fps:Number(context.fps),
+        start_mode:context.startMode||'prompt',source_image_name:context.sourceImageName||''},
+      original_tracks:original.tracks,prompt_tracks:edited.tracks
+    }};
+  }
+  function restoreDraft(saved,live,bridge) {
+    if(!saved||saved.format!=='morphorum.prompt-studio-draft'||saved.schema_version!==1)
+      return problem('INVALID_DRAFT','Unrecognized saved Studio draft.');
+    if(!saved.project_id||!saved.project_context)
+      return problem('INVALID_DRAFT','Saved project reference is missing.');
+    const original=bridge.validateTracks(saved.original_tracks,saved.project_context.max_frames);
+    const edited=bridge.validateTracks(saved.prompt_tracks,saved.project_context.max_frames);
+    if(!original.ok)return original;
+    if(!edited.ok)return edited;
+    const model=(record)=>JSON.stringify([
+      record?.model?.model_id||'',record?.model?.family||'',record?.model?.variant||'']);
+    const expected=saved.project_context,actual=live?.context;
+    const compatible=Boolean(live?.ok&&live.projectId===saved.project_id &&
+      Number(expected.max_frames)===Number(actual.maxFrames) &&
+      Number(expected.fps)===Number(actual.fps) &&
+      model(expected)===model(actual) &&
+      (expected.start_mode||'prompt')===(actual.startMode||'prompt') &&
+      (expected.source_image_name||'')===(actual.sourceImageName||'') &&
+      JSON.stringify(original.tracks)===JSON.stringify(live.promptTracks));
+    const snapshot=compatible?clone(live):{
+      ok:false,projectId:saved.project_id,
+      context:{name:saved.name,model:clone(expected.model),maxFrames:expected.max_frames,
+        fps:expected.fps,startMode:expected.start_mode,sourceImageName:expected.source_image_name}
+    };
+    return {ok:true,original:original.tracks,tracks:edited.tracks,
+      snapshot,revision:0,applied:false,compatible};
+  }
   function mount({panel,onEditor}={}) {
     if(!panel) throw new Error('Prompt Studio panel is required.');
     const bridge=root.MorphorumPromptStudioBridge;
     let draft=null,busy=false,invalid=false,previewedRevision=-1,blocked=false;
+    let baselineBlocked=false,savedId='',savedEtag='',savedRevision=-1;
+    let shownProjectId='',libraryEntries=[];
     const dom=document.createElement('article');
     dom.className='card glass ps13-workspace';
     dom.innerHTML=`
@@ -88,8 +137,25 @@
         <button class="secondary-button compact" type="button" data-ps="preview" disabled>Preview Changes</button>
         <button class="primary-button compact" type="button" data-ps="apply" disabled>Apply to Animation</button>
       </div>
+      <section class="ps14-library" aria-label="Saved Prompt Studio drafts">
+        <div class="ps14-library-heading"><strong>Saved drafts</strong>
+          <span class="muted">Stored in this project; included in its verified ZIP / Save As copy</span></div>
+        <div class="ps14-library-controls">
+          <label>Saved draft <select data-ps="saved" aria-label="Saved Prompt Studio draft">
+            <option value="">No drafts loaded</option></select></label>
+          <button class="secondary-button compact" type="button" data-ps="load">Load Draft</button>
+          <button class="secondary-button compact" type="button" data-ps="refresh">Refresh List</button>
+          <button class="secondary-button compact" type="button" data-ps="delete">Delete Draft</button>
+        </div>
+        <div class="ps14-library-controls">
+          <label>Draft name <input data-ps="name" type="text" maxlength="120" placeholder="Storyboard draft"></label>
+          <button class="primary-button compact" type="button" data-ps="save">Save Draft</button>
+          <button class="secondary-button compact" type="button" data-ps="save-copy">Save As New Draft</button>
+        </div>
+        <p class="muted ps14-library-note" data-ps="library-note" role="status" aria-live="polite">Open an animation project to browse its saved drafts.</p>
+      </section>
       <div class="ps13-context" data-ps="context">No prompts imported. Open a project in Project Editor, then select Import Existing Prompts.</div>
-      <p class="ps13-notice muted">Import is read-only. This draft stays in browser memory until you reload. Apply changes only the UNSAVED Project Editor; Save Project there to persist them. Keyframe drag/snap, LLM authoring and audio storyboard sync come in later phases.</p>
+      <p class="ps13-notice muted">Import is read-only. Unsaved Studio edits remain in browser memory until saved as a draft. Apply changes only the UNSAVED Project Editor; Save Project there to persist them. Keyframe drag/snap, LLM authoring and audio storyboard sync come in later phases.</p>
       <p class="ps13-status" data-ps="status" role="status" aria-live="polite">Ready to import.</p>
       <div class="ps13-lanes" data-ps="lanes" hidden></div>
       <section class="ps13-review" data-ps="review" aria-label="Prompt transfer preview" hidden>
@@ -102,6 +168,25 @@
     const importButton=find('import'),resetButton=find('reset'),
       previewButton=find('preview'),applyButton=find('apply'),
       lanes=find('lanes'),review=find('review'),context=find('context');
+    const savedSelect=find('saved'),nameInput=find('name'),note=find('library-note');
+    const saveButton=find('save'),saveCopyButton=find('save-copy'),
+      loadButton=find('load'),deleteButton=find('delete'),refreshButton=find('refresh');
+    const projectId=()=>root.MorphorumAnimation?.getPromptStudioProjectId?.()||'';
+    const endpoint=(id=projectId())=>'/api/animation/projects/'+
+      encodeURIComponent(id)+'/prompt-studio/drafts';
+    const libraryStatus=(message)=>{note.textContent=message;};
+    async function request(url,options={}) {
+      const response=await fetch(url,{cache:'no-store',
+        ...options,headers:{Accept:'application/json',...(options.body?{'Content-Type':'application/json'}:{}),
+          ...(options.headers||{})}});
+      let json;
+      try {json=await response.json();}catch(_){throw new Error('Invalid draft service response.');}
+      if(!response.ok)throw new Error(response.status===412
+        ? 'Draft changed in another browser. Refresh and reload before overwriting.'
+        : (json?.detail||response.status+' '+response.statusText));
+      return {data:json,etag:response.headers.get('ETag')||''};
+    }
+
     const status=(message,error=false)=>{
       const el=find('status');el.textContent=message;
       el.dataset.level=error?'error':'info';
@@ -113,7 +198,15 @@
       importButton.disabled=busy;
       resetButton.disabled=!can;
       previewButton.disabled=!can||invalid||count()===0;
-      applyButton.disabled=!can||invalid||blocked||previewedRevision!==draft?.revision||count()===0;
+      applyButton.disabled=!can||invalid||blocked||baselineBlocked||
+        previewedRevision!==draft?.revision||count()===0;
+      saveButton.disabled=busy||!draft?.ok||projectId()!==draft.snapshot.projectId;
+      saveCopyButton.disabled=saveButton.disabled;
+      loadButton.disabled=busy||!savedSelect.value||!projectId();
+      deleteButton.disabled=loadButton.disabled;
+      refreshButton.disabled=busy||!projectId();
+      savedSelect.disabled=busy||!projectId();
+      nameInput.disabled=busy||!draft?.ok;
       lanes.querySelectorAll('button,input,textarea,select').forEach(el=>{
         el.disabled=!can||el.dataset.psFixed==='1';
       });
@@ -121,7 +214,9 @@
     function onEdit(result,redraw=false){
       if(!result.ok){invalid=true;status(result.message,true);controls();return;}
       invalid=false;blocked=false;previewClear();
-      status(count()+' staged change(s). Preview Changes before applying.');
+      status(baselineBlocked
+        ? 'Edited saved draft. Its original Project Editor baseline has changed; Apply remains blocked. Save the draft, or manually reimport current prompts.'
+        : count()+' staged change(s). Preview Changes before applying.');
       if(redraw)renderLanes();
       else controls();
     }
@@ -231,7 +326,10 @@
         const snapshot=await editor.getPromptStudioEditorSnapshot();
         const result=beginDraft(snapshot,bridge);
         if(!result.ok){status(result.message,true);return;}
-        draft=result;invalid=false;blocked=false;previewClear();showContext();renderLanes();
+        draft=result;invalid=false;blocked=false;baselineBlocked=false;
+        savedId='';savedEtag='';savedRevision=-1;
+        nameInput.value=(result.snapshot.context.name||'Storyboard')+' Prompt Draft';
+        previewClear();showContext();renderLanes();
         status('Imported '+(draft.tracks.positive.keyframes.length+draft.tracks.negative.keyframes.length)+
           ' original keyframes. Editing here does not change Project Editor.');
       } catch(error){status(error.message||String(error),true);}
@@ -241,7 +339,7 @@
       if(!draft?.ok||draft.applied)return;
       draft.tracks=clone(draft.original);draft.revision+=1;
       invalid=false;blocked=false;previewClear();renderLanes();
-      status('Prompt Studio draft restored to the imported prompts. Project Editor unchanged.');
+      status('Prompt Studio draft restored to its imported baseline. Project Editor unchanged.');
     }
     function paintChanges(changes){
       const host=find('changes');host.replaceChildren();
@@ -263,6 +361,10 @@
     }
     async function preview(){
       if(!draft?.ok||invalid||draft.applied||busy)return;
+      if(baselineBlocked){
+        status('This draft belongs to an older Editor baseline. Apply is blocked; reimport current prompts before transferring.',true);
+        return;
+      }
       const editor=root.MorphorumAnimation;
       const result=editor?.previewPromptStudioTransfer?.(draft.snapshot,draft.tracks);
       if(!result?.ok){blocked=true;previewClear();status(result?.message||'Project Editor changed. Reimport its prompts.',true);controls();return;}
@@ -274,7 +376,7 @@
       status('Review the changes below, then Apply to Animation.');
     }
     async function apply(){
-      if(!draft?.ok||invalid||busy||previewedRevision!==draft.revision||blocked)return;
+      if(!draft?.ok||invalid||busy||baselineBlocked||previewedRevision!==draft.revision||blocked)return;
       busy=true;controls();
       status('Confirm the prompt-only transfer to Project Editor…');
       try {
@@ -288,17 +390,143 @@
       }catch(error){status(error.message||String(error),true);}
       finally{busy=false;controls();}
     }
+
+    async function refreshList({quiet=false}={}) {
+      const id=projectId();
+      if(!id){
+        shownProjectId='';libraryEntries=[];savedSelect.replaceChildren();
+        const empty=document.createElement('option');empty.value='';
+        empty.textContent='Open a project first';savedSelect.appendChild(empty);
+        libraryStatus('Open a project in Project Editor to list drafts.');
+        controls();return;
+      }
+      try {
+        const result=await request(endpoint(id));
+        if(projectId()!==id)return;
+        shownProjectId=id;libraryEntries=result.data.drafts||[];
+        const selected=savedSelect.value;
+        savedSelect.replaceChildren();
+        const empty=document.createElement('option');empty.value='';
+        empty.textContent=libraryEntries.length?'Select saved draft…':'No saved drafts yet';
+        savedSelect.appendChild(empty);
+        for(const item of libraryEntries){
+          const option=document.createElement('option');option.value=item.draft_id;
+          option.textContent=item.name+' · '+item.updated_at;
+          savedSelect.appendChild(option);
+        }
+        savedSelect.value=libraryEntries.some(e=>e.draft_id===selected)?selected:
+          libraryEntries.some(e=>e.draft_id===savedId)?savedId:'';
+        libraryStatus(libraryEntries.length+' draft(s) stored with this project.');
+      }catch(error){if(!quiet)libraryStatus('Draft list failed: '+error.message);}
+      controls();
+    }
+    async function confirmReplace(){
+      if(!draft?.ok||draft.applied||(!count()&&draft.revision===savedRevision))return true;
+      if(!root.MorphorumDialog?.confirm)return false;
+      return Boolean(await root.MorphorumDialog.confirm({
+        title:'Discard current Studio edits?',
+        message:'Loading another draft replaces the current browser-memory Studio edits. It does not change Project Editor or delete a saved draft.',
+        confirmText:'Load Draft',cancelText:'Keep Editing'}));
+    }
+    async function loadSaved(){
+      const id=projectId(),identifier=savedSelect.value;
+      if(busy||!id||!identifier)return;
+      if(!(await confirmReplace()))return;
+      busy=true;controls();
+      try {
+        const loaded=await request(endpoint(id)+'/'+encodeURIComponent(identifier));
+        let live;
+        try {live=await root.MorphorumAnimation?.getPromptStudioEditorSnapshot?.();}
+        catch(error){live={ok:false,message:error.message};}
+        if(projectId()!==id)throw new Error('Project changed while loading draft.');
+        const value=restoreDraft(loaded.data.draft,live,bridge);
+        if(!value.ok)throw new Error(value.message);
+        draft=value;invalid=false;blocked=false;baselineBlocked=!value.compatible;
+        savedId=identifier;savedEtag=loaded.etag;savedRevision=0;
+        nameInput.value=loaded.data.draft.name;
+        previewClear();showContext();renderLanes();
+        status(value.compatible?'Draft loaded. Its baseline matches Project Editor; preview before applying.'
+          :'Draft loaded for editing, but Project Editor has changed since its original import. Apply is disabled to protect current project prompts.',
+          !value.compatible);
+      }catch(error){status('Could not load draft: '+error.message,true);}
+      finally{busy=false;controls();}
+    }
+    async function saveDraft(asNew=false){
+      if(!draft?.ok||busy)return;
+      const id=projectId();
+      if(!id||draft.snapshot.projectId!==id){
+        status('Switch back to this draft’s original animation project before saving.',true);return;
+      }
+      const serialized=serializeDraft(draft,nameInput.value,bridge);
+      if(!serialized.ok){status(serialized.message,true);return;}
+      busy=true;controls();
+      try{
+        const overwrite=!asNew&&Boolean(savedId);
+        if(overwrite&&!/^"[a-f0-9]{64}"$/.test(savedEtag))
+          throw new Error('Saved draft revision is unknown. Reload it before overwrite.');
+        const url=overwrite?endpoint(id)+'/'+encodeURIComponent(savedId):endpoint(id);
+        const result=await request(url,{
+          method:overwrite?'PUT':'POST',
+          headers:overwrite?{'If-Match':savedEtag}:{},
+          body:JSON.stringify(serialized.record)
+        });
+        if(projectId()!==id)throw new Error('Project changed while saving draft. Refresh its library.');
+        savedId=result.data.draft.draft_id;savedEtag=result.etag;savedRevision=draft.revision;
+        nameInput.value=result.data.draft.name;
+        await refreshList({quiet:true});
+        libraryStatus('Saved '+result.data.draft.name+' in this project. Camera/render settings were not changed.');
+        status('Studio draft saved. Project Editor remains unchanged.');
+      }catch(error){status('Draft save failed: '+error.message,true);}
+      finally{busy=false;controls();}
+    }
+    async function deleteSaved(){
+      const id=projectId(),identifier=savedSelect.value;
+      if(busy||!id||!identifier)return;
+      if(!root.MorphorumDialog?.confirm){
+        status('Confirmation dialog unavailable; nothing deleted.',true);return;
+      }
+      const label=libraryEntries.find(entry=>entry.draft_id===identifier)?.name||identifier;
+      const confirmed=await root.MorphorumDialog.confirm({
+        title:'Delete saved Prompt Studio draft?',
+        message:'Delete "'+label+'" from this project? This does not change Project Editor or any saved render.',
+        variant:'danger',confirmText:'Delete Draft',cancelText:'Cancel'});
+      if(!confirmed||projectId()!==id)return;
+      busy=true;controls();
+      try{
+        // Use the selected list revision, not an unrelated currently loaded draft ETag.
+        const item=libraryEntries.find(entry=>entry.draft_id===identifier);
+        if(!item)throw new Error('Selected draft was not found; refresh the library.');
+        await request(endpoint(id)+'/'+encodeURIComponent(identifier),{
+          method:'DELETE',headers:{'If-Match':item.etag}
+        });
+        if(savedId===identifier){savedId='';savedEtag='';savedRevision=-1;}
+        savedSelect.value='';await refreshList({quiet:true});
+        libraryStatus('Saved draft deleted. Your current browser editor is not modified.');
+      }catch(error){status('Draft delete failed: '+error.message,true);}
+      finally{busy=false;controls();}
+    }
+
     find('editor').addEventListener('click',()=>onEditor?.());
     importButton.addEventListener('click',()=>void importPrompts());
     resetButton.addEventListener('click',reset);
     previewButton.addEventListener('click',()=>void preview());
     applyButton.addEventListener('click',()=>void apply());
+    saveButton.addEventListener('click',()=>void saveDraft());
+    saveCopyButton.addEventListener('click',()=>void saveDraft(true));
+    loadButton.addEventListener('click',()=>void loadSaved());
+    deleteButton.addEventListener('click',()=>void deleteSaved());
+    refreshButton.addEventListener('click',()=>void refreshList());
+    savedSelect.addEventListener('change',controls);
     controls();
     return {getState:()=>draft?{projectId:draft.snapshot.projectId,
       applied:draft.applied,changes:count(),revision:draft.revision}:null,
-      onShow:()=>{if(!draft)status('Import Existing Prompts reads the open Project Editor, including its unsaved prompt text.');}};
+      onShow:()=>{
+        if(!draft)status('Import Existing Prompts reads the open Project Editor, including its unsaved prompt text.');
+        if(shownProjectId!==projectId())void refreshList();
+        else controls();
+      }};
   }
-  const api={beginDraft,updateDraft,changeList,mount};
+  const api={beginDraft,updateDraft,changeList,serializeDraft,restoreDraft,mount};
   if(typeof module==='object'&&module.exports)module.exports=api;
   if(root)root.MorphorumPromptStudioWorkspace=api;
 })(typeof window==='object'?window:null);
