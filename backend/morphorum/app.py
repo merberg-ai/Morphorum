@@ -116,7 +116,7 @@ from .civitai_download import start_download, list_jobs, cancel_download, resume
 from .civitai_auth import get_token, token_status, store_token, clear_token
 from .civitai_identify import identify_model
 from .civitai_updates import check_model_update
-from .civitai_library import cached_metadata, sync_metadata, preview_path
+from .civitai_library import cached_metadata, cached_catalog, sync_metadata, preview_path
 from .civitai_installed import installed_versions
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
@@ -554,6 +554,15 @@ def get_settings() -> dict[str, Any]:
 def api_civitai_installed(model_id: int) -> dict[str, Any]:
     try:
         return installed_versions(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.post("/api/civitai/library-catalog")
+def api_civitai_cached_catalog(payload: dict[str, Any]) -> dict[str, Any]:
+    """Read cached preview summaries only; no Civitai lookup or remote request."""
+    try:
+        return cached_catalog(payload.get("model_ids"))
     except CivitaiSearchError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
