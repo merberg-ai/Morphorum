@@ -404,7 +404,7 @@
     const selected = [...state.bulkSelected].filter(id => state.models.some(model => model.id === id));
     state.bulkBusy = true;
     updateBulkControls();
-    let matched = 0, unmatched = 0, failed = 0;
+    let matched = 0, unmatched = 0, failed = 0, syncedWithPreview = 0;
     const errors = [];
     try {
       for (let index = 0; index < selected.length; index++) {
@@ -415,7 +415,10 @@
           const suffix = mode === 'identify' ? 'identify/' : mode === 'updates' ? 'updates/' : 'library/';
           const response = await api('/api/civitai/' + suffix + encodeURIComponent(id) +
             (mode === 'sync' ? '/sync' : ''), {method:'POST'});
-          if (mode === 'sync') window.MorphorumThumbnails?.set(id, response);
+          if (mode === 'sync') {
+            window.MorphorumThumbnails?.set(id, response);
+            if (response.preview) syncedWithPreview++;
+          }
           if (mode === 'identify' ? response.found : mode === 'sync' ? response.synced :
             response.status === 'newer_available') matched++;
           else unmatched++;
@@ -426,8 +429,11 @@
       }
       if (mode === 'sync') renderModels();
       toast('Bulk Civitai ' + (mode === 'identify' ? 'identification' : mode === 'sync' ? 'sync' : 'update check') + ' completed',
-        matched + ' matches/newer · ' + unmatched + ' no match/no newer · ' + failed + ' failed.' + (errors.length ? ' ' + errors.join(' | ') : ''),
-        failed ? 'warning' : 'success', 9000);
+        (mode === 'sync' ? matched + ' metadata synced · ' + syncedWithPreview + ' thumbnails downloaded · ' +
+          (matched - syncedWithPreview) + ' without thumbnails · ' + failed + ' failed.' :
+          matched + ' matches/newer · ' + unmatched + ' no match/no newer · ' + failed + ' failed.') +
+          (errors.length ? ' ' + errors.join(' | ') : ''),
+        failed || (mode === 'sync' && matched > syncedWithPreview) ? 'warning' : 'success', 9000);
     } finally {
       state.bulkBusy = false;
       updateBulkControls();
@@ -587,6 +593,18 @@
       line.textContent = [data.creator, data.base_model, data.synced_at ? 'Synced ' + new Date(data.synced_at).toLocaleDateString() : ''].filter(Boolean).join(' · ');
       metadataResult.append(line);
       // The prominent thumbnail lives on the card, not buried in this caption.
+      if (!data.preview) {
+        const note = document.createElement('small');
+        note.className = 'model-preview-diagnostic';
+        note.textContent = data.preview_warning || 'No usable cached Civitai thumbnail was found.';
+        metadataResult.append(note);
+      }
+      if (data.preview_source === 'same_model_other_version') {
+        const source = document.createElement('small');
+        source.className = 'muted';
+        source.textContent = 'Representative image from another version of this Civitai model.';
+        metadataResult.append(source);
+      }
       if (data.trained_words?.length) {
         const words = document.createElement('div');
         words.textContent = 'Triggers: ' + data.trained_words.slice(0, 8).join(', ');
@@ -605,7 +623,10 @@
         const oldArt = row.querySelector('.library-artwork');
         if (oldArt) oldArt.replaceWith(window.MorphorumThumbnails.create(model.id, model.name, 'model-entry-art'));
         showMetadata(data);
-        toast('Civitai metadata cached', model.name + ' metadata saved to Morphorum cache.', 'success');
+        toast(data.preview ? 'Civitai info + thumbnail cached' : 'Civitai info saved, no thumbnail',
+          data.preview ? model.name + ': image stored locally.' :
+            (data.preview_warning || 'No suitable Civitai image was available for this model.'),
+          data.preview ? 'success' : 'warning', 7500);
       } catch (error) { toast('Metadata sync failed', error.message, 'error'); }
       finally { sync.disabled = false; sync.classList.remove('busy'); sync.textContent = 'Sync Civitai Info'; }
     });
