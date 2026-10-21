@@ -60,6 +60,10 @@ PS3 adds **Structured Prompt Composer** above the PS2 timeline on `dev-webui`.
 
 No AI provider is part of PS3. That remains the separate PS4 work.
 
+## PS4 AI Director visibility hotfix (2026-10-21)
+
+PS4 initial UI integration left the **outer** AI panel hidden while toggling only its inner child. Even after a successful `dev-webui` update and prompt import, the AI controls could remain invisible. The fix in `frontend/dist/assets/prompt-studio-ai.js` explicitly reveals the outer section. A new **AI Story Director ↓** shortcut is in Prompt Studio's top action row. Before import, the section displays guidance; after **Import Existing Prompts** or **Load Draft**, the Ollama form should be visible. Reload the browser after updating the branch, and check the new shortcut to confirm the patched frontend assets are loaded.
+
 ## PS4 AI Story Director acceptance (dev-webui, Windows + Android)
 
 **Prerequisite:** A local Ollama server with at least one installed text-capable model. `http://127.0.0.1:11434` is the default Ollama endpoint **on the Morphorum host**, not on the Android phone. For a different LAN computer, enter its numeric private IP address (for example `http://192.168.1.20:11434`) and explicitly tick **Allow my trusted private LAN IP**. Ollama must be configured by its owner to listen on that interface; do not expose Ollama to the public internet. The connection accepts no credentials and never fetches model weights.
