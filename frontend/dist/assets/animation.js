@@ -2425,6 +2425,10 @@
   function fillForm() {
     state.editorRevision += 1;
     const project = state.project;
+    if (!project) {
+      state.projectEtag = '';
+      state.promptStudioPendingSaveEtag = '';
+    }
     syncMotionLabDraft();
     // Reload limits even when the user refreshes the same project ID.
     motionLabSyncRecordingLimits();
@@ -3807,16 +3811,22 @@
 
   async function uploadSourceImage(file) {
     if (!state.project || !file) return;
+    if (state.promptStudioPendingSaveEtag) {
+      toast('Save Prompt Studio first','Save pending Prompt Studio prompts before replacing source media.','warning');
+      return;
+    }
+    const projectId=state.project.id;
     const input = qs('#animation-source-file');
     if (input) input.disabled = true;
     try {
-      const response = await fetch('/api/animation/projects/' + encodeURIComponent(state.project.id) + '/source-image', {
+      const response = await fetch('/api/animation/projects/' + encodeURIComponent(projectId) + '/source-image', {
         method: 'POST',
         headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': file.name || 'source-image' },
         body: file,
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail || (response.status + ' ' + response.statusText));
+      if (state.project?.id!==projectId) return;
       state.project = {
         ...state.project,
         updated_at: payload.project?.updated_at || state.project.updated_at,
@@ -3826,6 +3836,7 @@
           source_image_name: payload.project?.animation?.source_image_name || file.name,
         },
       };
+      await reconcileSavedProjectRevision(projectId,payload.project);
       state.depthPreview = null;
       clearMotionPreviewResult();
       renderSourceState();
@@ -3841,15 +3852,22 @@
 
   async function clearSourceImage() {
     if (!state.project?.animation?.source_image) return;
+    if (state.promptStudioPendingSaveEtag) {
+      toast('Save Prompt Studio first','Save pending Studio prompts before clearing source media.','warning');
+      return;
+    }
+    const projectId=state.project.id;
     const button = qs('#animation-clear-source');
     if (button) button.disabled = true;
     try {
-      const payload = await api('/api/animation/projects/' + encodeURIComponent(state.project.id) + '/source-image', { method: 'DELETE' });
+      const payload = await api('/api/animation/projects/' + encodeURIComponent(projectId) + '/source-image', { method: 'DELETE' });
+      if (state.project?.id!==projectId) return;
       state.project = {
         ...state.project,
         updated_at: payload.project?.updated_at || state.project.updated_at,
         animation: { ...(state.project.animation || {}), source_image: '', source_image_name: '' },
       };
+      await reconcileSavedProjectRevision(projectId,payload.project);
       state.depthPreview = null;
       clearMotionPreviewResult();
       renderSourceState();
@@ -5445,6 +5463,9 @@
 
       await loadProjectList();
       fillForm();
+      state.projectEtag = '';
+      state.promptStudioPendingSaveEtag = '';
+      await reconcileSavedProjectRevision(payload.project.id,payload.project);
       void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
       await loadDepthPreviewStatus();
@@ -5812,7 +5833,7 @@
       const url = '/api/animation/projects/' + encodeURIComponent(item.id);
       const original = await promptStudioFetchSavedRevision(item.id);
       if (state.project?.id === item.id &&
-          (state.dirty || (state.projectEtag && state.projectEtag !== original.etag)))
+          (state.dirty || !state.projectEtag || state.projectEtag !== original.etag))
         throw new Error('The open project changed or has unsaved edits. Reload/review it before renaming.');
       const response=await fetch(url,{
         method:'PUT',cache:'no-store',
@@ -10853,6 +10874,7 @@
         state.project=result.project;
         state.dirty=false;
         fillForm();
+        await reconcileSavedProjectRevision(ready.projectId,result.project);
         await loadTimeline();
         review.textContent='Imported six camera schedules. Project saved.';
         toast('Motion imported','Six native camera schedules updated.','success');
@@ -12347,6 +12369,20 @@
   }
 
   // PS1.1: controlled Prompt Studio handshake. No network/project writes on apply.
+  // Reattach the loaded revision after legacy workflows that save outside the
+  // main Editor PUT. Never adopt a newer unrelated server project as the base.
+  async function reconcileSavedProjectRevision(projectId,savedProject) {
+    if (state.project?.id!==projectId) return false;
+    const {payload,etag}=await promptStudioFetchSavedRevision(projectId);
+    if (state.project?.id!==projectId) return false;
+    if (JSON.stringify(payload.project)!==JSON.stringify(savedProject)) {
+      state.projectEtag='';
+      throw new Error('Another writer changed this project during the operation. Reload/review before saving.');
+    }
+    state.projectEtag=etag;
+    state.editorRevision+=1;
+    return true;
+  }
   async function promptStudioFetchSavedRevision(projectId) {
     const response=await fetch('/api/animation/projects/'+encodeURIComponent(projectId),
       {cache:'no-store',headers:{Accept:'application/json'}});
