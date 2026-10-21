@@ -78,6 +78,16 @@ If the saved setup-state JSON is corrupted, preserve a backup for diagnostics ra
 - If you downloaded managed Z-Image-Turbo, wait for it to show **Installed** and **Use Model**.
 - Check that the model matches the intended family and file format.
 
+## Civitai model or LoRA thumbnail still says NO PREVIEW
+
+1. Confirm **Settings → Civitai Hub** is enabled, and **Load Previews** is on. Preview downloads are explicit, not background jobs.
+2. Use **Identify on Civitai** if necessary, then **Sync Civitai Info** for the installed checkpoint or LoRA. Metadata success alone does not mean an image was downloaded.
+3. Reopen **Models** or **LoRAs**. Their thumbnail cards use the local cache; they do not fetch images merely because the panel was opened.
+4. Check the displayed state: **PREVIEWS OFF** means the preference is disabled, **PREVIEW HIDDEN** means mature-content filtering, **CACHE MISSING / IMAGE LOAD FAILED** means missing or unreadable cached artwork, and **NO IMAGE AVAILABLE** means there was no eligible still or an upstream/CDN fetch failed.
+5. If the installed version has no example still, a clearly labeled representative preview from another version of the same SHA-verified Civitai model may be used. Never assume its example image was generated with your exact checkpoint version.
+
+See the [Civitai synchronization and diagnostics guide](CIVITAI_MODEL_HUB.md#c51-no-preview-after-successful-metadata-sync). If you still see older behavior after the October 21 release, stop Morphorum, update your **current branch**, restart it and retry. Do not delete checkpoints or LoRA files to fix a missing preview.
+
 ## "No generation models available" banner stays visible
 
 The translucent warning appears only after Morphorum successfully checks the model index and finds **no usable checkpoint**.
@@ -113,6 +123,10 @@ Open **Motion Lab → New Project Wizard** and check the message on the current 
 - Never delete or replace your entire `projects/` or `outputs/` directory while fixing a model download.
 
 The source package is published at [Tongyi-MAI/Z-Image-Turbo on Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo).
+
+## Managed Z-Image Turbo generation with a LoRA fails with an inference-tensor error
+
+On builds before the October 21, 2026 promotion, repeated Z-Image Turbo generations or animation with a LoRA could raise `Setting requires_grad=True on inference tensor outside InferenceMode is not allowed.` The fix now shipped on `main` uses the corrected managed Z-Image inference context while retaining model offloading. **Stop the server, update the checked-out branch and restart** before retrying with the same settings. The owner verified multiple still generations and an animation; this does not prove every LoRA setup is covered. If the exception still occurs, record the first complete traceback, model, LoRA name/weight and whether the same render succeeds without the LoRA, while excluding private paths and tokens. Do not solve it by forcing all managed model weights into limited GPU VRAM. See [TODO.MD](../TODO.MD) for the separate still-open ZT1 temporal-continuity investigation.
 
 ## CUDA is unavailable, or generation runs on the CPU
 
