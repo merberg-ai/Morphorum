@@ -213,11 +213,11 @@ def sync_metadata(model_id: str, *, client: httpx.Client | None = None):
     if not cfg.get("load_previews", True):
         result["preview_warning"] = "Thumbnail previews are disabled in Settings → Civitai Hub."
     else:
-        candidates = [(image, False) for image in (version.get("images") or [])]
+        candidates = [(image, False) for image in (version.get("images") or [])[:3]]
         for other in detail.get("versions", []):
             if other.get("id") == identity["version_id"]:
                 continue
-            candidates.extend((image, True) for image in (other.get("images") or []))
+            candidates.extend((image, True) for image in (other.get("images") or [])[:3])
             if len(candidates) >= 24:
                 break
         candidates = candidates[:24]
