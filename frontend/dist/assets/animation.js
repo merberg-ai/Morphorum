@@ -5810,14 +5810,27 @@
     renderProjectManager();
     try {
       const url = '/api/animation/projects/' + encodeURIComponent(item.id);
-      const original = await api(url);
-      const updated = await api(url, {
-        method: 'PUT',
-        body: JSON.stringify({ ...original.project, name: String(value).trim() }),
+      const original = await promptStudioFetchSavedRevision(item.id);
+      if (state.project?.id === item.id &&
+          (state.dirty || (state.projectEtag && state.projectEtag !== original.etag)))
+        throw new Error('The open project changed or has unsaved edits. Reload/review it before renaming.');
+      const response=await fetch(url,{
+        method:'PUT',cache:'no-store',
+        headers:{'Content-Type':'application/json','If-Match':original.etag},
+        body:JSON.stringify({...original.payload.project,name:String(value).trim()}),
       });
-      if (state.project?.id === item.id) {
-        state.project = updated.project;
-        state.path = updated.path || state.path;
+      const updated=await response.json();
+      if (!response.ok)
+        throw new Error(response.status===412
+          ? 'Project changed during rename. Review the newer saved project first.'
+          : (updated.detail||'Rename failed.'));
+      const etag=response.headers.get('ETag')||'';
+      if (!/^"[a-f0-9]{64}"$/.test(etag))
+        throw new Error('Rename saved but its revision was not returned. Reload the project.');
+      if (state.project?.id===item.id) {
+        state.project=updated.project;
+        state.projectEtag=etag;
+        state.path=updated.path||state.path;
         fillForm();
       }
       await loadProjectList();
@@ -9260,11 +9273,14 @@
                   last_applied_tracks: null,
                 };
               }
-              const payload = await api('/api/animation/projects/' + encodeURIComponent(projectId), {
+              if (state.promptStudioPendingSaveEtag)
+                throw new Error('Save your Prompt Studio changes before changing project duration.');
+              const payload = await guardedProjectWrite('/api/animation/projects/' + encodeURIComponent(projectId), {
                 method:'PUT',body:JSON.stringify(draft),
-              });
-              if (state.project?.id !== projectId) return;
-              state.project = payload.project;
+              },projectId);
+              if (payload.__editorRevision!==state.editorRevision)
+                throw new Error('Editor changed while matching audio length. Earlier settings were saved; newer edits remain unsaved.');
+              state.project=payload.project;
               fillForm();
               clearDirty();
               if (Number(state.project.animation.max_frames) !== targetFrames) {
@@ -10309,11 +10325,15 @@
           title: 'Saving Editor changes',
           message: 'Saving unsaved Editor settings before Motion Lab applies its layers…',
         });
-        const saved = await api('/api/animation/projects/' + encodeURIComponent(projectId), {
-          method: 'PUT', body: JSON.stringify(collectProject()),
-        });
-        state.project = saved.project;
-        state.path = saved.path || state.path;
+        if (state.promptStudioPendingSaveEtag)
+          throw new Error('Save your Prompt Studio changes explicitly in Project Editor before applying Motion Lab.');
+        const saved = await guardedProjectWrite('/api/animation/projects/' + encodeURIComponent(projectId), {
+          method:'PUT',body:JSON.stringify(collectProject()),
+        },projectId);
+        if (saved.__editorRevision!==state.editorRevision)
+          throw new Error('Editor changed while saving for Motion Lab. Newer edits remain unsaved.');
+        state.project=saved.project;
+        state.path=saved.path||state.path;
         fillForm();
         await loadTimeline();
         // Confirming the save doesn't confirm overwriting hand-edited tracks.
