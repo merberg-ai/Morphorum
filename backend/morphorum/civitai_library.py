@@ -146,6 +146,8 @@ def sync_metadata(model_id: str, *, client: httpx.Client | None = None):
         try:
             for image in candidates:
                 url = image.get("url") if isinstance(image, dict) else ""
+                if not isinstance(url, str):
+                    continue
                 try:
                     parsed = urlsplit(url)
                     host = (parsed.hostname or "").lower()
@@ -172,8 +174,8 @@ def sync_metadata(model_id: str, *, client: httpx.Client | None = None):
                             continue
                         data = b"".join(chunks)
                     valid = (
-                        (media == "image/jpeg" and data.startswith(b"\\xff\\xd8\\xff")) or
-                        (media == "image/png" and data.startswith(b"\\x89PNG\\r\\n\\x1a\\n")) or
+                        (media == "image/jpeg" and data.startswith(b"\xff\xd8\xff")) or
+                        (media == "image/png" and data.startswith(b"\x89PNG\r\n\x1a\n")) or
                         (media == "image/webp" and data.startswith(b"RIFF") and data[8:12] == b"WEBP")
                     )
                     if not valid:
