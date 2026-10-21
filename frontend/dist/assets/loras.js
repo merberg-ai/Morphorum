@@ -58,7 +58,17 @@
     const subtitle = qs('#lora-manager-subtitle');
     const insert = qs('#lora-manager-insert');
     const advanced = qs('#lora-manager-detail-advanced');
+    const preview = qs('#lora-manager-preview');
     if (!target || !title || !subtitle || !insert || !advanced) return;
+    if (preview) {
+      preview.replaceChildren();
+      if (state.selected) {
+        preview.append(window.MorphorumThumbnails?.create(state.selected.id, state.selected.name,
+          'lora-detail-art') || text('span', 'NO PREVIEW', 'muted'));
+      } else {
+        preview.append(text('span', 'Select a LoRA to view its cached artwork.', 'muted'));
+      }
+    }
     target.replaceChildren();
     advanced.replaceChildren();
     const d = state.detail;
@@ -119,14 +129,7 @@
       cached.className = 'lora-civitai-cached';
       cached.append(text('strong', 'Cached: ' + (state.cached.name || '') + ' · ' + (state.cached.version || '')));
       cached.append(text('p', [state.cached.creator, state.cached.base_model].filter(Boolean).join(' · '), 'muted'));
-      if (state.cached.preview) {
-        const img = document.createElement('img');
-        img.className = 'model-civitai-thumbnail';
-        img.alt = 'Cached Civitai model preview';
-        img.loading = 'lazy';
-        img.src = '/api/civitai/library/' + encodeURIComponent(state.selected.id) + '/preview';
-        cached.append(img);
-      }
+      // Cached artwork is presented prominently above Quick Use.
       if (state.cached.trained_words?.length) cached.append(text('p', 'Triggers: ' + state.cached.trained_words.slice(0, 16).join(', '), 'muted'));
       if (state.cached.description) cached.append(text('p', state.cached.description.slice(0, 650), 'muted'));
       identityPanel.append(cached);
@@ -242,6 +245,7 @@
             {method: 'POST', body: '{}'});
           if (!result.synced) throw Error('No verified metadata returned');
           success++;
+          window.MorphorumThumbnails?.set(id, result);
           if (state.selected?.id === id) {
             state.cached = result;
             updatePromptSnippet();
@@ -257,6 +261,7 @@
         failed ? 'warning' : 'success');
     } finally {
       state.bulkBusy = false;
+      renderLibrary();
       updateBulkToolbar();
       const status = qs('#lora-bulk-status');
       if (status) status.textContent = success + ' synced, ' + failed + ' failed · ' + state.bulkSelected.size + ' selected';
@@ -280,7 +285,11 @@
       button.className = 'lora-manager-item' + (state.selected?.id === record.id ? ' selected' : '');
       button.setAttribute('role', 'option');
       button.setAttribute('aria-selected', state.selected?.id === record.id ? 'true' : 'false');
-      button.append(text('strong', record.name), text('small', record.filename));
+      const label = document.createElement('span');
+      label.className = 'lora-item-label';
+      label.append(text('strong', record.name), text('small', record.filename));
+      button.append(window.MorphorumThumbnails?.create(record.id, record.name, 'lora-library-art') ||
+        text('span', 'NO PREVIEW', 'library-artwork-fallback'), label);
       button.addEventListener('click', () => selectLora(record));
       const row = document.createElement('div');
       row.className = 'lora-manager-select-row';
@@ -312,6 +321,8 @@
       const result = await api(url, write ? {method:'POST', body:'{}'} : {});
       if (request !== state.request) return;
       state.cached = result.synced ? result : null;
+      window.MorphorumThumbnails?.set(selected.id, result);
+      renderLibrary();
       if (state.cached?.trained_words?.length) updatePromptSnippet();
       toast(write ? 'Civitai metadata cached' : 'Civitai cache',
             result.synced ? 'Verified metadata available locally.' : 'No valid cached metadata. Sync first.',
@@ -387,6 +398,8 @@
         const cached = await api('/api/civitai/library/' + encodeURIComponent(record.id));
         if (request === state.request && cached.synced) {
           state.cached = cached;
+          window.MorphorumThumbnails?.set(record.id, cached);
+          renderLibrary();
           renderDetail();
           updatePromptSnippet();
         }
@@ -405,6 +418,8 @@
     try {
       const result = await api('/api/loras');
       state.records = result.loras || [];
+      // Read only cached files; selecting a LoRA never downloads Civitai media.
+      await window.MorphorumThumbnails?.refresh(state.records.map(item => item.id));
       const valid = new Set(state.records.map(item => item.id));
       for (const id of state.bulkSelected) if (!valid.has(id)) state.bulkSelected.delete(id);
       const selected = state.records.find(item => item.id === state.selected?.id);
