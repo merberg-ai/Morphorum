@@ -283,7 +283,8 @@
         q(field).disabled=working;
       q('mode').disabled=working;
       q('scenes').disabled=working||q('mode').value==='refine';
-      if(q('mode').value==='refine')q('scenes').value=String(d.tracks.positive.keyframes.length);
+      if(q('mode').value==='refine')
+        q('scenes').value=q('target').value!==''?'1':String(d.tracks.positive.keyframes.length);
       q('generate').disabled=working||!models.length||!q('model').value||!q('idea').value.trim()||
         q('idea').value.trim().length<8||(q('mode').value==='refine'&&
         d.tracks.positive.keyframes.length>16);

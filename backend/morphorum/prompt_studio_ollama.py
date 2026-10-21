@@ -300,7 +300,7 @@ def compile_result(plan: dict, raw: dict) -> dict:
         "mode": plan["mode"], "scene_count": len(overview), "family": plan["family"],
         "profile": plan["profile"],
     }
-    lengths, length_warnings = diagnostics(proposed, plan["family"])
+    lengths, length_warnings = diagnostics(proposed, plan["family"], plan["scene_frames"])
     if plan["include_negative"] and plan["family"] in ("flux", "zimage"):
         warnings.append(
             "Negative prompt support depends on the selected runtime pipeline; authoring does not verify inference."

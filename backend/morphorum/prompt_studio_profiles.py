@@ -99,7 +99,7 @@ def continuity_prefix(text: str, locks: dict[str, str]) -> str:
     return ", ".join(fragments)
 
 
-def diagnostics(tracks: dict, family: str) -> tuple[list[dict], list[str]]:
+def diagnostics(tracks: dict, family: str, focus_frames: list[int] | None = None) -> tuple[list[dict], list[str]]:
     limit = PROFILE_DESCRIPTIONS[family]["guideline_words"]
     entries, warnings = [], []
     focus = set(focus_frames) if focus_frames is not None else None
