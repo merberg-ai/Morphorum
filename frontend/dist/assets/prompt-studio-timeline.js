@@ -255,7 +255,7 @@
       displaySelection();
       const locked=state.locks.has(lane),invalid=state.selection.some(s=>s.frame===0||state.locks.has(s.lane));
       if(multi||locked||invalid||!getDraft()?.ok||getDraft().applied){
-        refresh();return;
+        refresh();setFrame(frame);return;
       }
       const origin=event.clientX;
       state.drag={pointerId:event.pointerId,origin,from:frame,lane,
@@ -280,9 +280,13 @@
       state.drag=null;button.style.transform='';delete button.dataset.dragPreview;
       button.classList.remove('ps2-invalid');
       if(drag.delta){
-        commitTracks(previewShift(getDraft().tracks,drag.selection,drag.delta,
+        const moved=commitTracks(previewShift(getDraft().tracks,drag.selection,drag.delta,
           getDraft().snapshot.context.maxFrames,[...state.locks]),'drag');
-      }else refresh();
+        setFrame(moved?drag.from+drag.delta:drag.from,{scrollIntoView:true});
+      }else{
+        refresh();
+        setFrame(drag.from,{scrollIntoView:false});
+      }
     }
     function refresh(){
       const draft=getDraft();
