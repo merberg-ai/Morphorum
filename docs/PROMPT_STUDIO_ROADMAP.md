@@ -114,3 +114,6 @@ Inspect before touching (not necessarily exhaustive): `backend/morphorum/animati
 Build one phase at a time on `dev-webui`. Run automated CI and request explicit Windows owner acceptance at each physical-gate phase. Do **not** implement PS1+ automatically, silently change native project schema, or merge PS implementation into `main` without separate authorization. Keep separate PQ roadmap untouched.
 
 **Related plans:** [PQ: Parseq hosted-manifest URL integration](PARSEQ_URL_INTEGRATION_ROADMAP.md), [Motion Studio](MOTION_STUDIO.md), [SDXL generation](SDXL_GENERATION.md), [Project archives](PROJECT_ARCHIVES.md), and [TODO](../TODO.MD).
+
+### PS4.1 — Observable Ollama generation (2026-10-21)
+Hotfix implemented on `dev-webui`: bounded streaming Ollama chat responses, stage/heartbeat progress events for cold-model loading and token generation, elapsed-time activity UI, stream cancellation/error handling and category-filtered Prompt Studio Console logs. No synthetic completion percent, no prompt-content logs and no changes to rendering or project saving. Owner Windows Ollama tests remain the gate.
