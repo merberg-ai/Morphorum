@@ -335,3 +335,33 @@ single-image generation afterward to catch unrelated model-selection changes.
 Tests: `tests/test_civitai_library.py`,
 `tests/test_civitai_detail.py`, `tests/frontend_cached_art.test.cjs`.
 Owner physical acceptance remains outstanding; do not merge into `main`.
+
+### C5.1: "NO PREVIEW" after successful metadata sync
+
+A successful SHA-256 metadata lookup does **not** imply a thumbnail was cached.
+Earlier C5 UI falsely used the same success notification for both operations.
+C5.1 distinguishes them and surfaces the reason in the Models/LoRAs detail
+panel and on the art placeholder. After syncing, inspect the message:
+- **PREVIEWS OFF**: enable Settings → Civitai Hub → Load Previews and save.
+- **PREVIEW HIDDEN**: the existing image is filtered by the mature-content
+  preference; changing this setting is explicit.
+- **CACHE MISSING / IMAGE LOAD FAILED**: a previously recorded preview is
+  unavailable on disk or failed the local image endpoint. Sync again.
+- **NO IMAGE AVAILABLE**: Civitai returned no allowed still, or the CDN failed;
+  the exact reason is shown after syncing (including sanitized CDN HTTP status).
+
+The sync now tries a handful of still-image candidates, handles bounded
+same-provider redirects, and can use a *representative* preview from another
+version of the **same SHA-256-verified Civitai model** when the installed
+version has none. Such images are labeled as representative rather than
+presented as examples generated with the installed version. Mature-content
+rules continue to apply; network requests happen only on explicit Sync.
+A successful metadata sync does not claim an image was downloaded.
+
+Physical Windows acceptance: with Civitai Hub enabled, verify Load Previews is
+on; sync one installed checkpoint and LoRA with known Civitai still images.
+Expect a thumbnail after sync and on reopening. If no image appears, note the
+new displayed diagnostic message, and if possible the `preview_status` and
+`preview_warning` from `GET /api/civitai/library/{indexed_id}`. Do not share
+authentication tokens or complete local model paths. Test filtered/disabled
+previews and a CDN failure without damaging previously cached metadata.
