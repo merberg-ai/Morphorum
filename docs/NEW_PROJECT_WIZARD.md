@@ -2,9 +2,9 @@
 
 **Create your first animation without needing to understand every Motion Lab control.**
 
-The **New Project Wizard** guides you through a seven-step setup using Morphorum's current built-in animation defaults. It lives under **Motion Lab → New Project Wizard** on the desktop sidebar and in the Motion Lab workspace navigation on smaller screens.
+The **New Project Wizard** guides you through a seven-step setup using Morphorum's current built-in animation defaults. Open it from the main **Project → New Project** navigation on desktop or phone. It is not nested in the Motion Lab workspace.
 
-The wizard is ideal for a new animation. To work on an existing project, use **Motion Lab → Project Manager → Open in Editor** instead.
+The wizard is ideal for a new animation. To work on an existing project, use **Project → Project Manager**, select the project, then choose **Open in Editor**.
 
 > [!IMPORTANT]
 > The wizard does **not** render anything or create a project when you open it. Your answers stay in a temporary browser-session draft until you select **Save Project & Open Editor** on the last page. A model must be available and selected before you can complete the wizard.
@@ -13,7 +13,7 @@ The wizard is ideal for a new animation. To work on an existing project, use **M
 
 1. Open Morphorum in your browser and keep the Morphorum server running.
 2. Go to **Models** and confirm that a usable checkpoint appears. You can download **Z-Image-Turbo** through the managed catalog or configure existing **SDXL** or **FLUX** checkpoint directories in **Settings** and select **Scan Models**.
-3. Open **Motion Lab → New Project Wizard**.
+3. Open **Project → New Project**.
 
 If there are no usable checkpoints, Morphorum displays a translucent **No generation models available** banner. Select **Configure Models / Help** for instructions on setting checkpoint and LoRA directories, downloading Z-Image-Turbo, scanning, and selecting a model.
 
