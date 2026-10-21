@@ -27,7 +27,6 @@ from .animation_projects import (
     new_animation_project_template,
     save_animation_project,
     mutate_animation_project,
-    AnimationProjectConflict,
     trash_animation_project,
 )
 from .project_assets import (
