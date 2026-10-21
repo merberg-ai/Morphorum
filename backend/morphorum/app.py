@@ -26,6 +26,8 @@ from .animation_projects import (
     normalize_animation_project,
     new_animation_project_template,
     save_animation_project,
+    mutate_animation_project,
+    AnimationProjectConflict,
     trash_animation_project,
 )
 from .project_assets import (
@@ -1334,6 +1336,13 @@ def api_animation_timeline_track(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _timeline_expected_etag(request: Request) -> str | None:
+    expected = request.headers.get("if-match")
+    if expected is not None and not re.fullmatch(r'"[0-9a-f]{64}"', expected):
+        raise HTTPException(status_code=400, detail="If-Match must be one quoted project ETag.")
+    return expected
+
+
 @app.put(
     "/api/animation/projects/{project_id}/timeline/tracks/"
     "{group}/{name}/keyframes/{frame}"
@@ -1344,26 +1353,26 @@ def api_upsert_animation_timeline_keyframe(
     name: str,
     frame: int,
     payload: dict[str, Any],
+    request: Request,
+    response: Response,
 ) -> dict[str, Any]:
+    expected = _timeline_expected_etag(request)
     try:
-        project = load_animation_project(project_id)
-        edited = upsert_track_keyframe(
-            project,
-            group,
-            name,
-            frame=frame,
-            value=payload.get("value"),
-        )
-        saved = save_animation_project(
+        saved, etag = mutate_animation_project(
             project_id,
-            edited,
-            prefer_tracks=True,
+            lambda project: upsert_track_keyframe(
+                project, group, name, frame=frame, value=payload.get("value"),
+            ),
+            expected_etag=expected,
         )
+        response.headers["ETag"] = etag
         return {
             "status": "saved",
             "project": saved,
             **get_timeline_track(saved, group, name),
         }
+    except AnimationProjectConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TimelineError as exc:
@@ -1379,25 +1388,26 @@ def api_delete_animation_timeline_keyframe(
     group: str,
     name: str,
     frame: int,
+    request: Request,
+    response: Response,
 ) -> dict[str, Any]:
+    expected = _timeline_expected_etag(request)
     try:
-        project = load_animation_project(project_id)
-        edited = delete_track_keyframe(
-            project,
-            group,
-            name,
-            frame=frame,
-        )
-        saved = save_animation_project(
+        saved, etag = mutate_animation_project(
             project_id,
-            edited,
-            prefer_tracks=True,
+            lambda project: delete_track_keyframe(
+                project, group, name, frame=frame,
+            ),
+            expected_etag=expected,
         )
+        response.headers["ETag"] = etag
         return {
             "status": "saved",
             "project": saved,
             **get_timeline_track(saved, group, name),
         }
+    except AnimationProjectConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TimelineError as exc:
@@ -1414,27 +1424,28 @@ def api_move_animation_timeline_keyframe(
     name: str,
     frame: int,
     payload: dict[str, Any],
+    request: Request,
+    response: Response,
 ) -> dict[str, Any]:
+    expected = _timeline_expected_etag(request)
     try:
-        project = load_animation_project(project_id)
-        edited = move_track_keyframe(
-            project,
-            group,
-            name,
-            source_frame=frame,
-            target_frame=payload.get("frame"),
-            overwrite=bool(payload.get("overwrite", False)),
-        )
-        saved = save_animation_project(
+        saved, etag = mutate_animation_project(
             project_id,
-            edited,
-            prefer_tracks=True,
+            lambda project: move_track_keyframe(
+                project, group, name, source_frame=frame,
+                target_frame=payload.get("frame"),
+                overwrite=bool(payload.get("overwrite", False)),
+            ),
+            expected_etag=expected,
         )
+        response.headers["ETag"] = etag
         return {
             "status": "saved",
             "project": saved,
             **get_timeline_track(saved, group, name),
         }
+    except AnimationProjectConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TimelineError as exc:
@@ -1450,25 +1461,26 @@ def api_set_animation_timeline_interpolation(
     group: str,
     name: str,
     payload: dict[str, Any],
+    request: Request,
+    response: Response,
 ) -> dict[str, Any]:
+    expected = _timeline_expected_etag(request)
     try:
-        project = load_animation_project(project_id)
-        edited = set_track_interpolation(
-            project,
-            group,
-            name,
-            interpolation=payload.get("interpolation"),
-        )
-        saved = save_animation_project(
+        saved, etag = mutate_animation_project(
             project_id,
-            edited,
-            prefer_tracks=True,
+            lambda project: set_track_interpolation(
+                project, group, name, interpolation=payload.get("interpolation"),
+            ),
+            expected_etag=expected,
         )
+        response.headers["ETag"] = etag
         return {
             "status": "saved",
             "project": saved,
             **get_timeline_track(saved, group, name),
         }
+    except AnimationProjectConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TimelineError as exc:

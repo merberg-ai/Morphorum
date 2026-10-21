@@ -695,6 +695,34 @@ def save_animation_project(
         return project
 
 
+def mutate_animation_project(
+    project_id: str,
+    mutation,
+    *,
+    expected_etag: str | None = None,
+    prefer_tracks: bool = True,
+) -> tuple[dict[str, Any], str]:
+    """Atomically check a saved revision, edit fresh project state and persist.
+
+    Unlike an endpoint's free-standing load/edit/save sequence, a concurrent
+    browser cannot change the project between the revision check and mutation.
+    Omitted If-Match remains supported for older API clients.
+    """
+    with _PROJECT_SAVE_LOCK:
+        if expected_etag is not None and project_etag(project_id) != expected_etag:
+            raise AnimationProjectConflict(
+                "Project changed since it was loaded. Reload before saving."
+            )
+        current = load_animation_project(project_id)
+        edited = mutation(deepcopy(current))
+        if not isinstance(edited, dict):
+            raise AnimationProjectError("Project mutation must return an object.")
+        saved = save_animation_project(
+            project_id, edited, prefer_tracks=prefer_tracks, expected_etag=expected_etag,
+        )
+        return saved, project_etag(project_id)
+
+
 def list_animation_projects() -> list[dict[str, Any]]:
     ensure_runtime_dirs()
     projects: list[dict[str, Any]] = []

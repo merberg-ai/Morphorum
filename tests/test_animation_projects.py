@@ -606,3 +606,45 @@ def test_ps1_staged_prompt_save_preserves_independent_lanes_and_unsaved_camera_c
     again=load_animation_project(created["id"])
     assert again["tracks"]["prompts"] == saved["tracks"]["prompts"]
     assert again["animation"]["prompt_transition"] == "hold"
+
+
+def test_ps12_atomic_timeline_edit_rejects_stale_etag_before_callback(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "Concurrent Timeline"})
+    old = animation_projects.project_etag(created["id"])
+    updated = save_animation_project(
+        created["id"], {**created, "notes": "another browser"},
+        expected_etag=old,
+    )
+    assert updated["notes"] == "another browser"
+    was_called = []
+    with pytest.raises(animation_projects.AnimationProjectConflict):
+        animation_projects.mutate_animation_project(
+            created["id"], lambda p: was_called.append(True) or p,
+            expected_etag=old,
+        )
+    assert not was_called
+    assert load_animation_project(created["id"])["notes"] == "another browser"
+
+
+def test_ps12_atomic_timeline_edit_returns_new_etag_and_retains_other_fields(
+    tmp_path, monkeypatch,
+) -> None:
+    from morphorum.animation_timeline import upsert_track_keyframe
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "Atomic Timeline"})
+    etag = animation_projects.project_etag(created["id"])
+    saved, next_etag = animation_projects.mutate_animation_project(
+        created["id"],
+        lambda p: upsert_track_keyframe(
+            p, "prompts", "positive", frame=30, value="<lora:Test:1> new",
+        ),
+        expected_etag=etag,
+    )
+    assert etag != next_etag
+    assert next_etag == animation_projects.project_etag(created["id"])
+    assert saved["prompts"]["30"] == "<lora:Test:1> new"
+    assert saved["camera_3d"] == created["camera_3d"]
+    assert saved["generation"] == created["generation"]
