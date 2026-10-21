@@ -121,3 +121,11 @@ Fixture contents become executable golden tests in PS1/PS2/PS6. No runtime code 
 | PS7/PS9 | Family-specific blend, renderer parity, Parseq if independently enabled, ZIP/Save As, installer, full CI and user docs | Separate signoff before any `main` merge |
 
 **PS0 exit condition:** Design and fixtures are reviewed; unresolved PS1 issues are identified. PS0 documentation creation alone is **not** a claim of tests passing or permission to implement PS1. Keep PQ, Z-Image single-file research, and `main` unchanged.
+
+## PS1.1 communication bridge (2026-10-21)
+
+Implementation: `frontend/dist/assets/prompt-studio-bridge.js` with side-effect-free track validators and patch/diff helpers; `window.MorphorumAnimation.getPromptStudioEditorSnapshot()`, `previewPromptStudioTransfer(snapshot, tracks)` and `applyPromptStudioTransfer(snapshot, tracks)` (async confirmation, fresh ETag check, in-memory-only). No Prompt Studio UI or persistent Studio drafts yet.
+
+- Imported text/LoRA directives and separate positive/negative lanes are copied without silent rewriting. Combined legacy Editor row text edits are reflected lane by lane; structural row changes are intentionally **not importable** until a safe lane-aware UI is ready. Existing Editor controls still work.
+- Captures server ETag on project load; snapshots are rejected on stale project ID/editor revision/input signature/saved revision. After PS apply, normal **Save Project** sends If-Match for that staged draft. No PUT on bridge apply. Timeline auto-save refuses while staged PS changes await explicit Save Project.
+- Browser/editor mutations outside the PS apply flow still include legacy save paths without unconditional If-Match; complete them and the cross-operation revision lifecycle in **PS1.2**. This bridge is **not** a declaration that full PS1 is tested. Node source/logic regression: `tests/frontend_prompt_studio_bridge.test.cjs`. Physical Windows and real browser testing remain pending.

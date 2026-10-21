@@ -12,6 +12,10 @@
     path: '',
     dirty: false,
     loading: false,
+    editorRevision: 0,
+    promptRowsBaseline: [],
+    projectEtag: '',
+    promptStudioPendingSaveEtag: '',
     previewTimer: null,
     validationTimer: null,
     previewSequence: 0,
@@ -825,6 +829,7 @@
 
   function markDirty({ validate = false } = {}) {
     if (!state.project || state.loading) return;
+    state.editorRevision += 1;
     state.dirty = true;
     resetRenderPreflight();
     setStatus('Unsaved changes', 'dirty');
@@ -1760,6 +1765,8 @@
   }
 
   async function persistDirtyBeforeTimelineEdit() {
+    if (state.promptStudioPendingSaveEtag)
+      throw new Error('Save the Prompt Studio changes in Project Editor before modifying the Timeline.');
     if (!state.project || !state.dirty) return;
     timelineStatus('Saving form…', 'busy');
     const payload = await api(
@@ -2205,12 +2212,22 @@
     return row;
   }
 
+  function readPromptEditorRows() {
+    const target = qs('#animation-prompt-list');
+    return target ? qsa('.animation-prompt-row',target).map(row => ({
+      frame: Number(qs('.animation-prompt-frame',row)?.value),
+      positive: qs('.animation-prompt-text',row)?.value ?? '',
+      negative: qs('.animation-negative-text',row)?.value ?? ''
+    })) : [];
+  }
+
   function renderPromptRows() {
     const list = qs('#animation-prompt-list');
     if (!list) return;
     list.replaceChildren();
 
     if (!state.project) {
+      state.promptRowsBaseline = [];
       const empty = document.createElement('div');
       empty.className = 'animation-empty';
       empty.textContent = 'Create or load a project to edit prompt keyframes.';
@@ -2227,6 +2244,7 @@
         )
       );
     }
+    state.promptRowsBaseline = readPromptEditorRows();
   }
 
   function evenlySpacedPromptFrames(count, totalFrames) {
@@ -2354,6 +2372,7 @@
   }
 
   function fillForm() {
+    state.editorRevision += 1;
     const project = state.project;
     syncMotionLabDraft();
     // Reload limits even when the user refreshes the same project ID.
@@ -2471,7 +2490,15 @@
     const selectedModelId = qs('#animation-model')?.value || '';
     const selectedModel = modelById(selectedModelId);
     const existingModel = state.project.model || {};
-    const promptMaps = collectPromptMaps();
+    // Preserve separate native prompt lanes for non-structural form edits.
+    // Existing combined-row moves stay on the original Editor path.
+    const bridgeSnapshot = window.MorphorumPromptStudioBridge?.snapshotTracks(
+      state.project,state.promptRowsBaseline,readPromptEditorRows(),
+      qs('#animation-prompt-transition')?.value || 'blend');
+    const promptMaps = bridgeSnapshot?.ok ? bridgeSnapshot.maps : collectPromptMaps();
+    const promptTracks = bridgeSnapshot?.ok
+      ? {...(state.project.tracks || {}),prompts:bridgeSnapshot.tracks}
+      : state.project.tracks;
 
     return {
       ...state.project,
@@ -2493,6 +2520,7 @@
         variant: selectedModel?.variant || existingModel.variant || '',
       },
       ...promptMaps,
+      tracks: promptTracks,
       motion: {
         ...(state.project.motion || {}),
         angle: qs('#animation-angle')?.value || '0:(0)',
@@ -5999,7 +6027,7 @@
     const select = qs('#animation-project-select');
     if (select) select.disabled = true;
     try {
-      const payload = await api(`/api/animation/projects/${encodeURIComponent(projectId)}`);
+      const {payload,etag} = await promptStudioFetchSavedRevision(projectId);
       clearMotionPreviewResult();
       resetRenderUi();
       state.project = payload.project;
@@ -6009,6 +6037,8 @@
       state.timelineSelection = null;
       state.depthPreview = null;
       fillForm();
+      state.projectEtag = etag;
+      state.promptStudioPendingSaveEtag = '';
       rememberAnimationProject(state.project.id);
       void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
@@ -6054,6 +6084,12 @@
       state.depthPreview = null;
       await loadProjectList();
       fillForm();
+      state.projectEtag = '';
+      state.promptStudioPendingSaveEtag = '';
+      try {
+        const fresh = await promptStudioFetchSavedRevision(state.project.id);
+        state.projectEtag = fresh.etag;
+      } catch (_) { /* PS snapshot refuses an unknown saved revision. */ }
       rememberAnimationProject(state.project.id);
       void restoreProjectMedia({ resetAudio: true });
       await loadTimeline();
@@ -6076,6 +6112,8 @@
         `/api/animation/projects/${encodeURIComponent(state.project.id)}`,
         {
           method: 'PUT',
+          headers: state.promptStudioPendingSaveEtag
+            ? {'If-Match':state.promptStudioPendingSaveEtag} : {},
           body: JSON.stringify(collectProject()),
         }
       );
@@ -6083,6 +6121,12 @@
       state.path = payload.path || state.path;
       await loadProjectList();
       fillForm();
+      state.promptStudioPendingSaveEtag = '';
+      state.projectEtag = '';
+      try {
+        const fresh = await promptStudioFetchSavedRevision(state.project.id);
+        state.projectEtag = fresh.etag;
+      } catch (_) { /* Bridge fails closed; normal saved project remains valid. */ }
       await loadTimeline();
       await loadRenderHistory();
       toast('Animation project saved', `${state.project.name} was written to project.json.`, 'success');
@@ -12214,7 +12258,106 @@
     return {ok:true,message:'Image settings applied to the open project draft. Use Save Project to persist them.'};
   }
 
+  // PS1.1: controlled Prompt Studio handshake. No network/project writes on apply.
+  async function promptStudioFetchSavedRevision(projectId) {
+    const response=await fetch('/api/animation/projects/'+encodeURIComponent(projectId),
+      {cache:'no-store',headers:{Accept:'application/json'}});
+    const payload=await response.json();
+    if (!response.ok) throw new Error(payload?.detail||'Cannot inspect saved project.');
+    const etag=response.headers.get('ETag')||'';
+    if (!/^"[a-f0-9]{64}"$/.test(etag))
+      throw new Error('Saved project ETag unavailable.');
+    return {payload,etag};
+  }
+  function promptStudioEditorSignature() {
+    return JSON.stringify({rows:readPromptEditorRows(),model:qs('#animation-model')?.value,
+      fps:qs('#animation-fps')?.value,maxFrames:qs('#animation-max-frames')?.value,
+      transition:qs('#animation-prompt-transition')?.value});
+  }
+  function promptStudioLiveTracks() {
+    return window.MorphorumPromptStudioBridge?.snapshotTracks(
+      state.project,state.promptRowsBaseline,readPromptEditorRows(),
+      qs('#animation-prompt-transition')?.value||'blend')||
+      {ok:false,code:'NO_BRIDGE',message:'Prompt Studio bridge script is unavailable.'};
+  }
+  async function getPromptStudioEditorSnapshot() {
+    if (!state.project?.id||state.loading)
+      return {ok:false,code:'NO_PROJECT',message:'Open a project in Project Editor first.'};
+    const projectId=state.project.id,revision=state.editorRevision;
+    const source=promptStudioLiveTracks();
+    if (!source.ok) return source;
+    if (!state.projectEtag)
+      return {ok:false,code:'REVISION_UNAVAILABLE',message:'Reload the current project before using Prompt Studio.'};
+    let current;
+    try {current=await promptStudioFetchSavedRevision(projectId);}
+    catch(error) {return {ok:false,code:'REVISION_UNAVAILABLE',message:error.message};}
+    if (projectId!==state.project?.id||revision!==state.editorRevision)
+      return {ok:false,code:'EDITOR_CHANGED',message:'Editor changed during snapshot. Retry import.'};
+    if (current.etag!==state.projectEtag)
+      return {ok:false,code:'SAVED_PROJECT_CHANGED',message:'Saved project changed elsewhere. Review/reload before importing.'};
+    const project=collectProject();
+    return {ok:true,projectId,revision,savedEtag:state.projectEtag,
+      signature:promptStudioEditorSignature(),dirty:state.dirty,
+      context:{model:JSON.parse(JSON.stringify(project.model)),fps:project.animation.fps,
+        maxFrames:project.animation.max_frames,startMode:project.animation.start_mode,
+        sourceImageName:project.animation.source_image_name||''},
+      promptTracks:source.tracks};
+  }
+  function previewPromptStudioTransfer(snapshot,proposedTracks) {
+    const bridge=window.MorphorumPromptStudioBridge;
+    if (!snapshot?.ok||!bridge||!state.project?.id||
+        snapshot.projectId!==state.project.id||snapshot.revision!==state.editorRevision||
+        snapshot.signature!==promptStudioEditorSignature()||
+        snapshot.savedEtag!==state.projectEtag)
+      return {ok:false,code:'STALE_EDITOR',message:'Editor changed. Import a fresh snapshot.'};
+    const current=promptStudioLiveTracks();
+    if (!current.ok) return current;
+    const project=collectProject();
+    if (JSON.stringify(snapshot.context.model)!==JSON.stringify(project.model)||
+        snapshot.context.fps!==project.animation.fps||
+        snapshot.context.maxFrames!==project.animation.max_frames)
+      return {ok:false,code:'CONTEXT_CHANGED',message:'Model or project timing changed.'};
+    const patch=bridge.buildPromptOnlyPatch(project,proposedTracks);
+    return patch.ok ? {ok:true,diff:bridge.diffTracks(current.tracks,patch.tracks)}:patch;
+  }
+  async function applyPromptStudioTransfer(snapshot,proposedTracks) {
+    let check=previewPromptStudioTransfer(snapshot,proposedTracks);
+    if (!check.ok) return check;
+    if (check.diff.total===0) return {ok:true,applied:false,message:'No changes to apply.'};
+    if (!window.MorphorumDialog?.confirm)
+      return {ok:false,code:'CONFIRMATION_UNAVAILABLE',message:'Confirmation dialog unavailable.'};
+    const accepted=await window.MorphorumDialog.confirm({
+      title:'Apply Prompt Studio prompts?',
+      message:'Update '+check.diff.total+' prompt item(s) in the UNSAVED Project Editor draft? Camera, generation, media and model settings stay unchanged.',
+      confirmText:'Apply to Editor',cancelText:'Keep Editing'});
+    if (!accepted) return {ok:false,code:'CANCELLED',message:'No changes applied.'};
+    check=previewPromptStudioTransfer(snapshot,proposedTracks);
+    if (!check.ok) return check;
+    let saved;
+    try {saved=await promptStudioFetchSavedRevision(snapshot.projectId);}
+    catch(error) {return {ok:false,code:'REVISION_UNAVAILABLE',message:error.message};}
+    check=previewPromptStudioTransfer(snapshot,proposedTracks);
+    if (!check.ok) return check;
+    if (saved.etag!==snapshot.savedEtag)
+      return {ok:false,code:'SAVED_PROJECT_CHANGED',message:'Saved project changed before apply. Editor was not modified.'};
+    const patch=window.MorphorumPromptStudioBridge.buildPromptOnlyPatch(collectProject(),proposedTracks);
+    if (!patch.ok) return patch;
+    state.project=patch.project;
+    qs('#animation-prompt-transition').value=patch.tracks.positive.interpolation;
+    renderPromptRows();
+    state.promptStudioPendingSaveEtag=snapshot.savedEtag;
+    state.timeline=null;
+    state.timelineSelection=null;
+    markDirty({validate:true});
+    renderTimeline();
+    return {ok:true,applied:true,diff:check.diff,
+      message:'Prompt changes are staged in Project Editor. Select Save Project to persist.'};
+  }
+
   window.MorphorumAnimation = {
+    getPromptStudioEditorSnapshot,
+    previewPromptStudioTransfer,
+    applyPromptStudioTransfer,
     applyImageSettingsToProject,
     hasOpenProject: () => Boolean(state.project?.id),
     openSavedProjectFromSetup,
