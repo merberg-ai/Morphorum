@@ -4,6 +4,8 @@
   const clone=value=>JSON.parse(JSON.stringify(value));
   const psComposer=root?.MorphorumPromptStudioComposer||
     (typeof module==='object'&&module.exports?require('./prompt-studio-composer.js'):null);
+  const psAI=root?.MorphorumPromptStudioAI||
+    (typeof module==='object'&&module.exports?require('./prompt-studio-ai.js'):null);
   const problem=(code,message)=>({ok:false,code,message});
   function beginDraft(snapshot,bridge) {
     if(!snapshot?.ok || !snapshot.projectId || !bridge)
@@ -13,7 +15,7 @@
     if(!validation.ok) return validation;
     return {ok:true,snapshot:clone(snapshot),original:clone(validation.tracks),
       tracks:clone(validation.tracks),composer:psComposer?.blank()||{schema_version:1,blocks:[]},
-      revision:0,applied:false};
+      aiProvenance:null,revision:0,applied:false};
   }
   function updateDraft(draft,bridge,lane,operation,frame,value) {
     if(!draft?.ok||draft.applied) return problem('NO_DRAFT','Import editable prompts first.');
@@ -91,7 +93,8 @@
       project_id:draft.snapshot.projectId,name:title,
       project_context:{model:clone(context.model),max_frames:frames,fps:Number(context.fps),
         start_mode:context.startMode||'prompt',source_image_name:context.sourceImageName||''},
-      original_tracks:original.tracks,prompt_tracks:edited.tracks,composer:composed.composer
+      original_tracks:original.tracks,prompt_tracks:edited.tracks,composer:composed.composer,
+      ai_provenance:draft.aiProvenance||null
     }};
   }
   function restoreDraft(saved,live,bridge) {
@@ -121,7 +124,8 @@
     const composed=psComposer?.normalize(saved.composer,saved.project_context.max_frames);
     if(!composed?.ok)return composed||problem('COMPOSER','Composer validation unavailable.');
     return {ok:true,original:original.tracks,tracks:edited.tracks,
-      composer:composed.composer,snapshot,revision:0,applied:false,compatible};
+      composer:composed.composer,aiProvenance:saved.ai_provenance||null,
+      snapshot,revision:0,applied:false,compatible};
   }
   function mount({panel,onEditor}={}) {
     if(!panel) throw new Error('Prompt Studio panel is required.');
@@ -129,7 +133,7 @@
     let draft=null,busy=false,invalid=false,previewedRevision=-1,blocked=false;
     let baselineBlocked=false,savedId='',savedEtag='',savedRevision=-1;
     let shownProjectId='',libraryEntries=[];
-    let timeline=null,composerUI=null;
+    let timeline=null,composerUI=null,aiUI=null;
     const dom=document.createElement('article');
     dom.className='card glass ps13-workspace';
     dom.innerHTML=`
@@ -163,8 +167,9 @@
         <p class="muted ps14-library-note" data-ps="library-note" role="status" aria-live="polite">Open an animation project to browse its saved drafts.</p>
       </section>
       <div class="ps13-context" data-ps="context">No prompts imported. Open a project in Project Editor, then select Import Existing Prompts.</div>
-      <p class="ps13-notice muted">Import and timeline edits stay in the Studio draft. Preview Changes and confirm Apply before saving in Project Editor. Visual keyframe changes have in-session Undo/Redo; Save Draft persists tracks, not the undo history. LLM authoring and audio storyboard sync are planned for later phases.</p>
+      <p class="ps13-notice muted">Import and timeline edits stay in the Studio draft. Preview Changes and confirm Apply before saving in Project Editor. Visual keyframe changes have in-session Undo/Redo; Save Draft persists tracks, not the undo history. Ollama storyboard suggestions require explicit review; audio storyboard synchronization remains planned for PS6.</p>
       <p class="ps13-status" data-ps="status" role="status" aria-live="polite">Ready to import.</p>
+      <section class="ps4-workspace" data-ps="ai" hidden aria-label="Ollama AI Story Director"></section>
       <section class="ps3-workspace" data-ps="composer" hidden aria-label="Structured Prompt Composer"></section>
       <section class="ps2-workspace" data-ps="timeline" hidden aria-label="Visual Prompt Studio timeline"></section>
       <div class="ps13-lanes" data-ps="lanes" hidden></div>
@@ -179,7 +184,8 @@
       previewButton=find('preview'),applyButton=find('apply'),
       lanes=find('lanes'),review=find('review'),context=find('context');
     const savedSelect=find('saved'),nameInput=find('name'),note=find('library-note');
-    const timelinePanel=find('timeline'),composerPanel=find('composer');
+    const timelinePanel=find('timeline'),composerPanel=find('composer'),
+      aiPanel=find('ai');
     const saveButton=find('save'),saveCopyButton=find('save-copy'),
       loadButton=find('load'),deleteButton=find('delete'),refreshButton=find('refresh');
     const projectId=()=>root.MorphorumAnimation?.getPromptStudioProjectId?.()||'';
@@ -219,6 +225,7 @@
       savedSelect.disabled=busy||!projectId();
       nameInput.disabled=busy||!draft?.ok;
       composerUI?.refresh();
+      aiUI?.refresh();
       lanes.querySelectorAll('button,input,textarea,select').forEach(el=>{
         el.disabled=!can||el.dataset.psFixed==='1';
       });
@@ -255,6 +262,7 @@
       else controls();
       timeline?.refresh();
       composerUI?.invalidate();composerUI?.refresh();
+      aiUI?.invalidate();aiUI?.refresh();
     }
     function makeLane(name){
       const track=draft.tracks[name];
@@ -364,7 +372,7 @@
         const snapshot=await editor.getPromptStudioEditorSnapshot();
         const result=beginDraft(snapshot,bridge);
         if(!result.ok){status(result.message,true);return;}
-        draft=result;timeline?.reset();composerUI?.reset();invalid=false;blocked=false;baselineBlocked=false;
+        draft=result;timeline?.reset();composerUI?.reset();aiUI?.reset();invalid=false;blocked=false;baselineBlocked=false;
         savedId='';savedEtag='';savedRevision=-1;
         nameInput.value=(result.snapshot.context.name||'Storyboard')+' Prompt Draft';
         previewClear();showContext();renderLanes();
@@ -377,8 +385,9 @@
       if(!draft?.ok||draft.applied)return;
       draft.tracks=clone(draft.original);
       draft.composer=psComposer?.blank()||{schema_version:1,blocks:[]};
+      draft.aiProvenance=null;
       draft.revision+=1;
-      timeline?.reset();composerUI?.reset();
+      timeline?.reset();composerUI?.reset();aiUI?.reset();
       invalid=false;blocked=false;previewClear();renderLanes();
       status('Prompt Studio draft restored to its imported baseline. Project Editor unchanged.');
     }
@@ -424,7 +433,7 @@
         const result=await root.MorphorumAnimation?.applyPromptStudioTransfer?.(draft.snapshot,draft.tracks);
         if(!result?.ok){blocked=result?.code!=='CANCELLED';status(result?.message||'Apply failed.',true);return;}
         if(result.applied){
-          draft.applied=true;timeline?.reset();composerUI?.reset();previewClear();renderLanes();
+          draft.applied=true;timeline?.reset();composerUI?.reset();aiUI?.reset();previewClear();renderLanes();
           status('Prompts staged in Project Editor. Save Project there to persist.');
           onEditor?.();
         }else status(result.message||'No prompt changes to apply.');
@@ -482,7 +491,7 @@
         if(projectId()!==id)throw new Error('Project changed while loading draft.');
         const value=restoreDraft(loaded.data.draft,live,bridge);
         if(!value.ok)throw new Error(value.message);
-        draft=value;timeline?.reset();composerUI?.reset();
+        draft=value;timeline?.reset();composerUI?.reset();aiUI?.reset();
         invalid=false;blocked=false;baselineBlocked=!value.compatible;
         savedId=identifier;savedEtag=loaded.etag;savedRevision=0;
         nameInput.value=loaded.data.draft.name;
@@ -548,6 +557,15 @@
       finally{busy=false;controls();}
     }
 
+    aiUI=psAI?.mount({
+      panel:aiPanel,getDraft:()=>draft,bridge,
+      onCommit:(tracks,provenance)=>{
+        const result=applyTracks(tracks,'ollama-storyboard');
+        if(result?.ok)draft.aiProvenance=provenance;
+        return result;
+      },
+      onNotice:(message,error)=>{if(error)status(message,true);}
+    })||null;
     composerUI=psComposer?.mount({
       panel:composerPanel,getDraft:()=>draft,
       onChange:next=>{
