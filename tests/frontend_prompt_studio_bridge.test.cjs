@@ -73,7 +73,8 @@ test('editor handshake is revision-guarded and cannot directly save a project',(
  const part=animation.slice(animation.indexOf('  async function applyPromptStudioTransfer('),
   animation.indexOf('  window.MorphorumAnimation = {'));
  assert.match(part,/MorphorumDialog\.confirm/);
- assert.match(part,/state\.project=result\.project/);
+ assert.match(part,/state\.project=patch\.project/);
  assert.match(part,/markDirty\(\{validate:true\}\)/);
+ assert.match(animation,/'If-Match':state\.promptStudioPendingSaveEtag/);
  assert.doesNotMatch(part,/method:\s*'PUT'|save_animation_project/);
 });
