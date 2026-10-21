@@ -7,8 +7,8 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 | Area | Availability |
 | --- | --- |
 | Platforms | Windows 10/11, 64-bit Linux installers and browser UI |
-| Models | SDXL, FLUX and Z-Image, including managed Z-Image-Turbo; external checkpoint folders |
-| Image generation | Text-to-image, supported image-to-image, seed/batch controls and LoRAs; SDXL-specific sampler/schedule selection, chunked CLIP prompt conditioning and adapter integrity reporting |
+| Models | SDXL, FLUX and Z-Image, including managed Z-Image-Turbo; external checkpoint folders (standalone Z-Image indexing does not imply loadability) |
+| Image generation | Text-to-image, supported image-to-image, seed/batch controls and LoRAs; SDXL-specific sampler/schedule selection, chunked CLIP prompt conditioning and adapter integrity reporting; managed Z-Image LoRA inference stability fix |
 | Animations | Saved projects, prompts/keyframes, 2D and depth-aware 3D motion, camera presets, curve editing, preview |
 | Motion Lab | Six-axis composer, keyboard/touch motion recording, supported gamepad controls; curve preview, ranged recording/refinement and saved-motion comparison |
 | Onboarding | Seven-step First-Run Setup Wizard with diagnostics, model/LoRA folders, optional Z-Image and 512 × 512 sample projects; separate seven-step New Project Wizard |
@@ -16,6 +16,8 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 | FFmpeg Manager | System detection or custom FFmpeg/FFprobe paths; optional SHA-256-verified managed FFmpeg install/update/remove on supported Windows/Linux hosts; host-side encoder checks |
 | Project archives | Verified full-configuration and input-media ZIP export/import, explicit overwrite and recoverable backup, Save Project As in Manager and Editor |
 | Import motion settings | Compatible Deforum Motion Studio camera schedules into existing 3D projects |
+| Local Civitai artwork | Explicit metadata/preview synchronization; local cached thumbnail cards in Models and previews in LoRAs, with mature-content settings and clear no-preview states |
+| About and updates | Project credits/logo and Git branch/commit status; host-only guarded update of the checked-out branch |
 | Remote operation | Authenticated API-only server, versioned client capabilities, project assets, telemetry, previews and job recovery |
 
 ## Current workflow and tested milestone
@@ -23,6 +25,12 @@ Morphorum **0.1.0a1** is an early-alpha application for running local AI image a
 The main menu includes Project Manager, New Project Wizard, and Project Editor directly. Project Editor groups its controls into five sections. Motion Lab Overview displays a read-only project/motion summary and workflow navigation for Preview, Apply, Save, Render, and Export. Motion Studio offers guided WAV analysis, beat detection, assignment, continuous/channel motion, and preview/apply stages. The Project Manager can move selected projects to Trash with confirmation, export/import portable project ZIPs, and create full-input-media project copies via **Save Project As**; this is also accessible from Project Editor.
 
 Owner Windows testing reported a successful 237-frame, 24 FPS animation with H.264 video and AAC audio export. On 2026-10-17, the owner also reported **G5.5 SDXL acceptance passed** and explicitly approved promotion of the G1–G5 SDXL improvements to `main`. The candidate's automated Backend, Syntax, and Windows/Linux Installer checks passed. The changes include expanded SDXL sampler/schedule selection, dual-CLIP long-prompt and negative-prompt handling, LoRA validation, animation cache/performance telemetry, and clearer render diagnostics. Individual G5 acceptance-matrix results were not provided separately; treat this as owner acceptance rather than independent verification of every scenario. Physical mobile testing is deferred, and the remaining P5.3 soundtrack provenance, P5.4 consistency, and P5.5 closeout are not complete.
+
+## October 21, 2026 promotion to main
+
+[PR #51](https://github.com/merberg-ai/Morphorum/pull/51) promoted the About/branch-update page, cached model/LoRA previews and safer preview diagnostics, and the managed Z-Image LoRA inference-context fix. The owner reported that thumbnails appeared correctly after synchronization and that the LoRA fix completed repeated Windows GPU still generations and an animation. GitHub Actions Backend, Syntax/frontend and Windows/Linux Installer checks passed on the promotion candidate. Dedicated device-width/mobile physical acceptance and exhaustive LoRA family combinations were **not** independently verified.
+
+**Not yet implemented:** [Prompt Studio PS0–PS9](PROMPT_STUDIO_ROADMAP.md), including its planned audio-to-storyboard synchronization, and [Parseq hosted URL integration PQ0–PQ7](PARSEQ_URL_INTEGRATION_ROADMAP.md). The separate ZT1 Z-Image animation continuity study and SDXL LoRA diagnostics remain open in [TODO.MD](../TODO.MD). Experimental standalone Z-Image checkpoints remain unavailable for normal generation.
 
 ## Important limits
 
