@@ -65,7 +65,7 @@ Starting with `run.bat` or `./run.sh` permits local host access only. To use ano
 - **Z-Image transfer still active:** **Not Now** continues onboarding; interrupted files are incomplete, not a usable model. Resume/retry when space and network are available. The full package is about 33 GB plus a disk reserve.
 - **Example Animations cannot advance:** The catalog and model index may still be loading or unavailable. Refresh/reopen setup and inspect **Console**. If your selected checkpoint disappeared, choose another or **No model yet**.
 - **Project saved but the Editor did not open:** Resolve any unsaved-editor prompt or ongoing render/recording, then retry. The same project ID is reused without overwriting your changes.
-- **Finish Without Example:** Finishes onboarding with no model or render required. Create a normal project later through **Motion Lab → New Project Wizard**.
+- **Finish Without Example:** Finishes onboarding with no model or render required. Create a normal project later through **Project → New Project**.
 - **Backend-only:** Has no browser wizard. Do not combine `--setup-wizard` and `--backend-only`.
 
 If the saved setup-state JSON is corrupted, preserve a backup for diagnostics rather than deleting it or user projects.
@@ -102,7 +102,7 @@ The warning automatically disappears once the model index contains a usable chec
 
 ## New Project Wizard will not advance or save
 
-Open **Motion Lab → New Project Wizard** and check the message on the current step.
+Open **Project → New Project** and check the message on the current step.
 
 - **Step 1:** The project must have a nonempty name (up to 120 characters).
 - **Step 2:** Select an available generation checkpoint. Use **Refresh Models** after scanning, or open **Models / Download** or **Settings** from the wizard.
@@ -261,7 +261,7 @@ does not ask for administrator privileges.
 
 ## Project is missing or was moved to Trash
 
-Look under **Motion Lab → Project Manager**. The manager lists projects from the application-managed `projects/` directory.
+Look under **Project → Project Manager**. The manager lists projects from the application-managed `projects/` directory.
 
 - Moving a project to Trash relocates its managed files to the project's `.trash` area; it is **not** an automatic restore-button workflow.
 - Separately stored completed renders and exports are not removed by moving a project to Trash.
