@@ -801,6 +801,99 @@ def api_animation_projects() -> dict[str, Any]:
     return {"projects": list_animation_projects()}
 
 
+
+# PS1.4: project-owned Prompt Studio drafts (independent from project.json).
+@app.get("/api/animation/projects/{project_id}/prompt-studio/drafts")
+def api_list_prompt_studio_drafts(project_id: str, response: Response) -> dict[str, Any]:
+    from .prompt_studio_drafts import list_drafts, PromptDraftError
+    try:
+        drafts = list_drafts(project_id)
+        response.headers["Cache-Control"] = "private, no-store"
+        return {"drafts": drafts}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PromptDraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/animation/projects/{project_id}/prompt-studio/drafts", status_code=201)
+def api_create_prompt_studio_draft(
+    project_id: str, payload: dict[str, Any], response: Response,
+) -> dict[str, Any]:
+    from .prompt_studio_drafts import create_draft, PromptDraftError
+    try:
+        draft, etag = create_draft(project_id, payload)
+        response.headers["ETag"] = etag
+        response.headers["Cache-Control"] = "private, no-store"
+        return {"draft": draft}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PromptDraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/animation/projects/{project_id}/prompt-studio/drafts/{draft_id}")
+def api_get_prompt_studio_draft(
+    project_id: str, draft_id: str, response: Response,
+) -> dict[str, Any]:
+    from .prompt_studio_drafts import read_draft, PromptDraftError
+    try:
+        draft, etag = read_draft(project_id, draft_id)
+        response.headers["ETag"] = etag
+        response.headers["Cache-Control"] = "private, no-store"
+        return {"draft": draft}
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PromptDraftError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.put("/api/animation/projects/{project_id}/prompt-studio/drafts/{draft_id}")
+def api_update_prompt_studio_draft(
+    project_id: str, draft_id: str, payload: dict[str, Any],
+    request: Request, response: Response,
+) -> dict[str, Any]:
+    from .prompt_studio_drafts import update_draft, PromptDraftError, PromptDraftConflict
+    match = request.headers.get("if-match")
+    if match is not None and not re.fullmatch(r'"[0-9a-f]{64}"', match):
+        raise HTTPException(status_code=400, detail="Invalid draft If-Match ETag.")
+    if match is None:
+        raise HTTPException(status_code=428, detail="Draft revision is required for overwrite.")
+    try:
+        draft, etag = update_draft(project_id, draft_id, payload, match)
+        response.headers["ETag"] = etag
+        response.headers["Cache-Control"] = "private, no-store"
+        return {"draft": draft}
+    except PromptDraftConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PromptDraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/animation/projects/{project_id}/prompt-studio/drafts/{draft_id}")
+def api_delete_prompt_studio_draft(
+    project_id: str, draft_id: str, request: Request, response: Response,
+) -> dict[str, Any]:
+    from .prompt_studio_drafts import delete_draft, PromptDraftError, PromptDraftConflict
+    match = request.headers.get("if-match")
+    if match is not None and not re.fullmatch(r'"[0-9a-f]{64}"', match):
+        raise HTTPException(status_code=400, detail="Invalid draft If-Match ETag.")
+    if match is None:
+        raise HTTPException(status_code=428, detail="Draft revision is required for deletion.")
+    try:
+        delete_draft(project_id, draft_id, match)
+        response.headers["Cache-Control"] = "private, no-store"
+        return {"status": "deleted", "draft_id": draft_id}
+    except PromptDraftConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PromptDraftError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.get("/api/animation/projects/{project_id}/archive")
 def api_export_project_archive(project_id: str):
     """Download saved project settings and verified attached inputs, no renders."""

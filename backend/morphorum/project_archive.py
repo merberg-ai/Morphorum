@@ -31,6 +31,7 @@ MAX_ARCHIVE_FILES = 128
 _DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _MOTION_FILE = re.compile(r"^motion_lab_audio/[0-9a-f]{64}\.wav$")
 _SOUND_FILE = re.compile(r"^imported_soundtrack/[0-9a-f]{64}\.(wav|mp3|ogg|flac)$")
+_PS_DRAFT_FILE = re.compile(r"^prompt_studio/drafts/[0-9a-f]{32}\.json$")
 _ALLOWED_FIXED = {"project.json", "assets/source.png",
                   "imported_soundtrack/attachment.json"}
 
@@ -46,7 +47,8 @@ class ProjectArchiveConflict(ProjectArchiveError):
 def _safe_member(name: str) -> bool:
     return (name in _ALLOWED_FIXED
             or bool(_MOTION_FILE.fullmatch(name))
-            or bool(_SOUND_FILE.fullmatch(name)))
+            or bool(_SOUND_FILE.fullmatch(name))
+            or bool(_PS_DRAFT_FILE.fullmatch(name)))
 
 
 def _sha(data: bytes) -> str:
@@ -82,6 +84,9 @@ def _input_files(project_id: str) -> dict[str, Path]:
         else:
             raise ProjectArchiveError("Unsupported input asset type.")
         files[relative] = root / relative
+    # Only validated project-owned Studio drafts are eligible. No cache/output files.
+    from .prompt_studio_drafts import draft_files
+    files.update(draft_files(project_id))
     if len(files) > MAX_ARCHIVE_FILES:
         raise ProjectArchiveError("Project contains too many input assets.")
     for name, path in files.items():
@@ -150,7 +155,10 @@ def _verified_archive(data: bytes) -> tuple[dict, dict[str, bytes]]:
                     raise ProjectArchiveError("Unsafe or unsupported ZIP entry: " + name)
                 if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
                     raise ProjectArchiveError("Unsupported ZIP compression.")
-                limit = MAX_PROJECT_JSON_BYTES if name in ("manifest.json", "project.json") else 40 * 1024 * 1024
+                from .prompt_studio_drafts import MAX_DRAFT_BYTES
+                limit = (MAX_DRAFT_BYTES if _PS_DRAFT_FILE.fullmatch(name)
+                         else MAX_PROJECT_JSON_BYTES if name in ("manifest.json", "project.json")
+                         else 40 * 1024 * 1024)
                 if info.file_size < 1 or info.file_size > limit:
                     raise ProjectArchiveError("Invalid ZIP entry size: " + name)
                 total += info.file_size
@@ -234,7 +242,16 @@ def _verified_archive(data: bytes) -> tuple[dict, dict[str, bytes]]:
                 raise ProjectArchiveError("Attached soundtrack does not match its format.")
         elif any(n.startswith("imported_soundtrack/") for n in files):
             raise ProjectArchiveError("Soundtrack metadata is missing.")
+        from .prompt_studio_drafts import validate_draft
         for path, raw in files.items():
+            if _PS_DRAFT_FILE.fullmatch(path):
+                try:
+                    payload = json.loads(raw)
+                    validated = validate_draft(payload, project_id, stored=True)
+                    if path != f"prompt_studio/drafts/{validated['draft_id']}.json":
+                        raise ProjectArchiveError("Prompt Studio draft ID does not match archive filename.")
+                except (ValueError, UnicodeError, TypeError) as exc:
+                    raise ProjectArchiveError("Invalid Prompt Studio draft in archive.") from exc
             if _MOTION_FILE.fullmatch(path) and (
                     _sha(raw) != Path(path).stem or
                     raw[:4] != b"RIFF" or raw[8:12] != b"WAVE"):
@@ -324,7 +341,11 @@ def save_project_as(source_id: str, new_name: str, *,
                     continue
                 target = stage / name
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(origin, target)
+                if _PS_DRAFT_FILE.fullmatch(name):
+                    from .prompt_studio_drafts import rewrite_draft_project
+                    target.write_bytes(rewrite_draft_project(origin.read_bytes(), source_id, new_id))
+                else:
+                    shutil.copyfile(origin, target)
             (stage / "project.json").write_text(
                 json.dumps(project, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
             stage.rename(destination)
