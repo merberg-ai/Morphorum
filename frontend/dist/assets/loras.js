@@ -129,6 +129,14 @@
       cached.className = 'lora-civitai-cached';
       cached.append(text('strong', 'Cached: ' + (state.cached.name || '') + ' · ' + (state.cached.version || '')));
       cached.append(text('p', [state.cached.creator, state.cached.base_model].filter(Boolean).join(' · '), 'muted'));
+      if (!state.cached.preview) {
+        cached.append(text('p', state.cached.preview_warning ||
+          'No suitable Civitai thumbnail is available for this LoRA.', 'lora-manager-warning'));
+      } else if (state.cached.preview_source === 'same_model_other_version') {
+        cached.append(text('p',
+          'Representative image from another version of this Civitai model.',
+          'muted lora-manager-small'));
+      }
       // Cached artwork is presented prominently above Quick Use.
       if (state.cached.trained_words?.length) cached.append(text('p', 'Triggers: ' + state.cached.trained_words.slice(0, 16).join(', '), 'muted'));
       if (state.cached.description) cached.append(text('p', state.cached.description.slice(0, 650), 'muted'));
@@ -232,7 +240,7 @@
     const ids = [...state.bulkSelected].filter(id => state.records.some(record => record.id === id));
     state.bulkBusy = true;
     updateBulkToolbar();
-    let success = 0, failed = 0;
+    let success = 0, failed = 0, withPreview = 0;
     const errors = [];
     try {
       for (let index = 0; index < ids.length; index++) {
@@ -245,6 +253,7 @@
             {method: 'POST', body: '{}'});
           if (!result.synced) throw Error('No verified metadata returned');
           success++;
+          if (result.preview) withPreview++;
           window.MorphorumThumbnails?.set(id, result);
           if (state.selected?.id === id) {
             state.cached = result;
@@ -257,8 +266,10 @@
         }
       }
       toast(failed ? 'LoRA sync finished with errors' : 'LoRA sync complete',
-        success + ' succeeded, ' + failed + ' failed.' + (errors.length ? ' ' + errors.join(' | ') : ''),
-        failed ? 'warning' : 'success');
+        success + ' metadata synced, ' + withPreview + ' thumbnails available, ' +
+          (success - withPreview) + ' without artwork, ' + failed + ' failed.' +
+          (errors.length ? ' ' + errors.join(' | ') : ''),
+        failed || withPreview < success ? 'warning' : 'success');
     } finally {
       state.bulkBusy = false;
       renderLibrary();
@@ -324,9 +335,13 @@
       window.MorphorumThumbnails?.set(selected.id, result);
       renderLibrary();
       if (state.cached?.trained_words?.length) updatePromptSnippet();
-      toast(write ? 'Civitai metadata cached' : 'Civitai cache',
-            result.synced ? 'Verified metadata available locally.' : 'No valid cached metadata. Sync first.',
-            result.synced ? 'success' : 'info');
+      const gotPreview = Boolean(result.preview);
+      toast(write ? (gotPreview ? 'Civitai metadata + thumbnail cached' : 'Metadata saved without artwork')
+                  : 'Civitai cache',
+            result.synced ? (gotPreview ? 'Verified metadata and thumbnail available locally.' :
+              (result.preview_warning || 'No suitable Civitai image is available.')) :
+              'No valid cached metadata. Sync first.',
+            result.synced ? (gotPreview ? 'success' : 'warning') : 'info');
     } catch (error) {
       if (request === state.request) toast('Civitai metadata failed', error.message, 'error');
     } finally {
