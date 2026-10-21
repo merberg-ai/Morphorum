@@ -44,3 +44,18 @@ Implementation details: [PS0 native contract](PROMPT_STUDIO_PS0_CONTRACT.md) and
 6. Use **Undo/Redo**, including text edits followed by drag. Editing after Undo must clear redo. Save Draft, refresh/reload it and verify the edited tracks persisted; Undo/Redo history is session-only.
 7. Preview Changes, Apply to Animation, Save Project and reload. Verify the native timeline and prompt resolution matches the Studio tracks and unrelated camera/generation/media settings remain unchanged.
 8. On mobile, check horizontal scroll, diamond dragging without accidental page movement, accessible zoom/snap buttons, and no viewport overflow. No rendering or backend project write should occur just by scrubbing or editing Studio.
+
+## PS3 structured prompt composer: physical acceptance
+
+PS3 adds **Structured Prompt Composer** above the PS2 timeline on `dev-webui`.
+
+1. Import a project, add a global Positive text block at Beginning, then a scene-local block at End at an existing positive keyframe. Preview the exact prompt string, including untouched literal text already in the frame.
+2. Reorder blocks with ↑/↓, toggle Active, edit the block text or placement, and preview the new result. Verify the negative lane remains unchanged unless a negative text block was deliberately added.
+3. Refresh the local LoRA catalog with an SDXL/FLUX/Z-Image project active. The list must be filtered to that project's model family. Choose a LoRA, adjust its weight, and optionally use cached Civitai trained words/thumbnail metadata. No automatic Civitai sync or internet fetch should occur.
+4. Check that negative LoRA directives are disallowed, other-family LoRAs cannot be committed, and duplicates of a native existing LoRA tag produce a warning/confirmation.
+5. **Commit Preview to Studio Draft** should update only the Studio draft tracks, including PS2's text/timeline editor. Then use Preview Changes → Apply to Animation → Save Project to persist into the animation. Verify the actual keyframes and raw LoRA directives survive reload.
+6. Save a draft with composer blocks, reload it, and verify label, scope, frame, order, weight, triggers, placement and enabled state. An old draft without composer data should still load with an empty composer.
+7. Verify project ZIP export/import and Save Project As keep block metadata. On a phone, ensure text editors, LoRA picker and actions fit the viewport.
+8. Check SDXL/FLUX/Z-Image generation separately if testing actual LoRA behavior. An indexed-family label and Civitai trigger metadata are informative, not proof the LoRA applies correctly in the renderer.
+
+No AI provider is part of PS3. That remains the separate PS4 work.
