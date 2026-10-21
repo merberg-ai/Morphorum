@@ -48,7 +48,7 @@
         <span class="ps4-provider">Ollama · text only</span></div>
       <div class="ps4-settings">
         <label>Ollama endpoint <input data-p4="endpoint" type="text"
-          value="http://127.0.0.1:11434" spellcheck="false" autocomplete="off"
+          value="http://127.0.0.1:11434" maxlength="200" spellcheck="false" autocomplete="off"
           placeholder="http://127.0.0.1:11434"></label>
         <label class="ps4-lan"><input data-p4="lan" type="checkbox">
           Allow my trusted private LAN IP (not public addresses)</label>
@@ -91,6 +91,17 @@
     panel.appendChild(node);
     const q=name=>node.querySelector('[data-p4="'+name+'"]');
     const draft=()=>getDraft?.();
+    // Browser-local, non-secret connection preferences. LAN permission is
+    // deliberately not persisted and must be opted into again per session.
+    const preference=(key,value)=>{
+      try{
+        if(value===undefined)return root.localStorage?.getItem('morphorum:ps4:'+key)||'';
+        root.localStorage?.setItem('morphorum:ps4:'+key,value);
+      }catch(_){return '';}
+    };
+    const savedEndpoint=preference('endpoint');
+    if(savedEndpoint&&savedEndpoint.length<=200)q('endpoint').value=savedEndpoint;
+    let preferredModel=preference('model');
     function status(s,bad=false){q('status').textContent=s;q('status').dataset.error=bad?'1':'0';
       if(bad)onNotice?.(s,true);}
     function invalidate(){
@@ -162,7 +173,7 @@
         if(!response.ok)throw Error(data.detail||'Ollama connection failed.');
         if(draft()?.snapshot.projectId!==id)throw Error('Project changed while connecting.');
         models=Array.isArray(data.models)?data.models:[];
-        const select=q('model'),previous=select.value;
+        const select=q('model'),previous=select.value||preferredModel;
         select.replaceChildren();
         for(const model of models){
           const op=document.createElement('option');op.value=model.name;
@@ -170,6 +181,8 @@
           select.appendChild(op);
         }
         if(models.some(x=>x.name===previous))select.value=previous;
+        preferredModel=select.value;
+        preference('model',preferredModel);
         connected=true;
         status(models.length+' Ollama model(s) found. Text JSON output support depends on the model.');
       }catch(error){forgetModelList();status(error.message,true);}
@@ -249,9 +262,16 @@
     q('discard').addEventListener('click',()=>{invalidate();refresh();status('AI proposal discarded. Draft unchanged.');});
     q('idea').addEventListener('input',()=>{invalidate();refresh();});
     q('mode').addEventListener('change',()=>{invalidate();refresh();});
-    q('endpoint').addEventListener('change',forgetModelList);
+    q('endpoint').addEventListener('change',()=>{
+      preference('endpoint',q('endpoint').value.slice(0,200));
+      forgetModelList();
+    });
     q('lan').addEventListener('change',forgetModelList);
-    q('model').addEventListener('change',()=>{invalidate();refresh();});
+    q('model').addEventListener('change',()=>{
+      preferredModel=q('model').value;
+      preference('model',preferredModel);
+      invalidate();refresh();
+    });
     q('negative').addEventListener('change',()=>{invalidate();refresh();});
     q('scenes').addEventListener('change',()=>{invalidate();refresh();});
     node.hidden=true;
