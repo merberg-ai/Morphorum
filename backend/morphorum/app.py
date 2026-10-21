@@ -803,6 +803,25 @@ def api_animation_projects() -> dict[str, Any]:
 
 
 
+# PS4: local Ollama storyboard proposals, never a render/project write.
+@app.post("/api/prompt-studio/ollama/models")
+async def api_prompt_studio_ollama_models(payload: dict[str, Any]) -> dict[str, Any]:
+    from .prompt_studio_ollama import models, OllamaStoryError
+    try:
+        return await models(payload)
+    except OllamaStoryError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.post("/api/prompt-studio/ollama/generate")
+async def api_prompt_studio_ollama_generate(payload: dict[str, Any]) -> dict[str, Any]:
+    from .prompt_studio_ollama import generate, OllamaStoryError
+    try:
+        return await generate(payload)
+    except OllamaStoryError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
 # PS2: read-only native prompt transition inspector for unsaved Studio tracks.
 @app.post("/api/animation/projects/{project_id}/prompt-studio/inspect-frame")
 def api_inspect_prompt_studio_frame(

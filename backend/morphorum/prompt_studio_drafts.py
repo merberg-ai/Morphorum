@@ -148,6 +148,23 @@ def _validate_composer(value: Any, max_frames: int) -> dict[str, Any]:
     return {"schema_version": 1, "blocks": output}
 
 
+
+def _validate_ai_provenance(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {
+            "provider", "model", "created_at", "mode", "scene_count", "family", "profile"}:
+        raise PromptDraftError("Invalid AI storyboard provenance.")
+    if (value.get("provider") != "ollama" or value.get("mode") not in ("create", "refine")
+            or value.get("family") not in ("sdxl", "flux", "zimage") or
+            value.get("profile") != "ps4-generic-v1" or
+            type(value.get("scene_count")) is not int or not 1 <= value["scene_count"] <= 16 or
+            not isinstance(value.get("model"), str) or not 1 <= len(value["model"]) <= 160 or
+            not isinstance(value.get("created_at"), str) or len(value["created_at"]) > 64):
+        raise PromptDraftError("AI provenance contains unsupported values.")
+    return dict(value)
+
+
 def validate_draft(value: Any, project_id: str, *, draft_id: str | None = None,
                    stored: bool = False) -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("format") != FORMAT:
@@ -190,6 +207,7 @@ def validate_draft(value: Any, project_id: str, *, draft_id: str | None = None,
         "original_tracks": original,
         "prompt_tracks": edited,
         "composer": _validate_composer(value.get("composer"), frames),
+        "ai_provenance": _validate_ai_provenance(value.get("ai_provenance")),
     }
     if stored:
         identifier = value.get("draft_id")
