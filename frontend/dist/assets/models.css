@@ -286,3 +286,55 @@
   min-width:17px !important; min-height:17px !important; max-width:17px; max-height:17px;
   margin:0 4px 0 0; padding:0; accent-color:var(--accent); cursor:pointer;
 }
+
+
+/* C5: cached-art inventory. These cards replace the cramped multi-column table
+   without changing model selection, bulk operations, or local file paths. */
+.library-artwork { position:relative; display:grid; place-items:center; width:100%; aspect-ratio:3 / 4; min-width:0; border-radius:11px; overflow:hidden; border:1px solid var(--border-strong); background:radial-gradient(ellipse at 25% 18%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 64%),linear-gradient(150deg,var(--panel-strong),var(--bg)); }
+.library-artwork img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+.library-artwork-fallback { font-family:var(--font-mono); text-align:center; color:var(--muted); font-size:.69rem; letter-spacing:.13em; line-height:1.5; padding:8px; opacity:.85; }
+#view-models .model-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,368px),1fr)); align-items:stretch; gap:13px; padding:14px; }
+#view-models .model-row { display:grid; grid-template-columns:20px minmax(86px,112px) minmax(0,1fr); grid-template-rows:minmax(145px,auto) auto; gap:13px; min-width:0; padding:13px; align-items:start; border:1px solid var(--border); border-radius:15px; background:color-mix(in srgb,var(--panel-strong) 76%,transparent); transition:border-color .16s ease,box-shadow .16s ease; }
+#view-models .model-row:hover { border-color:var(--border-strong); box-shadow:0 8px 25px rgba(0,0,0,.15); }
+#view-models .model-row > .model-bulk-checkbox { grid-column:1;grid-row:1;align-self:start;margin:5px 0 0; }
+#view-models .model-row > .model-entry-art { grid-column:2;grid-row:1;max-width:none;align-self:start; }
+#view-models .model-row > .model-entry-summary { grid-column:3;grid-row:1; min-width:0; max-width:100%; display:flex; flex-direction:column; gap:10px; }
+#view-models .model-entry-summary .model-name { font-size:.98rem;line-height:1.32;font-weight:700;white-space:normal;overflow-wrap:anywhere; }
+#view-models .model-entry-summary .model-file { font-size:.72rem;white-space:normal;overflow-wrap:anywhere;line-height:1.4;margin-top:5px; }
+#view-models .model-entry-pills { display:flex; flex-wrap:wrap;align-items:center;gap:6px; }
+#view-models .model-entry-pills .model-size { text-align:left;white-space:normal;font-size:.75rem; }
+#view-models .model-entry-summary .model-path-details { grid-column:auto;grid-row:auto;order:unset;width:100%;font-size:.75rem; }
+#view-models .model-entry-summary .model-path-details > summary {padding:4px 0;min-height:30px; }
+#view-models .model-entry-actions { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px;max-width:100%; }
+#view-models .model-entry-actions > button { width:100%;min-width:0;max-width:none;min-height:40px;font-size:.75rem;white-space:normal;overflow-wrap:anywhere;line-height:1.2;padding:8px; }
+#view-models .model-entry-actions > .use-model-button {grid-column:1 / -1;grid-row:auto;align-self:auto;font-size:.87rem;font-weight:700; }
+#view-models .model-row .model-civitai-metadata {font-size:.74rem;line-height:1.4;margin-top:8px;max-width:none;}
+#view-models .model-count-note {grid-column:1/-1;padding:10px 2px;border:0;background:transparent;}
+#view-models .model-row > * {min-width:0;}
+#view-models .model-bulk-toolbar {padding:12px 15px;gap:8px;border-bottom:1px solid var(--border);}
+/* Selected LoRA library: rectangular thumbnails with accessible text labels. */
+#view-loras .lora-manager-select-row {gap:9px;align-items:stretch;}
+#view-loras .lora-manager-select-row .lora-manager-item {display:grid;grid-template-columns:68px minmax(0,1fr);align-items:center;gap:12px;text-align:left;min-height:96px;padding:8px;}
+#view-loras .lora-manager-item .lora-library-art { width:68px; }
+#view-loras .lora-item-label {min-width:0;display:flex;flex-direction:column;gap:5px; }
+#view-loras .lora-item-label strong {overflow-wrap:anywhere;font-size:.87rem;line-height:1.3;}
+#view-loras .lora-item-label small {font-size:.71rem;white-space:normal;overflow-wrap:anywhere;line-height:1.3;}
+#view-loras .lora-manager-preview { display:grid;place-items:center;min-height:220px;padding:12px;margin:0 0 14px;border:1px solid var(--border-strong);border-radius:14px;background:linear-gradient(140deg,color-mix(in srgb,var(--accent) 6%,transparent),rgba(0,0,0,.14)); }
+#view-loras .lora-manager-preview > .lora-detail-art { width:min(100%,480px);height:230px;aspect-ratio:auto;border-radius:12px; }
+#view-loras .lora-detail-art img { object-fit:contain; }
+#view-loras .lora-detail-art .library-artwork-fallback {font-size:.85rem;}
+@media(max-width:640px) {
+  #view-models .model-list {grid-template-columns:minmax(0,1fr);padding:9px;gap:10px;}
+  #view-models .model-row {grid-template-columns:20px minmax(75px,100px) minmax(0,1fr);gap:9px;padding:10px;}
+  #view-models .model-entry-actions > button {min-height:43px;}
+  #view-loras .lora-manager-preview > .lora-detail-art {height:200px;}
+}
+@media(max-width:380px) {
+  #view-models .model-row {grid-template-columns:19px minmax(65px,82px) minmax(0,1fr);}
+  #view-models .model-row > .model-bulk-checkbox {grid-column:1;grid-row:1;}
+  #view-models .model-row > .model-entry-art {grid-column:2;grid-row:1;}
+  #view-models .model-row > .model-entry-summary {grid-column:3;grid-row:1;}
+  #view-models .model-row > .model-entry-actions {grid-column:1/-1;grid-row:2;}
+  #view-loras .lora-manager-select-row .lora-manager-item {grid-template-columns:54px minmax(0,1fr);}
+  #view-loras .lora-manager-item .lora-library-art {width:54px;}
+}
