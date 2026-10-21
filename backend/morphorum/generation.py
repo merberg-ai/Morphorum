@@ -1503,6 +1503,20 @@ class GenerationManager:
     def unload_after_job_enabled(self) -> bool:
         return self._unload_after_generation_enabled()
 
+    @staticmethod
+    def inference_context(family: str):
+        """Avoid inference tensors in Z-Image's group-offloaded PEFT parameters.
+
+        Group offload can replace PEFT adapter Parameter.data during forward.
+        Inside inference_mode those tensors become inference tensors; a later
+        PEFT adapter activation may then fail on requires_grad_(True).
+        no_grad prevents this while retaining low-VRAM group offloading.
+        Other families keep their existing inference_mode behavior.
+        """
+        import torch
+
+        return torch.no_grad() if family == "zimage" else torch.inference_mode()
+
     def _generator_device(self, family: str) -> str:
         if family == "flux" or self._pipeline_device == "cuda-offload":
             return "cpu"
@@ -3231,7 +3245,7 @@ class GenerationManager:
                     emit_console("info", "generation", summary)
                     previous_sdxl_diagnostic = diagnostic
 
-            with torch.inference_mode():
+            with self.inference_context(job.model["family"]):
                 result = pipe(**call_args)
 
             if job.cancel_requested:

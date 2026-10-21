@@ -79,6 +79,19 @@ The main navigation offers **Project Manager**, **New Project**, and **Project E
 
 **Release/testing note (October 2026):** Windows owner testing has confirmed successful animation generation and an MP4 with audio, plus acceptance of the G5 SDXL integration milestone (samplers and schedules, chunked prompt conditioning, LoRA verification, and diagnostics). Dedicated physical mobile acceptance is deferred, and remaining P5 work is tracked separately. This remains alpha software. See [SDXL generation](docs/SDXL_GENERATION.md) and [testing history](docs/TESTING.md).
 
+## Improved local Models & LoRA artwork (dev-webui)
+
+After explicitly synchronizing a verified installed checkpoint or LoRA using
+**Sync Civitai Info**, Morphorum keeps available Civitai still-image thumbnails
+with the rest of its cached metadata. The Models manager displays responsive
+thumbnail cards, including an opt-in **Sync Selected** action; the LoRA manager
+shows library thumbnails and a larger selected-adapter image. Reopening either
+manager reads local cached assets only, without an automatic remote Civitai
+request. Models with no usable preview display a placeholder. The Civitai Hub
+must be enabled and its thumbnail/mature-content preferences still apply.
+
+[Local thumbnail behavior, safety limits and test checklist](docs/CIVITAI_MODEL_HUB.md)
+
 ## What can Morphorum do?
 
 | Feature | What it provides |
@@ -137,6 +150,14 @@ The usual launcher provides both a **web interface and generation API**, typical
 - **[Backend-only mode](docs/BACKEND_ONLY.md)**: LAN setup, per-client credentials, connection checks, security
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)**: installer, model, CUDA, networking and export problems
 - **[Documentation index](docs/README.md)**: all maintained user and contributor guides
+
+## About & built-in updater
+
+The **About** page (desktop navigation, or **More → About** on mobile) introduces Morphorum, credits Deforum and SD WebUI Forge plus community members including **chicodog530**, and links the GitHub repository. It also displays your **installed version, checked-out branch and commit**, with an on-demand **Check for updates** action that fetches only the checked-out branch.
+
+When a clean working copy is behind its remote, **Update current branch** runs the existing backup/rollback installer from a browser on the **host computer only**; remote LAN browsers can check but cannot apply updates because the regular WebUI is unauthenticated. Never update while rendering; restart Morphorum afterward. The About page now includes the optimized blue-and-purple Morphorum skull logo, sized to preserve its full artwork on desktop and mobile.
+
+[About and update safeguards](docs/ABOUT_AND_UPDATES.md)
 
 ## Project information
 

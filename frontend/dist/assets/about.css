@@ -1,0 +1,54 @@
+/* About: compact cyber-glass identity and branch-pinned maintenance. */
+#view-about .about-layout { display:grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .87fr); gap:18px; align-items:start; }
+#view-about .about-identity { grid-column:1/-1; overflow:hidden; position:relative; }
+#view-about .about-identity::before { content:""; pointer-events:none; position:absolute; inset:0; background:radial-gradient(ellipse at 8% 25%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 52%),radial-gradient(ellipse at 93% 90%,color-mix(in srgb,var(--accent-2) 13%,transparent),transparent 52%); }
+#view-about .about-hero { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:clamp(16px,3vw,34px); position:relative; padding:clamp(0px,1vw,12px); }
+#view-about .about-logo-slot { flex:1 1 460px; min-width:min(100%,355px); max-width:600px; aspect-ratio:3 / 2; display:grid; place-items:center; border-radius:18px; border:1px solid color-mix(in srgb,var(--accent) 23%,transparent); background:#010207; box-shadow:0 12px 42px rgba(0,0,0,.24),0 0 36px color-mix(in srgb,var(--accent) 8%,transparent); overflow:hidden; }
+#view-about .about-logo-fallback { font-size:clamp(64px,12vw,150px); line-height:1; font-weight:800; letter-spacing:-.12em; padding-right:.12em; font-family:var(--font-ui); color:var(--accent); text-shadow:0 0 36px color-mix(in srgb,var(--accent) 56%,transparent); }
+#view-about #about-logo { width:100%; height:100%; object-fit:contain; }
+#view-about #about-logo[hidden],#view-about .about-logo-fallback[hidden] { display:none; }
+#view-about .about-brand-copy { flex:1 1 320px; min-width:min(100%,280px); max-width:720px; }
+#view-about .about-brand-copy h2 { margin:.1em 0 .35em; font-size:clamp(30px,4vw,50px); letter-spacing:-.04em; color:var(--text); }
+#view-about .about-brand-copy p { line-height:1.65; }
+#view-about .about-link-row { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-top:18px; }
+#view-about a:not(.secondary-button) { color:var(--accent); text-decoration:none; }
+#view-about a:hover { text-decoration:underline; }
+#view-about .about-update-card,#view-about .about-credits { height:100%; min-width:0; }
+#view-about .about-git-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:16px 0; }
+#view-about .about-git-grid > div { display:flex; flex-direction:column; gap:7px; padding:13px; background:color-mix(in srgb,var(--panel-strong) 80%,transparent); border:1px solid var(--border); border-radius:12px; min-width:0; }
+#view-about .about-git-grid span { font-size:.82em; color:var(--muted); }
+#view-about .about-git-grid strong { font-size:1.06em; }
+#view-about .about-git-grid code { color:var(--accent); font-family:var(--font-mono); overflow-wrap:anywhere; }
+#view-about .about-update-message { min-height:2.2em; line-height:1.5; }
+#view-about .about-update-actions { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0; }
+#view-about .about-update-actions button { flex:1 1 170px; }
+#view-about .about-update-safety { line-height:1.55; font-size:.87em; }
+#view-about .about-command-row { display:flex; flex-wrap:wrap; align-items:center; gap:9px; padding:12px; border:1px solid var(--border); border-radius:12px; background:rgba(0,0,0,.14); margin-top:14px; }
+#view-about .about-command-row > span { flex-basis:100%; color:var(--muted); font-size:.83em; }
+#view-about .about-command-row code { flex:1; overflow-wrap:anywhere; color:var(--accent); }
+#view-about .about-update-log { margin-top:14px; max-height:210px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; border-radius:12px; border:1px solid var(--border); background:rgba(0,0,0,.3); color:var(--text); font-family:var(--font-mono); font-size:.76rem; }
+#view-about .about-credit-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:14px 0; }
+#view-about .about-credit-grid > div { display:flex; flex-direction:column; gap:9px; min-width:0; padding:14px; border:1px solid var(--border); border-radius:12px; background:rgba(0,0,0,.12); }
+#view-about .about-credit-grid strong { color:var(--text); }
+#view-about .about-credit-grid span { color:var(--muted); line-height:1.5; font-size:.9em; }
+#view-about .about-credit-grid a { margin-top:auto; font-size:.88em; }
+#view-about .about-attribution-note { margin-top:16px; font-size:.83em; }
+@media(max-width:920px) {
+  #view-about .about-layout { grid-template-columns:minmax(0,1fr); }
+  #view-about .about-identity { grid-column:1; }
+}
+@media(max-width:840px) {
+  #view-about .about-hero { flex-direction:column; text-align:center; padding:0; }
+  #view-about .about-logo-slot { flex:0 0 auto; min-width:0; width:min(100%,600px); }
+  #view-about .about-brand-copy { flex:0 1 auto; min-width:0; max-width:660px; }
+  #view-about .about-link-row { justify-content:center; }
+}
+@media(max-width:640px) {
+  #view-about .about-logo-slot { width:100%; }
+  #view-about .about-hero { gap:14px; }
+  #view-about .about-brand-copy h2 { font-size:34px; }
+  #view-about .about-link-row { justify-content:center; }
+  #view-about .about-credit-grid { grid-template-columns:minmax(0,1fr); }
+  #view-about .about-git-grid { gap:8px; }
+  #view-about .about-git-grid > div { padding:9px; }
+}

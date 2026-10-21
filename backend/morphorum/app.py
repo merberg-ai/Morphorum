@@ -116,7 +116,7 @@ from .civitai_download import start_download, list_jobs, cancel_download, resume
 from .civitai_auth import get_token, token_status, store_token, clear_token
 from .civitai_identify import identify_model
 from .civitai_updates import check_model_update
-from .civitai_library import cached_metadata, sync_metadata, preview_path
+from .civitai_library import cached_metadata, cached_catalog, sync_metadata, preview_path
 from .civitai_installed import installed_versions
 from .managed_models import ManagedModelError, managed_model_manager
 from .model_index import get_model, list_models, model_summary, scan_models
@@ -126,6 +126,7 @@ from .paths import ROOT, ensure_runtime_dirs
 from .settings import load_settings, model_family_definitions, save_settings, validate_model_paths, validate_path
 from .ffmpeg_tools import ffmpeg_status, normalize_ffmpeg_settings
 from .managed_ffmpeg import managed_ffmpeg_manager, ManagedFFmpegError
+from .git_updates import GitUpdateError, git_update_manager
 from .system_info import (
     doctor_report,
     git_branch,
@@ -312,6 +313,79 @@ def health() -> dict:
     }
 
 
+# About's updater cannot be a remote-administration endpoint: the ordinary
+# LAN WebUI is intentionally unauthenticated. Only host-local, same-origin
+# requests may start source updates. Read-only checks work over trusted LAN.
+def _about_same_origin(request: Request) -> None:
+    origin = request.headers.get("origin", "")
+    host = request.headers.get("host", "")
+    if not origin or origin.rstrip("/") != str(request.url.scheme) + "://" + host:
+        raise HTTPException(status_code=403, detail="Same-origin browser request required.")
+
+
+def _about_local_host(request: Request) -> bool:
+    import ipaddress
+    try:
+        return bool(request.client and
+                    ipaddress.ip_address(request.client.host).is_loopback)
+    except ValueError:
+        return False
+
+
+def _about_work_busy() -> bool:
+    if generation_manager.model_status().get("busy"):
+        return True
+    with animation_render_manager._lock:
+        if any(job.status not in {"completed", "failed", "cancelled"}
+               for job in animation_render_manager._jobs.values()):
+            return True
+    with video_export_manager._lock:
+        return any(job.status in {"queued", "encoding"}
+                   for job in video_export_manager._jobs.values())
+
+
+@app.get("/api/about/git", include_in_schema=False)
+def about_git_status(request: Request) -> dict:
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=404, detail="About is only available in WebUI mode.")
+    state = git_update_manager.status()
+    state["host_local"] = _about_local_host(request)
+    return state
+
+
+@app.post("/api/about/check", include_in_schema=False)
+def about_git_check(request: Request) -> dict:
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=404, detail="About is only available in WebUI mode.")
+    _about_same_origin(request)
+    try:
+        return {"check": git_update_manager.check(),
+                "host_local": _about_local_host(request)}
+    except GitUpdateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/about/update", include_in_schema=False)
+def about_git_apply(request: Request, payload: dict[str, Any]) -> dict:
+    if BACKEND_ONLY:
+        raise HTTPException(status_code=404, detail="About is only available in WebUI mode.")
+    _about_same_origin(request)
+    if not _about_local_host(request):
+        raise HTTPException(
+            status_code=403,
+            detail="Updates may only be applied from a browser on the Morphorum host. "
+                   "LAN clients can check for updates but cannot install them.")
+    try:
+        return {"update": git_update_manager.start(
+            expected_branch=str(payload.get("branch") or ""),
+            expected_head=str(payload.get("head") or ""),
+            expected_remote_head=str(payload.get("remote_head") or ""),
+            work_is_busy=_about_work_busy,
+        )}
+    except GitUpdateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.get("/api/client/capabilities")
 def api_client_capabilities() -> dict[str, Any]:
     """DB2.1 additive feature/identity handshake for native clients."""
@@ -480,6 +554,15 @@ def get_settings() -> dict[str, Any]:
 def api_civitai_installed(model_id: int) -> dict[str, Any]:
     try:
         return installed_versions(model_id)
+    except CivitaiSearchError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@app.post("/api/civitai/library-catalog")
+def api_civitai_cached_catalog(payload: dict[str, Any]) -> dict[str, Any]:
+    """Read cached preview summaries only; no Civitai lookup or remote request."""
+    try:
+        return cached_catalog(payload.get("model_ids"))
     except CivitaiSearchError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 

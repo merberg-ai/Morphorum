@@ -22,6 +22,33 @@ from morphorum.animation_render import (
 )
 
 
+def test_managed_zimage_blended_prompt_encoding_does_not_poison_lora_parameters() -> None:
+    """Encoding outside pipeline.__call__ must not poison group-offloaded LoRA weights."""
+    parameter = torch.nn.Parameter(torch.ones(2), requires_grad=False)
+    modes = []
+
+    class OffloadedPromptPipe:
+        def encode_prompt(self, **_kwargs):
+            modes.append((torch.is_grad_enabled(), torch.is_inference_mode_enabled()))
+            parameter.data = torch.empty_like(parameter)
+            return (torch.ones((1, 2, 4)),)
+
+    result = _prompt_conditioning_kwargs(
+        OffloadedPromptPipe(),
+        "zimage",
+        {"from_text": "fog", "to_text": "skeletons", "from_frame": 0,
+         "to_frame": 1, "to_weight": 0.5},
+        {"from_text": "", "to_text": ""},
+        guidance_scale=0.0,
+    )
+    assert modes == [(False, False), (False, False)]
+    assert result["prompt"] is None
+    assert result["prompt_embeds"].shape == (1, 2, 4)
+    assert not parameter.is_inference()
+    parameter.requires_grad_(True)
+    assert parameter.requires_grad
+
+
 def sample_project(max_frames: int = 4) -> dict:
     return {
         "schema_version": 1,

@@ -6,6 +6,19 @@ Morphorum is intentionally starting with a clean-room core. This file will track
 
 The project may study public behavior, documentation, formats, and interfaces from projects including Deforum, Stable Diffusion WebUI, Forge, Diffusers, and related model ecosystems. Reference does not mean source code is incorporated.
 
+## Community acknowledgments
+
+Morphorum's About page thanks [Deforum](https://github.com/deforum/sd-webui-deforum)
+for the animation and prompt-scheduling ecosystem and
+[Stable Diffusion WebUI Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)
+for accessible, performance-focused local model workflows. Special community
+appreciation also goes to **chicodog530** and creators across the PyTorch,
+Diffusers and Stable Diffusion communities.
+
+These acknowledgments do not imply affiliation, endorsement, or bundling of
+Deforum/Forge source code. Any future vendored assets must be reviewed
+under the contributor rules below.
+
 ## Optional managed FFmpeg and FFprobe
 
 Morphorum's **FFmpeg Manager** can fetch an optional upstream static **GPL** build containing FFmpeg and FFprobe for Windows/Linux. The binaries are downloaded only after a user requests installation; they are **not included in this source repository**, and the original Morphorum code remains separately distributed under the Unlicense.

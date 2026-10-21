@@ -2,9 +2,35 @@
 
 Deferred investigations and improvements. These entries are **not** release blockers unless a later test demonstrates a functional failure.
 
+## PQ: Parseq hosted-manifest URL integration (planned 2026-10-20)
+
+**Status:** Roadmap only, **NOT IMPLEMENTED**. Owner selected **Option A**: use the external Parseq editor and a saved, stable hosted JSON URL rather than rebuilding Parseq. The authoritative staged plan is [PQ Parseq URL Integration Roadmap](docs/PARSEQ_URL_INTEGRATION_ROADMAP.md), phases **PQ0–PQ7**.
+
+- Keep work on `dev-webui`; `main` unchanged. Start implementation only when owner explicitly requests PQ0.
+- Save the Parseq URL once per Morphorum project; fetch/validate the latest published JSON before each new automatic render; **freeze a verified immutable manifest per render/resume**. No silent fallback to old JSON when source is unavailable.
+- Reuse existing Morphorum frame resolver, motion previews, SDXL/FLUX/managed Z-Image renderer, save/conflict rules and project archives. Map supported fields with explicit ownership; do not execute Parseq expressions or replace native tracks.
+- Safeguard HTTP fetching (SSRF, private DNS/redirects, size/time limits, token redaction), cross-model guidance/retention semantics, 2D/3D delta conversions, prompt/LoRA handling, FPS/frame counts, and source provenance.
+- Require golden fixtures, automated regressions, owner Windows GPU gates and explicit approval before any main merge. Mobile physical testing cannot be marked PASS unless performed.
+
+**Next step when authorized:** PQ0 upstream contract/fixtures/threat-model baseline only. Do not implement PQ1+ preemptively.
+
+## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
+
+**Status:** Roadmap only, **NOT IMPLEMENTED**. Full phased design: [Prompt Studio PS0–PS9 Roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Develop on `dev-webui`; keep native renders and project saving unchanged until each phase is tested. Begin **PS0 only on explicit owner authorization**.
+
+- Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
+- Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
+- Optional AI Story Director with local/LAN Ollama first, validated structured scenes, versioned SDXL/FLUX/managed Z-Image prompt profiles, optional vision of user-selected start images, and later optional verified managed LLM.
+- **PS6 is a required audio-to-storyboard synchronization milestone:** reuse Motion Studio's existing soundtrack/beat/cue analysis, align scene entrances and climaxes to chosen beats using deterministic FPS/frame snapping, provide manual locks, timeline preview and diff/undo; support offline/manual beat alignment and do not replace audio or motion schedules.
+- Save/load reusable Studio drafts; **Apply to Animation** updates only the existing Project Editor's *unsaved prompt draft* after confirmation, preserving current project conflict checks. Explicit Save Project commits changes.
+- Coexist with the independent PQ hosted-Parseq roadmap. If Parseq overrides runtime prompts, warn before applying native prompts, and never modify hosted Parseq manifests. No parallel renderer, automatic LoRA downloads or silently changed model settings.
+- Physical Windows GPU owner verification and existing CI gates per PS milestone; later merge requires explicit owner signoff. Preserve incomplete PQ and experimental external Z-Image gating.
+
+**Next when authorized:** PS0 contract/fixtures and native prompt/audio-cue API audit, not PS1 implementation.
+
 ## Z-Image Turbo LoRA stability and animation coherence (reported 2026-10-19)
 
-**Status:** Open. Physical Windows testing found a reproducible functional failure with a Z-Image LoRA, plus a separate animation quality concern. Investigate and validate on `dev-webui` before merging a fix. **Priority:** ZL1 correctness first; ZT1 quality second.
+**Status:** **ZL1 passed / resolved on `dev-webui`** (user physical Windows GPU verification reported 2026-10-20): repeated managed Z-Image single-image generations with and without LoRAs, plus a Z-Image animation, no longer raise the inference-tensor exception. **ZT1 remains open** for animation temporal coherence and has not been modified. No merge to `main` yet.
 
 ### ZL1: Managed Z-Image + LoRA inference stability (bug)
 
@@ -14,15 +40,9 @@ Deferred investigations and improvements. These entries are **not** release bloc
 Setting requires_grad=True on inference tensor outside InferenceMode is not allowed.
 ```
 
-**Investigation / proposed work:**
-- Reproduce with single-image generations/batches and animation, with/without LoRA. Collect full Python tracebacks and record the exact stage (LoRA load, adapter enable/weight update, task conversion, prompt encoding, offload transfer, or inference).
-- Audit `backend/morphorum/generation.py` shared `configure_loras()`, model reuse and txt2img/img2img conversion, and `backend/morphorum/animation_render.py` inference and conditioning contexts. The single-image failure means the task switch cannot be the only suspect.
-- On 16 GB GPUs, inspect PEFT adapter parameter lifecycle with Diffusers Z-Image BF16 group offloading and `torch.inference_mode()`. Confirm the cause before changing behavior; evaluate `torch.no_grad()` selectively where inference tensors might later undergo parameter/adapter operations.
-- Ensure loaded adapter identity, weight, enabled state and valid tensors survive subsequent generations and task changes without stale adapters or unintended LoRA effects. Preserve memory-safe offloading: do not solve by forcing the managed Z-Image model entirely into 16 GB VRAM.
-- Add regression coverage for repeated Z-Image single-image/batch generations, txt2img-to-img2img animation, LoRA enable/disable/reweight, and generation without LoRA; run automated tests and Windows GPU physical verification.
-- Keep SDXL, FLUX, managed model installation and existing project behavior unchanged unless a separately tested shared fix is necessary.
+**Fix and verification (2026-10-20):** Managed Z-Image keeps group offloading, but its still-image inference, animation-anchor inference, and blended prompt encoding use `torch.no_grad()` instead of `torch.inference_mode()`. The inferred failure mechanism is that Diffusers offloading can create inference tensors in PEFT adapter parameters, conflicting with a later `requires_grad_(True)` operation. SDXL and FLUX retain their previous inference contexts. CPU regression coverage exercises repeated adapter activation/disable/reweight cycles and blended Z-Image conditioning. GitHub Actions backend tests passed (run 39421028500, commit e0c88ee). User verified on physical Windows GPU: multiple managed Z-Image generations both with and without LoRAs, and an animation, without recurrence of the reported error.
 
-**Acceptance:** Same settings complete several consecutive single-image generations and a multi-anchor animation with the Z-Image LoRA; without-LoRA baseline still succeeds; no inference tensor exception, stale adapter influence, or new CUDA out-of-memory regression.
+**Acceptance:** **Passed by user report** for repeated physical Windows GPU still-image generation with and without LoRAs, and an animation without recurrence of the reported error. Automated CPU tests passed. The exact animation length, number of diffusion anchors, and LoRA scheduling variations were not separately recorded, so this is not a claim of exhaustive coverage. Keep the regression tests in place and reopen if the exception recurs.
 
 ### ZT1: Z-Image animation temporal coherence (quality improvement)
 
@@ -64,4 +84,4 @@ Setting requires_grad=True on inference tensor outside InferenceMode is not allo
 
 ## Project Editor prompt/keyframe UX
 
-Next discussion topic: review prompt entry, keyframe editing, scheduling, and navigation workflows before defining implementation milestones. No design or changes have been approved yet.
+The planned Prompt Studio PS0–PS9 roadmap above supersedes this open-ended discussion item. No Prompt Studio implementation has been authorized; retain existing editor behavior until PS1+ acceptance gates.
