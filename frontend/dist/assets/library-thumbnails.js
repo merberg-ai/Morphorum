@@ -45,7 +45,14 @@
     holder.className = 'library-artwork ' + extraClass;
     const fallback = document.createElement('span');
     fallback.className = 'library-artwork-fallback';
-    fallback.textContent = 'NO PREVIEW';
+    const status = meta?.preview_status;
+    fallback.textContent = status === 'disabled' ? 'PREVIEWS OFF'
+      : status === 'filtered' ? 'PREVIEW HIDDEN'
+      : status === 'missing' ? 'CACHE MISSING'
+      : meta?.synced ? 'NO IMAGE AVAILABLE' : 'NO PREVIEW';
+    if (meta?.preview_warning) holder.title = meta.preview_warning;
+    else if (meta?.preview_source === 'same_model_other_version')
+      holder.title = 'Representative artwork from another version of the same Civitai model.';
     fallback.setAttribute('aria-hidden', 'true');
     holder.appendChild(fallback);
     if (meta?.preview) {
@@ -55,7 +62,11 @@
       img.alt = 'Cached preview for ' + String(name || 'model');
       img.src = '/api/civitai/library/' + encodeURIComponent(id) +
         '/preview?v=' + encodeURIComponent(meta.synced_at || '');
-      img.addEventListener('error', () => img.remove(), {once: true});
+      img.addEventListener('error', () => {
+        img.remove();
+        fallback.textContent = 'IMAGE LOAD FAILED';
+        holder.title = 'Cached thumbnail could not be displayed. Retry Sync Civitai Info.';
+      }, {once: true});
       holder.appendChild(img);
     }
     return holder;
