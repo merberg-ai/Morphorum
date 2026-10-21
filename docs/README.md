@@ -14,7 +14,7 @@ Welcome! You do not need to know Python or Git to use Morphorum. Start with the 
 | **[Project archives & Save Project As](PROJECT_ARCHIVES.md)** | Portable project ZIP import/export, full-input copies, overwrite recovery and safety limits |
 | **[Saved project media](PROJECT_MEDIA.md)** | How start images and soundtrack/Motion Lab WAVs persist and restore |
 | **[Motion Studio](MOTION_STUDIO.md)** | Six-stage WAV workflow, beat assignment and cleanup, frequency channels, continuous motion and project camera tracks |
-| **[Prompt Studio PS1.4 (dev-webui testing)](PROMPT_STUDIO_PS1_MANUAL.md)** | Manual prompt import, separate lanes, saved drafts, project ZIP portability, diff and safe Apply to Editor |
+| **[Prompt Studio PS2 (dev-webui testing)](PROMPT_STUDIO_PS1_MANUAL.md)** | Visual drag/snap/zoom timeline, undo/redo, frame inspector, saved drafts, ZIP portability and safe Apply to Editor |
 | **[Prompt Studio PS1.3 (dev-webui testing)](PROMPT_STUDIO_PS1_MANUAL.md)** | Manual keyframe prompt import, independent positive/negative lanes, diff preview and safe Apply to Editor |
 | **[FFmpeg Manager](FFMPEG_MANAGER.md)** | Auto-detect, custom paths, verified local install, update/removal, media acceptance test and GPL terms |
 | **[Troubleshooting](TROUBLESHOOTING.md)** | Fix browser, installer, model, CUDA, LAN, project and video problems |

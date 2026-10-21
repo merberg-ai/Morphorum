@@ -1,6 +1,6 @@
 # Prompt Studio (PS0–PS9) — Implementation Roadmap
 
-**Status:** PS0 documented; PS1.1–PS1.3 Windows-accepted; PS1.4 project-owned persistent drafts implemented on dev-webui awaiting physical acceptance (2026-10-21)  
+**Status:** PS0 and PS1.1–PS1.4 Windows-accepted; PS2 visual native prompt timeline implemented on dev-webui for CI and physical acceptance (2026-10-21)  
 **Development branch:** `dev-webui`; preserve `main` until separately approved promotion of tested changes.  
 **Purpose:** Native, model-aware, optionally LLM-assisted storyboard, prompt sequence, timeline and audio-cue authoring for Morphorum animation projects.  
 **Current gate:** PS1.3 passed physical Windows testing; PS1.4 stored drafts and portability are implemented on `dev-webui` but need owner Windows/mobile acceptance. Do not merge to `main` without explicit approval. PS2 and later remain unimplemented.
@@ -74,7 +74,7 @@ This is a **committed, named scope** of Prompt Studio, not a speculative future 
 Add Prompt Studio navigation/workspace and read-only project context. Implement explicit import/round-trip of existing prompt keyframes, positive/negative text, LoRA directives and transition mode, with draft lifecycle. Apply via existing Project Editor *unsaved* model, diff/confirm and Save Project; conflict/stale checks and archive compatibility. **Gate:** Windows load/import/edit/apply/save/reload; no camera/generation/media changes.
 
 ### PS2 — Visual prompt timeline and frame inspector
-Desktop/touch keyframe lanes, scene order/durations, frame-time labels, drag/snap/zoom, duplicate/delete, evenly space, locks, multi-select, undo/redo and scrub. Canonical frame inspector using the same resolved-frame path as generation. Start with existing Hold/Blend behavior, no new interpolator. **Gate:** edge frames, drag collisions, mobile tests, exact prompt-state parity.
+**PS2 implemented on dev-webui, physical acceptance pending:** separate positive/negative marker lanes, pointer/touch drag, exact frame-time ruler and scrub, adjustable snap/zoom, multiselect, duplicate, even spacing, temporary lane locks, bounded reversible undo/redo and read-only native Hold/Blend prompt inspector. Existing text fields remain the editable scene bodies and frame inputs; no new interpolator. **Remaining PS2 refinement:** explicit visual scene duration blocks and any owner-requested timeline polish, including accessibility/mobile tests. **Gate:** frame 0, last frame, collisions, mixed locks, mobile touch, timeline parity after Apply → Save → Reload.
 
 ### PS3 — Structured composer and LoRA metadata
 Shared/global and scene-local blocks; prefix/suffix placement; cached Civitai LoRA thumbnails/trigger words; family filter; exact prompt preview and duplication diagnostics. Make import and export lossless, with a raw-text escape hatch. LoRA weights remain user-confirmed. **Gate:** SDXL and managed Z-Image LoRA round-trips with no unwanted tag rewriting; FLUX controls only when supported.

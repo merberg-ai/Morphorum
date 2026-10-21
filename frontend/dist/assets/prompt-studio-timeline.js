@@ -166,7 +166,12 @@
         if(x<scroll.scrollLeft+32||x>scroll.scrollLeft+scroll.clientWidth-32)
           scroll.scrollLeft=Math.max(0,x-scroll.clientWidth/2);
       }
-      void inspect();
+      scheduleInspect();
+    }
+    let inspectTimer=null;
+    function scheduleInspect(){
+      root.clearTimeout(inspectTimer);
+      inspectTimer=root.setTimeout(()=>void inspect(),140);
     }
     async function inspect(){
       const draft=getDraft();if(!draft?.ok)return;

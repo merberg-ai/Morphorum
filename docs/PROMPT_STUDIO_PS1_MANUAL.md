@@ -33,3 +33,14 @@
 Visual drag/snap/undo timeline (PS2), LoRA block organizer (PS3), local Ollama AI authoring (PS4), model-specific prompt profiles (PS5), **audio-to-storyboard synchronization (PS6)**, transition refinement and Parseq coexistence. Existing rendering and native frame resolution remain unchanged.
 
 Implementation details: [PS0 native contract](PROMPT_STUDIO_PS0_CONTRACT.md) and [PS0–PS9 roadmap](PROMPT_STUDIO_ROADMAP.md).
+
+## PS2 visual timeline acceptance (dev-webui, Windows/mobile)
+
+1. Import an existing or stored Studio draft. A horizontally scrollable time ruler and separate positive/negative diamond keyframes appear above the text editors. Scrub the range/Frame input to inspect both tracks' **native backend Hold/Blend prompt transitions**, including from/to weights and raw prompt text.
+2. Drag a nonzero positive keyframe on desktop and by touch on phone. Try Snap 1, 5, 10 and zoom levels. Check a diamond's resulting frame number matches its text editor. Move negative keyframes independently; frame 0 cannot move.
+3. Shift/Ctrl-click two diamonds then drag to move them together. Occupied destinations, out-of-bounds moves and anchored frame-zero selections must not partially modify the draft.
+4. Select nonzero keyframes and use **Duplicate** and **Evenly Space**. Verify raw text and LoRA tags stay byte-for-byte intact.
+5. Use **Lock** for a lane; verify its diamonds and matching frame/text inputs cannot be edited. Unlock and try again. Locks are temporary editor controls, not rendering or stored draft metadata.
+6. Use **Undo/Redo**, including text edits followed by drag. Editing after Undo must clear redo. Save Draft, refresh/reload it and verify the edited tracks persisted; Undo/Redo history is session-only.
+7. Preview Changes, Apply to Animation, Save Project and reload. Verify the native timeline and prompt resolution matches the Studio tracks and unrelated camera/generation/media settings remain unchanged.
+8. On mobile, check horizontal scroll, diamond dragging without accidental page movement, accessible zoom/snap buttons, and no viewport overflow. No rendering or backend project write should occur just by scrubbing or editing Studio.

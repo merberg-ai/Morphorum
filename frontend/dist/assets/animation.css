@@ -4286,3 +4286,65 @@ dialog#animation-deforum-dialog {
  .ps14-library-controls button{flex:1 1 calc(50% - .5rem);min-height:44px}
  .ps14-library-controls label{flex-basis:100%}
 }
+
+/* PS2: scrollable, touch-first native positive/negative prompt timeline */
+.ps2-workspace{border:1px solid var(--border);border-radius:12px;margin:1rem 0;
+  padding:clamp(.65rem,1.7vw,1.15rem);min-width:0;overflow:hidden}
+.ps2-header{display:flex;align-items:start;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.ps2-header h3{margin:0 0 .3rem}
+.ps2-header p{margin:.25rem 0 .7rem;font-size:.85rem}
+.ps2-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:end}
+.ps2-tools label{display:flex;gap:.35rem;align-items:center;font-size:.85rem}
+.ps2-tools input{width:100px}
+.ps2-tools button{min-height:36px}
+.ps2-timeline-scroll{margin-top:.7rem;border:1px solid var(--border);border-radius:9px;
+  overflow:auto;overscroll-behavior-x:contain;max-width:100%;background:color-mix(in srgb,var(--bg) 45%,transparent)}
+.ps2-canvas{position:relative;min-height:248px;isolation:isolate}
+.ps2-ruler{height:50px;position:relative;cursor:crosshair;border-bottom:1px solid var(--border);
+  background:repeating-linear-gradient(90deg,transparent 0,transparent 47px,
+  color-mix(in srgb,var(--border) 50%,transparent) 48px)}
+.ps2-tick{position:absolute;top:7px;transform:translateX(-50%);font-size:.7rem;
+  max-width:95px;white-space:nowrap;color:var(--text-secondary,var(--muted))}
+.ps2-track{position:relative;height:97px;border-bottom:1px solid var(--border);
+  background:linear-gradient(to bottom,transparent 60%,color-mix(in srgb,var(--border) 20%,transparent) 61%,transparent 62%)}
+.ps2-lane-label{position:sticky;left:48px;top:0;display:inline-block;z-index:4;
+  margin-top:7px;font-weight:600;font-size:.83rem;pointer-events:none}
+.ps2-lock{position:sticky;left:145px;top:3px;z-index:5;padding:3px 7px;min-height:28px;
+  font-size:.7rem;border-radius:6px}
+.ps2-track.ps2-locked{background:color-mix(in srgb,var(--border) 16%,transparent)}
+.ps2-keyframe{position:absolute;top:52px;z-index:7;width:22px;height:29px;min-width:22px;
+  padding:0;border:0;background:transparent;touch-action:none;cursor:grab;
+  transform-origin:center center;transition:box-shadow .12s}
+.ps2-keyframe::before{content:'';position:absolute;left:4px;top:7px;width:14px;height:14px;
+  background:var(--accent,#5cc5e8);border:2px solid var(--bg);
+  transform:rotate(45deg);border-radius:2px;box-shadow:0 0 0 1px var(--border-strong)}
+.ps2-track[data-lane="negative"] .ps2-keyframe::before{background:var(--text-secondary,#ad9bd4)}
+.ps2-keyframe.selected::before{box-shadow:0 0 0 3px var(--accent,#5cc5e8)}
+.ps2-keyframe.anchor::before{border-radius:6px;transform:rotate(0deg)}
+.ps2-keyframe.ps2-invalid::before{background:var(--warning,#f0b15f)}
+.ps2-keyframe:active{cursor:grabbing}
+.ps2-keyframe:focus-visible{outline:2px solid var(--accent,#5cc5e8);outline-offset:2px}
+.ps2-playhead{position:absolute;top:49px;bottom:0;width:2px;background:var(--accent,#5cc5e8);
+  opacity:.75;z-index:3;pointer-events:none}
+.ps2-footer{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;margin:.85rem 0}
+.ps2-footer label{display:flex;gap:.4rem;align-items:center}
+.ps2-footer input[type=number]{width:92px;min-width:72px}
+.ps2-footer input[type=range]{flex:1 1 145px;min-width:100px}
+.ps2-footer output{font-size:.82rem;font-variant-numeric:tabular-nums}
+.ps2-footer span{margin-left:auto;font-size:.8rem}
+.ps2-inspector{border-top:1px solid var(--border);padding-top:.8rem}
+.ps2-inspector>p{font-size:.81rem;margin:.25rem 0 .65rem}
+.ps2-inspector>[data-ps2=inspector]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+.ps2-inspector-lane{min-width:0;border:1px solid var(--border);border-radius:8px;padding:.7rem}
+.ps2-inspector-lane p{font-size:.8rem;margin:.4rem 0}
+.ps2-inspector-lane pre{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:.82rem;
+  max-height:150px;overflow:auto}
+@media(max-width:740px){
+ .ps2-header{display:block}
+ .ps2-tools{gap:.45rem}
+ .ps2-tools button{flex:1 1 calc(25% - .5rem);min-height:44px}
+ .ps2-timeline-scroll{touch-action:pan-x pan-y}
+ .ps2-inspector>[data-ps2=inspector]{grid-template-columns:minmax(0,1fr)}
+ .ps2-footer span{margin-left:0;width:100%}
+}
+@media(prefers-reduced-motion:reduce){.ps2-keyframe{transition:none}}
