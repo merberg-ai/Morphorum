@@ -122,3 +122,12 @@ test('PS1.3 Prompt Studio is a Project workspace, not a second renderer',()=>{
  assert.match(animation,/name === 'prompt-studio'\) promptStudioWorkspace/);
  assert.match(animation,/context:\{name:project\.name,model:/);
 });
+
+test('PS1.3 normal Editor enable and dirty bindings exclude the Studio draft UI',()=>{
+ const body=animation.slice(animation.indexOf('  function setEditorEnabled('),
+   animation.indexOf('  function setStatus('));
+ assert.match(body,/input\.closest\('#animation-panel-prompt-studio'\)/);
+ const bind=animation.slice(animation.indexOf('  function bind() {'),
+   animation.indexOf('  async function start() {'));
+ assert.match(bind,/input\.closest\('#animation-panel-prompt-studio'\)/);
+});

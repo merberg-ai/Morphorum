@@ -14,6 +14,7 @@ Welcome! You do not need to know Python or Git to use Morphorum. Start with the 
 | **[Project archives & Save Project As](PROJECT_ARCHIVES.md)** | Portable project ZIP import/export, full-input copies, overwrite recovery and safety limits |
 | **[Saved project media](PROJECT_MEDIA.md)** | How start images and soundtrack/Motion Lab WAVs persist and restore |
 | **[Motion Studio](MOTION_STUDIO.md)** | Six-stage WAV workflow, beat assignment and cleanup, frequency channels, continuous motion and project camera tracks |
+| **[Prompt Studio PS1.3 (dev-webui testing)](PROMPT_STUDIO_PS1_MANUAL.md)** | Manual keyframe prompt import, independent positive/negative lanes, diff preview and safe Apply to Editor |
 | **[FFmpeg Manager](FFMPEG_MANAGER.md)** | Auto-detect, custom paths, verified local install, update/removal, media acceptance test and GPL terms |
 | **[Troubleshooting](TROUBLESHOOTING.md)** | Fix browser, installer, model, CUDA, LAN, project and video problems |
 | **[SDXL generation](SDXL_GENERATION.md)** | Select SDXL samplers/schedules; understand chunked CLIP prompts, LoRA integrity and render diagnostics |
@@ -35,7 +36,7 @@ Project Manager, New Project Wizard and Project Editor are direct main-menu dest
 ## Planned integrations (not yet supported)
 
 - **[PQ Parseq URL Integration Roadmap](PARSEQ_URL_INTEGRATION_ROADMAP.md)**: proposed phased work to consume Parseq's Auto-uploaded JSON via a saved URL, validate and apply supported per-frame controls, freeze each render's manifest, and retain Morphorum's native backend. **Planning only; not implemented.** Development is gated on owner approval and restricted to `dev-webui`.
-- **[PS Prompt Studio PS0–PS9 Roadmap](PROMPT_STUDIO_ROADMAP.md)** and **[PS0 technical contract](PROMPT_STUDIO_PS0_CONTRACT.md)**: planned standalone storyboard and visual keyframe editor, model-aware LoRA/trigger word composer, Ollama/optional managed LLM assistant, non-destructive Apply to Animation and **required PS6 audio-to-storyboard synchronization using Motion Studio beat cues**. **PS0 contract/fixture planning started on `dev-webui`; Prompt Studio runtime not implemented.**
+- **[PS Prompt Studio PS0–PS9 Roadmap](PROMPT_STUDIO_ROADMAP.md)** and **[PS0 technical contract](PROMPT_STUDIO_PS0_CONTRACT.md)**: planned standalone storyboard and visual keyframe editor, model-aware LoRA/trigger word composer, Ollama/optional managed LLM assistant, non-destructive Apply to Animation and **required PS6 audio-to-storyboard synchronization using Motion Studio beat cues**. **PS1.3 manual workspace is now available on `dev-webui` for Windows acceptance only; main still has no Prompt Studio runtime. AI authoring, audio storyboard sync and persistent draft storage are still planned.**
 
 ## Contributing
 
