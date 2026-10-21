@@ -56,6 +56,37 @@ def cached_metadata(model_id: str):
         data.pop("preview_url", None)
     return data
 
+def cached_catalog(model_ids: list[str]) -> dict:
+    """Read bounded cached summaries for manager thumbnails, without network I/O.
+
+    Uses the exact same validity, Civitai preference, and mature-content rules as
+    the individual metadata and preview endpoints.
+    """
+    if not isinstance(model_ids, list) or len(model_ids) > 120:
+        raise CivitaiSearchError("Request 0 to 120 indexed model IDs.", 422)
+    if any(not isinstance(mid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", mid)
+           for mid in model_ids):
+        raise CivitaiSearchError("Invalid indexed model ID.", 422)
+    if not load_settings().get("civitai", {}).get("enabled", False):
+        raise CivitaiSearchError("Civitai Hub is disabled.", 403)
+    result = {}
+    for model_id in dict.fromkeys(model_ids):
+        data = cached_metadata(model_id)
+        if not data.get("synced"):
+            continue
+        result[model_id] = {
+            "synced": True,
+            "name": data.get("name"),
+            "version": data.get("version"),
+            "base_model": data.get("base_model"),
+            "creator": data.get("creator"),
+            "synced_at": data.get("synced_at"),
+            "trained_words": (data.get("trained_words") or [])[:20],
+            "preview": data.get("preview"),
+        }
+    return {"entries": result}
+
+
 def _atomic_json(path: Path, obj: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=".metadata-", dir=str(path.parent))
