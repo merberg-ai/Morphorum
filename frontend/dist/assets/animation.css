@@ -4434,3 +4434,10 @@ dialog#animation-deforum-dialog {
  border:1px solid var(--border);border-radius:8px}
 .ps4-scene-card strong{font-size:.83rem;overflow-wrap:anywhere}
 .ps4-scene-card span{font-size:.77rem}
+
+/* PS4 fix: discoverable Ollama entry state before importing Prompt Studio prompts. */
+.ps4-empty{border:1px solid var(--border);border-radius:12px;
+ padding:clamp(.75rem,1.7vw,1.1rem);margin-bottom:.5rem}
+.ps4-empty h3{margin:0 0 .35rem}
+.ps4-empty p{margin:.2rem 0;font-size:.85rem;line-height:1.5}
+.ps4-empty[hidden],.ps4-director[hidden],.ps4-workspace[hidden]{display:none!important}

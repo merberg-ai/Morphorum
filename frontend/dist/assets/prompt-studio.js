@@ -145,6 +145,7 @@
       </div>
       <div class="ps13-actions">
         <button class="primary-button compact" type="button" data-ps="import">Import Existing Prompts</button>
+        <button class="secondary-button compact" type="button" data-ps="ai-shortcut">AI Story Director ↓</button>
         <button class="secondary-button compact" type="button" data-ps="reset" disabled>Reset Draft</button>
         <button class="secondary-button compact" type="button" data-ps="preview" disabled>Preview Changes</button>
         <button class="primary-button compact" type="button" data-ps="apply" disabled>Apply to Animation</button>
@@ -581,6 +582,13 @@
     })||null;
     find('editor').addEventListener('click',()=>onEditor?.());
     importButton.addEventListener('click',()=>void importPrompts());
+    find('ai-shortcut').addEventListener('click',()=>{
+      if(!aiUI){status('AI Story Director script is unavailable. Refresh the browser after updating.',true);return;}
+      aiUI.refresh();
+      aiPanel.scrollIntoView?.({block:'start'});
+      if(!draft?.ok)
+        status('Import Existing Prompts or Load Draft to enable the AI Story Director.');
+    });
     resetButton.addEventListener('click',reset);
     previewButton.addEventListener('click',()=>void preview());
     applyButton.addEventListener('click',()=>void apply());

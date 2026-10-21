@@ -88,3 +88,24 @@ test('PS4 visual storyboard review displays grounded frames and scene titles wit
  assert.match(script,/LAN permission is/);
  assert.match(script,/for\(const field of \['endpoint','lan','model','idea','negative'\]\)/);
 });
+
+test('PS4 visibility reveals the outer Studio container, not only the child UI',()=>{
+  const parent={hidden:true},director={hidden:true},empty={hidden:true};
+  ai.setVisibility(parent,director,empty,false);
+  assert.equal(parent.hidden,false,'the outer workspace must be visible before importing');
+  assert.equal(director.hidden,true,'form stays hidden without an editable draft');
+  assert.equal(empty.hidden,false,'guidance is visible before import');
+  ai.setVisibility(parent,director,empty,true);
+  assert.equal(parent.hidden,false,'outer workspace must not remain hidden');
+  assert.equal(director.hidden,false,'AI form must appear after import/load');
+  assert.equal(empty.hidden,true,'guidance must disappear once the form opens');
+});
+test('PS4 always has a top-level in-Studio navigation shortcut and import guidance',()=>{
+  const host=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets','prompt-studio.js'),'utf8');
+  const ui=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets','prompt-studio-ai.js'),'utf8');
+  assert.match(host,/data-ps="ai-shortcut"/);
+  assert.match(host,/aiPanel\.scrollIntoView\?/);
+  assert.match(ui,/setVisibility\(panel,node,empty,usable\)/);
+  assert.match(ui,/Import Existing Prompts/);
+  assert.match(ui,/panel\.append\(empty,node\)/);
+});

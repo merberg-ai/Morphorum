@@ -36,6 +36,13 @@
     }
     return items;
   }
+  // The outer section starts with [hidden] in Prompt Studio's HTML.
+  // Revealing only its inner child leaves the entire AI Director invisible.
+  function setVisibility(panel,node,empty,usable){
+    panel.hidden=false;
+    node.hidden=!usable;
+    empty.hidden=usable;
+  }
   function mount({panel,getDraft,onCommit,onNotice,bridge}={}){
     if(!panel)throw Error('AI Story Director container is missing.');
     let working=false,pending=null,controller=null,sequence=0,models=[],connected=false;
@@ -89,7 +96,11 @@
           <button type="button" data-p4="discard" class="secondary-button compact">Discard Proposal</button>
         </div>
       </section>`;
-    panel.appendChild(node);
+    const empty=document.createElement('div');
+    empty.className='ps4-empty';
+    empty.innerHTML='<h3>AI Story Director</h3>'+
+      '<p class="muted">Open an animation project, then select <strong>Import Existing Prompts</strong> or <strong>Load Draft</strong> to enable Ollama storyboard authoring. No model download or remote service is required for manual editing.</p>';
+    panel.append(empty,node);
     const q=name=>node.querySelector('[data-p4="'+name+'"]');
     const draft=()=>getDraft?.();
     // Browser-local, non-secret connection preferences. LAN permission is
@@ -113,7 +124,7 @@
     }
     function refresh(){
       const d=draft(),usable=context();
-      node.hidden=!usable;
+      setVisibility(panel,node,empty,usable);
       if(!usable){invalidate();return;}
       // Freeze all request inputs while Ollama is evaluating a snapshot.
       for(const field of ['endpoint','lan','model','idea','negative'])
@@ -283,11 +294,11 @@
     });
     q('negative').addEventListener('change',()=>{invalidate();refresh();});
     q('scenes').addEventListener('change',()=>{invalidate();refresh();});
-    node.hidden=true;
-    return {refresh,invalidate,reset(){cancel();invalidate();forgetModelList();node.hidden=!context();refresh();},
+    refresh();
+    return {refresh,invalidate,reset(){cancel();invalidate();forgetModelList();refresh();},
       getPending:()=>pending};
   }
-  const api={validateProposal,changes,mount};
+  const api={validateProposal,changes,setVisibility,mount};
   if(typeof module==='object'&&module.exports)module.exports=api;
   if(root)root.MorphorumPromptStudioAI=api;
 })(typeof window==='object'?window:null);
