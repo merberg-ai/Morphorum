@@ -79,6 +79,19 @@ The main navigation offers **Project Manager**, **New Project**, and **Project E
 
 **Release/testing note (October 2026):** Windows owner testing has confirmed successful animation generation and an MP4 with audio, plus acceptance of the G5 SDXL integration milestone (samplers and schedules, chunked prompt conditioning, LoRA verification, and diagnostics). Dedicated physical mobile acceptance is deferred, and remaining P5 work is tracked separately. This remains alpha software. See [SDXL generation](docs/SDXL_GENERATION.md) and [testing history](docs/TESTING.md).
 
+## Improved local Models & LoRA artwork (dev-webui)
+
+After explicitly synchronizing a verified installed checkpoint or LoRA using
+**Sync Civitai Info**, Morphorum keeps available Civitai still-image thumbnails
+with the rest of its cached metadata. The Models manager displays responsive
+thumbnail cards, including an opt-in **Sync Selected** action; the LoRA manager
+shows library thumbnails and a larger selected-adapter image. Reopening either
+manager reads local cached assets only, without an automatic remote Civitai
+request. Models with no usable preview display a placeholder. The Civitai Hub
+must be enabled and its thumbnail/mature-content preferences still apply.
+
+[Local thumbnail behavior, safety limits and test checklist](docs/CIVITAI_MODEL_HUB.md)
+
 ## What can Morphorum do?
 
 | Feature | What it provides |
