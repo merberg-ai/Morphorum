@@ -133,3 +133,12 @@ Implementation: `frontend/dist/assets/prompt-studio-bridge.js` with side-effect-
 ### PS1.1 canonical-prompt save boundary
 
 For a Studio-staged editor draft, Save Project sends `If-Match` and `X-Morphorum-Prompt-Tracks: canonical`. The backend rejects that special mode without `If-Match`; under the project save lock it preserves **only** the two incoming canonical prompt tracks during legacy reconciliation while still merging unrelated unsaved legacy camera/generation changes. Ordinary Save Project and other API callers retain their previous legacy precedence rules. Backend regression: `test_ps1_staged_prompt_save_preserves_independent_lanes_and_unsaved_camera_changes`. This is not a claim that all other save/mutation paths have been hardened yet.
+
+## PS1.2 guarded Editor saves and timeline boundary (2026-10-21)
+
+- **Ordinary Save Project**, form autosave before timeline editing, audio-length Save, Motion Lab's form pre-save and Project Manager rename now send the saved project's quoted revision via `If-Match`. A stale HTTP 412 leaves the local unsaved form intact with a reload/review error.
+- **Native timeline CRUD:** upsert/delete/move/interpolation use backend `mutate_animation_project` under `_PROJECT_SAVE_LOCK`; optional `If-Match` is checked atomically before reading/editing. New ETag is returned for sequential browser operations. Legacy external clients can omit If-Match for compatibility.
+- **Studio staging:** Prompt-only Apply remains in-memory. Project Editor explicit Save uses canonical prompt tracks with If-Match. Indirect Motion Lab/duration saves are blocked until a Studio-staged prompt is explicitly saved.
+- **While-save edits:** The browser tracks an `editorRevision`; newer form edits made during a slow network request are not automatically cleared/repainted. This is not a multi-workspace transaction.
+- **Remaining boundaries:** source-image media writes, independent project imports, Motion Lab direct Apply and other endpoints are not all revision-guarded by this milestone; concurrent external mutations still change the saved project ETag and block subsequent Editor guarded saves. Do not claim exhaustive concurrency hardening or physical Windows acceptance.
+- Tests: `tests/test_ps12_project_revision.py`, existing `tests/test_animation_projects.py`, `tests/frontend_prompt_studio_bridge.test.cjs`, CI. No standalone Prompt Studio UI in PS1.2.

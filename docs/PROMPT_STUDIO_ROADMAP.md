@@ -69,6 +69,8 @@ This is a **committed, named scope** of Prompt Studio, not a speculative future 
 **Design artifacts prepared for review on `dev-webui`:** [PS0 contract baseline](PROMPT_STUDIO_PS0_CONTRACT.md) and `tests/fixtures/prompt_studio/*.json` synthetic fixtures. The audit maps current fields, import/apply hazards, ETag gap, Hold/Blend behavior, LoRA/trigger preservation, SDXL/FLUX/Z-Image render-conditioning code paths, audio markers/cues and current 3000-frame analyzer limits. Draft v1 schema, migration/ZIP policy and acceptance matrix are proposed, **not implemented or executed**. **Gate:** owner contract review before PS1; no runtime modifications in PS0.
 
 ### PS1 — Native project context and non-destructive prompt import/apply
+
+**Progress:** PS1.1 communication bridge and PS1.2 guarded Editor/timeline saves implemented on `dev-webui`. Native standalone Studio workspace, editable draft library, project archive integration and user Windows/browser acceptance remain pending.
 Add Prompt Studio navigation/workspace and read-only project context. Implement explicit import/round-trip of existing prompt keyframes, positive/negative text, LoRA directives and transition mode, with draft lifecycle. Apply via existing Project Editor *unsaved* model, diff/confirm and Save Project; conflict/stale checks and archive compatibility. **Gate:** Windows load/import/edit/apply/save/reload; no camera/generation/media changes.
 
 ### PS2 — Visual prompt timeline and frame inspector

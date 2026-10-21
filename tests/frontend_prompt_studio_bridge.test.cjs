@@ -75,7 +75,30 @@ test('editor handshake is revision-guarded and cannot directly save a project',(
  assert.match(part,/MorphorumDialog\.confirm/);
  assert.match(part,/state\.project=patch\.project/);
  assert.match(part,/markDirty\(\{validate:true\}\)/);
- assert.match(animation,/'If-Match':state\.promptStudioPendingSaveEtag/);
+ assert.match(animation,/async function guardedProjectWrite\(/);
+ assert.match(animation,/'If-Match':expected/);
+ assert.match(animation,/response\.status===412/);
  assert.match(animation,/'X-Morphorum-Prompt-Tracks':'canonical'/);
  assert.doesNotMatch(part,/method:\s*'PUT'|save_animation_project/);
+});
+
+test('PS1.2 guarded saves cover core Editor and timeline writes',()=>{
+ const autosave=animation.slice(animation.indexOf('  async function persistDirtyBeforeTimelineEdit('),
+   animation.indexOf('  async function loadTimeline('));
+ assert.match(autosave,/guardedProjectWrite\(/);
+ const main=animation.slice(animation.indexOf('  async function saveProject('),
+   animation.indexOf('  async function reloadProject('));
+ assert.match(main,/guardedProjectWrite\(/);
+ assert.match(main,/newerEdits/);
+ for(const fn of ['moveTimelineKeyframe','addTimelineKeyframeAtPlayhead',
+   'applyTimelineEditor','deleteTimelineKeyframe']){
+   const start=animation.indexOf('  async function '+fn+'(');
+   assert.ok(start>0,fn);
+   const end=animation.indexOf('\n  }',start);
+   assert.match(animation.slice(start,end),/guardedProjectWrite\(/,fn);
+ }
+ assert.match(animation,/Save your Prompt Studio changes before changing project duration/);
+ assert.match(animation,/Save your Prompt Studio changes explicitly in Project Editor before applying Motion Lab/);
+ assert.match(animation,/const original = await promptStudioFetchSavedRevision\(item\.id\)/);
+ assert.match(animation,/headers:\{'Content-Type':'application\/json','If-Match':original\.etag\}/);
 });
