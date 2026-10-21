@@ -103,6 +103,7 @@ def model_details(model_id: int, *, client: httpx.Client | None = None) -> dict[
                              "compatibility": "Potentially compatible; verify file format and loader" if supported else "Not established for Morphorum"})
         return {"id": model_id, "name": str(data.get("name") or "")[:200],
                 "type": str(data.get("type") or "")[:60],
+                "mature": bool(data.get("nsfw")),
                 "creator": str(creator.get("username") or "")[:100],
                 "description": _readable(data.get("description")),
                 "tags": [str(t)[:80] for t in (data.get("tags") or [])[:40] if isinstance(t, str)],
