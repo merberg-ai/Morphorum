@@ -103,6 +103,9 @@
       const d=draft(),usable=context();
       node.hidden=!usable;
       if(!usable){invalidate();return;}
+      // Freeze all request inputs while Ollama is evaluating a snapshot.
+      for(const field of ['endpoint','lan','model','idea','negative'])
+        q(field).disabled=working;
       q('mode').disabled=working;
       q('scenes').disabled=working||q('mode').value==='refine';
       if(q('mode').value==='refine')q('scenes').value=String(d.tracks.positive.keyframes.length);
@@ -244,11 +247,13 @@
     q('cancel').addEventListener('click',cancel);
     q('accept').addEventListener('click',()=>void accept());
     q('discard').addEventListener('click',()=>{invalidate();refresh();status('AI proposal discarded. Draft unchanged.');});
-    q('idea').addEventListener('input',refresh);
+    q('idea').addEventListener('input',()=>{invalidate();refresh();});
     q('mode').addEventListener('change',()=>{invalidate();refresh();});
     q('endpoint').addEventListener('change',forgetModelList);
     q('lan').addEventListener('change',forgetModelList);
-    q('model').addEventListener('change',refresh);
+    q('model').addEventListener('change',()=>{invalidate();refresh();});
+    q('negative').addEventListener('change',()=>{invalidate();refresh();});
+    q('scenes').addEventListener('change',()=>{invalidate();refresh();});
     node.hidden=true;
     return {refresh,invalidate,reset(){cancel();invalidate();forgetModelList();node.hidden=!context();refresh();},
       getPending:()=>pending};
