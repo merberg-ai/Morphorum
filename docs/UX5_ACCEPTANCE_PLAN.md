@@ -1,8 +1,8 @@
-# UX5 combined WebUI acceptance (dev-webui)
+# UX5 combined WebUI acceptance (historical checklist)
 
-This is a development-only checklist. Do not merge to main before user acceptance and green CI.
+> **Release reconciliation (2026-10-21):** UX5 Windows acceptance was reported on October 16, and the affected WebUI changes were subsequently promoted to published `main`, including the [PR #51](https://github.com/merberg-ai/Morphorum/pull/51) consolidation. Current release checks passed; physical mobile checks remain deferred. Failures and "do not merge" wording below describe **earlier checkpoints**, not current published code. Do not convert unrecorded device, audio alignment or edge-case tests into PASS.
 
-## Current automated gate
+## Original automated gate (historical pre-fix failures)
 - Syntax checks: FAIL, 12 of 236 frontend Node tests failing as of UX4.2 head e591825. Some assertions still expect Project Manager, Wizard and Editor inside Motion Lab, despite UX2.4 moving them to primary navigation. Other WAV/media tests need behavioral triage, not blanket assertion removal.
 - Backend tests: FAIL, 1 of 791 (789 passed, 1 skipped). Exact keyframe 0.09 was clipped to 0.08 by the generated camera safety patch; a follow-up patch preserves explicitly authored keyframe and recording axes. Re-run required.
 - Installer checks: PASS at UX4.2 head.
@@ -28,14 +28,14 @@ This is a development-only checklist. Do not merge to main before user acceptanc
 - Repair and rerun frontend and backend CI; tests must reflect intended new navigation rather than the old sidebar.
 - Record actual Windows, mobile and GPU smoke outcomes. Don't mark unchecked cases passed.
 - Update public user-facing docs only after final behavior is verified.
-- Keep main unchanged until explicit authorization.
+- At that milestone, main promotion still required explicit authorization; the eventual release was approved and merged.
 
 ## Mobile acceptance disposition (owner decision, 2026-10-16)
 
-**DEFERRED:** Owner explicitly postponed physical mobile verification to a later milestone. This is not a PASS and is no longer a blocker to starting P5 development on `dev-webui`. The remaining mobile acceptance checklist stays open for a future session. UX5 Windows/GPU acceptance and CI results stand independently; `main` still requires explicit merge authorization.
+**DEFERRED:** Owner explicitly postponed physical mobile verification to a later milestone. This is not a PASS and is no longer a blocker to starting P5 development on `dev-webui`. The remaining mobile acceptance checklist stays open for a future session. UX5 Windows/GPU acceptance and CI results stand independently; `main` promotion was still pending at this historical checkpoint; it has since occurred.
 
 ## Owner Windows acceptance (2026-10-16)
 
 **PASS:** Owner reports the combined UX5 Windows test successful and supplied a rendered/exported MP4. The uploaded export was independently inspected: H.264 video, 832×1216 at 24 fps, duration 9.875 seconds, plus an AAC audio stream. This verifies an audio track exists, not subjective A/V synchronization. Earlier checks include Project Manager bulk trash, contextual navigation, Editor layout, cue bulk delete, and soundtrack attachment. Automated Syntax, Backend, and Installer workflows all passed at source commit `25eafd2`.
 
-**Remaining nonblocking release review:** a dedicated physical phone/mobile check and final public documentation review have not been independently reported as complete. Do not treat mobile or frame-accurate audio sync as tested. Keep `main` unchanged pending explicit merge authorization.
+**Remaining nonblocking release review:** a dedicated physical phone/mobile check and final public documentation review have not been independently reported as complete. Do not treat mobile or frame-accurate audio sync as tested. This was the remaining release gate at the historical checkpoint; the later owner-approved main promotion is complete.
