@@ -1,0 +1,99 @@
+{
+  "format": "morphorum.prompt-studio-draft",
+  "schema_version": 1,
+  "draft_id": "fixture-independent-tracks",
+  "project_context": {
+    "project_id": "ps0-fixture-project",
+    "base_project_etag": null,
+    "project_schema_version": 2,
+    "timeline_schema_version": 1,
+    "model": {
+      "model_id": "fixture-model",
+      "family": "sdxl",
+      "variant": ""
+    },
+    "max_frames": 60,
+    "fps": 24,
+    "start_mode": "prompt",
+    "source_image_name": ""
+  },
+  "prompt_tracks": {
+    "positive": {
+      "kind": "prompt",
+      "interpolation": "blend",
+      "keyframes": [
+        {
+          "frame": 0,
+          "value": "<lora:Horror Style ZIT:1>h0rr0rstyl3, an empty haunted corridor"
+        },
+        {
+          "frame": 30,
+          "value": "<lora:Horror Style ZIT:1>h0rr0rstyl3, a skeletal figure appears"
+        }
+      ]
+    },
+    "negative": {
+      "kind": "prompt",
+      "interpolation": "hold",
+      "keyframes": [
+        {
+          "frame": 0,
+          "value": "blurry, washed out"
+        },
+        {
+          "frame": 20,
+          "value": "soft focus, duplicate limbs"
+        }
+      ]
+    }
+  },
+  "scenes": [],
+  "composer": {
+    "global_blocks": [],
+    "scene_blocks": []
+  },
+  "continuity": {
+    "fixed": [],
+    "variable": []
+  },
+  "audio_alignment": null,
+  "ai_provenance": null,
+  "source": "imported_editor_draft",
+  "expected_resolved_endpoints": [
+    {
+      "frame": 15,
+      "positive": {
+        "mode": "blend",
+        "from_frame": 0,
+        "to_frame": 30,
+        "from_weight": 0.5,
+        "to_weight": 0.5
+      },
+      "negative": {
+        "mode": "hold",
+        "from_frame": 0,
+        "to_frame": 20,
+        "from_weight": 1,
+        "to_weight": 0
+      }
+    },
+    {
+      "frame": 30,
+      "positive": {
+        "mode": "blend",
+        "from_frame": 30,
+        "to_frame": 30,
+        "from_weight": 1,
+        "to_weight": 0
+      },
+      "negative": {
+        "mode": "hold",
+        "from_frame": 20,
+        "to_frame": 20,
+        "from_weight": 1,
+        "to_weight": 0
+      }
+    }
+  ],
+  "fixture_notice": "DESIGN ONLY: A synthetic LoRA tag tests string preservation, not adapter availability; expected endpoints come from schedules.resolve_prompt_transition, not resolve_project_frame with LoRA resolution."
+}

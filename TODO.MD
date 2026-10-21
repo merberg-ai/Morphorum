@@ -16,7 +16,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
 
-**Status:** Roadmap only, **NOT IMPLEMENTED**. Full phased design: [Prompt Studio PS0–PS9 Roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Develop on `dev-webui`; keep native renders and project saving unchanged until each phase is tested. Begin **PS0 only on explicit owner authorization**.
+**Status:** **PS0 authorized 2026-10-21; contract and golden design fixtures prepared for review on `dev-webui` (NOT runtime implementation).** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS1 remains gated on owner review.
 
 - Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
 - Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
@@ -26,7 +26,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 - Coexist with the independent PQ hosted-Parseq roadmap. If Parseq overrides runtime prompts, warn before applying native prompts, and never modify hosted Parseq manifests. No parallel renderer, automatic LoRA downloads or silently changed model settings.
 - Physical Windows GPU owner verification and existing CI gates per PS milestone; later merge requires explicit owner signoff. Preserve incomplete PQ and experimental external Z-Image gating.
 
-**Next when authorized:** PS0 contract/fixtures and native prompt/audio-cue API audit, not PS1 implementation.
+**Next:** Owner review of [PS0 contract](docs/PROMPT_STUDIO_PS0_CONTRACT.md), especially editor dirty-state bridge, missing browser If-Match and sparse-track preservation. Do not begin PS1 until separately authorized.
 
 ## Z-Image Turbo LoRA stability and animation coherence (reported 2026-10-19)
 

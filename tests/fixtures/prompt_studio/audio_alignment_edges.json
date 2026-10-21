@@ -1,0 +1,46 @@
+{
+  "fixture_kind": "prompt_studio_audio_snap_design_v1",
+  "project_context": {
+    "max_frames": 120,
+    "fps": 23.976,
+    "duration_seconds": 5.005005005005005
+  },
+  "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "analysis_version": 2,
+  "snap_policy": "floor(seconds * fps + 0.5); reject frame >= max_frames; no silent clamp",
+  "events": [
+    {
+      "id": "kick-1",
+      "time_seconds": 1,
+      "expected_frame": 24,
+      "status": "accepted"
+    },
+    {
+      "id": "snare-1",
+      "time_seconds": 1.004,
+      "expected_frame": 24,
+      "status": "collision-with-kick-1"
+    },
+    {
+      "id": "rise-1",
+      "time_seconds": 2.002,
+      "expected_frame": 48,
+      "status": "accepted"
+    },
+    {
+      "id": "end-1",
+      "time_seconds": 4.99,
+      "raw_candidate_frame": 120,
+      "expected_frame": null,
+      "status": "outside-animation"
+    },
+    {
+      "id": "past-1",
+      "time_seconds": 5.1,
+      "raw_candidate_frame": 122,
+      "expected_frame": null,
+      "status": "outside-animation"
+    }
+  ],
+  "fixture_notice": "DESIGN ONLY: synthetic times and SHA; detector event-frame and cue-frame helpers currently differ in clamp/reject semantics."
+}

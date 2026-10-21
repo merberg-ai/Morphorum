@@ -1,9 +1,9 @@
 # Prompt Studio (PS0–PS9) — Implementation Roadmap
 
-**Status:** PLANNED / NOT IMPLEMENTED (2026-10-21)  
+**Status:** PS0 baseline documented / awaiting owner review; PS1–PS9 NOT IMPLEMENTED (2026-10-21)  
 **Development branch:** `dev-webui`; preserve `main` until separately approved promotion of tested changes.  
 **Purpose:** Native, model-aware, optionally LLM-assisted storyboard, prompt sequence, timeline and audio-cue authoring for Morphorum animation projects.  
-**First implementation gate:** PS0 only when specifically authorized. Roadmap text does **not** authorize implementing PS1+ or merging experimental code.
+**Current gate:** PS0 authorized and documented in [PS0 contract baseline](PROMPT_STUDIO_PS0_CONTRACT.md), with design fixtures. This does **not** authorize implementing PS1+ or merging experimental code.
 
 ## 1. Intended experience
 
@@ -66,7 +66,7 @@ This is a **committed, named scope** of Prompt Studio, not a speculative future 
 ## 6. Milestones and owner acceptance
 
 ### PS0 — Baseline, schema and architecture (design-only code contract)
-Map exact native prompt/project field shapes, animation resolver, existing editor unsaved-state handling, audio markers and current Motion Studio assets. Define a versioned studio-draft schema and migration/portable archive policy. Record examples of existing Hold/Blend, LoRA/trigger behavior, SDXL long prompts and current Parseq precedence. Establish golden fixtures and frontend/backend regression matrix. **Gate:** contract review before implementation.
+**Design artifacts prepared for review on `dev-webui`:** [PS0 contract baseline](PROMPT_STUDIO_PS0_CONTRACT.md) and `tests/fixtures/prompt_studio/*.json` synthetic fixtures. The audit maps current fields, import/apply hazards, ETag gap, Hold/Blend behavior, LoRA/trigger preservation, SDXL/FLUX/Z-Image render-conditioning code paths, audio markers/cues and current 3000-frame analyzer limits. Draft v1 schema, migration/ZIP policy and acceptance matrix are proposed, **not implemented or executed**. **Gate:** owner contract review before PS1; no runtime modifications in PS0.
 
 ### PS1 — Native project context and non-destructive prompt import/apply
 Add Prompt Studio navigation/workspace and read-only project context. Implement explicit import/round-trip of existing prompt keyframes, positive/negative text, LoRA directives and transition mode, with draft lifecycle. Apply via existing Project Editor *unsaved* model, diff/confirm and Save Project; conflict/stale checks and archive compatibility. **Gate:** Windows load/import/edit/apply/save/reload; no camera/generation/media changes.
