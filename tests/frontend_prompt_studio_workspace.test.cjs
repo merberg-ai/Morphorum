@@ -62,3 +62,52 @@ test('PS1.3 frame-zero remove and move controls stay disabled on reactivation',(
  assert.match(script,/frame\.dataset\.psFixed=point\.frame===0/);
  assert.match(script,/remove\.dataset\.psFixed=point\.frame===0/);
 });
+
+test('PS1.4 serializes versioned saved draft without Editor ETag and restores independently',()=>{
+ const source=studio.beginDraft(snapshot(),bridge);
+ studio.updateDraft(source,bridge,'positive','text',60,'<lora:Style:1>  night');
+ const result=studio.serializeDraft(source,'  Horror Story  ',bridge);
+ assert.equal(result.ok,true);
+ assert.equal(result.record.schema_version,1);
+ assert.equal(result.record.format,'morphorum.prompt-studio-draft');
+ assert.equal(result.record.name,'Horror Story');
+ assert.equal(result.record.project_id,'demo');
+ assert.equal(result.record.project_context.max_frames,120);
+ assert.equal(JSON.stringify(result.record).includes('savedEtag'),false);
+ assert.equal(result.record.prompt_tracks.positive.keyframes[1].value,'<lora:Style:1>  night');
+ const restored=studio.restoreDraft(result.record,snapshot(),bridge);
+ assert.equal(restored.ok,true);
+ assert.equal(restored.compatible,true);
+ assert.equal(restored.tracks.positive.keyframes[1].value,'<lora:Style:1>  night');
+ assert.equal(restored.original.positive.keyframes[1].value,'city');
+ assert.deepEqual(studio.changeList(restored.original,restored.tracks).map(x=>x.kind),['Changed']);
+});
+test('PS1.4 refuses silent rebase after baseline/model/timing changes',()=>{
+ const saved=studio.serializeDraft(studio.beginDraft(snapshot(),bridge),'saved',bridge).record;
+ const edited=snapshot();edited.promptTracks.negative.keyframes[1].value='new external edit';
+ assert.equal(studio.restoreDraft(saved,edited,bridge).compatible,false);
+ const model=snapshot();model.context.model.family='flux';
+ assert.equal(studio.restoreDraft(saved,model,bridge).compatible,false);
+ const timing=snapshot();timing.context.fps=30;
+ assert.equal(studio.restoreDraft(saved,timing,bridge).compatible,false);
+ const other=snapshot();other.projectId='another';
+ assert.equal(studio.restoreDraft(saved,other,bridge).compatible,false);
+ const stale=studio.restoreDraft(saved,{ok:false,message:'stale'},bridge);
+ assert.equal(stale.ok,true);
+ assert.equal(stale.compatible,false);
+ assert.equal(stale.snapshot.ok,false);
+});
+test('PS1.4 uses conditional draft overwrite and explicit deletion confirmation',()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const script=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets','prompt-studio.js'),'utf8');
+ assert.match(script,/data-ps="load"/);
+ assert.match(script,/data-ps="save-copy"/);
+ assert.match(script,/data-ps="delete"/);
+ assert.match(script,/async function refreshList/);
+ assert.match(script,/method:overwrite\?'PUT':'POST'/);
+ assert.match(script,/headers:overwrite\?\{'If-Match':savedEtag\}/);
+ assert.match(script,/method:'DELETE',headers:\{'If-Match':item\.etag\}/);
+ assert.match(script,/baselineBlocked\|\|/);
+ assert.match(script,/async function deleteSaved/);
+ assert.match(script,/MorphorumDialog\.confirm/);
+});
