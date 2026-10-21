@@ -375,7 +375,9 @@
     }
     function reset(){
       if(!draft?.ok||draft.applied)return;
-      draft.tracks=clone(draft.original);draft.revision+=1;
+      draft.tracks=clone(draft.original);
+      draft.composer=psComposer?.blank()||{schema_version:1,blocks:[]};
+      draft.revision+=1;
       timeline?.reset();composerUI?.reset();
       invalid=false;blocked=false;previewClear();renderLanes();
       status('Prompt Studio draft restored to its imported baseline. Project Editor unchanged.');
