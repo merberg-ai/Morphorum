@@ -6112,8 +6112,12 @@
         `/api/animation/projects/${encodeURIComponent(state.project.id)}`,
         {
           method: 'PUT',
-          headers: state.promptStudioPendingSaveEtag
-            ? {'If-Match':state.promptStudioPendingSaveEtag} : {},
+          // api() forwards explicit headers verbatim; keep JSON Content-Type.
+          headers: {
+            'Content-Type':'application/json',
+            ...(state.promptStudioPendingSaveEtag
+              ? {'If-Match':state.promptStudioPendingSaveEtag} : {}),
+          },
           body: JSON.stringify(collectProject()),
         }
       );
