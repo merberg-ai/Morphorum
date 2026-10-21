@@ -17,6 +17,14 @@ See the current results under [Actions](https://github.com/merberg-ai/Morphorum/
 
 **SDXL G5 release history:** On 2026-10-17 the owner reported G5.5 Windows acceptance passed and explicitly approved merging the G1–G5 SDXL improvements. The release candidate's [draft PR #43](https://github.com/merberg-ai/Morphorum/pull/43) passed Backend, Syntax, and Installer checks; the final pre-promotion CI backend run had **848 passed, 1 skipped**. See the [acceptance matrix](G5_RELEASE_ACCEPTANCE.md) for repeatable test cases and known scope limits; individual W1–W11 outcomes were not supplied as separate test records. Passing CI does not prove GPU speed or pixel-level image quality. The [SDXL user guide](SDXL_GENERATION.md) explains expected diagnostics. Installer checks run on pull requests, even if a source-only `dev-webui` push does not trigger them.
 
+## October 21, 2026 release: PR #51
+
+[PR #51](https://github.com/merberg-ai/Morphorum/pull/51) merged the About/current-branch update page, Civitai cached-artwork model/LoRA UI, and managed Z-Image LoRA inference-context fix into `main`. **Backend tests, Syntax/frontend tests and Windows/Linux Installer checks all passed** on the PR merge candidate; the corresponding `main` Backend and Syntax runs also succeeded after merge. Owner-reported Windows tests verified the Z-Image LoRA fix for several still generations with/without LoRA and an animation, plus the appearance of synced model/LoRA previews. These are not exhaustive device, checkpoint, LoRA, mature-preview/CDN or animation-coherence acceptance results.
+
+Useful focused regressions: `tests/test_generation.py`, `tests/test_animation_render.py`, `tests/test_civitai_library.py`, `tests/test_git_updates.py`, `tests/frontend_cached_art.test.cjs`, and `tests/frontend_about.test.cjs`. Re-test host-only update restrictions, missing-preview diagnostics, clean-branch behavior, LoRA enable/disable/reweight and completed animation rendering on the actual Windows GPU. Phone-width physical acceptance remains a separate task.
+
+**Roadmap-only:** [Prompt Studio PS0–PS9](PROMPT_STUDIO_ROADMAP.md) (required PS6 Motion Studio audio-to-storyboard sync) and [Parseq PQ0–PQ7](PARSEQ_URL_INTEGRATION_ROADMAP.md) are documented proposals, not implemented features.
+
 ## Run tests locally
 
 A normal installed Morphorum has its own Python virtual environment. Install `pytest` in that environment if it is not already available.
