@@ -66,6 +66,30 @@
     for(const lane of ['positive','negative'])next[lane].keyframes.sort((a,b)=>a.frame-b.frame);
     return {ok:true,tracks:next,selection:additions.map(p=>({lane:p.lane,frame:p.frame}))};
   }
+  function deleteSelection(tracks,selection,locked=[]){
+    if(!Array.isArray(selection)||!selection.length)
+      return error('SELECTION','Select keyframes to delete.');
+    const next=copy(tracks),unique=new Set();
+    for(const {lane,frame} of selection){
+      if(!['positive','negative'].includes(lane)||locked.includes(lane))
+        return error('LOCKED','Unlock the selected prompt lanes before deleting.');
+      if(frame===0)return error('FRAME_ZERO','Frame zero cannot be deleted.');
+      if(!next[lane].keyframes.some(p=>p.frame===frame))
+        return error('MISSING','A selected keyframe is missing.');
+      unique.add(lane+':'+frame);
+    }
+    for(const lane of ['positive','negative'])
+      next[lane].keyframes=next[lane].keyframes.filter(p=>!unique.has(lane+':'+p.frame));
+    return {ok:true,tracks:next,selection:[]};
+  }
+  function sceneSegments(tracks,maxFrames,fps=24){
+    const points=tracks.positive.keyframes;
+    return points.map((item,i)=>{
+      const next=points[i+1]?.frame ?? maxFrames;
+      return {index:i+1,start:item.frame,end:next-1,frames:next-item.frame,
+        seconds:(next-item.frame)/fps,value:item.value};
+    });
+  }
   function evenlySpace(tracks,lane,maxFrames,locked=[]){
     if(!['positive','negative'].includes(lane)||locked.includes(lane))
       return error('LOCKED','Unlock the selected prompt lane first.');
@@ -111,6 +135,7 @@
           <button type="button" class="secondary-button compact" data-ps2="undo" title="Undo (Ctrl+Z)">Undo</button>
           <button type="button" class="secondary-button compact" data-ps2="redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
           <button type="button" class="secondary-button compact" data-ps2="duplicate">Duplicate</button>
+          <button type="button" class="secondary-button compact" data-ps2="delete">Delete Selected</button>
           <button type="button" class="secondary-button compact" data-ps2="space">Evenly Space</button>
         </div>
       </div>
@@ -119,6 +144,7 @@
           <div data-ps2="ruler" class="ps2-ruler" aria-label="Time ruler"></div>
           <div data-ps2="positive" class="ps2-track" aria-label="Positive prompt keyframes"></div>
           <div data-ps2="negative" class="ps2-track" aria-label="Negative prompt keyframes"></div>
+          <div data-ps2="scenes" class="ps2-scenes" aria-label="Positive prompt scene durations"></div>
           <div data-ps2="playhead" class="ps2-playhead" aria-hidden="true"></div>
         </div>
       </div>
@@ -142,6 +168,7 @@
       find('redo').disabled=!history.canRedo;
       const available=Boolean(getDraft()?.ok&&!getDraft().applied);
       find('duplicate').disabled=!available||!selected.length;
+      find('delete').disabled=!available||!selected.length;
       find('space').disabled=!available||!selected.length;
     };
     function select(lane,frame,multi=false){
@@ -311,6 +338,20 @@
           row.appendChild(button);
         }
       }
+      const scenes=find('scenes');scenes.replaceChildren();
+      for(const segment of sceneSegments(draft.tracks,total,fps)){
+        const block=document.createElement('button');block.type='button';
+        block.className='ps2-scene';
+        block.style.left=g.frameToX(segment.start)+'px';
+        block.style.width=Math.max(1,segment.frames*g.px-2)+'px';
+        block.title='Scene '+segment.index+': frames '+segment.start+'–'+segment.end+
+          ' · '+segment.seconds.toFixed(2)+' seconds';
+        block.setAttribute('aria-label',block.title);
+        block.textContent='Scene '+segment.index+' · '+segment.seconds.toFixed(1)+'s';
+        block.addEventListener('click',()=>{setFrame(segment.start,{scrollIntoView:true});
+          select('positive',segment.start);});
+        scenes.appendChild(block);
+      }
       state.selection=state.selection.filter(s=>draft.tracks[s.lane]?.keyframes.some(k=>k.frame===s.frame));
       displaySelection();
       setFrame(state.frame);
@@ -339,6 +380,11 @@
       commitTracks(duplicateSelection(draft.tracks,state.selection,state.snap,
         draft.snapshot.context.maxFrames,[...state.locks]),'duplicate');
     });
+    function deleteSelected(){
+      const draft=getDraft();if(!draft?.ok)return;
+      commitTracks(deleteSelection(draft.tracks,state.selection,[...state.locks]),'delete');
+    }
+    find('delete').addEventListener('click',deleteSelected);
     find('space').addEventListener('click',()=>{
       const draft=getDraft();if(!draft?.ok)return;
       const lanes=[...new Set(state.selection.map(s=>s.lane))];
@@ -360,7 +406,9 @@
     panel.addEventListener('keydown',e=>{
       const tag=e.target?.tagName;
       if(['INPUT','TEXTAREA','SELECT'].includes(tag))return;
-      if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){
+      if((e.key==='Delete'||e.key==='Backspace')&&state.selection.length){
+        e.preventDefault();deleteSelected();
+      }else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){
         e.preventDefault();restore(e.shiftKey?'redo':'undo');
       }else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){
         e.preventDefault();restore('redo');
@@ -372,7 +420,8 @@
       locks:state.locks,getSelection:()=>copy(state.selection),undo:()=>restore('undo'),
       redo:()=>restore('redo'),selection:state.selection};
   }
-  const api={snapFrame,pixelGeometry,previewShift,duplicateSelection,evenlySpace,createHistory,mount};
+  const api={snapFrame,pixelGeometry,previewShift,duplicateSelection,deleteSelection,
+    sceneSegments,evenlySpace,createHistory,mount};
   if(typeof module==='object'&&module.exports)module.exports=api;
   if(root)root.MorphorumPromptStudioTimeline=api;
 })(typeof window==='object'?window:null);

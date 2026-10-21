@@ -106,3 +106,28 @@ test('PS2 integration stays isolated from project saves and follows Studio draft
  assert.match(controller,/frame===0/);
  assert.doesNotMatch(controller,/\bmethod:\s*['"](?:PUT|PATCH|DELETE)['"]|saveProject\(/);
 });
+
+test('PS2 scene duration strips align consecutive positive prompt keyframes',()=>{
+ const scenes=timeline.sceneSegments(sample(),120,24);
+ assert.deepEqual(scenes.map(s=>[s.start,s.end,s.frames]),[
+  [0,19,20],[20,39,20],[40,119,80]
+ ]);
+ assert.equal(scenes[0].seconds,20/24);
+ assert.equal(scenes[2].value,'sunrise');
+});
+test('PS2 delete selection is all-or-nothing and preserves frame-zero anchors',()=>{
+ const original=sample(),raw=JSON.stringify(original);
+ const bad=timeline.deleteSelection(original,[
+  {lane:'positive',frame:20},{lane:'negative',frame:0}
+ ]);
+ assert.equal(bad.code,'FRAME_ZERO');
+ assert.equal(JSON.stringify(original),raw);
+ assert.equal(timeline.deleteSelection(original,[{lane:'positive',frame:20}],['positive']).code,'LOCKED');
+ const valid=timeline.deleteSelection(original,[
+  {lane:'positive',frame:20},{lane:'negative',frame:30}
+ ]);
+ assert.equal(valid.ok,true);
+ assert.deepEqual(valid.tracks.positive.keyframes.map(x=>x.frame),[0,40]);
+ assert.deepEqual(valid.tracks.negative.keyframes.map(x=>x.frame),[0]);
+ assert.equal(JSON.stringify(original),raw);
+});

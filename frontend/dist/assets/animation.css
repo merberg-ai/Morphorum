@@ -4348,3 +4348,12 @@ dialog#animation-deforum-dialog {
  .ps2-footer span{margin-left:0;width:100%}
 }
 @media(prefers-reduced-motion:reduce){.ps2-keyframe{transition:none}}
+
+/* PS2 scenes are read-only duration blocks. Start time is the positive prompt keyframe. */
+.ps2-canvas{min-height:289px}
+.ps2-scenes{position:relative;height:41px;overflow:hidden;border-top:1px solid var(--border)}
+.ps2-scene{position:absolute;top:5px;height:30px;border:1px solid var(--border-strong);
+  border-radius:5px;background:color-mix(in srgb,var(--accent,#5cc5e8) 17%,var(--bg));
+  padding:2px 5px;text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  font-size:.7rem;cursor:pointer}
+.ps2-scene:hover,.ps2-scene:focus-visible{outline:2px solid var(--accent,#5cc5e8)}
