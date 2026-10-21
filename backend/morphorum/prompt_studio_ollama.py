@@ -5,7 +5,9 @@ provides scene text. Native integer frame placement and validation live here.
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
+import time
 import json
 import re
 from copy import deepcopy
@@ -17,6 +19,7 @@ import httpx
 
 from .prompt_studio_drafts import PromptDraftError, _validate_tracks
 from .loras import LORA_TAG
+from .console import emit_console
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434"
 MAX_RESPONSE_BYTES = 256 * 1024
@@ -297,3 +300,180 @@ async def generate(payload: dict) -> dict:
     if not isinstance(raw, dict) or set(raw) != {"scenes"}:
         raise OllamaStoryError("Ollama returned an unsupported scene schema.", 422)
     return compile_result(plan, raw)
+
+
+# PS4.1: streamed progress; preserve the original JSON endpoint for compatibility.
+MAX_GENERATION_SECONDS = 240
+
+
+async def _chat_stream(plan: dict):
+    """Receive Ollama chunks and publish only counts/stages until output is validated."""
+    request_body = {
+        "model": plan["model"], "messages": _prompt_messages(plan),
+        "stream": True, "format": "json",
+        "options": {"temperature": 0.45, "num_predict": 4096},
+        "keep_alive": "0",
+    }
+    parts: list[str] = []
+    characters = 0
+    done = False
+    started = time.monotonic()
+    last_progress = started
+    last_console = started
+    try:
+        async with httpx.AsyncClient(
+            trust_env=False, follow_redirects=False,
+            timeout=httpx.Timeout(MAX_GENERATION_SECONDS + 5, connect=5),
+        ) as client:
+            async with client.stream("POST", plan["endpoint"] + "/api/chat",
+                                     json=request_body) as response:
+                if response.status_code != 200:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        raise OllamaStoryError("Ollama redirect refused.", 502)
+                    if response.status_code == 404:
+                        raise OllamaStoryError("Ollama model/API not found. Check the installed model.", 502)
+                    raise OllamaStoryError(f"Ollama returned HTTP {response.status_code}.", 502)
+                yield {"type": "progress", "stage": "responding",
+                       "message": "Ollama responded; waiting for text output.", "characters": 0}
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    if len(line) > MAX_RESPONSE_BYTES + 8192:
+                        raise OllamaStoryError("Ollama streaming chunk is too large.", 502)
+                    try:
+                        packet = json.loads(line)
+                    except ValueError as exc:
+                        raise OllamaStoryError("Ollama returned a malformed streaming chunk.", 502) from exc
+                    if not isinstance(packet, dict):
+                        raise OllamaStoryError("Ollama streaming packet must be an object.", 502)
+                    if packet.get("error"):
+                        raise OllamaStoryError("Ollama reported an error: " +
+                                               str(packet["error"])[:180], 502)
+                    msg = packet.get("message") or {}
+                    if not isinstance(msg, dict):
+                        raise OllamaStoryError("Ollama returned a malformed message.", 502)
+                    part = msg.get("content", "")
+                    if not isinstance(part, str):
+                        raise OllamaStoryError("Ollama returned non-text content.", 502)
+                    characters += len(part)
+                    if characters > MAX_RESPONSE_BYTES:
+                        raise OllamaStoryError("Ollama text output exceeded 256 KiB.", 502)
+                    parts.append(part)
+                    now = time.monotonic()
+                    if characters and (now - last_progress >= .8 or packet.get("done")):
+                        yield {"type": "progress", "stage": "receiving",
+                               "message": "Receiving model output", "characters": characters}
+                        last_progress = now
+                    if now - last_console >= 15 and characters:
+                        emit_console("info", "prompt-studio",
+                                     f"Ollama streaming: {characters} characters received, " +
+                                     f"{int(now - started)}s elapsed.")
+                        last_console = now
+                    if packet.get("done") is True:
+                        done = True
+                        metrics = {
+                            "eval_count": packet.get("eval_count")
+                            if type(packet.get("eval_count")) is int else None,
+                            "eval_seconds": round(packet["eval_duration"] / 1e9, 2)
+                            if type(packet.get("eval_duration")) in (int, float) else None,
+                            "load_seconds": round(packet["load_duration"] / 1e9, 2)
+                            if type(packet.get("load_duration")) in (int, float) else None,
+                        }
+                        break
+        if not done:
+            raise OllamaStoryError("Ollama stream ended without a completion marker.", 502)
+        yield {"type": "progress", "stage": "validating",
+               "message": "Validating scene JSON and native keyframes.",
+               "characters": characters}
+        try:
+            decoded = json.loads("".join(parts))
+        except (ValueError, TypeError) as exc:
+            raise OllamaStoryError("Ollama did not return valid scene JSON. Try another model.", 422) from exc
+        if not isinstance(decoded, dict) or set(decoded) != {"scenes"}:
+            raise OllamaStoryError("Ollama returned an unsupported scene schema.", 422)
+        result = compile_result(plan, decoded)
+        result["metrics"] = metrics
+        emit_console("info", "prompt-studio",
+                     f"Ollama storyboard ready: {len(result['scenes'])} scene(s), "
+                     f"{characters} characters, {int(time.monotonic() - started)}s. "
+                     "No project or draft was saved.")
+        yield {"type": "result", "data": result}
+    except httpx.TimeoutException as exc:
+        raise OllamaStoryError("Ollama stopped responding before the timeout.", 504) from exc
+    except httpx.RequestError as exc:
+        raise OllamaStoryError("Ollama connection failed during generation.", 503) from exc
+
+
+def _ndjson(event: dict) -> bytes:
+    return (json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+async def generate_events(plan: dict):
+    """Give stage updates even while model loads; cancel provider on disconnect."""
+    queue: asyncio.Queue = asyncio.Queue(maxsize=32)
+    start = time.monotonic()
+    emit_console("info", "prompt-studio",
+                 f"Ollama storyboard start: model={plan['model']}, mode={plan['mode']}, "
+                 f"scenes={len(plan['scene_frames'])}, family={plan['family']}.")
+    stage = "connecting"
+    characters = 0
+    yield _ndjson({"type": "progress", "stage": stage,
+                   "message": "Connecting to Ollama; the model may need loading.",
+                   "elapsed_seconds": 0, "characters": 0})
+
+    async def worker():
+        try:
+            async with asyncio.timeout(MAX_GENERATION_SECONDS):
+                async for event in _chat_stream(plan):
+                    await queue.put(event)
+        except asyncio.CancelledError:
+            emit_console("warning", "prompt-studio",
+                         "Ollama storyboard cancelled or client disconnected.")
+            raise
+        except (OllamaStoryError, TimeoutError) as exc:
+            msg = (str(exc) if isinstance(exc, OllamaStoryError)
+                   else f"Ollama generation exceeded {MAX_GENERATION_SECONDS} seconds.")
+            emit_console("error", "prompt-studio", "Ollama storyboard failed: " + msg)
+            await queue.put({"type": "error", "message": msg})
+        except Exception as exc:
+            emit_console("error", "prompt-studio",
+                         f"Ollama unexpected provider error: {type(exc).__name__}")
+            await queue.put({"type": "error", "message": "Unexpected Ollama provider error. Check console."})
+        finally:
+            await queue.put(None)
+
+    task = asyncio.create_task(worker())
+    last_console = start
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=2)
+            except asyncio.TimeoutError:
+                event = {"type": "progress", "stage": stage,
+                         "message": ("Waiting for Ollama model load or first response"
+                                     if stage == "connecting" else
+                                     "Waiting for more Ollama output"),
+                         "characters": characters}
+            if event is None:
+                break
+            if event["type"] == "progress":
+                stage = event.get("stage", stage)
+                characters = event.get("characters", characters)
+                event["elapsed_seconds"] = int(time.monotonic() - start)
+            if time.monotonic() - last_console >= 20:
+                emit_console("info", "prompt-studio",
+                             f"Ollama storyboard active: stage={stage}, "
+                             f"elapsed={int(time.monotonic() - start)}s, characters={characters}.")
+                last_console = time.monotonic()
+            yield _ndjson(event)
+            if event["type"] in ("result", "error"):
+                break
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+def stream_generation(payload: dict):
+    """Validate before beginning the streaming HTTP response."""
+    return generate_events(validate_story_request(payload))
