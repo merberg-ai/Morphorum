@@ -802,6 +802,37 @@ def api_animation_projects() -> dict[str, Any]:
 
 
 
+
+# PS2: read-only native prompt transition inspector for unsaved Studio tracks.
+@app.post("/api/animation/projects/{project_id}/prompt-studio/inspect-frame")
+def api_inspect_prompt_studio_frame(
+    project_id: str, payload: dict[str, Any],
+) -> dict[str, Any]:
+    from .prompt_studio_drafts import _validate_tracks, PromptDraftError
+    from .schedules import resolve_prompt_transition
+    try:
+        # Project identity must exist; no mutation of project.json or drafts.
+        load_animation_project(project_id)
+        max_frames = payload.get("max_frames")
+        frame = payload.get("frame")
+        if type(max_frames) is not int or not 1 <= max_frames <= 1_000_000 or (
+                type(frame) is not int or not 0 <= frame < max_frames):
+            raise PromptDraftError("Inspector frame or project length is invalid.")
+        lanes = _validate_tracks(payload.get("tracks"), max_frames, "tracks")
+        result = {"frame": frame, "time_note": "Prompt-only native resolver"}
+        for name in ("positive", "negative"):
+            track = lanes[name]
+            result[name] = resolve_prompt_transition(
+                {str(item["frame"]): item["value"] for item in track["keyframes"]},
+                frame=frame, max_frames=max_frames, mode=track["interpolation"],
+            ).to_dict()
+        return result
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (PromptDraftError, ScheduleError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 # PS1.4: project-owned Prompt Studio drafts (independent from project.json).
 @app.get("/api/animation/projects/{project_id}/prompt-studio/drafts")
 def api_list_prompt_studio_drafts(project_id: str, response: Response) -> dict[str, Any]:

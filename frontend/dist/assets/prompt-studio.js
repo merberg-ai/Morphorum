@@ -122,6 +122,7 @@
     let draft=null,busy=false,invalid=false,previewedRevision=-1,blocked=false;
     let baselineBlocked=false,savedId='',savedEtag='',savedRevision=-1;
     let shownProjectId='',libraryEntries=[];
+    let timeline=null;
     const dom=document.createElement('article');
     dom.className='card glass ps13-workspace';
     dom.innerHTML=`
@@ -155,8 +156,9 @@
         <p class="muted ps14-library-note" data-ps="library-note" role="status" aria-live="polite">Open an animation project to browse its saved drafts.</p>
       </section>
       <div class="ps13-context" data-ps="context">No prompts imported. Open a project in Project Editor, then select Import Existing Prompts.</div>
-      <p class="ps13-notice muted">Import is read-only. Unsaved Studio edits remain in browser memory until saved as a draft. Apply changes only the UNSAVED Project Editor; Save Project there to persist them. Keyframe drag/snap, LLM authoring and audio storyboard sync come in later phases.</p>
+      <p class="ps13-notice muted">Import and timeline edits stay in the Studio draft. Preview Changes and confirm Apply before saving in Project Editor. Visual keyframe changes have in-session Undo/Redo; Save Draft persists tracks, not the undo history. LLM authoring and audio storyboard sync are planned for later phases.</p>
       <p class="ps13-status" data-ps="status" role="status" aria-live="polite">Ready to import.</p>
+      <section class="ps2-workspace" data-ps="timeline" hidden aria-label="Visual Prompt Studio timeline"></section>
       <div class="ps13-lanes" data-ps="lanes" hidden></div>
       <section class="ps13-review" data-ps="review" aria-label="Prompt transfer preview" hidden>
         <h3>Changes to Project Editor</h3>
@@ -169,6 +171,7 @@
       previewButton=find('preview'),applyButton=find('apply'),
       lanes=find('lanes'),review=find('review'),context=find('context');
     const savedSelect=find('saved'),nameInput=find('name'),note=find('library-note');
+    const timelinePanel=find('timeline');
     const saveButton=find('save'),saveCopyButton=find('save-copy'),
       loadButton=find('load'),deleteButton=find('delete'),refreshButton=find('refresh');
     const projectId=()=>root.MorphorumAnimation?.getPromptStudioProjectId?.()||'';
@@ -211,6 +214,28 @@
         el.disabled=!can||el.dataset.psFixed==='1';
       });
     }
+    function makeEdit(lane,operation,frame,value,redraw=false){
+      if(timeline?.locks?.has(lane))
+        return onEdit(problem('LOCKED','Unlock the '+lane+' lane before editing.'));
+      const before=draft?.ok?clone(draft.tracks):null;
+      const result=updateDraft(draft,bridge,lane,operation,frame,value);
+      if(result.ok&&before&&JSON.stringify(before)!==JSON.stringify(draft.tracks))
+        timeline?.record(before,operation==='text'?'text:'+lane+':'+frame:operation);
+      onEdit(result,redraw);
+      return result;
+    }
+    function applyTracks(next,key,old,historyReplay=false){
+      if(!draft?.ok||draft.applied)
+        return problem('NO_DRAFT','Load a Studio draft before editing its timeline.');
+      const valid=bridge.validateTracks(next,draft.snapshot.context.maxFrames);
+      if(!valid.ok)return valid;
+      const before=old||clone(draft.tracks);
+      if(!historyReplay&&JSON.stringify(before)!==JSON.stringify(valid.tracks))
+        timeline?.record(before,key);
+      draft.tracks=valid.tracks;draft.revision+=1;
+      onEdit({ok:true,revision:draft.revision},true);
+      return {ok:true};
+    }
     function onEdit(result,redraw=false){
       if(!result.ok){invalid=true;status(result.message,true);controls();return;}
       invalid=false;blocked=false;previewClear();
@@ -219,6 +244,7 @@
         : count()+' staged change(s). Preview Changes before applying.');
       if(redraw)renderLanes();
       else controls();
+      timeline?.refresh();
     }
     function makeLane(name){
       const track=draft.tracks[name];
@@ -228,13 +254,14 @@
       const title=document.createElement('h3');title.textContent=name==='positive'?'Positive prompts':'Negative prompts';
       const modeLabel=document.createElement('label');modeLabel.textContent='Transition ';
       const mode=document.createElement('select');
+      mode.dataset.psFixed=timeline?.locks.has(name)?'1':'0';
       mode.setAttribute('aria-label',name+' prompt transition');
       for(const option of ['blend','hold']){
         const opt=document.createElement('option');opt.value=option;
         opt.textContent=option==='blend'?'Blend':'Hold';mode.appendChild(opt);
       }
       mode.value=track.interpolation;
-      mode.addEventListener('change',()=>onEdit(updateDraft(draft,bridge,name,'interpolation',0,mode.value)));
+      mode.addEventListener('change',()=>makeEdit(name,'interpolation',0,mode.value));
       modeLabel.appendChild(mode);heading.append(title,modeLabel);
       section.appendChild(heading);
       const rows=document.createElement('div');rows.className='ps13-rows';
@@ -244,26 +271,25 @@
         const frame=document.createElement('input');frame.type='number';
         frame.min='0';frame.max=String(draft.snapshot.context.maxFrames-1);
         frame.step='1';frame.value=String(point.frame);
-        frame.dataset.psFixed=point.frame===0?'1':'0';
+        frame.dataset.psFixed=point.frame===0||timeline?.locks.has(name)?'1':'0';
         frame.disabled=point.frame===0;
         frame.setAttribute('aria-label',name+' keyframe '+point.frame+' frame');
         frame.addEventListener('change',()=>{
-          const result=updateDraft(draft,bridge,name,'move',point.frame,frame.value);
+          const result=makeEdit(name,'move',point.frame,frame.value,true);
           if(!result.ok)frame.value=String(point.frame);
-          onEdit(result,true);
         });frameLabel.appendChild(frame);
         const textLabel=document.createElement('label');textLabel.textContent='Prompt at F'+point.frame;
         const textarea=document.createElement('textarea');textarea.rows=3;textarea.value=point.value;
-        textarea.maxLength=32768;
+        textarea.maxLength=32768;textarea.dataset.psFixed=timeline?.locks.has(name)?'1':'0';
         textarea.placeholder=name==='positive'?'Describe this scene…':'Avoid these visual elements…';
         textarea.setAttribute('aria-label',name+' prompt at frame '+point.frame);
-        textarea.addEventListener('input',()=>onEdit(updateDraft(draft,bridge,name,'text',point.frame,textarea.value)));
+        textarea.addEventListener('input',()=>makeEdit(name,'text',point.frame,textarea.value));
         textLabel.appendChild(textarea);
         const remove=document.createElement('button');remove.type='button';
         remove.className='secondary-button compact';remove.textContent='Remove';
-        remove.dataset.psFixed=point.frame===0?'1':'0';
+        remove.dataset.psFixed=point.frame===0||timeline?.locks.has(name)?'1':'0';
         remove.disabled=point.frame===0;
-        remove.addEventListener('click',()=>onEdit(updateDraft(draft,bridge,name,'remove',point.frame),true));
+        remove.addEventListener('click',()=>makeEdit(name,'remove',point.frame,undefined,true));
         row.append(frameLabel,textLabel,remove);rows.appendChild(row);
       }
       section.appendChild(rows);
@@ -277,7 +303,9 @@
       addLabel.appendChild(at);
       const add=document.createElement('button');add.className='secondary-button compact';
       add.type='button';add.textContent='+ Add Keyframe';
-      add.addEventListener('click',()=>onEdit(updateDraft(draft,bridge,name,'add',at.value),true));
+      add.addEventListener('click',()=>makeEdit(name,'add',at.value,undefined,true));
+      at.dataset.psFixed=timeline?.locks.has(name)?'1':'0';
+      add.dataset.psFixed=timeline?.locks.has(name)?'1':'0';
       actions.append(addLabel,add);section.appendChild(actions);
       return section;
     }
@@ -326,7 +354,7 @@
         const snapshot=await editor.getPromptStudioEditorSnapshot();
         const result=beginDraft(snapshot,bridge);
         if(!result.ok){status(result.message,true);return;}
-        draft=result;invalid=false;blocked=false;baselineBlocked=false;
+        draft=result;timeline?.reset();invalid=false;blocked=false;baselineBlocked=false;
         savedId='';savedEtag='';savedRevision=-1;
         nameInput.value=(result.snapshot.context.name||'Storyboard')+' Prompt Draft';
         previewClear();showContext();renderLanes();
@@ -338,6 +366,7 @@
     function reset(){
       if(!draft?.ok||draft.applied)return;
       draft.tracks=clone(draft.original);draft.revision+=1;
+      timeline?.reset();
       invalid=false;blocked=false;previewClear();renderLanes();
       status('Prompt Studio draft restored to its imported baseline. Project Editor unchanged.');
     }
@@ -383,7 +412,7 @@
         const result=await root.MorphorumAnimation?.applyPromptStudioTransfer?.(draft.snapshot,draft.tracks);
         if(!result?.ok){blocked=result?.code!=='CANCELLED';status(result?.message||'Apply failed.',true);return;}
         if(result.applied){
-          draft.applied=true;previewClear();renderLanes();
+          draft.applied=true;timeline?.reset();previewClear();renderLanes();
           status('Prompts staged in Project Editor. Save Project there to persist.');
           onEditor?.();
         }else status(result.message||'No prompt changes to apply.');
@@ -441,7 +470,8 @@
         if(projectId()!==id)throw new Error('Project changed while loading draft.');
         const value=restoreDraft(loaded.data.draft,live,bridge);
         if(!value.ok)throw new Error(value.message);
-        draft=value;invalid=false;blocked=false;baselineBlocked=!value.compatible;
+        draft=value;timeline?.reset();
+        invalid=false;blocked=false;baselineBlocked=!value.compatible;
         savedId=identifier;savedEtag=loaded.etag;savedRevision=0;
         nameInput.value=loaded.data.draft.name;
         previewClear();showContext();renderLanes();
@@ -506,6 +536,10 @@
       finally{busy=false;controls();}
     }
 
+    timeline=root.MorphorumPromptStudioTimeline?.mount({
+      panel:timelinePanel,getDraft:()=>draft,onTracks:applyTracks,
+      onNotice:(message,error)=>{status(message,error);renderLanes();},
+    })||null;
     find('editor').addEventListener('click',()=>onEditor?.());
     importButton.addEventListener('click',()=>void importPrompts());
     resetButton.addEventListener('click',reset);
