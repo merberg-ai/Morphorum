@@ -6108,6 +6108,13 @@
     const button = qs('#animation-save');
     setBusy(button, true);
     try {
+      // Prevent a legacy combined-row structural edit from destroying the
+      // sparse prompt lanes of a Studio-staged project.
+      if (state.promptStudioPendingSaveEtag) {
+        const safeTracks = promptStudioLiveTracks();
+        if (!safeTracks.ok) throw new Error(
+          'Prompt Studio tracks could not be safely reconciled: ' + safeTracks.message);
+      }
       const payload = await api(
         `/api/animation/projects/${encodeURIComponent(state.project.id)}`,
         {
