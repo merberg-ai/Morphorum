@@ -21,6 +21,9 @@
       return invalid('FRAME','AI scene frames or text were invalid.');
     return {ok:true,tracks:checked.tracks,scenes:copy(value.scenes),
       warnings:Array.isArray(value.warnings)?value.warnings.filter(x=>typeof x==='string').slice(0,40):[],
+      diagnostics:Array.isArray(value.diagnostics)?value.diagnostics.filter(x=>
+        x&&['positive','negative'].includes(x.lane)&&Number.isInteger(x.frame)&&
+        Number.isInteger(x.words_approx)&&typeof x.long_prompt==='boolean').slice(0,100):[],
       provenance:copy(value.provenance)};
   }
   function changes(before,after){
@@ -86,7 +89,7 @@
     if(!panel)throw Error('AI Story Director container is missing.');
     let working=false,pending=null,controller=null,sequence=0,models=[],connected=false;
     let elapsedTimer=null,startedAt=0,progressState=null;
-    let profileCatalog=null,profileFetchPending=false,profileFamily='';
+    let profileCatalog=null,profileFetchPending=false,profileFetchAttempted=false,profileFamily='';
     const node=document.createElement('section');node.className='ps4-director';
     node.innerHTML=`
       <div class="ps4-head"><div><h3>AI Story Director</h3>
@@ -226,8 +229,8 @@
     }
     const profileId=family=>'ps5-'+family+'-v1';
     async function ensureProfiles(){
-      if(profileCatalog||profileFetchPending)return;
-      profileFetchPending=true;
+      if(profileCatalog||profileFetchPending||profileFetchAttempted)return;
+      profileFetchPending=true;profileFetchAttempted=true;
       try{
         const response=await fetch('/api/prompt-studio/profiles',{cache:'no-store'});
         if(!response.ok)throw Error('Profile catalog HTTP '+response.status);
@@ -242,10 +245,11 @@
     function refreshProfile(d){
       const family=d.snapshot.context.model?.family||'';
       const selector=q('profile');
-      if(profileFamily!==family||(!selector.value&&profileCatalog)){
+      if(profileFamily!==family||(profileCatalog&&selector.dataset.loadedProfile!==family)){
         profileFamily=family;
         selector.replaceChildren();
         const record=profileCatalog?.profiles?.find(p=>p.family===family);
+        selector.dataset.loadedProfile=record?family:'';
         if(record){
           const option=document.createElement('option');option.value=record.id;
           option.textContent=record.name+' · v1';selector.appendChild(option);
@@ -272,7 +276,7 @@
       const d=draft(),usable=context();
       setVisibility(panel,node,empty,usable);
       if(!usable){invalidate();return;}
-      if(!profileCatalog&&!profileFetchPending)void ensureProfiles();
+      if(!profileCatalog&&!profileFetchPending&&!profileFetchAttempted)void ensureProfiles();
       refreshProfile(d);
       // Freeze all request inputs while Ollama is evaluating a snapshot.
       for(const field of ['endpoint','lan','model','idea','negative','profile','subject','style'])
