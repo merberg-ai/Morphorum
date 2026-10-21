@@ -52,3 +52,16 @@ test('legacy core controls and model selection remain available',()=>{
   assert.match(models,/useModel\(model\.id\)/);
   assert.match(loras,/insertIntoImage/);
 });
+
+test('thumbnail sync distinguishes metadata-only success from image success',()=>{
+  assert.match(shared,/PREVIEWS OFF/);
+  assert.match(shared,/PREVIEW HIDDEN/);
+  assert.match(shared,/CACHE MISSING/);
+  assert.match(shared,/IMAGE LOAD FAILED/);
+  assert.match(models,/Civitai info saved, no thumbnail/);
+  assert.match(models,/data\.preview_warning/);
+  assert.match(models,/thumbnails downloaded/);
+  assert.match(loras,/Metadata saved without artwork/);
+  assert.match(loras,/withPreview/);
+  assert.match(loras,/result\.preview_warning/);
+});
