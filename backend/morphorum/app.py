@@ -1047,8 +1047,16 @@ def api_save_animation_project(
     match = request.headers.get("if-match")
     if match is not None and not re.fullmatch(r'"[0-9a-f]{64}"', match):
         raise HTTPException(status_code=400, detail="If-Match must be one quoted project ETag.")
+    studio_tracks = request.headers.get("x-morphorum-prompt-tracks")
+    if studio_tracks not in (None, "canonical"):
+        raise HTTPException(status_code=400, detail="Unsupported Prompt Studio track mode.")
+    if studio_tracks and not match:
+        raise HTTPException(status_code=428, detail="Prompt Studio saves require If-Match.")
     try:
-        project = save_animation_project(project_id, payload, expected_etag=match)
+        project = save_animation_project(
+            project_id, payload, expected_etag=match,
+            prefer_prompt_tracks=(studio_tracks == "canonical"),
+        )
         response.headers["ETag"] = project_etag(project_id)
         return {
             "status": "saved",

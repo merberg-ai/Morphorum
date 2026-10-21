@@ -6123,7 +6123,8 @@
           headers: {
             'Content-Type':'application/json',
             ...(state.promptStudioPendingSaveEtag
-              ? {'If-Match':state.promptStudioPendingSaveEtag} : {}),
+              ? {'If-Match':state.promptStudioPendingSaveEtag,
+                 'X-Morphorum-Prompt-Tracks':'canonical'} : {}),
           },
           body: JSON.stringify(collectProject()),
         }

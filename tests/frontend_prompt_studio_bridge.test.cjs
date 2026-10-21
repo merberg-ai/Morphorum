@@ -76,5 +76,6 @@ test('editor handshake is revision-guarded and cannot directly save a project',(
  assert.match(part,/state\.project=patch\.project/);
  assert.match(part,/markDirty\(\{validate:true\}\)/);
  assert.match(animation,/'If-Match':state\.promptStudioPendingSaveEtag/);
+ assert.match(animation,/'X-Morphorum-Prompt-Tracks':'canonical'/);
  assert.doesNotMatch(part,/method:\s*'PUT'|save_animation_project/);
 });

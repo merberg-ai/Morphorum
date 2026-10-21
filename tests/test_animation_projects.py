@@ -570,3 +570,39 @@ def test_schedule_type_survives_project_normalization_and_legacy_defaults() -> N
     })
     assert project["generation"]["schedule_type"] == "karras"
     assert normalize_animation_project(project)["generation"]["schedule_type"] == "karras"
+
+def test_ps1_staged_prompt_save_preserves_independent_lanes_and_unsaved_camera_changes(
+    tmp_path, monkeypatch,
+) -> None:
+    """Native prompt authority must not erase unrelated legacy Editor form edits."""
+    monkeypatch.setattr(animation_projects, "PROJECTS_DIR", tmp_path)
+    created = create_animation_project({"name": "PS1 Separate Prompt Tracks"})
+    payload = deepcopy(created)
+    payload["tracks"]["prompts"]["positive"] = {
+        "kind":"prompt", "interpolation":"hold",
+        "keyframes":[{"frame":0,"value":"<lora:Test:1> first"},
+                     {"frame":30,"value":"second"}],
+    }
+    payload["tracks"]["prompts"]["negative"] = {
+        "kind":"prompt", "interpolation":"blend",
+        "keyframes":[{"frame":0,"value":"noise"},
+                     {"frame":20,"value":"blur"}],
+    }
+    payload["prompts"] = {"0":"<lora:Test:1> first","30":"second"}
+    payload["negative_prompts"] = {"0":"noise","20":"blur"}
+    payload["animation"]["prompt_transition"] = "hold"
+    payload["motion"]["zoom"] = "0:(1.0), 30:(1.12)"
+    payload["generation"]["strength"] = "0:(0.75)"
+    saved = save_animation_project(
+        created["id"], payload,
+        expected_etag=animation_projects.project_etag(created["id"]),
+        prefer_prompt_tracks=True,
+    )
+    assert saved["tracks"]["prompts"]["positive"]["interpolation"] == "hold"
+    assert saved["tracks"]["prompts"]["negative"]["interpolation"] == "blend"
+    assert [x["frame"] for x in saved["tracks"]["prompts"]["negative"]["keyframes"]] == [0,20]
+    assert saved["motion"]["zoom"] == "0:(1.0), 30:(1.12)"
+    assert saved["generation"]["strength"] == "0:(0.75)"
+    again=load_animation_project(created["id"])
+    assert again["tracks"]["prompts"] == saved["tracks"]["prompts"]
+    assert again["animation"]["prompt_transition"] == "hold"

@@ -329,6 +329,7 @@ def normalize_animation_project(
     existing: dict[str, Any] | None = None,
     project_id: str | None = None,
     prefer_tracks: bool | None = None,
+    prefer_prompt_tracks: bool = False,
 ) -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
     had_existing = isinstance(existing, dict)
@@ -524,12 +525,22 @@ def normalize_animation_project(
     if use_incoming_tracks and isinstance(existing_tracks, dict) and had_existing:
         project["tracks"] = normalize_tracks(incoming_tracks, project=project)
         if legacy_changed:
+            # Prompt Studio explicitly authors independent canonical prompt lanes,
+            # while the legacy Editor can also change unsaved numeric schedules.
+            # Merge those numeric edits but never flatten the separate prompt
+            # keyframes/interpolation to one legacy Hold/Blend mode.
+            authoritative_prompts = (
+                deepcopy(project["tracks"]["prompts"])
+                if prefer_prompt_tracks else None
+            )
             project["tracks"] = _merge_legacy_timeline_changes(
                 payload,
                 existing,
                 project,
                 project["tracks"],
             )
+            if authoritative_prompts is not None:
+                project["tracks"]["prompts"] = authoritative_prompts
         sync_legacy_from_tracks(project, project["tracks"])
     elif use_incoming_tracks and (
         not had_existing
@@ -657,6 +668,7 @@ def save_animation_project(
     *,
     prefer_tracks: bool | None = None,
     expected_etag: str | None = None,
+    prefer_prompt_tracks: bool = False,
 ) -> dict[str, Any]:
     # All saves share this lock; a conditional check and write are one unit.
     # Older browser callers omit expected_etag and preserve prior semantics.
@@ -674,6 +686,7 @@ def save_animation_project(
             existing=existing,
             project_id=project_id,
             prefer_tracks=prefer_tracks,
+            prefer_prompt_tracks=prefer_prompt_tracks,
         )
         project["created_at"] = existing["created_at"]
         project["updated_at"] = _utc_now()
