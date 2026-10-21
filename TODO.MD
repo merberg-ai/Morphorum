@@ -16,7 +16,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
 
-**Status:** **PS0 documented, PS1.1 bridge and PS1.2 guarded revision handling Windows-accepted; PS1.3 visible manual workspace implemented on `dev-webui` for testing, not merged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS1 remains gated on owner review.
+**Status:** **PS0 and PS1.1–PS1.3 Windows-accepted; PS1.4 project-owned persistent Prompt Studio drafts implemented on `dev-webui` for acceptance, not merged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS1 remains gated on owner review.
 
 - Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
 - Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
@@ -89,3 +89,9 @@ The planned Prompt Studio PS0–PS9 roadmap above supersedes this open-ended dis
 ### PS1.3 Prompt Studio manual workspace (2026-10-21)
 
 Project → Prompt Studio and the Editor's Prompt Keyframes shortcut now open a **manual-only** Prompt Studio page. Import Existing Prompts snapshots live/unsaved Editor prompts; separate positive/negative lanes support text/frame/transition edits, frame-zero protection, add/remove/move with collisions refused. Preview Changes shows a diff before confirmation-gated Apply to Animation; Apply updates the unsaved Project Editor only, never project.json or camera/media/other schedules. Reset Draft restores the import; Studio drafts are **in memory only** (lost on browser reload) until later persistence work. No AI/LoRA composer, audio synchronization, or draggable timeline yet. User Windows/mobile acceptance needed before more phases.
+
+### PS1.4 Persistent Prompt Studio drafts (2026-10-21)
+- Draft format `morphorum.prompt-studio-draft` v1 at `<project>/prompt_studio/drafts/<32hex>.json` is separate from `project.json`. Max 30 drafts per project and 8 MiB per draft; exact lane text/LoRA tags, frame order, model and timing validated.
+- Project draft API: list/create/get/update/delete. ETags and mandatory If-Match on overwrite/delete; stale writers rejected with HTTP 412. WebUI: Save Draft, Save As New Draft, Load Draft, Delete Draft, per-project selector.
+- Saved drafts can be edited even after an Editor change, but Apply remains blocked unless the original imported lanes, model, FPS, frame count and source reference match a fresh live Editor snapshot. No automatic rebase or project save.
+- ZIP export/import includes only validated, manifest-hashed draft JSON. Save Project As copies these draft files and updates their ownership to the new project. No generated media or caches. Windows/mobile acceptance pending; PS2 not started.
