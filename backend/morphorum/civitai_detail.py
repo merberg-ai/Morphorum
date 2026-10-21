@@ -80,7 +80,8 @@ def model_details(model_id: int, *, client: httpx.Client | None = None) -> dict[
                     # The gallery can include video previews; the local cache serves images only.
                     if str(image.get("type") or "image").lower() not in ("image", ""):
                         continue
-                    mature = image.get("nsfw") not in (None, False, "None", "Soft")
+                    classification = image.get("nsfwLevel", image.get("nsfw"))
+                    mature = classification not in (None, False, "None", "Soft")
                     if not settings.get("allow_mature", False) and mature:
                         continue
                     images.append({"url": image["url"], "width": image.get("width"),
