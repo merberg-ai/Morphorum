@@ -215,7 +215,37 @@ function mount({panel,getDraft,onChange,onCommit,onNotice}={}){
           action==='reorder'?{id:b.id,direction:arg}:{id:b.id}));
         buttons.appendChild(button);
       }
-      row.append(summary,buttons);host.appendChild(row);
+      const editor=document.createElement('div');editor.className='ps3-block-editor';
+      const positionChoice=document.createElement('select');
+      positionChoice.setAttribute('aria-label','Block placement for '+(b.label||b.name||b.id));
+      for(const [value,label] of [['before','Beginning'],['after','End']]){
+        const option=document.createElement('option');option.value=value;
+        option.textContent=label;positionChoice.appendChild(option);
+      }
+      positionChoice.value=b.placement;
+      positionChoice.addEventListener('change',()=>modify('update',
+        {id:b.id,patch:{placement:positionChoice.value}}));
+      editor.appendChild(positionChoice);
+      if(b.kind==='text'){
+        const field=document.createElement('textarea');field.rows=2;
+        field.maxLength=32768;field.value=b.text;
+        field.setAttribute('aria-label','Text for '+(b.label||b.id));
+        field.addEventListener('change',()=>modify('update',{id:b.id,patch:{text:field.value}}));
+        editor.appendChild(field);
+      }else{
+        const weight=document.createElement('input');weight.type='number';weight.min='-4';
+        weight.max='4';weight.step='.05';weight.value=String(b.weight);
+        weight.setAttribute('aria-label','LoRA weight for '+b.name);
+        weight.addEventListener('change',()=>modify('update',
+          {id:b.id,patch:{weight:Number(weight.value)}}));
+        const triggers=document.createElement('input');triggers.type='text';
+        triggers.value=b.triggers.join(', ');
+        triggers.setAttribute('aria-label','Trigger words for '+b.name);
+        triggers.addEventListener('change',()=>modify('update',
+          {id:b.id,patch:{triggers:triggers.value.split(',').map(x=>x.trim()).filter(Boolean)}}));
+        editor.append(weight,triggers);
+      }
+      row.append(summary,buttons,editor);host.appendChild(row);
     }
   }
   function refresh(){
@@ -256,7 +286,7 @@ function mount({panel,getDraft,onChange,onCommit,onNotice}={}){
     else{
       const r=records.find(r=>r.id===q('lora').value);
       if(!r)return message('Select an indexed LoRA first.',true);
-      block.name=(r.filename||r.name||'').replace(/\.safetensors$/i,'');
+      block.name=(r.filename||r.name||'').replace(/\.(?:safetensors|pt|ckpt|pth)$/i,'');
       block.model_id=r.id;block.family=r.family;block.weight=Number(q('weight').value);
       block.triggers=q('triggers').value.split(',').map(x=>x.trim()).filter(Boolean).slice(0,24);
     }
