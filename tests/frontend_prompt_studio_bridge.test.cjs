@@ -131,3 +131,7 @@ test('PS1.3 normal Editor enable and dirty bindings exclude the Studio draft UI'
    animation.indexOf('  async function start() {'));
  assert.match(bind,/input\.closest\('#animation-panel-prompt-studio'\)/);
 });
+
+test('PS1.4 Studio reads current project identity through the guarded Editor facade',()=>{
+ assert.match(animation,/getPromptStudioProjectId:\s*\(\) => state\.project\?\.id \|\| ''/);
+});
