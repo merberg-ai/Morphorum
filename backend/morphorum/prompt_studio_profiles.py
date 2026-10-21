@@ -102,8 +102,11 @@ def continuity_prefix(text: str, locks: dict[str, str]) -> str:
 def diagnostics(tracks: dict, family: str) -> tuple[list[dict], list[str]]:
     limit = PROFILE_DESCRIPTIONS[family]["guideline_words"]
     entries, warnings = [], []
+    focus = set(focus_frames) if focus_frames is not None else None
     for lane in ("positive", "negative"):
         for point in tracks[lane]["keyframes"]:
+            if focus is not None and point["frame"] not in focus:
+                continue
             text = point["value"]
             words = len(_WORD.findall(_LORA.sub("", text)))
             tags = len(_LORA.findall(text))
