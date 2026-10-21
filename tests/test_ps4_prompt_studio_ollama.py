@@ -187,3 +187,99 @@ def test_saved_draft_validates_optional_ai_provenance_without_breaking_older_ver
     for wrong in [{**good,"provider":"not-ollama"},{**good,"scene_count":200},
                   {**good,"model":"x"*300},{**good,"url":"http://example.com"}]:
         with pytest.raises(ValueError):_validate_ai_provenance(wrong)
+
+
+def test_ps41_streamed_stage_progress_and_terminal_result(monkeypatch, tmp_path):
+    import asyncio
+    import json
+    monkeypatch.setattr(projects, "PROJECTS_DIR", tmp_path / "projects")
+    calls = []
+    async def fake_stream(plan):
+        calls.append(plan["model"])
+        yield {"type":"progress","stage":"responding","message":"Ollama responded","characters":0}
+        yield {"type":"progress","stage":"receiving","message":"Receiving model output","characters":123}
+        yield {"type":"result","data":ollama.compile_result(plan,fake_scenes())}
+    monkeypatch.setattr(ollama,"_chat_stream",fake_stream)
+    with TestClient(app) as client:
+        p=client.post("/api/animation/projects",json={"name":"PS4 progress"}).json()["project"]
+        base=f"/api/animation/projects/{p['id']}"
+        etag=client.get(base).headers["ETag"]
+        response=client.post("/api/prompt-studio/ollama/generate-stream",json=req())
+        assert response.status_code==200,response.text
+        assert response.headers["content-type"].startswith("application/x-ndjson")
+        events=[json.loads(line) for line in response.text.splitlines()]
+        assert [x["type"] for x in events]==["progress","progress","progress","result"]
+        assert [x["stage"] for x in events[:-1]]==["connecting","responding","receiving"]
+        assert events[2]["characters"]==123
+        assert events[-1]["data"]["scenes"][0]["frame"]==0
+        assert events[0]["elapsed_seconds"]==0
+        assert calls==["qwen3:4b"]
+        assert client.get(base).headers["ETag"]==etag
+
+
+def test_ps41_stream_failure_has_diagnostic_event_and_no_result(monkeypatch):
+    import json
+    async def broken(_plan):
+        yield {"type":"progress","stage":"responding","message":"connected","characters":0}
+        raise ollama.OllamaStoryError("Mock Ollama stream failure.", 502)
+    monkeypatch.setattr(ollama,"_chat_stream",broken)
+    with TestClient(app) as client:
+        response=client.post("/api/prompt-studio/ollama/generate-stream",json=req())
+        events=[json.loads(line) for line in response.text.splitlines()]
+        assert response.status_code==200
+        assert events[-1]["type"]=="error"
+        assert "Mock Ollama stream failure" in events[-1]["message"]
+        assert not any(e["type"]=="result" for e in events)
+        bad=client.post("/api/prompt-studio/ollama/generate-stream",json={
+            **req(),"endpoint":"https://example.com"})
+        assert bad.status_code==400
+
+
+def test_ps41_realistic_ollama_ndjson_chunks_compile_without_text_leaking(monkeypatch):
+    import asyncio
+    import httpx
+    import json
+    original_client=httpx.AsyncClient
+    packets=[
+        {"message":{"content":'{"scenes":['},"done":False},
+        {"message":{"content":','.join(json.dumps(x) for x in fake_scenes()["scenes"])+"]}"},"done":False},
+        {"done":True,"message":{"content":""},"eval_count":275,
+         "eval_duration":5_000_000_000,"load_duration":2_000_000_000}
+    ]
+    requests=[]
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200,content="\n".join(json.dumps(x) for x in packets)+"\n")
+    transport=httpx.MockTransport(handler)
+    monkeypatch.setattr(ollama.httpx,"AsyncClient",
+                        lambda **kw: original_client(transport=transport,**kw))
+    async def collect():
+        events=[]
+        async for event in ollama._chat_stream(ollama.validate_story_request(req())):
+            events.append(event)
+        return events
+    events=asyncio.run(collect())
+    assert events[-1]["type"]=="result"
+    assert events[-1]["data"]["metrics"]["eval_count"]==275
+    assert events[-1]["data"]["metrics"]["load_seconds"]==2.0
+    assert events[-1]["data"]["scenes"][2]["frame"]==48
+    assert requests[0].url.path=="/api/chat"
+    sent=json.loads(requests[0].content)
+    assert sent["stream"] is True
+    assert sent["format"]=="json"
+    assert not any("Scene image" in str(x) for x in events[:-1])
+
+
+def test_ps41_no_completion_marker_returns_error(monkeypatch):
+    import asyncio
+    import httpx
+    original=httpx.AsyncClient
+    transport=httpx.MockTransport(lambda request:
+        httpx.Response(200,content='{"message":{"content":"partial"},"done":false}\n'))
+    monkeypatch.setattr(ollama.httpx,"AsyncClient",
+                        lambda **kw: original(transport=transport,**kw))
+    async def collect():
+        async for _ in ollama._chat_stream(ollama.validate_story_request(req())):
+            pass
+    with pytest.raises(ollama.OllamaStoryError,match="completion marker"):
+        asyncio.run(collect())

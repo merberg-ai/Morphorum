@@ -109,3 +109,49 @@ test('PS4 always has a top-level in-Studio navigation shortcut and import guidan
   assert.match(ui,/Import Existing Prompts/);
   assert.match(ui,/panel\.append\(empty,node\)/);
 });
+
+test('PS4.1 incremental NDJSON parser handles fragmented progress and terminal storyboard',async()=>{
+  const te=new TextEncoder();
+  const fragments=[
+    '{"type":"progress","stage":"connecting","elapsed_seconds":0,"characters":0}\n'+
+      '{"type":"progress","stage":"receiv',
+    'ing","elapsed_seconds":5,"characters":230}\n'+
+      '{"type":"result","data":{"scenes":[{"frame":0}]}}\n'
+  ];
+  let index=0;
+  const response={body:{getReader:()=>({
+    read:async()=>index<fragments.length?{done:false,value:te.encode(fragments[index++])}:{done:true},
+    releaseLock(){}
+  })}};
+  const events=[];
+  const result=await ai.readProgressStream(response,e=>events.push(e));
+  assert.deepEqual(events.map(e=>e.type),['progress','progress','result']);
+  assert.equal(events[1].characters,230);
+  assert.equal(result.scenes[0].frame,0);
+});
+test('PS4.1 stream error and disconnected early request never create a fake result',async()=>{
+  function response(value){
+    let done=false;
+    return {body:{getReader:()=>({
+      read:async()=>done?{done:true}:(done=true,{done:false,value:new TextEncoder().encode(value)}),
+      releaseLock(){}
+    })}};
+  }
+  await assert.rejects(()=>ai.readProgressStream(response(
+    '{"type":"error","message":"Ollama offline"}\n')),/Ollama offline/);
+  await assert.rejects(()=>ai.readProgressStream(response(
+    '{"type":"progress","stage":"connecting"}\n')),/ended before/);
+  await assert.rejects(()=>ai.readProgressStream(response(
+    'this is not json\n')),/invalid JSON/);
+});
+test('PS4.1 shows elapsed real activity instead of invented progress percentage, and console source',()=>{
+  const ui=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets','prompt-studio-ai.js'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','frontend','dist','index.html'),'utf8');
+  assert.match(ui,/data-p4="activity"/);
+  assert.match(ui,/data-p4="elapsed"/);
+  assert.match(ui,/\/api\/prompt-studio\/ollama\/generate-stream/);
+  assert.match(ui,/setInterval\(renderProgress,1000\)/);
+  assert.match(ui,/stopProgress\(\)/);
+  assert.match(ui,/onEvent\?\.\(evt\)/);
+  assert.match(html,/value="prompt-studio" checked/);
+});
