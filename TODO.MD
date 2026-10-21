@@ -16,7 +16,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
 
-**Status:** **PS0 and PS1.1–PS1.3 Windows-accepted; PS1.4 project-owned persistent Prompt Studio drafts implemented on `dev-webui` for acceptance, not merged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS1 remains gated on owner review.
+**Status:** **PS0 and PS1.1–PS1.3 Windows-accepted; PS1.4 project-owned persistent Prompt Studio drafts implemented on `dev-webui` for acceptance, not merged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS1.4 physical acceptance is the next gate.
 
 - Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
 - Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
@@ -84,7 +84,7 @@ Setting requires_grad=True on inference tensor outside InferenceMode is not allo
 
 ## Project Editor prompt/keyframe UX
 
-The planned Prompt Studio PS0–PS9 roadmap above supersedes this open-ended discussion item. No Prompt Studio implementation has been authorized; retain existing editor behavior until PS1+ acceptance gates.
+The Prompt Studio PS0–PS9 roadmap above supersedes this open-ended discussion item. PS1.1–PS1.3 are Windows-accepted, PS1.4 awaits acceptance, and PS2–PS9 still require their separate implementation and testing gates.
 
 ### PS1.3 Prompt Studio manual workspace (2026-10-21)
 
