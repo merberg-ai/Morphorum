@@ -86,6 +86,7 @@
     if(!panel)throw Error('AI Story Director container is missing.');
     let working=false,pending=null,controller=null,sequence=0,models=[],connected=false;
     let elapsedTimer=null,startedAt=0,progressState=null;
+    let profileCatalog=null,profileFetchPending=false,profileFamily='';
     const node=document.createElement('section');node.className='ps4-director';
     node.innerHTML=`
       <div class="ps4-head"><div><h3>AI Story Director</h3>
@@ -107,6 +108,24 @@
         <label>Story, scene idea or creative direction
           <textarea data-p4="idea" rows="5" maxlength="6000"
             placeholder="Describe the story, recurring characters, setting, emotional arc and visual style…"></textarea></label>
+        <fieldset class="ps5-profile"><legend>PS5.1 · Model-aware authoring</legend>
+          <div class="ps5-settings">
+            <label>Prompt profile <select data-p4="profile" aria-label="Model-aware prompt profile">
+              <option value="">Checking family profile…</option></select></label>
+            <label>Refine selection <select data-p4="target">
+              <option value="">All existing positive keyframes</option></select></label>
+          </div>
+          <p data-p4="profile-note" class="muted">Authoring profile guidance; not renderer capability detection.</p>
+          <div class="ps5-settings">
+            <label>Lock recurring subject/character description
+              <textarea data-p4="subject" rows="2" maxlength="1000"
+                placeholder="Exact character identity, clothing, proportions…"></textarea></label>
+            <label>Lock visual style / setting
+              <textarea data-p4="style" rows="2" maxlength="1000"
+                placeholder="Same illustration technique, palette, camera style…"></textarea></label>
+          </div>
+          <p class="muted">Nonempty locks are repeated literally in accepted generated prompts where missing. They do not change render settings. Refine Selected changes just one positive keyframe; unrelated lanes stay intact.</p>
+        </fieldset>
         <div class="ps4-options">
           <label>Mode <select data-p4="mode"><option value="create">Create storyboard</option>
             <option value="refine">Refine existing positive keyframes</option></select></label>
@@ -139,6 +158,7 @@
         <h4>AI proposal: review before acceptance</h4>
         <p data-p4="summary" class="muted"></p>
         <div data-p4="warnings"></div>
+        <div data-p4="diagnostics" class="ps5-diagnostics" aria-label="Prompt length diagnostics"></div>
         <div data-p4="scenes" class="ps4-scene-overview" aria-label="Proposed storyboard scenes"></div>
         <div data-p4="diff"></div>
         <div class="ps4-actions">
@@ -204,12 +224,58 @@
     function context(){
       const d=draft();return Boolean(d?.ok&&!d.applied);
     }
+    const profileId=family=>'ps5-'+family+'-v1';
+    async function ensureProfiles(){
+      if(profileCatalog||profileFetchPending)return;
+      profileFetchPending=true;
+      try{
+        const response=await fetch('/api/prompt-studio/profiles',{cache:'no-store'});
+        if(!response.ok)throw Error('Profile catalog HTTP '+response.status);
+        const result=await response.json();
+        if(!Array.isArray(result.profiles))throw Error('Invalid authoring profile catalog');
+        profileCatalog=result;
+      }catch(error){
+        q('profile-note').textContent='Profile metadata unavailable: '+error.message+
+          '. This does not affect manual prompt editing.';
+      }finally{profileFetchPending=false;refresh();}
+    }
+    function refreshProfile(d){
+      const family=d.snapshot.context.model?.family||'';
+      const selector=q('profile');
+      if(profileFamily!==family||(!selector.value&&profileCatalog)){
+        profileFamily=family;
+        selector.replaceChildren();
+        const record=profileCatalog?.profiles?.find(p=>p.family===family);
+        if(record){
+          const option=document.createElement('option');option.value=record.id;
+          option.textContent=record.name+' · v1';selector.appendChild(option);
+          q('profile-note').textContent=record.negative_note+
+            ' Length guideline: approximately '+record.guideline_words+
+            ' words (not CLIP tokens, and not a hard limit).';
+        }else{
+          const option=document.createElement('option');option.value=profileId(family);
+          option.textContent=family.toUpperCase()+' profile · v1';selector.appendChild(option);
+        }
+      }
+      const target=q('target'),before=target.value;
+      target.replaceChildren();
+      const all=document.createElement('option');all.value='';all.textContent='All existing positive keyframes';
+      target.appendChild(all);
+      for(const point of d.tracks.positive.keyframes){
+        const item=document.createElement('option');item.value=String(point.frame);
+        item.textContent='Only frame '+point.frame;target.appendChild(item);
+      }
+      if([...target.options].some(x=>x.value===before))target.value=before;
+      target.disabled=working||q('mode').value!=='refine';
+    }
     function refresh(){
       const d=draft(),usable=context();
       setVisibility(panel,node,empty,usable);
       if(!usable){invalidate();return;}
+      if(!profileCatalog&&!profileFetchPending)void ensureProfiles();
+      refreshProfile(d);
       // Freeze all request inputs while Ollama is evaluating a snapshot.
-      for(const field of ['endpoint','lan','model','idea','negative'])
+      for(const field of ['endpoint','lan','model','idea','negative','profile','subject','style'])
         q(field).disabled=working;
       q('mode').disabled=working;
       q('scenes').disabled=working||q('mode').value==='refine';
@@ -234,6 +300,17 @@
         ' changed prompt keyframes · '+result.provenance.family.toUpperCase()+
         ' · '+result.provenance.model+'. No project settings or media will change.';
       q('warnings').replaceChildren();q('diff').replaceChildren();q('scenes').replaceChildren();
+      q('diagnostics').replaceChildren();
+      if(Array.isArray(result.diagnostics)){
+        const heading=document.createElement('p');
+        heading.textContent='Prompt lengths (approximate words, not model tokens):';
+        q('diagnostics').appendChild(heading);
+        const problematic=result.diagnostics.filter(x=>x.long_prompt);
+        const summary=document.createElement('p');summary.textContent=problematic.length?
+          problematic.map(x=>x.lane+' F'+x.frame+': '+x.words_approx+' words').join(' · '):
+          'No length warnings under the profile heuristics.';
+        q('diagnostics').appendChild(summary);
+      }
       for(const scene of result.scenes){
         const cell=document.createElement('div');cell.className='ps4-scene-card';
         const title=document.createElement('strong');
@@ -301,7 +378,9 @@
       if(!d?.ok||working||!connected||!q('model').value)return;
       const id=d.snapshot.projectId,rev=d.revision,sourceTracks=copy(d.tracks);
       const mode=q('mode').value;
-      const count=mode==='refine'?sourceTracks.positive.keyframes.length:Number(q('scenes').value);
+      const target=q('target').value;
+      const count=mode==='refine'?
+        (target!==''?1:sourceTracks.positive.keyframes.length):Number(q('scenes').value);
       if(!Number.isInteger(count)||count<1||count>16)return status('Choose between 1 and 16 scenes.',true);
       invalidate();working=true;const seq=++sequence;controller=new AbortController();
       refresh();startProgress();
@@ -316,6 +395,9 @@
             family:d.snapshot.context.model.family,
             max_frames:d.snapshot.context.maxFrames,fps:d.snapshot.context.fps,
             tracks:sourceTracks,include_negative:q('negative').checked,
+            profile:q('profile').value||profileId(d.snapshot.context.model.family),
+            target_frame:mode==='refine'&&target!==''?Number(target):null,
+            continuity:{subject:q('subject').value,style:q('style').value},
           }),
         });
         if(!response.ok){
@@ -388,6 +470,12 @@
     });
     q('negative').addEventListener('change',()=>{invalidate();refresh();});
     q('scenes').addEventListener('change',()=>{invalidate();refresh();});
+    for(const key of ['profile','target']){
+      q(key).addEventListener('change',()=>{invalidate();refresh();});
+    }
+    for(const key of ['subject','style']){
+      q(key).addEventListener('input',()=>{invalidate();refresh();});
+    }
     refresh();
     return {refresh,invalidate,reset(){cancel();invalidate();forgetModelList();refresh();},
       getPending:()=>pending};
