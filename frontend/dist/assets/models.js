@@ -865,6 +865,9 @@
     reloadManaged: loadManagedModels,
     selectExisting,
   };
-  window.addEventListener('morphorum:settings-changed', () => loadManagedModels());
+  window.addEventListener('morphorum:settings-changed', () => {
+    void loadManagedModels();
+    void loadModels(); // Respect changed Civitai preview / mature-content preferences.
+  });
   window.addEventListener('DOMContentLoaded', start);
 })();
