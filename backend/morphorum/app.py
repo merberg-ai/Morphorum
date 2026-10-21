@@ -1719,38 +1719,49 @@ def api_download_motion_lab_wav(project_id: str, sha256: str):
 
 
 @app.post("/api/animation/projects/{project_id}/source-image", status_code=201)
-async def api_upload_animation_source_image(project_id: str, request: Request) -> dict[str, Any]:
+async def api_upload_animation_source_image(
+    project_id: str, request: Request, response: Response,
+) -> dict[str, Any]:
+    expected = _timeline_expected_etag(request)
     try:
-        project = load_animation_project(project_id)
         data = await read_bounded(
             request.stream(), limit=SOURCE_MAX_BYTES,
             expected_digest=request.headers.get("x-content-sha256"),
         )
-        destination = animation_project_directory(project_id) / "assets" / "source.png"
-        info = save_source_image(data, destination)
         filename = str(request.headers.get("x-filename") or "source-image").strip()[:255]
-        project.setdefault("animation", {})["source_image"] = "assets/source.png"
-        project["animation"]["source_image_name"] = filename
-        saved = save_animation_project(project_id, project)
+        source_info: dict[str, Any] = {}
+
+        def attach(project: dict[str, Any]) -> dict[str, Any]:
+            destination = animation_project_directory(project_id) / "assets" / "source.png"
+            source_info.update(save_source_image(data, destination))
+            project.setdefault("animation", {})["source_image"] = "assets/source.png"
+            project["animation"]["source_image_name"] = filename
+            return project
+
+        saved, etag = mutate_animation_project(
+            project_id, attach, expected_etag=expected,
+        )
+        response.headers["ETag"] = etag
         clear_project_depth_manifest(animation_project_directory(project_id))
         emit_console(
-            "info",
-            "animation",
+            "info", "animation",
             f"Updated source image for animation project {project_id}: "
-            f"{info['width']}x{info['height']}.",
+            f"{source_info['width']}x{source_info['height']}.",
         )
         return {
             "status": "uploaded",
             "source": {
                 "url": f"/api/animation/projects/{project_id}/source-image",
                 "name": filename,
-                "width": info["width"],
-                "height": info["height"],
-                "bytes": info["bytes"],
+                "width": source_info["width"],
+                "height": source_info["height"],
+                "bytes": source_info["bytes"],
             },
             "project": saved,
             "asset": source_descriptor(project_id),
         }
+    except AnimationProjectConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except ProjectAssetTooLarge as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from exc
     except ProjectAssetError as exc:
@@ -1774,17 +1785,27 @@ def api_animation_source_image(project_id: str):
 
 
 @app.delete("/api/animation/projects/{project_id}/source-image")
-def api_delete_animation_source_image(project_id: str) -> dict[str, Any]:
+def api_delete_animation_source_image(
+    project_id: str, request: Request, response: Response,
+) -> dict[str, Any]:
+    expected = _timeline_expected_etag(request)
     try:
-        project = load_animation_project(project_id)
-        path = animation_project_directory(project_id) / "assets" / "source.png"
-        path.unlink(missing_ok=True)
-        project.setdefault("animation", {})["source_image"] = ""
-        project["animation"]["source_image_name"] = ""
+        def clear_source(project: dict[str, Any]) -> dict[str, Any]:
+            path = animation_project_directory(project_id) / "assets" / "source.png"
+            path.unlink(missing_ok=True)
+            project.setdefault("animation", {})["source_image"] = ""
+            project["animation"]["source_image_name"] = ""
+            return project
+
+        saved, etag = mutate_animation_project(
+            project_id, clear_source, expected_etag=expected,
+        )
+        response.headers["ETag"] = etag
         clear_project_depth_manifest(animation_project_directory(project_id))
-        saved = save_animation_project(project_id, project)
         emit_console("info", "animation", f"Cleared source image for animation project {project_id}.")
         return {"status": "cleared", "project": saved}
+    except AnimationProjectConflict as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except AnimationProjectError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

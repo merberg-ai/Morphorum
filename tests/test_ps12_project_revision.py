@@ -71,3 +71,32 @@ def test_ps12_motion_lab_apply_rejects_stale_etag(tmp_path, monkeypatch):
             headers={"If-Match":etag},json={"layers":[]})
         assert refused.status_code==412,refused.text
         assert client.get(path).json()["project"]["notes"]=="concurrent note"
+
+
+def test_ps12_source_image_mutations_reject_stale_before_touching_media(tmp_path, monkeypatch):
+    import io
+    from PIL import Image
+    monkeypatch.setattr(projects,"PROJECTS_DIR",tmp_path/"projects")
+    def png(color):
+        out=io.BytesIO()
+        Image.new("RGB",(32,32),color).save(out,format="PNG")
+        return out.getvalue()
+    with TestClient(app) as client:
+        project=client.post("/api/animation/projects",json={"name":"Source ETag"}).json()["project"]
+        path=f"/api/animation/projects/{project['id']}"
+        initial=client.get(path).headers["etag"]
+        one=client.post(path+"/source-image",content=png("red"),
+            headers={"If-Match":initial,"X-Filename":"red.png"})
+        assert one.status_code==201,one.text
+        next_etag=one.headers["etag"]
+        original=client.get(path+"/source-image").content
+        denied=client.post(path+"/source-image",content=png("blue"),
+            headers={"If-Match":initial,"X-Filename":"blue.png"})
+        assert denied.status_code==412,denied.text
+        assert client.get(path+"/source-image").content==original
+        assert client.delete(path+"/source-image",headers={"If-Match":initial}).status_code==412
+        assert client.get(path+"/source-image").content==original
+        cleared=client.delete(path+"/source-image",headers={"If-Match":next_etag})
+        assert cleared.status_code==200,cleared.text
+        assert cleared.headers["etag"]!=next_etag
+        assert client.get(path+"/source-image").status_code==404

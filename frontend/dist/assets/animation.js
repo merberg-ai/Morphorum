@@ -3819,9 +3819,12 @@
     const input = qs('#animation-source-file');
     if (input) input.disabled = true;
     try {
+      if (!/^"[a-f0-9]{64}"$/.test(state.projectEtag||''))
+        throw new Error('Project revision unknown. Reload before uploading source media.');
       const response = await fetch('/api/animation/projects/' + encodeURIComponent(projectId) + '/source-image', {
         method: 'POST',
-        headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': file.name || 'source-image' },
+        headers: { 'Content-Type': file.type || 'application/octet-stream',
+          'X-Filename': file.name || 'source-image','If-Match':state.projectEtag },
         body: file,
       });
       const payload = await response.json();
@@ -3860,7 +3863,9 @@
     const button = qs('#animation-clear-source');
     if (button) button.disabled = true;
     try {
-      const payload = await api('/api/animation/projects/' + encodeURIComponent(projectId) + '/source-image', { method: 'DELETE' });
+      const payload = await guardedProjectWrite(
+        '/api/animation/projects/' + encodeURIComponent(projectId) + '/source-image',
+        {method:'DELETE'},projectId);
       if (state.project?.id!==projectId) return;
       state.project = {
         ...state.project,

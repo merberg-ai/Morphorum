@@ -146,3 +146,7 @@ For a Studio-staged editor draft, Save Project sends `If-Match` and `X-Morphorum
 ### PS1.2 Motion Lab direct Apply
 
 `POST /motion-lab/apply` now accepts an optional `If-Match` and uses the atomic backend mutation helper. The browser sends the project's loaded revision for Apply and camera rebase; preview remains read-only. Studio-staged prompt edits must be explicitly saved before Motion Lab Apply. Stale revisions return HTTP 412, separate from the existing camera conflict/rebase decision. Legacy clients may omit If-Match.
+
+### Source-image mutation safeguard
+
+Upload and Clear Source Image now accept optional `If-Match` and perform their project update **inside the same atomic saved-revision check** as timeline writes. Stale writes return HTTP 412 before replacing or unlinking the source image. The Project Editor supplies its loaded ETag and reconciles the saved revision after a successful asset change, preserving other unsaved form edits. Legacy API clients may still omit If-Match. The broader soundtrack/ZIP/import side-effect audit remains separate.
