@@ -4,17 +4,18 @@
 
 > **Before you start:** Open a saved **3D animation project** with a defined frame count and FPS. Motion Studio changes motion only when you explicitly stage, preview or apply it. Saving a project or browsing these controls does not start an AI render. For installation/model setup, see [Getting started](GETTING_STARTED.md).
 
-## Navigate Motion Studio's five stages
+## Navigate Motion Studio's six stages
 
-Motion Studio now opens with a **five-step workspace navigator**. Choose any stage to focus on its controls, use **Previous step** and **Next step** for a guided workflow, or return to an earlier stage without resetting audio or draft motion.
+Motion Studio opens with a **six-step workspace navigator**. Choose any stage to focus on its controls, use **Previous step** and **Next step** for a guided workflow, or return to an earlier stage without resetting audio or draft motion.
 
 | Stage | What to do |
 | --- | --- |
 | **1 · Load Audio** | Choose a local PCM WAV or reuse an attached project soundtrack. Matching the animation length is optional and requires confirmation before project changes. |
 | **2 · Analyze WAV** | Run **Analyze WAV** for a newly selected file and inspect the waveform, playback and optional envelope diagnostics. A restored saved project soundtrack may already be analyzed. |
 | **3 · Detect Beats** | Tune frequency, transient/level sensitivity and onset threshold. Review the shared waveform, correct markers and explicitly save marker edits. |
-| **4 · Create Motion** | Choose **Beat Cues**, **Sound Channels**, **Continuous Motion**, or **Single-Band Pulse**. Only the selected creation mode's controls are shown. |
-| **5 · Preview & Apply** | Review staged draft motion, jump to Motion Curves or Camera Preview, then use **Apply to Animation** when satisfied. |
+| **4 · Assign Motion to Beats** | Select kick, snare or high-frequency events, preview matching markers and assign camera movement presets in bulk; save or revise cues explicitly. |
+| **5 · Create Motion** | Choose **Beat Cues**, **Sound Channels**, **Continuous Motion**, or **Single-Band Pulse** for further authoring. Only the selected creation mode's controls are shown. |
+| **6 · Preview & Apply** | Review staged draft motion, jump to Motion Curves or Camera Preview, then use **Apply to Animation** when satisfied. |
 
 **Analysis and beat controls:** After choosing a local file, use **Continue to Analyze WAV** in Step 1 and **Analyze WAV** in Step 2. Audio analysis is independent of optional project length matching: if **Match project length** is checked but draft Motion Lab layers prevent resizing, Morphorum keeps the draft and project duration unchanged, unchecks the option, and still analyzes the WAV. No draft deletion is needed. In the beat-cue editor, **Preview matches** highlights markers that meet the chosen band, minimum strength, time range and spacing. A zero-match result now names the filter or missing-marker condition to adjust. Step 2 now reports the host request, success (including candidate-beat count), or a clear error. **View Detected Beats** opens Step 3. The backend produces candidate markers during WAV analysis; **Show Detected Beats** redraws the existing markers rather than running a second, destructive analysis. Detection filters can be tuned without silently replacing saved marker edits. The optional **Additional envelope diagnostics** accordion reports why no plot is available, and displays the analyzed RMS graph when frame alignment is valid. Using a saved project soundtrack already restores its analyzed WAV, so no browser file upload is required.
 
@@ -35,7 +36,7 @@ An imported Deforum settings file can reference a local soundtrack path, but tha
 
 ## 2. Create your motion
 
-Select **Stage 4 · Create Motion** and choose the relevant authoring mode:
+Select **Stage 5 · Create Motion** and choose the relevant authoring mode:
 
 
 Motion Studio offers complementary workflows:
@@ -66,7 +67,7 @@ Stage and Preview are different from Apply, and neither is the AI animation rend
 
 For frequency-driven movement, start with the example **Bass**, **Snare** and **Crash** channels or customize each channel's frequency band, target camera axis, hit/ripple response, intensity and timing. Use the spectrum to check which frequencies you are selecting. Stage channels, preview their curves, then Apply to write the motion.
 
-For manual musical timing, use **Stage 3 · Detect Beats** to review and save corrected markers, then **Stage 4 · Beat Cues** to place or revise cues. Preview before applying. Changes belong to the selected project/soundtrack rather than modifying your original audio file.
+For manual musical timing, use **Stage 3 · Detect Beats** to review and save corrected markers, then **Stage 4 · Assign Motion to Beats** to select matching events and batch-assign motion. Stage 5 remains available for additional Beat Cues, Sound Channels and Continuous Motion editing. Preview before applying. Changes belong to the selected project/soundtrack rather than modifying your original audio file.
 
 A channel or manual cue can produce strong motion even when its strength looks modest. Preview with conservative values before increasing the response, especially when multiple layers affect the same axis.
 
