@@ -290,3 +290,48 @@ The model scanner includes both the explicitly configured standalone checkpoint 
 **Compatibility boundary:** An indexed standalone Civitai `.safetensors` file is not necessarily a complete Diffusers pipeline. Morphorum's current Z-Image generation backend only supports the managed full Diffusers snapshot; standalone Civitai checkpoints appear in Models as **Indexed only** and are disabled for generation until a tested single-file loader/conversion workflow exists. This is intentionally not a claim of runtime support.
 
 Acceptance: restart, Scan Models, verify a previously downloaded Z-Image file in the Models library under Z-Image, confirm the full managed Z-Image-Turbo remains loadable, and verify standalone checkpoint **Use** is unavailable rather than causing a rendering error.
+
+## C5: Offline cached artwork in Models and LoRA Manager (development)
+
+The original C3.3 metadata cache remains the single source of truth; no
+second thumbnail database or background Civitai scanner was introduced.
+After **Sync Civitai Info**, an exact SHA-256 match stores text metadata
+and, when a suitable still image is available and previews are enabled, one
+bounded JPEG/PNG/WebP preview under `cache/civitai-library/<indexed_id>/`.
+Images are retrieved only through a user-initiated sync. The server excludes
+video previews, validates a recognizable image signature and size, and can
+try up to three eligible image candidates. If a resync's image request fails,
+previously verified artwork for the same exact file/version is kept.
+Mature-content and thumbnail settings continue to govern whether it is served.
+No checkpoint or LoRA sidecars are overwritten.
+
+Models and LoRAs now both read the same local cache through
+`POST /api/civitai/library-catalog`, a read-only bounded request accepting
+up to 120 indexed IDs at a time. It returns only compact cached summaries and
+does not contact Civitai. The browser serves images exclusively from the
+existing `GET /api/civitai/library/{model_id}/preview` endpoint. Missing,
+stale, disabled or unsynchronized artwork shows a clean **NO PREVIEW**
+placeholder, not a broken external image. Models also has an explicit
+**Sync Civitai Info (N)** bulk action, alongside the previous identify/update
+actions. LoRAs keeps its existing bulk synchronization.
+
+The Models screen now uses responsive thumbnail cards with name, filename,
+architecture badges, file size, expandable path and existing model/tag/Civitai
+actions. The LoRA library adds thumbnails to its selection list, with a larger
+aspect-preserving preview above the selected adapter's Quick Use controls.
+Existing local metadata inspection, triggers, prompt-tag copying/insertion,
+model selection and rendering pipelines are unchanged.
+
+**Manual acceptance (Windows + mobile):** Enable Civitai Hub in Settings,
+keep previews on, identify/sync one checkpoint and one LoRA with safe example
+images. Open both managers and verify the images appear immediately after
+reopening or restarting Morphorum. Verify records with no images show
+placeholders, filter/search/family switching, bulk actions, failed network
+resync preserving already cached images, disabled Hub/previews, and mature
+preference changes. Test a 320–390px phone width, desktop cards, and the
+selected LoRA image with both portrait and landscape examples. Run a normal
+single-image generation afterward to catch unrelated model-selection changes.
+
+Tests: `tests/test_civitai_library.py`,
+`tests/test_civitai_detail.py`, `tests/frontend_cached_art.test.cjs`.
+Owner physical acceptance remains outstanding; do not merge into `main`.
