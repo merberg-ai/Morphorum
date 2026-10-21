@@ -153,7 +153,7 @@ def test_sync_downloads_valid_image_after_other_preview_is_unavailable(monkeypat
         if request.url.path.endswith("not-an-image.jpg"):
             return httpx.Response(200, headers={"content-type": "image/jpeg"}, content=b"broken")
         return httpx.Response(200, headers={"content-type": "image/webp"},
-                              content=b"RIFF" + b"\\x00" * 4 + b"WEBP" + b"payload")
+                              content=b"RIFF" + b"\x00" * 4 + b"WEBP" + b"payload")
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         result = lib.sync_metadata("verified", client=client)
     assert len(called) == 2
@@ -185,7 +185,7 @@ def test_sync_retains_previous_image_when_remote_unavailable(monkeypatch, tmp_pa
     })
     folder = lib._directory("local")
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / "preview.jpg").write_bytes(b"\\xff\\xd8\\xffOld preview")
+    (folder / "preview.jpg").write_bytes(b"\xff\xd8\xffOld preview")
     lib._atomic_json(folder / "metadata.json", {
         "synced": True, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
         "sha256": "a" * 64, "version_id": 5, "preview": "preview.jpg",
