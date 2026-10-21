@@ -3,7 +3,7 @@
 **Status:** PS0 documented; PS1.1–PS1.3 Windows-accepted; PS1.4 project-owned persistent drafts implemented on dev-webui awaiting physical acceptance (2026-10-21)  
 **Development branch:** `dev-webui`; preserve `main` until separately approved promotion of tested changes.  
 **Purpose:** Native, model-aware, optionally LLM-assisted storyboard, prompt sequence, timeline and audio-cue authoring for Morphorum animation projects.  
-**Current gate:** PS0 authorized and documented in [PS0 contract baseline](PROMPT_STUDIO_PS0_CONTRACT.md), with design fixtures. This does **not** authorize implementing PS1+ or merging experimental code.
+**Current gate:** PS1.3 passed physical Windows testing; PS1.4 stored drafts and portability are implemented on `dev-webui` but need owner Windows/mobile acceptance. Do not merge to `main` without explicit approval. PS2 and later remain unimplemented.
 
 ## 1. Intended experience
 
