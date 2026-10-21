@@ -92,6 +92,62 @@ def _validate_tracks(value: Any, max_frames: int, label: str) -> dict:
     return normalized
 
 
+def _validate_composer(value: Any, max_frames: int) -> dict[str, Any]:
+    """PS3 optional composer; existing version-one drafts remain readable."""
+    if value is None:
+        return {"schema_version": 1, "blocks": []}
+    if (not isinstance(value, dict) or type(value.get("schema_version")) is not int or
+            value["schema_version"] != 1 or not isinstance(value.get("blocks"), list) or
+            len(value["blocks"]) > 100):
+        raise PromptDraftError("Unsupported Prompt Studio composer version or block count.")
+    ids: set[str] = set()
+    output: list[dict[str, Any]] = []
+    for raw in value["blocks"]:
+        if not isinstance(raw, dict):
+            raise PromptDraftError("Composer block must be an object.")
+        ident = raw.get("id")
+        if not isinstance(ident, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", ident) or ident in ids:
+            raise PromptDraftError("Composer block IDs must be unique and safe.")
+        ids.add(ident)
+        scope, lane, kind, placement = (raw.get(k) for k in ("scope", "lane", "kind", "placement"))
+        if (scope not in ("global", "frame") or lane not in ("positive", "negative")
+                or kind not in ("text", "lora") or placement not in ("before", "after")
+                or type(raw.get("enabled")) is not bool):
+            raise PromptDraftError("Invalid composer block type, scope or placement.")
+        frame = raw.get("frame")
+        if scope == "global":
+            if frame is not None:
+                raise PromptDraftError("Global composer block cannot reference a frame.")
+        elif type(frame) is not int or not 0 <= frame < max_frames:
+            raise PromptDraftError("Composer scene frame is outside the project.")
+        label = raw.get("label", "")
+        if not isinstance(label, str) or len(label) > 120:
+            raise PromptDraftError("Composer label must contain at most 120 characters.")
+        block = {"id": ident, "scope": scope, "frame": frame, "lane": lane,
+                 "kind": kind, "placement": placement, "enabled": raw["enabled"], "label": label}
+        if kind == "text":
+            if not isinstance(raw.get("text"), str) or len(raw["text"]) > 32768:
+                raise PromptDraftError("Composer text is invalid or oversized.")
+            block["text"] = raw["text"]
+        else:
+            import math
+            name, weight = raw.get("name"), raw.get("weight")
+            triggers = raw.get("triggers")
+            if (lane != "positive" or not isinstance(name, str) or not name.strip() or
+                    len(name) > 140 or re.search(r"[:<>\r\n]", name) or
+                    type(weight) not in (float, int) or not math.isfinite(weight) or
+                    not -4 <= weight <= 4 or raw.get("family") not in ("sdxl", "flux", "zimage") or
+                    not isinstance(raw.get("model_id"), str) or len(raw["model_id"]) > 128 or
+                    not isinstance(triggers, list) or len(triggers) > 24 or
+                    any(not isinstance(t, str) or len(t) > 160 or "\n" in t or "\r" in t
+                        for t in triggers)):
+                raise PromptDraftError("Invalid LoRA directive, trigger word or model family.")
+            block.update({"model_id": raw["model_id"], "name": name,
+                          "weight": float(weight), "family": raw["family"], "triggers": list(triggers)})
+        output.append(block)
+    return {"schema_version": 1, "blocks": output}
+
+
 def validate_draft(value: Any, project_id: str, *, draft_id: str | None = None,
                    stored: bool = False) -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("format") != FORMAT:
@@ -133,6 +189,7 @@ def validate_draft(value: Any, project_id: str, *, draft_id: str | None = None,
         },
         "original_tracks": original,
         "prompt_tracks": edited,
+        "composer": _validate_composer(value.get("composer"), frames),
     }
     if stored:
         identifier = value.get("draft_id")
