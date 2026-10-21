@@ -71,7 +71,12 @@ def cached_catalog(model_ids: list[str]) -> dict:
         raise CivitaiSearchError("Civitai Hub is disabled.", 403)
     result = {}
     for model_id in dict.fromkeys(model_ids):
-        data = cached_metadata(model_id)
+        try:
+            data = cached_metadata(model_id)
+        except CivitaiSearchError as exc:
+            if exc.status == 404:  # An indexed file disappeared during a rescan.
+                continue
+            raise
         if not data.get("synced"):
             continue
         result[model_id] = {
