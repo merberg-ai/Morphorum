@@ -160,3 +160,51 @@ def test_archive_rejects_tampered_draft_and_unsupported_version(project):
     from morphorum.project_archive import ProjectArchiveError, inspect_project_archive
     with pytest.raises(ProjectArchiveError):
         inspect_project_archive(changed.getvalue())
+
+
+def test_ps3_saved_composer_roundtrip_and_legacy_defaults(project):
+    client, pid, _ = project
+    record=payload(pid)
+    record["composer"]={"schema_version":1,"blocks":[
+      {"id":"block1","scope":"global","frame":None,"lane":"positive",
+       "kind":"text","placement":"before","enabled":True,
+       "label":"Continuity","text":"  preserve exact typography  "},
+      {"id":"lora1","scope":"frame","frame":0,"lane":"positive",
+       "kind":"lora","placement":"after","enabled":True,
+       "label":"Style","model_id":"synthetic-id","name":"Horror Style ZIT",
+       "family":"sdxl","weight":1.0,"triggers":["h0rr0rstyl3"]}
+    ]}
+    response=client.post(f"/api/animation/projects/{pid}/prompt-studio/drafts",json=record)
+    assert response.status_code==201,response.text
+    saved=response.json()["draft"]
+    assert saved["composer"]["blocks"][0]["text"]=="  preserve exact typography  "
+    loaded=studio.read_draft(pid,saved["draft_id"])[0]
+    assert loaded["composer"]==saved["composer"]
+    legacy=payload(pid)
+    assert studio.validate_draft(legacy,pid)["composer"]=={"schema_version":1,"blocks":[]}
+
+
+def test_ps3_invalid_composer_is_rejected_before_disk_write(project):
+    client,pid,_=project
+    url=f"/api/animation/projects/{pid}/prompt-studio/drafts"
+    good={"schema_version":1,"blocks":[
+      {"id":"block1","scope":"frame","frame":40,"lane":"positive",
+       "kind":"text","placement":"after","enabled":True,
+       "label":"Scene action","text":"night"}]}
+    import copy
+    def assert_bad(composer):
+        record=payload(pid);record["composer"]=composer
+        res=client.post(url,json=record)
+        assert res.status_code==400,res.text
+    for c in [
+      {"schema_version":2,"blocks":[]},
+      {"schema_version":1,"blocks":[good["blocks"][0]]*2},
+      {"schema_version":1,"blocks":[dict(good["blocks"][0],frame=120)]},
+      {"schema_version":1,"blocks":[dict(good["blocks"][0],enabled="true")]},
+      {"schema_version":1,"blocks":[dict(good["blocks"][0],lane="invalid")]},
+      {"schema_version":1,"blocks":[dict(good["blocks"][0],text="x"*32769)]},
+    ]:assert_bad(c)
+    lora=dict(good["blocks"][0],kind="lora",model_id="indexed",name="test",
+        family="zimage",weight=1,triggers=["test"])
+    assert_bad({"schema_version":1,"blocks":[dict(lora,lane="negative")]})
+    assert client.get(url).json()["drafts"]==[]
