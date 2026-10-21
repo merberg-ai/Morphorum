@@ -14,6 +14,20 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 **Next step when authorized:** PQ0 upstream contract/fixtures/threat-model baseline only. Do not implement PQ1+ preemptively.
 
+## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
+
+**Status:** Roadmap only, **NOT IMPLEMENTED**. Full phased design: [Prompt Studio PS0–PS9 Roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Develop on `dev-webui`; keep native renders and project saving unchanged until each phase is tested. Begin **PS0 only on explicit owner authorization**.
+
+- Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
+- Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
+- Optional AI Story Director with local/LAN Ollama first, validated structured scenes, versioned SDXL/FLUX/managed Z-Image prompt profiles, optional vision of user-selected start images, and later optional verified managed LLM.
+- **PS6 is a required audio-to-storyboard synchronization milestone:** reuse Motion Studio's existing soundtrack/beat/cue analysis, align scene entrances and climaxes to chosen beats using deterministic FPS/frame snapping, provide manual locks, timeline preview and diff/undo; support offline/manual beat alignment and do not replace audio or motion schedules.
+- Save/load reusable Studio drafts; **Apply to Animation** updates only the existing Project Editor's *unsaved prompt draft* after confirmation, preserving current project conflict checks. Explicit Save Project commits changes.
+- Coexist with the independent PQ hosted-Parseq roadmap. If Parseq overrides runtime prompts, warn before applying native prompts, and never modify hosted Parseq manifests. No parallel renderer, automatic LoRA downloads or silently changed model settings.
+- Physical Windows GPU owner verification and existing CI gates per PS milestone; later merge requires explicit owner signoff. Preserve incomplete PQ and experimental external Z-Image gating.
+
+**Next when authorized:** PS0 contract/fixtures and native prompt/audio-cue API audit, not PS1 implementation.
+
 ## Z-Image Turbo LoRA stability and animation coherence (reported 2026-10-19)
 
 **Status:** **ZL1 passed / resolved on `dev-webui`** (user physical Windows GPU verification reported 2026-10-20): repeated managed Z-Image single-image generations with and without LoRAs, plus a Z-Image animation, no longer raise the inference-tensor exception. **ZT1 remains open** for animation temporal coherence and has not been modified. No merge to `main` yet.
@@ -70,4 +84,4 @@ Setting requires_grad=True on inference tensor outside InferenceMode is not allo
 
 ## Project Editor prompt/keyframe UX
 
-Next discussion topic: review prompt entry, keyframe editing, scheduling, and navigation workflows before defining implementation milestones. No design or changes have been approved yet.
+The planned Prompt Studio PS0–PS9 roadmap above supersedes this open-ended discussion item. No Prompt Studio implementation has been authorized; retain existing editor behavior until PS1+ acceptance gates.
