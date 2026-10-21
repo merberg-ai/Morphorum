@@ -29,7 +29,7 @@ Morphorum runs on your own computer. The browser is only the interface: closing 
 
 ## First-run setup wizard
 
-If this is a **fresh installation**, Morphorum opens a separate seven-step setup wizard when you first visit the WebUI. This is distinct from **Motion Lab → New Project Wizard**, which is for creating ordinary animation projects later.
+If this is a **fresh installation**, Morphorum opens a separate seven-step setup wizard when you first visit the WebUI. This is distinct from **Project → New Project**, which is for creating ordinary animation projects later.
 
 1. Review host diagnostics and the explanation of WebUI (the recommended default) versus authenticated backend-only mode.
 2. Add paths to existing **SDXL** or **FLUX** checkpoint folders on the computer running Morphorum. Check the folders and choose **Save Folders & Scan**. File detection is preliminary, not proof that every model will load.
@@ -81,7 +81,7 @@ Lower resolution, batch size, or the number of competing GPU applications first.
 
 ## 4. Create your first animation with the wizard
 
-The easiest way to start a new animation is **Motion Lab → New Project Wizard**, available in the desktop sidebar or Motion Lab workspace navigation.
+The easiest way to start a new animation is **Project → New Project** in the main desktop/phone navigation.
 
 The wizard has seven guided pages, with explanations and **?** hints beside individual settings:
 
@@ -108,7 +108,7 @@ A fresh installation with no existing projects also includes a **Default** anima
 - Two positive-prompt keyframes with cat/top-hat scenes
 - No model selected until you choose one
 
-Open **Motion Lab → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. The Project Editor explains why controls are locked until a project opens and provides shortcuts to Project Manager and the New Project Wizard. The browser remembers your last opened project when it is still available. Still-image model selection does not automatically select a model for an animation project. For an early GPU test, try fewer frames and a model-supported resolution.
+Open **Project → Project Manager → Default → Open in Editor**, choose a compatible model, and review its settings. This is a *separate existing example*, not the unsaved wizard draft. The Project Editor explains why controls are locked until a project opens and provides shortcuts to Project Manager and the New Project Wizard. The browser remembers your last opened project when it is still available. Still-image model selection does not automatically select a model for an animation project. For an early GPU test, try fewer frames and a model-supported resolution.
 
 ### Save, duplicate or move an animation project
 
@@ -202,7 +202,7 @@ checkpoint list until a later successful refresh.
 
 ## Animation checkpoint compatibility
 
-In **Motion Lab → Project Editor**, the **Checkpoint compatibility** panel
+In **Project → Project Editor**, the **Checkpoint compatibility** panel
 shows the indexed model's family and variant, currently selected sampler and
 render size. It compares the settings against the backend's published model
 capabilities. SDXL images must be aligned to 8 pixels; Flux and Z-Image use
