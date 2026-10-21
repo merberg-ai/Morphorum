@@ -121,3 +121,78 @@ def test_cached_catalog_rejects_unbounded_bad_ids_and_disabled_hub(monkeypatch):
     with pytest.raises(CivitaiSearchError) as exc:
         lib.cached_catalog(["ok"])
     assert exc.value.status == 403
+
+
+def test_sync_downloads_valid_image_after_other_preview_is_unavailable(monkeypatch, tmp_path):
+    import httpx
+    model = tmp_path / "model.safetensors"
+    model.write_bytes(b"weights")
+    monkeypatch.setattr(lib, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(lib, "get_model", lambda _: {"path": str(model)})
+    monkeypatch.setattr(lib, "load_settings", lambda: {"civitai": {
+        "enabled": True, "load_previews": True, "allow_mature": True,
+    }})
+    monkeypatch.setattr(lib, "identify_model", lambda _: {
+        "found": True, "sha256": "e" * 64,
+        "civitai_model_id": 6, "version_id": 12,
+        "url": "https://civitai.com/models/6?modelVersionId=12",
+    })
+    monkeypatch.setattr(lib, "model_details", lambda _: {
+        "name": "Demo", "creator": "Creator", "mature": False,
+        "description": "Description", "versions": [{
+            "id": 12, "name": "V1", "base_model": "SDXL 1.0",
+            "trained_words": ["paint"], "images": [
+                {"url": "https://image.civitai.com/not-an-image.jpg", "mature": False},
+                {"url": "https://image.civitai.com/real.webp", "mature": False},
+            ],
+        }],
+    })
+    called = []
+    def handler(request):
+        called.append(str(request.url))
+        if request.url.path.endswith("not-an-image.jpg"):
+            return httpx.Response(200, headers={"content-type": "image/jpeg"}, content=b"broken")
+        return httpx.Response(200, headers={"content-type": "image/webp"},
+                              content=b"RIFF" + b"\\x00" * 4 + b"WEBP" + b"payload")
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = lib.sync_metadata("verified", client=client)
+    assert len(called) == 2
+    assert result["synced"] and result["preview"] == "preview.webp"
+    assert result["preview_allowed_mature"] is False
+    assert lib.preview_path("verified").read_bytes().startswith(b"RIFF")
+    assert lib.cached_catalog(["verified"])["entries"]["verified"]["preview"] == "preview.webp"
+
+
+def test_sync_retains_previous_image_when_remote_unavailable(monkeypatch, tmp_path):
+    import httpx
+    model = tmp_path / "model.safetensors"
+    model.write_bytes(b"weights")
+    stat = model.stat()
+    monkeypatch.setattr(lib, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(lib, "get_model", lambda _: {"path": str(model)})
+    monkeypatch.setattr(lib, "load_settings", lambda: {"civitai": {
+        "enabled": True, "load_previews": True, "allow_mature": False,
+    }})
+    monkeypatch.setattr(lib, "identify_model", lambda _: {
+        "found": True, "sha256": "a" * 64, "civitai_model_id": 8,
+        "version_id": 5, "url": "https://civitai.com/models/8?modelVersionId=5",
+    })
+    monkeypatch.setattr(lib, "model_details", lambda _: {
+        "name": "Demo", "creator": "Creator", "mature": False,
+        "versions": [{"id": 5, "name": "V1", "base_model": "SDXL 1.0",
+                      "trained_words": [], "images": [
+                          {"url": "https://image.civitai.com/missing.jpg", "mature": False}]}],
+    })
+    folder = lib._directory("local")
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "preview.jpg").write_bytes(b"\\xff\\xd8\\xffOld preview")
+    lib._atomic_json(folder / "metadata.json", {
+        "synced": True, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
+        "sha256": "a" * 64, "version_id": 5, "preview": "preview.jpg",
+        "preview_allowed_mature": False,
+    })
+    with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(503))) as client:
+        new = lib.sync_metadata("local", client=client)
+    assert new["preview"] == "preview.jpg"
+    assert lib.preview_path("local").read_bytes().endswith(b"Old preview")
+    assert "preview_warning" not in new or isinstance(new["preview_warning"], str)
