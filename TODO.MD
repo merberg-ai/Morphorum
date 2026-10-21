@@ -16,7 +16,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
 
-**Status:** **PS0 and PS1.1–PS1.3 Windows-accepted; PS1.4 project-owned persistent Prompt Studio drafts implemented on `dev-webui` for acceptance, not merged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS1.4 physical acceptance is the next gate.
+**Status:** **PS0–PS3 Windows-accepted; PS4 Ollama Story Director implemented on `dev-webui`, physical owner tests pending; `main` unchanged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS4 Ollama/Windows testing is the next gate.
 
 - Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
 - Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
@@ -84,7 +84,7 @@ Setting requires_grad=True on inference tensor outside InferenceMode is not allo
 
 ## Project Editor prompt/keyframe UX
 
-The Prompt Studio PS0–PS9 roadmap above supersedes this open-ended discussion item. PS1.1–PS1.3 are Windows-accepted, PS1.4 awaits acceptance, and PS2–PS9 still require their separate implementation and testing gates.
+The Prompt Studio PS0–PS9 roadmap supersedes this open-ended item. PS1–PS3 are Windows-accepted, PS4 awaits physical acceptance, and PS5–PS9 require separate implementation and test gates.
 
 ### PS1.3 Prompt Studio manual workspace (2026-10-21)
 
@@ -100,7 +100,7 @@ Project → Prompt Studio and the Editor's Prompt Keyframes shortcut now open a 
 On `dev-webui` PS2 adds a native positive/negative keyframe visual timeline to the PS1.4 workspace: pointer/touch diamond dragging, Hold/Blend prompt-only frame inspector (uses `resolve_prompt_transition` shared with native rendering), zoom, frame/time ruler, snap 1/2/5/10/24, scrubbing, multiselection, duplication, even spacing, per-lane editing locks, atomic delete and 80-step in-session undo/redo. A positive-lane scene strip displays scene lengths in seconds. Frame zero/last frame bounds, collisions and selected-group moves fail atomically; raw prompts/LoRA tags remain exact. All edits remain Studio draft-only until preview, confirmed Apply, and explicit Editor Save. Owner-requested scene-order/visual polish remains a follow-up within PS2 after Windows/mobile testing. Keep `main` untouched.
 
 ### PS3: Structured Prompt Composer (2026-10-21)
-On `dev-webui` PS3 introduces global and scene-local prompt blocks with separate beginning/end placement, text/LoRA types, order, activation and inline editing. The positive-only LoRA picker reuses indexed same-family local adapters plus optional cached Civitai trained words and thumbnails (no automatic sync). Exact composed prompt preview and duplicate-LoRA diagnostics precede a deliberate Commit to Studio Draft. Only the existing guarded Preview Changes / Apply to Animation / Save Project persists into the animation. Validated `composer` metadata is an optional backwards-compatible property of v1 Studio drafts, surviving ZIP and Save As. **PS3 Windows/mobile physical acceptance pending. PS4 not started.**
+On `dev-webui` PS3 introduces global and scene-local prompt blocks with separate beginning/end placement, text/LoRA types, order, activation and inline editing. The positive-only LoRA picker reuses indexed same-family local adapters plus optional cached Civitai trained words and thumbnails (no automatic sync). Exact composed prompt preview and duplicate-LoRA diagnostics precede a deliberate Commit to Studio Draft. Only the existing guarded Preview Changes / Apply to Animation / Save Project persists into the animation. Validated `composer` metadata is an optional backwards-compatible property of v1 Studio drafts, surviving ZIP and Save As. **PS3 owner Windows-accepted; PS4 is implemented separately and awaiting physical acceptance.**
 
 ### PS4: Ollama AI Story Director (2026-10-21)
 - **Implemented on `dev-webui`, Windows/mobile acceptance pending.** New text-only PS4 Ollama AI Story Director: backend-controlled loopback default, opt-in private numeric LAN host, no public endpoint or redirect support, bounded model catalog and chat requests, strict schema/timeout errors. No arbitrary network fetches, image/file upload or silent project writes.

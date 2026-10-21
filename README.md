@@ -79,6 +79,10 @@ The main navigation offers **Project Manager**, **New Project**, and **Project E
 
 **Release/testing note (October 2026):** Windows owner testing has confirmed successful animation generation and an MP4 with audio, plus acceptance of the G5 SDXL integration milestone (samplers and schedules, chunked prompt conditioning, LoRA verification, and diagnostics). Dedicated physical mobile acceptance is deferred, and remaining P5 work is tracked separately. This remains alpha software. See [SDXL generation](docs/SDXL_GENERATION.md) and [testing history](docs/TESTING.md).
 
+## Prompt Studio (experimental dev-webui)
+
+The `dev-webui` branch includes owner-tested PS1–PS3 prompt authoring: independently editable positive/negative timeline lanes, portable project-owned Studio drafts, and a LoRA/text block composer. PS4 adds an **Ollama AI Story Director** for local or opted-in private-LAN text generation and refinement, deterministic native frame assignments, and a reviewed proposal/Accept workflow. PS4 has automated CI coverage; **physical Ollama Windows/mobile testing is pending**. These Prompt Studio features are **not yet merged into `main`**. Advanced vision and family-specific prompting (PS5) and audio-to-storyboard sync (PS6) remain planned. [Prompt Studio manual](docs/PROMPT_STUDIO_PS1_MANUAL.md) · [Roadmap](docs/PROMPT_STUDIO_ROADMAP.md)
+
 ## Local Models & LoRA artwork (available on main)
 
 After explicitly synchronizing a verified installed checkpoint or LoRA using

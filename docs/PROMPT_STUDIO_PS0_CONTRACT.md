@@ -1,8 +1,8 @@
 # PS0 — Prompt Studio native contract baseline
 
-**Status:** Design/fixture baseline prepared for owner review; **PS1 not authorized or implemented**.  
+**Status:** Historical PS0 design baseline. PS1–PS3 were implemented and Windows-accepted; PS4 is implemented pending physical Ollama acceptance. Original audit paragraphs are retained for traceability.  
 **Branch:** `dev-webui` only. Baseline inspected at commit `3fe3fd0402f4` on 2026-10-21.  
-**Roadmap:** [Prompt Studio PS0–PS9](PROMPT_STUDIO_ROADMAP.md). These contracts are **proposals for PS1+**, not existing APIs or persisted schema.
+**Roadmap:** [Prompt Studio PS0–PS9](PROMPT_STUDIO_ROADMAP.md). Original PS0 proposals are followed by phase implementation notes. Current source and roadmap supersede historical gaps.
 
 ## Decision summary
 
@@ -162,3 +162,9 @@ Upload and Clear Source Image now accept optional `If-Match` and perform their p
 The WebUI includes Save Draft, Save As New Draft, Load Draft, Delete Draft and a per-project selector. Resume fetches the current Editor snapshot. It only enables Preview/Apply when the recorded baseline tracks and model/FPS/frame count/start image match the live Editor. Mismatched drafts remain editable and persistable without any automatic rebase, but **cannot transfer over newer Editor prompts**.
 
 Project ZIP export includes verified Studio drafts under a strict filename allowlist with manifest hashes. Import validates version, identity, track structure, archive entry hashes and size. Save Project As copies validated drafts and rewrites only the owning `project_id`. No generated renders, media caches, renderer changes, LLM integrations, or audio scheduling are introduced. This phase awaits owner Windows/mobile acceptance.
+
+## PS4 Ollama suggestion boundary (2026-10-21)
+
+`backend/morphorum/prompt_studio_ollama.py` restricts configured HTTP endpoints to loopback or explicitly enabled private numeric LAN addresses. Public/hostname URLs (except `localhost`), credentials, arbitrary paths and redirects are rejected. Bounded requests/responses, timeouts and `trust_env=False` mitigate unintended outbound access. `POST /api/prompt-studio/ollama/models` reads installed model names and informative metadata only; it does not download models or infer vision support. `POST /api/prompt-studio/ollama/generate` accepts a bounded story, selected model family, native prompt tracks, timeline/FPS and Create/Refine mode, and returns strictly validated scene text compiled to integer frames by Morphorum. Native frames never come from the LLM.
+
+Create generates new positive tracks without editing existing negatives unless explicitly requested. Refine retains positive frame positions and exact raw LoRA tag bytes (placed at the front of the rewritten prompt with a warning). The LLM cannot insert a new LoRA directive, project patch, formula or executable code via the scene schema. Results are nonpersistent suggestions until the browser's explicit review and **Accept Into Studio Draft**; Editor Apply and Project Save remain separately gated. Draft v1 optionally stores `ai_provenance` (Ollama model/family/mode/scene count/version/timestamp), carried through Save As and verified project ZIP. Old drafts are compatible. No media is sent, no AI weights are installed, and audio/vision processing remains PS5/PS6. Physical Windows/live Ollama acceptance is pending.
