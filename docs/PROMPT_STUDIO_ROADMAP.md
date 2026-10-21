@@ -1,6 +1,6 @@
 # Prompt Studio (PS0–PS9) — Implementation Roadmap
 
-**Status:** PS0 documented; PS1.1 bridge and PS1.2 guarded saves Windows-accepted; PS1.3 manual Prompt Studio workspace under test on dev-webui (2026-10-21)  
+**Status:** PS0 documented; PS1.1–PS1.3 Windows-accepted; PS1.4 project-owned persistent drafts implemented on dev-webui awaiting physical acceptance (2026-10-21)  
 **Development branch:** `dev-webui`; preserve `main` until separately approved promotion of tested changes.  
 **Purpose:** Native, model-aware, optionally LLM-assisted storyboard, prompt sequence, timeline and audio-cue authoring for Morphorum animation projects.  
 **Current gate:** PS0 authorized and documented in [PS0 contract baseline](PROMPT_STUDIO_PS0_CONTRACT.md), with design fixtures. This does **not** authorize implementing PS1+ or merging experimental code.
@@ -70,7 +70,7 @@ This is a **committed, named scope** of Prompt Studio, not a speculative future 
 
 ### PS1 — Native project context and non-destructive prompt import/apply
 
-**Progress:** PS1.1 communication bridge and PS1.2 guarded saves passed owner Windows acceptance. PS1.3 adds a visible Project-menu workspace with explicit import of the unsaved Editor prompt draft, independent positive/negative keyframe text/frame editing, Hold/Blend, reset, diff preview and confirmation-gated apply to unsaved Project Editor. Studio draft remains browser memory only. Persisted/portable drafts, visual drag/snap timeline, archive integration and PS1.3 physical acceptance are not yet completed.
+**Progress:** PS1.1 communication bridge and PS1.2 guarded saves passed owner Windows acceptance. PS1.3 adds a visible Project-menu workspace with explicit import of the unsaved Editor prompt draft, independent positive/negative keyframe text/frame editing, Hold/Blend, reset, diff preview and confirmation-gated apply to unsaved Project Editor. PS1.3 passed Windows acceptance. PS1.4 adds versioned project-owned drafts with Save, Save As New, Load and Delete, revision-safe draft updates, protected resume, ZIP import/export and Save As copies. PS1.4 awaits physical Windows acceptance; visual drag/snap editing remains PS2.
 Add Prompt Studio navigation/workspace and read-only project context. Implement explicit import/round-trip of existing prompt keyframes, positive/negative text, LoRA directives and transition mode, with draft lifecycle. Apply via existing Project Editor *unsaved* model, diff/confirm and Save Project; conflict/stale checks and archive compatibility. **Gate:** Windows load/import/edit/apply/save/reload; no camera/generation/media changes.
 
 ### PS2 — Visual prompt timeline and frame inspector
