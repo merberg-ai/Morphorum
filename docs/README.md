@@ -14,7 +14,7 @@ Welcome! You do not need to know Python or Git to use Morphorum. Start with the 
 | **[Project archives & Save Project As](PROJECT_ARCHIVES.md)** | Portable project ZIP import/export, full-input copies, overwrite recovery and safety limits |
 | **[Saved project media](PROJECT_MEDIA.md)** | How start images and soundtrack/Motion Lab WAVs persist and restore |
 | **[Motion Studio](MOTION_STUDIO.md)** | Six-stage WAV workflow, beat assignment and cleanup, frequency channels, continuous motion and project camera tracks |
-| **[Prompt Studio PS4 (dev-webui testing)](PROMPT_STUDIO_PS1_MANUAL.md)** | Ollama story generation/refinement, AI review, LoRA composer, visual timeline, project drafts and guarded Apply |
+| **[Prompt Studio PS5.1 (dev-webui testing)](PROMPT_STUDIO_PS1_MANUAL.md)** | SDXL/FLUX/Z-Image profiles, continuity locks, selected-frame AI refinement, visual timeline and guarded Apply |
 | **[FFmpeg Manager](FFMPEG_MANAGER.md)** | Auto-detect, custom paths, verified local install, update/removal, media acceptance test and GPL terms |
 | **[Troubleshooting](TROUBLESHOOTING.md)** | Fix browser, installer, model, CUDA, LAN, project and video problems |
 | **[SDXL generation](SDXL_GENERATION.md)** | Select SDXL samplers/schedules; understand chunked CLIP prompts, LoRA integrity and render diagnostics |
@@ -36,7 +36,7 @@ Project Manager, New Project Wizard and Project Editor are direct main-menu dest
 ## Planned integrations (not yet supported)
 
 - **[PQ Parseq URL Integration Roadmap](PARSEQ_URL_INTEGRATION_ROADMAP.md)**: proposed phased work to consume Parseq's Auto-uploaded JSON via a saved URL, validate and apply supported per-frame controls, freeze each render's manifest, and retain Morphorum's native backend. **Planning only; not implemented.** Development is gated on owner approval and restricted to `dev-webui`.
-- **[PS Prompt Studio PS0–PS9 Roadmap](PROMPT_STUDIO_ROADMAP.md)** and **[PS0 technical contract](PROMPT_STUDIO_PS0_CONTRACT.md)**: planned standalone storyboard and visual keyframe editor, model-aware LoRA/trigger word composer, Ollama/optional managed LLM assistant, non-destructive Apply to Animation and **required PS6 audio-to-storyboard synchronization using Motion Studio beat cues**. **PS0–PS3 passed Windows testing; PS4 Ollama story generation and reviewed AI drafts are available on `dev-webui` for physical testing, but are not on `main`. Advanced model-family/vision support (PS5) and required audio-to-storyboard sync (PS6) remain planned.**
+- **[PS Prompt Studio PS0–PS9 Roadmap](PROMPT_STUDIO_ROADMAP.md)** and **[PS0 technical contract](PROMPT_STUDIO_PS0_CONTRACT.md)**: planned standalone storyboard and visual keyframe editor, model-aware LoRA/trigger word composer, Ollama/optional managed LLM assistant, non-destructive Apply to Animation and **required PS6 audio-to-storyboard synchronization using Motion Studio beat cues**. **PS0–PS4.1 passed owner Windows testing; PS5.1 model-aware prompt profiles and targeted refinement are on `dev-webui` for physical acceptance, not `main`. Explicit-consent start-image vision is PS5.2; required audio-to-storyboard sync remains PS6.**
 
 ## Contributing
 

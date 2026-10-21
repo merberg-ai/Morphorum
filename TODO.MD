@@ -16,7 +16,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
 
-**Status:** **PS0–PS3 Windows-accepted; PS4 Ollama Story Director implemented on `dev-webui`, physical owner tests pending; `main` unchanged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS4 Ollama/Windows testing is the next gate.
+**Status:** **PS0–PS4.1 Windows-accepted; PS5.1 family profiles and continuity/selected-frame refinement available on `dev-webui` for Windows tests, `main` unchanged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS4 Ollama/Windows testing is the next gate.
 
 - Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
 - Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
@@ -109,3 +109,8 @@ On `dev-webui` PS3 introduces global and scene-local prompt blocks with separate
 
 ### PS4.1 Ollama progress hotfix (2026-10-21)
 The user observed silent "waiting for Ollama" behavior. Replaced the WebUI's one-shot generation call with `/api/prompt-studio/ollama/generate-stream` returning bounded NDJSON stage/heartbeat/result/error events and a 240-second generation deadline. An indeterminate activity UI shows elapsed seconds, current stage and real received-character counts, with Cancel. Backend emits Prompt Studio console start/heartbeat/progress/failure/completion messages; a checked Prompt Studio source filter was added to the WebUI Console. Raw story and generated text are never logged; original `/generate` is retained for compatibility. Automated mocked stream tests added; physical Windows Ollama confirmation is still required. `main` remains unchanged.
+
+### PS5.1 model-family profiles and precise continuity (2026-10-21)
+- Implemented on `dev-webui`: read-only versioned prompt profile catalog (`ps5-sdxl-v1`, `ps5-flux-v1`, `ps5-zimage-v1`), strict family selection, explicit recurring subject/style immutable text locks (max 1000 chars each), targeted Refine one existing positive frame and frame-preserving negative-lane merge when negative generation is explicitly enabled.
+- Existing PS4 streaming Ollama request path, cancellation, provenance, editor/studio isolation, and native rendering unchanged. Old PS4 generic profile remains a valid default for clients without `profile`; only PS5 WebUI opts in. Generated proposals carry heuristic word counts and warning labels, not CLIP tokenizer output.
+- **Next gate PS5.2**: optional start-image vision requires source-image validation, explicit per-request consent and preview, local Ollama vision capability evidence and no other uploads. **PS5.3** evaluate candidate 4B/9B models on Windows, not assume performance. PS6 audio synchronization remains required. Do not merge `main`.
