@@ -269,6 +269,40 @@
     return payload;
   }
 
+  // PS1.2. Every native Editor/timeline save carries its loaded ETag.
+  // Only this helper may advance the browser's saved-revision baseline.
+  async function guardedProjectWrite(url,options={},projectId=state.project?.id) {
+    if (!projectId || state.project?.id!==projectId)
+      throw new Error('Project changed before the edit could be saved.');
+    const expected=state.projectEtag;
+    if (!/^"[a-f0-9]{64}"$/.test(expected||''))
+      throw new Error('The project revision is unknown. Reload before saving.');
+    const beforeRevision=state.editorRevision;
+    const headers={'Content-Type':'application/json',...(options.headers||{}),'If-Match':expected};
+    const response=await fetch(url,{...options,headers,cache:'no-store'});
+    const type=response.headers.get('content-type')||'';
+    const payload=type.includes('application/json') ? await response.json() : await response.text();
+    if (!response.ok) {
+      const detail=typeof payload==='object'?payload.detail||JSON.stringify(payload):payload;
+      const error=new Error(response.status===412
+        ? 'Project changed in another browser or workspace. Your unsaved edits are intact. Review or reload before saving.'
+        : (detail||response.status+' '+response.statusText));
+      error.status=response.status;
+      throw error;
+    }
+    const etag=response.headers.get('ETag')||'';
+    if (!/^"[a-f0-9]{64}"$/.test(etag))
+      throw new Error('Project save succeeded but the new revision could not be verified. Reload before another edit.');
+    if (state.project?.id!==projectId)
+      throw new Error('Project changed during the save. The server saved the old project; reload to review.');
+    state.projectEtag=etag;
+    if (payload && typeof payload==='object') {
+      payload.__editorRevision=beforeRevision;
+      payload.__projectId=projectId;
+    }
+    return payload;
+  }
+
   function isMobileTimeline() {
     return window.matchMedia('(max-width: 720px)').matches;
   }
@@ -1769,15 +1803,16 @@
       throw new Error('Save the Prompt Studio changes in Project Editor before modifying the Timeline.');
     if (!state.project || !state.dirty) return;
     timelineStatus('Saving form…', 'busy');
-    const payload = await api(
-      '/api/animation/projects/' + encodeURIComponent(state.project.id),
-      {
-        method: 'PUT',
-        body: JSON.stringify(collectProject()),
-      }
+    const projectId=state.project.id;
+    const payload = await guardedProjectWrite(
+      '/api/animation/projects/' + encodeURIComponent(projectId),
+      {method:'PUT',body:JSON.stringify(collectProject())},projectId
     );
-    state.project = payload.project;
-    state.path = payload.path || state.path;
+    state.project=payload.project;
+    state.path=payload.path||state.path;
+    if (payload.__editorRevision!==state.editorRevision)
+      throw new Error('Editor changed while saving. The earlier edit was saved; newer unsaved edits remain. Save them before editing the timeline.');
+    state.editorRevision+=1;
     clearDirty();
   }
 
@@ -1815,12 +1850,24 @@
     }
   }
 
-  async function finishTimelineMutation(payload, selection) {
+  async function finishTimelineMutation(payload, selection, startingRevision) {
     if (payload?.project) {
+      if (payload.__projectId!==state.project?.id)
+        throw new Error('Project changed while editing its timeline. Reload before continuing.');
       state.project = payload.project;
       state.timelineSelection = selection || state.timelineSelection;
-      clearDirty();
-      fillForm();
+      if (startingRevision!==state.editorRevision) {
+        // Do not overwrite text entered in the main Editor while a network edit
+        // was in flight. Keep the saved project baseline and the newer form.
+        state.dirty=true;
+        syncProjectWorkspaceStatus();
+        setStatus('Unsaved edits · review timeline changes','dirty');
+        toast('Editor changed during timeline save',
+          'The timeline update was saved, but newer Editor form edits remain unsaved. Review before saving.','warning',7000);
+      } else {
+        clearDirty();
+        fillForm();
+      }
     }
     await loadTimeline();
     refreshInspector();
@@ -1833,7 +1880,8 @@
     renderTimelineEditor();
     try {
       await persistDirtyBeforeTimelineEdit();
-      const payload = await api(
+      const startingRevision=state.editorRevision;
+      const payload = await guardedProjectWrite(
         '/api/animation/projects/' + encodeURIComponent(state.project.id) +
         '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
         '/' + encodeURIComponent(descriptor.name) +
@@ -1847,7 +1895,7 @@
         group: descriptor.group,
         name: descriptor.name,
         frame: targetFrame,
-      });
+      }, startingRevision);
     } catch (error) {
       timelineStatus('Move failed', 'error');
       toast('Could not move keyframe', error.message, 'error', 6500);
@@ -1934,7 +1982,8 @@
     timelineStatus('Adding keyframe…', 'busy');
     try {
       await persistDirtyBeforeTimelineEdit();
-      const payload = await api(
+      const startingRevision=state.editorRevision;
+      const payload = await guardedProjectWrite(
         '/api/animation/projects/' + encodeURIComponent(state.project.id) +
         '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
         '/' + encodeURIComponent(descriptor.name) +
@@ -1948,7 +1997,7 @@
         group: descriptor.group,
         name: descriptor.name,
         frame,
-      });
+      }, startingRevision);
     } catch (error) {
       timelineStatus('Add failed', 'error');
       toast('Could not add keyframe', error.message, 'error', 6500);
@@ -1980,11 +2029,12 @@
     timelineStatus('Saving keyframe…', 'busy');
     try {
       await persistDirtyBeforeTimelineEdit();
+      const startingRevision=state.editorRevision;
       let payload = null;
       let frame = originalFrame;
 
       if (frame !== null && frame !== undefined && Number(frame) !== targetFrame) {
-        payload = await api(
+        payload = await guardedProjectWrite(
           '/api/animation/projects/' + encodeURIComponent(state.project.id) +
           '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
           '/' + encodeURIComponent(descriptor.name) +
@@ -1998,7 +2048,7 @@
         frame = targetFrame;
       }
 
-      payload = await api(
+      payload = await guardedProjectWrite(
         '/api/animation/projects/' + encodeURIComponent(state.project.id) +
         '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
         '/' + encodeURIComponent(descriptor.name) +
@@ -2011,7 +2061,7 @@
       if (payload?.project) state.project = payload.project;
 
       if (interpolation && interpolation !== track.interpolation) {
-        payload = await api(
+        payload = await guardedProjectWrite(
           '/api/animation/projects/' + encodeURIComponent(state.project.id) +
           '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
           '/' + encodeURIComponent(descriptor.name) +
@@ -2027,7 +2077,7 @@
         group: descriptor.group,
         name: descriptor.name,
         frame: targetFrame,
-      });
+      }, startingRevision);
     } catch (error) {
       timelineStatus('Save failed', 'error');
       toast('Could not save timeline keyframe', error.message, 'error', 7000);
@@ -2048,7 +2098,8 @@
     timelineStatus('Deleting keyframe…', 'busy');
     try {
       await persistDirtyBeforeTimelineEdit();
-      const payload = await api(
+      const startingRevision=state.editorRevision;
+      const payload = await guardedProjectWrite(
         '/api/animation/projects/' + encodeURIComponent(state.project.id) +
         '/timeline/tracks/' + encodeURIComponent(descriptor.group) +
         '/' + encodeURIComponent(descriptor.name) +
@@ -2059,7 +2110,7 @@
         group: descriptor.group,
         name: descriptor.name,
         frame: null,
-      });
+      }, startingRevision);
     } catch (error) {
       timelineStatus('Delete failed', 'error');
       toast('Could not delete keyframe', error.message, 'error', 6500);
@@ -6115,30 +6166,33 @@
         if (!safeTracks.ok) throw new Error(
           'Prompt Studio tracks could not be safely reconciled: ' + safeTracks.message);
       }
-      const payload = await api(
-        `/api/animation/projects/${encodeURIComponent(state.project.id)}`,
+      const projectId=state.project.id;
+      const payload = await guardedProjectWrite(
+        `/api/animation/projects/${encodeURIComponent(projectId)}`,
         {
-          method: 'PUT',
-          // api() forwards explicit headers verbatim; keep JSON Content-Type.
-          headers: {
-            'Content-Type':'application/json',
-            ...(state.promptStudioPendingSaveEtag
-              ? {'If-Match':state.promptStudioPendingSaveEtag,
-                 'X-Morphorum-Prompt-Tracks':'canonical'} : {}),
-          },
-          body: JSON.stringify(collectProject()),
-        }
+          method:'PUT',
+          headers:state.promptStudioPendingSaveEtag
+            ? {'X-Morphorum-Prompt-Tracks':'canonical'}:{},
+          body:JSON.stringify(collectProject()),
+        },projectId
       );
       state.project = payload.project;
       state.path = payload.path || state.path;
+      // Only clear the dirty state if the browser form has not changed
+      // since the server received the saved snapshot.
+      const newerEdits=payload.__editorRevision!==state.editorRevision;
+      state.promptStudioPendingSaveEtag = '';
+      if (newerEdits) {
+        state.dirty=true;
+        syncProjectWorkspaceStatus();
+        setStatus('Newer unsaved edits','dirty');
+        toast('Earlier edits saved',
+          'You made more changes while the save was running. Those newer changes remain in the Editor and have not been saved.','warning',7000);
+        return;
+      }
       await loadProjectList();
       fillForm();
       state.promptStudioPendingSaveEtag = '';
-      state.projectEtag = '';
-      try {
-        const fresh = await promptStudioFetchSavedRevision(state.project.id);
-        state.projectEtag = fresh.etag;
-      } catch (_) { /* Bridge fails closed; normal saved project remains valid. */ }
       await loadTimeline();
       await loadRenderHistory();
       toast('Animation project saved', `${state.project.name} was written to project.json.`, 'success');
