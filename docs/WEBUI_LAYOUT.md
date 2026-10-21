@@ -72,3 +72,19 @@ Motion Lab's `#motion-lab-sidebar` buttons previously received their custom styl
 ### Touch submenu dismissal
 
 On compact and coarse-pointer layouts, selecting a **Project** or **Motion Lab** submenu destination now navigates to the requested workspace and then closes both nav popups. The menu toggles' `aria-expanded` attributes return to `false`, keeping the underlying editor unobstructed. On wide fine-pointer desktops the sidebar remains open as before. Both behaviors are covered by the WebUI regression suite.
+
+## Civitai artwork in local model managers (dev-webui)
+
+The installed **Models** library uses an auto-fitting card grid in place of
+dense rows. Each card keeps its selection checkbox, thumbnail or NO PREVIEW
+placeholder, filename, family, type, file size, collapsible full path and
+original generation/Civitai actions. **Sync Civitai Info (N)** is an explicit
+bulk action; opening the manager loads only existing local cached data.
+
+The **LoRAs** manager retains its two-column desktop selector/detail layout,
+with miniature images in the selector and a larger fitted preview above Quick
+Use. On tablet/phone the detail stack remains single-column. Cache images are
+loaded with native lazy loading and use only the local preview endpoint.
+The selected adapter, prompt snippets and runtime diagnostics remain unchanged.
+Verify mobile click targets, disabled Civitai Hub behavior, 320px layouts and
+long filenames before merging. Regression: `frontend_cached_art.test.cjs`.
