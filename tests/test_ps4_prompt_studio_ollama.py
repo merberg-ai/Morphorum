@@ -283,3 +283,28 @@ def test_ps41_no_completion_marker_returns_error(monkeypatch):
             pass
     with pytest.raises(ollama.OllamaStoryError,match="completion marker"):
         asyncio.run(collect())
+
+
+def test_ps41_ollama_thinking_stage_reports_count_without_disclosing_reasoning(monkeypatch):
+    import asyncio
+    import httpx
+    import json
+    original=httpx.AsyncClient
+    packets=[
+        {"message":{"thinking":"private hidden reasoning","content":""},"done":False},
+        {"message":{"content":json.dumps(fake_scenes())},"done":False},
+        {"message":{"content":""},"done":True,"eval_count":90}
+    ]
+    transport=httpx.MockTransport(lambda request:
+        httpx.Response(200,content="\n".join(json.dumps(x) for x in packets)+"\n"))
+    monkeypatch.setattr(ollama.httpx,"AsyncClient",
+                        lambda **kw: original(transport=transport,**kw))
+    async def collect():
+        return [event async for event in ollama._chat_stream(
+            ollama.validate_story_request(req()))]
+    events=asyncio.run(collect())
+    reasoning=[x for x in events if x.get("stage")=="reasoning"]
+    assert len(reasoning)==1
+    assert reasoning[0]["reasoning_characters"]==len("private hidden reasoning")
+    assert "private hidden reasoning" not in str(events[:-1])
+    assert events[-1]["type"]=="result"

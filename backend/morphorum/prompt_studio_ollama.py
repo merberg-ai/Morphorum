@@ -316,6 +316,8 @@ async def _chat_stream(plan: dict):
     }
     parts: list[str] = []
     characters = 0
+    reasoning_characters = 0
+    reasoning_reported = False
     done = False
     started = time.monotonic()
     last_progress = started
@@ -353,13 +355,22 @@ async def _chat_stream(plan: dict):
                     if not isinstance(msg, dict):
                         raise OllamaStoryError("Ollama returned a malformed message.", 502)
                     part = msg.get("content", "")
-                    if not isinstance(part, str):
-                        raise OllamaStoryError("Ollama returned non-text content.", 502)
+                    thinking = msg.get("thinking", "")
+                    if not isinstance(part, str) or not isinstance(thinking, str):
+                        raise OllamaStoryError("Ollama returned a non-text chunk.", 502)
+                    reasoning_characters += len(thinking)
                     characters += len(part)
                     if characters > MAX_RESPONSE_BYTES:
                         raise OllamaStoryError("Ollama text output exceeded 256 KiB.", 502)
                     parts.append(part)
                     now = time.monotonic()
+                    if thinking and not characters and (
+                            not reasoning_reported or now - last_progress >= .8):
+                        yield {"type": "progress", "stage": "reasoning",
+                               "message": "Ollama is reasoning before writing the storyboard",
+                               "characters": 0, "reasoning_characters": reasoning_characters}
+                        reasoning_reported = True
+                        last_progress = now
                     if characters and (now - last_progress >= .8 or packet.get("done")):
                         yield {"type": "progress", "stage": "receiving",
                                "message": "Receiving model output", "characters": characters}

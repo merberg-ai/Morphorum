@@ -172,12 +172,16 @@
       const elapsed=Math.max(0,Math.round((Date.now()-startedAt)/1000));
       q('elapsed').textContent=elapsed+'s elapsed';
       const stages={connecting:'Connecting / loading model',
-        responding:'Ollama connected',receiving:'Generating response',
+        responding:'Ollama connected',reasoning:'Model reasoning',
+        receiving:'Generating response',
         validating:'Validating storyboard'};
       q('stage').textContent=stages[progressState.stage]||'Waiting for Ollama';
       const chars=Number.isSafeInteger(progressState.characters)?progressState.characters:0;
+      const thinking=Number.isSafeInteger(progressState.reasoning_characters)?
+        progressState.reasoning_characters:0;
       q('detail').textContent=String(progressState.message||'Waiting for Ollama')+
-        (chars?' · '+chars.toLocaleString()+' characters received':'')+
+        (thinking?' · '+thinking.toLocaleString()+' reasoning characters (content hidden)':'')+
+        (chars?' · '+chars.toLocaleString()+' output characters received':'')+
         ' · timeout after 240s';
     }
     function startProgress(){
@@ -322,7 +326,7 @@
           if(seq!==sequence)return;
           if(event.type==='progress'){
             progressState={stage:event.stage,message:event.message,
-              characters:event.characters};
+              characters:event.characters,reasoning_characters:event.reasoning_characters};
             renderProgress();
           }
         });
