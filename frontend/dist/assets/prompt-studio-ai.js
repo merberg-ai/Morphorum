@@ -43,9 +43,49 @@
     node.hidden=!usable;
     empty.hidden=usable;
   }
+  async function readProgressStream(response,onEvent){
+    if(!response.body?.getReader)
+      throw Error('Streaming progress is unavailable in this browser. Update your browser to continue.');
+    const reader=response.body.getReader();
+    const decoder=new TextDecoder();
+    let buffer='',result=null;
+    function dispatch(line){
+      if(!line.trim())return;
+      let evt;
+      try{evt=JSON.parse(line);}catch(_){throw Error('Ollama progress stream contained invalid JSON.');}
+      if(!evt||typeof evt!=='object')throw Error('Invalid Ollama progress event.');
+      if(evt.type==='error')throw Error(String(evt.message||'Ollama generation failed.'));
+      if(evt.type==='progress'){
+        onEvent?.(evt);
+      }else if(evt.type==='result'){
+        if(result!==null)throw Error('Ollama returned more than one result.');
+        result=evt.data;
+        onEvent?.(evt);
+      }else throw Error('Unexpected Ollama progress event.');
+    }
+    try{
+      while(true){
+        const {done,value}=await reader.read();
+        if(done)break;
+        buffer+=decoder.decode(value,{stream:true});
+        if(buffer.length>600000)throw Error('Ollama progress message exceeded the browser safety limit.');
+        let newline;
+        while((newline=buffer.indexOf('\n'))!==-1){
+          const line=buffer.slice(0,newline);
+          buffer=buffer.slice(newline+1);
+          dispatch(line);
+        }
+      }
+      buffer+=decoder.decode();
+      if(buffer.trim())dispatch(buffer);
+    }finally{reader.releaseLock();}
+    if(result===null)throw Error('Ollama stream ended before a completed storyboard was received.');
+    return result;
+  }
   function mount({panel,getDraft,onCommit,onNotice,bridge}={}){
     if(!panel)throw Error('AI Story Director container is missing.');
     let working=false,pending=null,controller=null,sequence=0,models=[],connected=false;
+    let elapsedTimer=null,startedAt=0,progressState=null;
     const node=document.createElement('section');node.className='ps4-director';
     node.innerHTML=`
       <div class="ps4-head"><div><h3>AI Story Director</h3>
@@ -82,6 +122,17 @@
           <button type="button" data-p4="generate" class="primary-button compact">Generate Storyboard</button>
           <button type="button" data-p4="cancel" class="secondary-button compact" disabled>Cancel Request</button>
         </div>
+        <div data-p4="activity" class="ps4-activity" hidden aria-label="Ollama generation status">
+          <div class="ps4-activity-top">
+            <strong data-p4="stage">Preparing request…</strong>
+            <output data-p4="elapsed">0s elapsed</output>
+          </div>
+          <progress aria-label="Generation is running, progress is not a percentage"></progress>
+          <p data-p4="detail" class="muted">Ollama has not responded yet.</p>
+          <p class="muted ps4-activity-note">Model loading and generation can take time.
+            This is live activity feedback, not a predicted completion percentage.
+            Cancel stops this browser's streaming request.</p>
+        </div>
         <p data-p4="status" class="ps4-status" role="status" aria-live="polite">Import a draft and test the Ollama connection.</p>
       </div>
       <section class="ps4-review" data-p4="review" hidden>
@@ -116,6 +167,33 @@
     let preferredModel=preference('model');
     function status(s,bad=false){q('status').textContent=s;q('status').dataset.error=bad?'1':'0';
       if(bad)onNotice?.(s,true);}
+    function renderProgress(){
+      if(!working||!progressState)return;
+      const elapsed=Math.max(0,Math.round((Date.now()-startedAt)/1000));
+      q('elapsed').textContent=elapsed+'s elapsed';
+      const stages={connecting:'Connecting / loading model',
+        responding:'Ollama connected',receiving:'Generating response',
+        validating:'Validating storyboard'};
+      q('stage').textContent=stages[progressState.stage]||'Waiting for Ollama';
+      const chars=Number.isSafeInteger(progressState.characters)?progressState.characters:0;
+      q('detail').textContent=String(progressState.message||'Waiting for Ollama')+
+        (chars?' · '+chars.toLocaleString()+' characters received':'')+
+        ' · timeout after 240s';
+    }
+    function startProgress(){
+      stopProgress();
+      startedAt=Date.now();
+      progressState={stage:'connecting',characters:0,
+        message:'Request sent to Morphorum; connecting to Ollama…'};
+      q('activity').hidden=false;
+      renderProgress();
+      elapsedTimer=setInterval(renderProgress,1000);
+    }
+    function stopProgress(){
+      if(elapsedTimer!==null){clearInterval(elapsedTimer);elapsedTimer=null;}
+      q('activity').hidden=true;
+      progressState=null;
+    }
     function invalidate(){
       pending=null;q('review').hidden=true;q('accept').disabled=true;
     }
@@ -211,7 +289,8 @@
     function cancel(){
       if(!working)return;
       ++sequence;controller?.abort();controller=null;working=false;
-      invalidate();refresh();status('Request cancelled in this browser. Ollama may still finish its previous evaluation.');
+      stopProgress();invalidate();refresh();
+      status('Request cancelled; Morphorum will close the Ollama stream when the disconnect is detected.');
     }
     async function generate(){
       const d=draft();
@@ -221,9 +300,10 @@
       const count=mode==='refine'?sourceTracks.positive.keyframes.length:Number(q('scenes').value);
       if(!Number.isInteger(count)||count<1||count>16)return status('Choose between 1 and 16 scenes.',true);
       invalidate();working=true;const seq=++sequence;controller=new AbortController();
-      refresh();status('Ollama is generating scene suggestions. Your existing prompts remain unchanged…');
+      refresh();startProgress();
+      status('Ollama generation requested. Progress and elapsed time appear above; draft unchanged.');
       try{
-        const response=await fetch('/api/prompt-studio/ollama/generate',{
+        const response=await fetch('/api/prompt-studio/ollama/generate-stream',{
           method:'POST',cache:'no-store',signal:controller.signal,
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({
@@ -234,9 +314,19 @@
             tracks:sourceTracks,include_negative:q('negative').checked,
           }),
         });
-        const output=await response.json();
+        if(!response.ok){
+          const error=await response.json().catch(()=>({}));
+          throw Error(error.detail||'AI storyboard generation failed (HTTP '+response.status+').');
+        }
+        const output=await readProgressStream(response,event=>{
+          if(seq!==sequence)return;
+          if(event.type==='progress'){
+            progressState={stage:event.stage,message:event.message,
+              characters:event.characters};
+            renderProgress();
+          }
+        });
         if(seq!==sequence)return;
-        if(!response.ok)throw Error(output.detail||'AI storyboard generation failed.');
         if(draft()!==d||d.revision!==rev||draft()?.snapshot?.projectId!==id)
           throw Error('Studio draft changed during generation. Discarding stale AI result.');
         const checked=validateProposal(output,d,bridge);
@@ -248,7 +338,7 @@
         if(seq===sequence)status(error.name==='AbortError'?'AI request cancelled.':
           (error.message||'AI request failed.'),error.name!=='AbortError');
       }finally{
-        if(seq===sequence){working=false;controller=null;refresh();}
+        if(seq===sequence){working=false;controller=null;stopProgress();refresh();}
       }
     }
     async function accept(){
@@ -298,7 +388,7 @@
     return {refresh,invalidate,reset(){cancel();invalidate();forgetModelList();refresh();},
       getPending:()=>pending};
   }
-  const api={validateProposal,changes,setVisibility,mount};
+  const api={validateProposal,changes,setVisibility,readProgressStream,mount};
   if(typeof module==='object'&&module.exports)module.exports=api;
   if(root)root.MorphorumPromptStudioAI=api;
 })(typeof window==='object'?window:null);
