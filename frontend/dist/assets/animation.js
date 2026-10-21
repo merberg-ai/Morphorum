@@ -800,7 +800,9 @@
     qsa(
       '#view-animation input, #view-animation select, #view-animation textarea'
     ).forEach(input => {
-      if (input.id.startsWith('animation-deforum-') || input.id.startsWith('animation-hybrid-') || input.id.startsWith('animation-video-')) {
+      // Prompt Studio owns its isolated draft controls, including frame-zero locks.
+      if (input.closest('#animation-panel-prompt-studio') ||
+          input.id.startsWith('animation-deforum-') || input.id.startsWith('animation-hybrid-') || input.id.startsWith('animation-video-')) {
         return;
       }
       if (input.id === 'animation-project-select') {
