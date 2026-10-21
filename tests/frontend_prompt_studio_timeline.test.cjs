@@ -131,3 +131,13 @@ test('PS2 delete selection is all-or-nothing and preserves frame-zero anchors',(
  assert.deepEqual(valid.tracks.negative.keyframes.map(x=>x.frame),[0]);
  assert.equal(JSON.stringify(original),raw);
 });
+
+test('PS2 mouse/touch pointer selection and scrub stay in sync after click or drag',()=>{
+ const script=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets','prompt-studio-timeline.js'),'utf8');
+ assert.match(script,/setFrame\(moved\?drag\.from\+drag\.delta:drag\.from/);
+ assert.match(script,/refresh\(\);\s*setFrame\(drag\.from/);
+ assert.match(script,/if\(multi\|\|locked\|\|invalid/);
+ assert.match(script,/setFrame\(frame\);return;/);
+ assert.match(script,/data-ps2="scenes"/);
+ assert.match(script,/data-ps2="delete"/);
+});
