@@ -4427,3 +4427,10 @@ dialog#animation-deforum-dialog {
  .ps4-settings label,.ps4-options label{flex-basis:100%}
  .ps4-settings button,.ps4-actions button{min-height:44px;flex:1 1 150px}
 }
+
+/* PS4 reviewed scene cards: timeline timebase comes from the backend compiler. */
+.ps4-scene-overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,165px),1fr));gap:.55rem;margin:.7rem 0}
+.ps4-scene-card{display:flex;flex-direction:column;gap:.3rem;min-width:0;padding:.55rem;
+ border:1px solid var(--border);border-radius:8px}
+.ps4-scene-card strong{font-size:.83rem;overflow-wrap:anywhere}
+.ps4-scene-card span{font-size:.77rem}

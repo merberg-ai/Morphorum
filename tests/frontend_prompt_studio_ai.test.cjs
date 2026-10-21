@@ -78,3 +78,13 @@ test('PS4 UI isolates proposals from native render and enforces review, cancella
  assert.match(host,/draft\.aiProvenance=provenance/);
  assert.doesNotMatch(ui,/\/api\/animation\/projects\/.*(?:save|render)/);
 });
+
+test('PS4 visual storyboard review displays grounded frames and scene titles without injection',()=>{
+ const script=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets','prompt-studio-ai.js'),'utf8');
+ assert.match(script,/data-p4="scenes"/);
+ assert.match(script,/result\.scenes/);
+ assert.match(script,/title\.textContent=/);
+ assert.match(script,/root\.localStorage\?\.setItem/);
+ assert.match(script,/LAN permission is/);
+ assert.match(script,/for\(const field of \['endpoint','lan','model','idea','negative'\]\)/);
+});

@@ -81,6 +81,7 @@
         <h4>AI proposal: review before acceptance</h4>
         <p data-p4="summary" class="muted"></p>
         <div data-p4="warnings"></div>
+        <div data-p4="scenes" class="ps4-scene-overview" aria-label="Proposed storyboard scenes"></div>
         <div data-p4="diff"></div>
         <div class="ps4-actions">
           <button type="button" data-p4="accept" class="primary-button compact">
@@ -139,7 +140,15 @@
       q('summary').textContent=result.scenes.length+' scenes · '+modifications.length+
         ' changed prompt keyframes · '+result.provenance.family.toUpperCase()+
         ' · '+result.provenance.model+'. No project settings or media will change.';
-      q('warnings').replaceChildren();q('diff').replaceChildren();
+      q('warnings').replaceChildren();q('diff').replaceChildren();q('scenes').replaceChildren();
+      for(const scene of result.scenes){
+        const cell=document.createElement('div');cell.className='ps4-scene-card';
+        const title=document.createElement('strong');
+        title.textContent=(scene.title||'Scene')+' · F'+scene.frame;
+        const time=document.createElement('span');time.className='muted';
+        time.textContent=Number(scene.time_seconds||0).toFixed(2)+'s';
+        cell.append(title,time);q('scenes').appendChild(cell);
+      }
       for(const w of result.warnings){
         const p=document.createElement('p');p.className='ps4-warning';p.textContent=w;
         q('warnings').appendChild(p);
