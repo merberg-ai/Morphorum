@@ -53,3 +53,12 @@ test('PS1.3 reports changed native items and no mutation of imported source',()=
  d.applied=true;
  assert.equal(studio.updateDraft(d,bridge,'positive','text',60,'not allowed').code,'NO_DRAFT');
 });
+
+test('PS1.3 frame-zero remove and move controls stay disabled on reactivation',()=>{
+ const fs=require('node:fs');
+ const path=require('node:path');
+ const script=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets','prompt-studio.js'),'utf8');
+ assert.match(script,/el\.disabled=!can\|\|el\.dataset\.psFixed==='1'/);
+ assert.match(script,/frame\.dataset\.psFixed=point\.frame===0/);
+ assert.match(script,/remove\.dataset\.psFixed=point\.frame===0/);
+});

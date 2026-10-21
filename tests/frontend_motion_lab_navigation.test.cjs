@@ -11,11 +11,11 @@ const js = fs.readFileSync(path.join(dist, 'assets', 'animation.js'), 'utf8');
 const css = fs.readFileSync(path.join(dist, 'assets', 'animation.css'), 'utf8');
 const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
 
-test('Motion Lab includes Project Manager, New Project Wizard and eleven shared-state tool panels', () => {
-  const names = ['motion','wizard','projects','editor','composer','recording','curves','preview','motion-import','audio','monitor','outputs'];
-  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['motion', 'wizard', 'projects', 'editor', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'\]/);
+test('Motion Lab retains its workspaces and the Project menu adds Prompt Studio', () => {
+  const names = ['motion','wizard','projects','editor','prompt-studio','composer','recording','curves','preview','motion-import','audio','monitor','outputs'];
+  assert.match(js, /const VISIBLE_ANIMATION_TABS = \['motion', 'wizard', 'projects', 'editor', 'prompt-studio', 'composer', 'recording', 'curves', 'preview', 'motion-import', 'audio', 'monitor', 'outputs'\]/);
   assert.match(js, /const names = \{/);
-  for (const name of names) assert.match(js, new RegExp((name === 'motion-import' ? "'motion-import'" : name) + ":", 'm'));
+  for (const name of names) assert.match(js, new RegExp((['motion-import','prompt-studio'].includes(name) ? "'"+name+"'" : name) + ":", 'm'));
   assert.match(js, /panels\.motion\.appendChild\(motionIntro\)/);
   assert.match(js, /panels\[name\]\.appendChild\(card\)/);
   assert.match(js, /panels\.outputs\.appendChild\(wrapper\)/);
@@ -23,7 +23,7 @@ test('Motion Lab includes Project Manager, New Project Wizard and eleven shared-
   assert.match(js, /mediaVault\.inert = true/);
   assert.match(css, /#animation-media-vault\s*\{display:none!important;\}/);
   assert.match(html, /data-view="animation"[^>]*>[^<]*<span class="nav-icon">[^<]*<\/span><span>Motion Lab<\/span>/);
-  for (const name of names) assert.match(html, new RegExp((['wizard','projects','editor'].includes(name) ? 'data-project-nav="' : 'data-motion-nav="') + name + '"'));
+  for (const name of names) assert.match(html, new RegExp((['wizard','projects','editor','prompt-studio'].includes(name) ? 'data-project-nav="' : 'data-motion-nav="') + name + '"'));
 });
 
 test('Tool switching highlights the desktop sidebar, preserves selections, and safely stops recording', () => {

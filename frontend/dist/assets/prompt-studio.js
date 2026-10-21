@@ -114,7 +114,9 @@
       resetButton.disabled=!can;
       previewButton.disabled=!can||invalid||count()===0;
       applyButton.disabled=!can||invalid||blocked||previewedRevision!==draft?.revision||count()===0;
-      lanes.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=!can);
+      lanes.querySelectorAll('button,input,textarea,select').forEach(el=>{
+        el.disabled=!can||el.dataset.psFixed==='1';
+      });
     }
     function onEdit(result,redraw=false){
       if(!result.ok){invalid=true;status(result.message,true);controls();return;}
@@ -147,6 +149,7 @@
         const frame=document.createElement('input');frame.type='number';
         frame.min='0';frame.max=String(draft.snapshot.context.maxFrames-1);
         frame.step='1';frame.value=String(point.frame);
+        frame.dataset.psFixed=point.frame===0?'1':'0';
         frame.disabled=point.frame===0;
         frame.setAttribute('aria-label',name+' keyframe '+point.frame+' frame');
         frame.addEventListener('change',()=>{
@@ -163,6 +166,7 @@
         textLabel.appendChild(textarea);
         const remove=document.createElement('button');remove.type='button';
         remove.className='secondary-button compact';remove.textContent='Remove';
+        remove.dataset.psFixed=point.frame===0?'1':'0';
         remove.disabled=point.frame===0;
         remove.addEventListener('click',()=>onEdit(updateDraft(draft,bridge,name,'remove',point.frame),true));
         row.append(frameLabel,textLabel,remove);rows.appendChild(row);
