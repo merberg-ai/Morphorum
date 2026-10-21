@@ -822,6 +822,23 @@ async def api_prompt_studio_ollama_generate(payload: dict[str, Any]) -> dict[str
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
 
+# PS4.1: incremental Ollama feedback, heartbeats and checked result events.
+@app.post("/api/prompt-studio/ollama/generate-stream")
+async def api_prompt_studio_ollama_generate_stream(
+    payload: dict[str, Any],
+) -> StreamingResponse:
+    from .prompt_studio_ollama import stream_generation, OllamaStoryError
+    try:
+        events = stream_generation(payload)
+    except OllamaStoryError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return StreamingResponse(
+        events, media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-transform",
+                 "X-Accel-Buffering": "no"},
+    )
+
+
 # PS2: read-only native prompt transition inspector for unsaved Studio tracks.
 @app.post("/api/animation/projects/{project_id}/prompt-studio/inspect-frame")
 def api_inspect_prompt_studio_frame(
