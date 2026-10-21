@@ -76,6 +76,9 @@ def test_cached_catalog_batches_only_valid_local_metadata(monkeypatch, tmp_path)
     monkeypatch.setattr(lib, "load_settings", lambda: {"civitai": {
         "enabled": True, "load_previews": True, "allow_mature": False,
     }})
+    image_path = lib._directory("adapter1") / "preview.webp"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"RIFF" + bytes(4) + b"WEBP" + b"preview")
     lib._atomic_json(lib._directory("adapter1") / "metadata.json", {
         "synced": True, "model_id": "adapter1", "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
         "preview": "preview.webp", "preview_allowed_mature": False,
@@ -98,6 +101,9 @@ def test_cached_catalog_obeys_preview_settings_and_invalidates(monkeypatch, tmp_
     monkeypatch.setattr(lib, "get_model", lambda _: {"path": str(model)})
     cfg = {"enabled": True, "load_previews": False, "allow_mature": False}
     monkeypatch.setattr(lib, "load_settings", lambda: {"civitai": cfg})
+    image_path = lib._directory("ckpt") / "preview.jpg"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"test jpg")
     lib._atomic_json(lib._directory("ckpt") / "metadata.json", {
         "synced": True, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
         "preview": "preview.jpg", "preview_allowed_mature": True,
@@ -196,3 +202,74 @@ def test_sync_retains_previous_image_when_remote_unavailable(monkeypatch, tmp_pa
     assert new["preview"] == "preview.jpg"
     assert lib.preview_path("local").read_bytes().endswith(b"Old preview")
     assert "preview_warning" not in new or isinstance(new["preview_warning"], str)
+
+
+def test_preview_diagnostic_distinguishes_disabled_missing_and_filtered(monkeypatch, tmp_path):
+    model = tmp_path / "model.safetensors"
+    model.write_bytes(b"weights")
+    stat = model.stat()
+    monkeypatch.setattr(lib, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(lib, "get_model", lambda _: {"path": str(model)})
+    cfg = {"enabled": True, "load_previews": True, "allow_mature": False}
+    monkeypatch.setattr(lib, "load_settings", lambda: {"civitai": cfg})
+    lib._atomic_json(lib._directory("id") / "metadata.json", {
+        "synced": True, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
+        "preview": "preview.jpg", "preview_allowed_mature": False})
+    data = lib.cached_metadata("id")
+    assert data["preview_status"] == "missing"
+    assert "thumbnail" in data["preview_warning"].lower()
+    cfg["load_previews"] = False
+    assert lib.cached_metadata("id")["preview_status"] == "disabled"
+    cfg["load_previews"] = True
+    (lib._directory("id") / "preview.jpg").write_bytes(b"placeholder")
+    manifest = lib._directory("id") / "metadata.json"
+    record = json.loads(manifest.read_text())
+    record["preview_allowed_mature"] = True
+    lib._atomic_json(manifest, record)
+    assert lib.cached_metadata("id")["preview_status"] == "filtered"
+    cfg["allow_mature"] = True
+    assert lib.cached_metadata("id")["preview_status"] == "ready"
+
+
+def test_preview_uses_other_version_of_same_verified_model(monkeypatch, tmp_path):
+    import httpx
+    model = tmp_path / "model.safetensors"
+    model.write_bytes(b"weights")
+    monkeypatch.setattr(lib, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(lib, "get_model", lambda _: {"path": str(model)})
+    monkeypatch.setattr(lib, "load_settings", lambda: {"civitai": {
+        "enabled": True, "load_previews": True, "allow_mature": False}})
+    monkeypatch.setattr(lib, "identify_model", lambda _: {
+        "found": True, "sha256": "a" * 64, "civitai_model_id": 9,
+        "version_id": 99, "url": "https://civitai.com/models/9?modelVersionId=99"})
+    monkeypatch.setattr(lib, "model_details", lambda _: {
+        "name": "Demo", "creator": "Maker", "mature": False,
+        "versions": [
+            {"id": 99, "name": "Old", "base_model": "SDXL 1.0",
+             "trained_words": [], "images": []},
+            {"id": 100, "name": "New", "images": [
+                {"url": "https://image.civitai.com/new.jpg", "mature": False}]}],
+    })
+    calls = []
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(200, headers={"Content-Type": "image/jpeg"},
+                              content=bytes.fromhex("ffd8ff") + b"fake-preview")
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        data = lib.sync_metadata("id", client=client)
+    assert len(calls) == 1
+    assert data["preview"] == "preview.jpg"
+    assert data["preview_source"] == "same_model_other_version"
+    assert data["preview_status"] == "ready"
+
+
+def test_preview_redirect_must_remain_on_civitai(monkeypatch):
+    import httpx
+    def handler(request):
+        return httpx.Response(302, headers={"Location": "https://evil.example/take"})
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(CivitaiSearchError, match="untrusted host"):
+            lib._fetch_preview_image(client, "https://image.civitai.com/redirect")
+    assert not lib._trusted_preview_url("http://image.civitai.com/test")
+    assert not lib._trusted_preview_url("https://image.civitai.com.evil.example/test")
+    assert not lib._trusted_preview_url("https://evil.example@image.civitai.com/path")
