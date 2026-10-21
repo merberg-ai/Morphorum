@@ -86,7 +86,7 @@ test('PS4 visual storyboard review displays grounded frames and scene titles wit
  assert.match(script,/title\.textContent=/);
  assert.match(script,/root\.localStorage\?\.setItem/);
  assert.match(script,/LAN permission is/);
- assert.match(script,/for\(const field of \['endpoint','lan','model','idea','negative'\]\)/);
+ assert.match(script,/for\(const field of \['endpoint','lan','model','idea','negative','profile','subject','style'\]\)/);
 });
 
 test('PS4 visibility reveals the outer Studio container, not only the child UI',()=>{

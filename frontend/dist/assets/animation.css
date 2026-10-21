@@ -4453,3 +4453,17 @@ dialog#animation-deforum-dialog {
  accent-color:var(--accent,#57bfec)}
 .ps4-activity p{margin:.4rem 0;font-size:.81rem;overflow-wrap:anywhere}
 .ps4-activity .ps4-activity-note{opacity:.77;line-height:1.5}
+
+/* PS5.1: independent model-aware story authoring and continuity lock controls */
+.ps5-profile{border:1px solid var(--border);border-radius:9px;padding:.8rem;
+ margin:.85rem 0;min-width:0}
+.ps5-profile legend{font-size:.85rem;font-weight:650;padding:0 .4rem}
+.ps5-profile>p{font-size:.8rem;line-height:1.5}
+.ps5-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));
+ gap:.7rem;margin:.55rem 0}
+.ps5-settings label{display:flex;flex-direction:column;gap:.32rem;font-size:.83rem;min-width:0}
+.ps5-settings textarea,.ps5-settings select{width:100%;max-width:100%;min-width:0;font:inherit}
+.ps5-settings textarea{resize:vertical}
+.ps5-diagnostics{font-size:.79rem}
+.ps5-diagnostics p{margin:.35rem 0;overflow-wrap:anywhere}
+@media(max-width:600px){.ps5-settings{grid-template-columns:minmax(0,1fr)}}
