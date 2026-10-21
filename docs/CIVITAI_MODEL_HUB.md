@@ -1,6 +1,12 @@
-# Civitai Model Hub roadmap
+# Civitai Model Hub guide and milestone history
 
-The optional Civitai Model Hub is developed on `feature/civitai-model-hub`. It is disabled by default.
+## Current shipped status (October 21, 2026)
+
+The optional Civitai Model Hub and local model/LoRA metadata tooling are available on the published **`main`** branch, and remain **disabled by default** until enabled in Settings. PR [#51](https://github.com/merberg-ai/Morphorum/pull/51) brought the responsive Models thumbnail cards, LoRA preview panels and improved cached-artwork status messages to `main`. Previews synchronize only on an explicit **Sync Civitai Info** action, and opening local managers reads the local cache without making automatic online requests. Mature-content and thumbnail preferences still apply. The owner confirmed the formerly missing previews appeared after synchronization. Backend, Syntax and Installer CI passed for the merge; full mobile/maturity/CDN combinations are not documented as physical acceptance.
+
+**Historical roadmap below:** C1–C5 headings and statements such as "pending Windows verification", "feature branch only" or "do not merge" record the state **at those earlier milestones**, not the status of the published `main` branch. The current supported behavior and limitations are summarized here and in [Current Status](CURRENT_STATUS.md). The later C5/C5.1 sections describe the active local-cache and placeholder workflows.
+
+## Original development milestones
 
 ## C1.0: Settings foundation (implemented)
 
@@ -243,7 +249,7 @@ Verified installed checkpoint and LoRA entries in the Civitai Hub now offer **Us
 5. Try a different-family LoRA and a project with no checkpoint; confirm refusal.
 6. Remove a test checkpoint from the index and reopen its project to confirm the existing missing-model warning rather than a silent replacement.
 
-Code committed; automated tests and Windows physical verification remain pending. Do not merge to main without acceptance.
+**Historical C4.2 checkpoint:** This note describes the state before the Civitai work was promoted to main; see the shipped-status section above.
 
 ## C4.3: Bulk verification and final Hub polish (Windows acceptance pending)
 
@@ -261,7 +267,7 @@ The previously completed C4.1/C4.2 Hub gallery continues to show verified instal
 6. In Civitai Hub, verify installed-version indicators and Image/Project actions, model detail previews, and the download queue still work.
 7. Disable Civitai Hub and ensure bulk operations report guarded failures instead of performing network requests.
 
-**C4.3 is staged on the feature branch only.** Automated tests and physical Windows validation are still pending. Final release hardening and merge belong to C5.
+**Historical C4.3 checkpoint:** This milestone was feature-branch-only at the time. The later C5 work and cached artwork improvements have since been promoted; see the current shipped-status section above.
 
 ## C5 release hardening: staged validation
 
@@ -291,7 +297,7 @@ The model scanner includes both the explicitly configured standalone checkpoint 
 
 Acceptance: restart, Scan Models, verify a previously downloaded Z-Image file in the Models library under Z-Image, confirm the full managed Z-Image-Turbo remains loadable, and verify standalone checkpoint **Use** is unavailable rather than causing a rendering error.
 
-## C5: Offline cached artwork in Models and LoRA Manager (development)
+## C5: Offline cached artwork in Models and LoRA Manager (released on main)
 
 The original C3.3 metadata cache remains the single source of truth; no
 second thumbnail database or background Civitai scanner was introduced.
@@ -334,7 +340,7 @@ single-image generation afterward to catch unrelated model-selection changes.
 
 Tests: `tests/test_civitai_library.py`,
 `tests/test_civitai_detail.py`, `tests/frontend_cached_art.test.cjs`.
-Owner physical acceptance remains outstanding; do not merge into `main`.
+Owner feedback confirmed cached previews now appear correctly after synchronization. The feature was promoted to `main` via [PR #51](https://github.com/merberg-ai/Morphorum/pull/51). The checklist above remains useful for regression testing; complete mobile/mature-filter/CDN edge-case physical acceptance was not separately recorded.
 
 ### C5.1: "NO PREVIEW" after successful metadata sync
 
