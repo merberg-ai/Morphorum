@@ -2,6 +2,8 @@
 (function(root) {
   'use strict';
   const clone=value=>JSON.parse(JSON.stringify(value));
+  const psComposer=root?.MorphorumPromptStudioComposer||
+    (typeof module==='object'&&module.exports?require('./prompt-studio-composer.js'):null);
   const problem=(code,message)=>({ok:false,code,message});
   function beginDraft(snapshot,bridge) {
     if(!snapshot?.ok || !snapshot.projectId || !bridge)
@@ -10,7 +12,8 @@
     const validation=bridge.validateTracks(snapshot.promptTracks,maxFrames);
     if(!validation.ok) return validation;
     return {ok:true,snapshot:clone(snapshot),original:clone(validation.tracks),
-      tracks:clone(validation.tracks),revision:0,applied:false};
+      tracks:clone(validation.tracks),composer:psComposer?.blank()||{schema_version:1,blocks:[]},
+      revision:0,applied:false};
   }
   function updateDraft(draft,bridge,lane,operation,frame,value) {
     if(!draft?.ok||draft.applied) return problem('NO_DRAFT','Import editable prompts first.');
@@ -81,12 +84,14 @@
     if(!original.ok)return original;
     if(!edited.ok)return edited;
     const context=draft.snapshot.context;
+    const composed=psComposer?.normalize(draft.composer,frames);
+    if(!composed?.ok)return composed||problem('COMPOSER','Composer validation unavailable.');
     return {ok:true,record:{
       format:'morphorum.prompt-studio-draft',schema_version:1,
       project_id:draft.snapshot.projectId,name:title,
       project_context:{model:clone(context.model),max_frames:frames,fps:Number(context.fps),
         start_mode:context.startMode||'prompt',source_image_name:context.sourceImageName||''},
-      original_tracks:original.tracks,prompt_tracks:edited.tracks
+      original_tracks:original.tracks,prompt_tracks:edited.tracks,composer:composed.composer
     }};
   }
   function restoreDraft(saved,live,bridge) {
@@ -113,8 +118,10 @@
       context:{name:saved.name,model:clone(expected.model),maxFrames:expected.max_frames,
         fps:expected.fps,startMode:expected.start_mode,sourceImageName:expected.source_image_name}
     };
+    const composed=psComposer?.normalize(saved.composer,saved.project_context.max_frames);
+    if(!composed?.ok)return composed||problem('COMPOSER','Composer validation unavailable.');
     return {ok:true,original:original.tracks,tracks:edited.tracks,
-      snapshot,revision:0,applied:false,compatible};
+      composer:composed.composer,snapshot,revision:0,applied:false,compatible};
   }
   function mount({panel,onEditor}={}) {
     if(!panel) throw new Error('Prompt Studio panel is required.');
@@ -122,7 +129,7 @@
     let draft=null,busy=false,invalid=false,previewedRevision=-1,blocked=false;
     let baselineBlocked=false,savedId='',savedEtag='',savedRevision=-1;
     let shownProjectId='',libraryEntries=[];
-    let timeline=null;
+    let timeline=null,composerUI=null;
     const dom=document.createElement('article');
     dom.className='card glass ps13-workspace';
     dom.innerHTML=`
@@ -158,6 +165,7 @@
       <div class="ps13-context" data-ps="context">No prompts imported. Open a project in Project Editor, then select Import Existing Prompts.</div>
       <p class="ps13-notice muted">Import and timeline edits stay in the Studio draft. Preview Changes and confirm Apply before saving in Project Editor. Visual keyframe changes have in-session Undo/Redo; Save Draft persists tracks, not the undo history. LLM authoring and audio storyboard sync are planned for later phases.</p>
       <p class="ps13-status" data-ps="status" role="status" aria-live="polite">Ready to import.</p>
+      <section class="ps3-workspace" data-ps="composer" hidden aria-label="Structured Prompt Composer"></section>
       <section class="ps2-workspace" data-ps="timeline" hidden aria-label="Visual Prompt Studio timeline"></section>
       <div class="ps13-lanes" data-ps="lanes" hidden></div>
       <section class="ps13-review" data-ps="review" aria-label="Prompt transfer preview" hidden>
@@ -171,7 +179,7 @@
       previewButton=find('preview'),applyButton=find('apply'),
       lanes=find('lanes'),review=find('review'),context=find('context');
     const savedSelect=find('saved'),nameInput=find('name'),note=find('library-note');
-    const timelinePanel=find('timeline');
+    const timelinePanel=find('timeline'),composerPanel=find('composer');
     const saveButton=find('save'),saveCopyButton=find('save-copy'),
       loadButton=find('load'),deleteButton=find('delete'),refreshButton=find('refresh');
     const projectId=()=>root.MorphorumAnimation?.getPromptStudioProjectId?.()||'';
@@ -210,6 +218,7 @@
       refreshButton.disabled=busy||!projectId();
       savedSelect.disabled=busy||!projectId();
       nameInput.disabled=busy||!draft?.ok;
+      composerUI?.refresh();
       lanes.querySelectorAll('button,input,textarea,select').forEach(el=>{
         el.disabled=!can||el.dataset.psFixed==='1';
       });
@@ -245,6 +254,7 @@
       if(redraw)renderLanes();
       else controls();
       timeline?.refresh();
+      composerUI?.invalidate();composerUI?.refresh();
     }
     function makeLane(name){
       const track=draft.tracks[name];
@@ -354,7 +364,7 @@
         const snapshot=await editor.getPromptStudioEditorSnapshot();
         const result=beginDraft(snapshot,bridge);
         if(!result.ok){status(result.message,true);return;}
-        draft=result;timeline?.reset();invalid=false;blocked=false;baselineBlocked=false;
+        draft=result;timeline?.reset();composerUI?.reset();invalid=false;blocked=false;baselineBlocked=false;
         savedId='';savedEtag='';savedRevision=-1;
         nameInput.value=(result.snapshot.context.name||'Storyboard')+' Prompt Draft';
         previewClear();showContext();renderLanes();
@@ -366,7 +376,7 @@
     function reset(){
       if(!draft?.ok||draft.applied)return;
       draft.tracks=clone(draft.original);draft.revision+=1;
-      timeline?.reset();
+      timeline?.reset();composerUI?.reset();
       invalid=false;blocked=false;previewClear();renderLanes();
       status('Prompt Studio draft restored to its imported baseline. Project Editor unchanged.');
     }
@@ -412,7 +422,7 @@
         const result=await root.MorphorumAnimation?.applyPromptStudioTransfer?.(draft.snapshot,draft.tracks);
         if(!result?.ok){blocked=result?.code!=='CANCELLED';status(result?.message||'Apply failed.',true);return;}
         if(result.applied){
-          draft.applied=true;timeline?.reset();previewClear();renderLanes();
+          draft.applied=true;timeline?.reset();composerUI?.reset();previewClear();renderLanes();
           status('Prompts staged in Project Editor. Save Project there to persist.');
           onEditor?.();
         }else status(result.message||'No prompt changes to apply.');
@@ -470,7 +480,7 @@
         if(projectId()!==id)throw new Error('Project changed while loading draft.');
         const value=restoreDraft(loaded.data.draft,live,bridge);
         if(!value.ok)throw new Error(value.message);
-        draft=value;timeline?.reset();
+        draft=value;timeline?.reset();composerUI?.reset();
         invalid=false;blocked=false;baselineBlocked=!value.compatible;
         savedId=identifier;savedEtag=loaded.etag;savedRevision=0;
         nameInput.value=loaded.data.draft.name;
@@ -536,6 +546,15 @@
       finally{busy=false;controls();}
     }
 
+    composerUI=psComposer?.mount({
+      panel:composerPanel,getDraft:()=>draft,
+      onChange:next=>{
+        if(!draft?.ok||draft.applied)return problem('NO_DRAFT','No editable Studio draft.');
+        draft.composer=next;draft.revision+=1;previewClear();controls();return {ok:true};
+      },
+      onCommit:next=>applyTracks(next,'composer'),
+      onNotice:(message,error)=>{if(error)status(message,true);}
+    })||null;
     timeline=root.MorphorumPromptStudioTimeline?.mount({
       panel:timelinePanel,getDraft:()=>draft,onTracks:applyTracks,
       onNotice:(message,error)=>{status(message,error);renderLanes();},
