@@ -4467,3 +4467,30 @@ dialog#animation-deforum-dialog {
 .ps5-diagnostics{font-size:.79rem}
 .ps5-diagnostics p{margin:.35rem 0;overflow-wrap:anywhere}
 @media(max-width:600px){.ps5-settings{grid-template-columns:minmax(0,1fr)}}
+
+
+/* PS5.2: optional local start-image preview and consent, independent of PS4.1. */
+.ps5-vision{border:1px solid var(--border);border-radius:10px;padding:.8rem;
+  margin:.85rem 0;min-width:0}
+.ps5-vision legend{font-size:.85rem;font-weight:650;padding:0 .4rem}
+.ps5-vision p{font-size:.8rem;line-height:1.55;overflow-wrap:anywhere}
+.ps5-vision-media{display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+  margin:.55rem 0}
+.ps5-vision-media img{display:block;max-width:min(100%,320px);max-height:240px;
+  width:auto;height:auto;object-fit:contain;border-radius:8px;
+  background:rgba(0,0,0,.22);border:1px solid var(--border)}
+.ps5-vision-media img[hidden],.ps5-vision-result[hidden]{display:none!important}
+.ps5-vision-media p{flex:1 1 165px;min-width:0}
+.ps5-vision-consent{display:flex;gap:.5rem;align-items:flex-start;
+  line-height:1.5;margin:.75rem 0;font-size:.83rem}
+.ps5-vision-consent input{width:auto;flex:none;margin-top:.2rem}
+.ps5-vision-result{padding:.65rem 0;min-width:0}
+.ps5-vision-result label{display:flex;flex-direction:column;gap:.4rem;font-size:.82rem}
+.ps5-vision-result textarea{width:100%;max-width:100%;min-width:0;resize:vertical;font:inherit}
+.ps5-vision-result button{margin-top:.65rem;min-height:40px}
+.ps5-vision [data-p4="vision-status"][data-error="1"]{color:var(--warning,#f0b15f)}
+@media(max-width:600px){
+  .ps5-vision-media{flex-direction:column;align-items:stretch}
+  .ps5-vision-media img{max-width:100%}
+  .ps5-vision .ps4-actions button{flex:1 1 100%;min-height:44px}
+}

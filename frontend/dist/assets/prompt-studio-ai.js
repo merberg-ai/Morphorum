@@ -85,18 +85,36 @@
     if(result===null)throw Error('Ollama stream ended before a completed storyboard was received.');
     return result;
   }
+  // Only server-managed, checksum-addressed project source images can be previewed.
+  // Provider-supplied URLs are deliberately ignored.
+  function sourceAsset(inventory,projectId){
+    if(!inventory||!Array.isArray(inventory.assets)||typeof projectId!=='string')return null;
+    const asset=inventory.assets.find(x=>x?.kind==='source_image'&&x.project_id===projectId&&
+      x.media_type==='image/png'&&x.id==='source-image'&&
+      /^[0-9a-f]{64}$/.test(x.sha256||'')&&Number.isSafeInteger(x.bytes)&&x.bytes>0);
+    return asset?{sha256:asset.sha256,bytes:asset.bytes,projectId}:null;
+  }
+  function appendVisionDescription(idea,description){
+    if(typeof idea!=='string'||typeof description!=='string')return null;
+    const text=description.trim();
+    if(text.length<8||text.length>2400)return null;
+    const next=[idea.trim(),'Visual reference from the attached start image (editable description): '+text]
+      .filter(Boolean).join('\n\n');
+    return next.length<=6000?next:null;
+  }
   function mount({panel,getDraft,onCommit,onNotice,bridge}={}){
     if(!panel)throw Error('AI Story Director container is missing.');
     let working=false,pending=null,controller=null,sequence=0,models=[],connected=false;
     let elapsedTimer=null,startedAt=0,progressState=null;
     let profileCatalog=null,profileFetchPending=false,profileFetchAttempted=false,profileFamily='';
+    let imageAsset=null,imageAssetKey='',imageBusy=false,visionResult=null,activeVision=false;
     const node=document.createElement('section');node.className='ps4-director';
     node.innerHTML=`
       <div class="ps4-head"><div><h3>AI Story Director</h3>
         <p class="muted">Use Ollama on this computer or an explicitly trusted private LAN host.
-        Only your story, existing prompt text and project timing/model family are sent.
-        No files or images are transmitted.</p></div>
-        <span class="ps4-provider">Ollama · text only</span></div>
+        Normally only your story, existing prompts and project timing/model family are sent.
+        Image analysis is separate, optional, and requires explicit per-request consent.</p></div>
+        <span class="ps4-provider">Ollama · text / opt-in vision</span></div>
       <div class="ps4-settings">
         <label>Ollama endpoint <input data-p4="endpoint" type="text"
           value="http://127.0.0.1:11434" maxlength="200" spellcheck="false" autocomplete="off"
@@ -128,6 +146,42 @@
                 placeholder="Same illustration technique, palette, camera style…"></textarea></label>
           </div>
           <p class="muted">Nonempty locks are repeated literally in accepted generated prompts where missing. They do not change render settings. Refine Selected changes just one positive keyframe; unrelated lanes stay intact.</p>
+        </fieldset>
+        <fieldset class="ps5-vision">
+          <legend>PS5.2 · Analyze attached start image (optional)</legend>
+          <p class="muted">This uses only the PNG already attached to this animation project.
+            Preview it below. Clicking Analyze transmits a resized copy to the selected
+            <strong>loopback Ollama</strong> model on this computer, after its vision capability
+            has been verified. Text-model LAN access does not grant image access.
+            No image is sent simply by opening this section.</p>
+          <div class="ps5-vision-media">
+            <img data-p4="vision-preview" alt="Attached project start image preview" hidden>
+            <p data-p4="vision-media" class="muted">Checking this project's start image…</p>
+          </div>
+          <div class="ps4-actions">
+            <button type="button" data-p4="vision-refresh" class="secondary-button compact">Refresh Start Image</button>
+          </div>
+          <label class="ps5-vision-consent">
+            <input data-p4="vision-consent" type="checkbox">
+            I authorize sending this previewed attached image to the selected local
+            Ollama vision model for this request only.
+          </label>
+          <div class="ps4-actions">
+            <button type="button" data-p4="vision-analyze" class="secondary-button compact" disabled>
+              Analyze Start Image</button>
+          </div>
+          <p class="muted" data-p4="vision-status" role="status" aria-live="polite">
+            No image analysis requested.</p>
+          <div class="ps5-vision-result" data-p4="vision-result" hidden>
+            <label>Review and edit the model's visual description
+              <textarea data-p4="vision-description" rows="4" maxlength="2400"
+                placeholder="Image description appears here after opt-in analysis."></textarea>
+            </label>
+            <button type="button" data-p4="vision-use" class="secondary-button compact">
+              Add Description to Story</button>
+            <p class="muted">Adding this text only edits the story input. It does not start
+              storyboard generation, modify existing prompts, or save the project.</p>
+          </div>
         </fieldset>
         <div class="ps4-options">
           <label>Mode <select data-p4="mode"><option value="create">Create storyboard</option>
@@ -196,7 +250,7 @@
       q('elapsed').textContent=elapsed+'s elapsed';
       const stages={connecting:'Connecting / loading model',
         responding:'Ollama connected',reasoning:'Model reasoning',
-        receiving:'Generating response',
+        receiving:'Generating response',vision:'Verifying and describing start image',
         validating:'Validating storyboard'};
       q('stage').textContent=stages[progressState.stage]||'Waiting for Ollama';
       const chars=Number.isSafeInteger(progressState.characters)?progressState.characters:0;
@@ -205,7 +259,7 @@
       q('detail').textContent=String(progressState.message||'Waiting for Ollama')+
         (thinking?' · '+thinking.toLocaleString()+' reasoning characters (content hidden)':'')+
         (chars?' · '+chars.toLocaleString()+' output characters received':'')+
-        ' · timeout after 240s';
+        ' · timeout after '+(activeVision?'150s':'240s');
     }
     function startProgress(){
       stopProgress();
@@ -223,6 +277,120 @@
     }
     function invalidate(){
       pending=null;q('review').hidden=true;q('accept').disabled=true;
+    }
+    function clearVisionResult(){
+      visionResult=null;q('vision-result').hidden=true;
+      q('vision-description').value='';
+    }
+    function visionStatus(message,bad=false){
+      q('vision-status').textContent=message;
+      q('vision-status').dataset.error=bad?'1':'0';
+    }
+    async function fetchSourceAsset(id){
+      const response=await fetch('/api/animation/projects/'+encodeURIComponent(id)+
+        '/media-inventory',{cache:'no-store'});
+      if(!response.ok)throw Error('Project media inventory HTTP '+response.status);
+      return sourceAsset(await response.json(),id);
+    }
+    async function inspectVisionAsset(force=false){
+      const d=draft(),id=d?.snapshot?.projectId||'';
+      if(!id||!d?.ok)return;
+      const key=id+':'+(d.snapshot.context?.sourceImageName||'');
+      if(!force&&(imageBusy||imageAssetKey===key))return;
+      const old=imageAsset;
+      imageAssetKey=key;imageBusy=true;imageAsset=null;
+      q('vision-preview').hidden=true;q('vision-consent').checked=false;
+      q('vision-media').textContent='Checking attached start image…';
+      clearVisionResult();
+      refresh();
+      try{
+        const asset=await fetchSourceAsset(id);
+        if(draft()!==d||imageAssetKey!==key)return;
+        imageAsset=asset;
+        if(asset){
+          const photo=q('vision-preview');
+          photo.src='/api/animation/projects/'+encodeURIComponent(id)+
+            '/source-image?v='+asset.sha256;
+          photo.hidden=false;
+          q('vision-media').textContent='Attached project image · '+
+            (d.snapshot.context?.sourceImageName||'source.png')+
+            ' · '+Math.round(asset.bytes/1024)+' KiB';
+          visionStatus(old&&old.sha256!==asset.sha256?
+            'Image changed. Review the new preview and explicitly consent again.':
+            'Review the image, select an installed vision model, then opt in.');
+        }else{
+          q('vision-media').textContent='No attached start image found. Attach one in Project Editor first.';
+          visionStatus('Image analysis unavailable without an attached project image.');
+        }
+      }catch(error){
+        if(draft()===d){q('vision-media').textContent='Could not inspect attached image.';
+          visionStatus(error.message||'Media inventory unavailable.',true);}
+      }finally{
+        if(draft()===d&&imageAssetKey===key){imageBusy=false;refresh();}
+      }
+    }
+    function isLoopbackEndpoint(){
+      try{
+        const host=new URL(q('endpoint').value).hostname;
+        return host==='localhost'||host==='127.0.0.1'||host==='[::1]'||host==='::1';
+      }catch(_){return false;}
+    }
+    async function analyzeImage(){
+      const d=draft(),asset=imageAsset;
+      if(!d?.ok||working||imageBusy||!connected||!asset||!q('vision-consent').checked||
+         !isLoopbackEndpoint()||!q('model').value)return;
+      const id=d.snapshot.projectId,rev=d.revision,sha=asset.sha256;
+      q('vision-consent').checked=false;
+      clearVisionResult();
+      working=true;activeVision=true;const seq=++sequence;controller=new AbortController();
+      refresh();startProgress();
+      progressState={stage:'vision',characters:0,
+        message:'Verifying vision capability before any image is transmitted…'};
+      renderProgress();
+      visionStatus('Analyzing the previewed image locally; Studio draft unchanged.');
+      try{
+        const response=await fetch('/api/prompt-studio/ollama/analyze-start-image',{
+          method:'POST',cache:'no-store',signal:controller.signal,
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({project_id:id,source_sha256:sha,consent:true,
+            endpoint:q('endpoint').value,model:q('model').value}),
+        });
+        const data=await response.json().catch(()=>({}));
+        if(!response.ok)throw Error(data.detail||'Image analysis failed (HTTP '+response.status+').');
+        const current=draft();
+        if(seq!==sequence)return;
+        if(current!==d||d.revision!==rev||current?.snapshot?.projectId!==id)
+          throw Error('Studio project or draft changed; discarding stale image description.');
+        // Confirm the project media was not replaced while Ollama was processing.
+        const latest=await fetchSourceAsset(id);
+        if(seq!==sequence)return;
+        if(!latest||latest.sha256!==sha||data.source_sha256!==sha||
+           data.project_id!==id||data.model!==q('model').value)
+          throw Error('Attached start image changed. Refresh the preview before retrying.');
+        if(typeof data.description!=='string'||data.description.trim().length<8||
+           data.description.length>2400)throw Error('Invalid model description.');
+        visionResult={projectId:id,sha256:sha};
+        q('vision-description').value=data.description;
+        q('vision-result').hidden=false;
+        visionStatus('Image description ready for review. Nothing was applied or saved.');
+      }catch(error){
+        if(seq===sequence)visionStatus(error.name==='AbortError'?'Image analysis cancelled.':
+          (error.message||'Image analysis failed.'),error.name!=='AbortError');
+      }finally{
+        if(seq===sequence){working=false;activeVision=false;controller=null;
+          stopProgress();refresh();}
+      }
+    }
+    function useImageDescription(){
+      const d=draft();
+      if(!visionResult||!d?.ok||d.snapshot.projectId!==visionResult.projectId||
+         imageAsset?.sha256!==visionResult.sha256||working)
+        return visionStatus('Refresh the image and repeat analysis before using this description.',true);
+      const next=appendVisionDescription(q('idea').value,q('vision-description').value);
+      if(next===null)return visionStatus('Description is invalid or the story would exceed 6000 characters.',true);
+      q('idea').value=next;
+      invalidate();refresh();
+      visionStatus('Description added to the editable story. Generate Storyboard separately.');
     }
     function context(){
       const d=draft();return Boolean(d?.ok&&!d.applied);
@@ -291,6 +459,15 @@
       q('cancel').disabled=!working;
       q('connect').disabled=working;
       q('accept').disabled=!pending||working;
+      q('vision-refresh').disabled=working||imageBusy;
+      q('vision-consent').disabled=working||imageBusy||!imageAsset;
+      q('vision-analyze').disabled=working||imageBusy||!imageAsset||!connected||
+        !q('model').value||!q('vision-consent').checked||!isLoopbackEndpoint();
+      q('vision-description').disabled=working;
+      q('vision-use').disabled=working||!visionResult;
+      // Project-owned attached images may be added after the Studio draft import.
+      if(!imageBusy&&imageAssetKey!==d.snapshot.projectId+':'+
+         (d.snapshot.context?.sourceImageName||''))void inspectVisionAsset();
     }
     function forgetModelList(){
       models=[];connected=false;invalidate();
@@ -376,7 +553,8 @@
       if(!working)return;
       ++sequence;controller?.abort();controller=null;working=false;
       stopProgress();invalidate();refresh();
-      status('Request cancelled; Morphorum will close the Ollama stream when the disconnect is detected.');
+      activeVision=false;visionStatus('Request cancelled; no prompts changed.');
+      status('Request cancelled; no Studio or Project Editor changes were made.');
     }
     async function generate(){
       const d=draft();
@@ -387,7 +565,7 @@
       const count=mode==='refine'?
         (target!==''?1:sourceTracks.positive.keyframes.length):Number(q('scenes').value);
       if(!Number.isInteger(count)||count<1||count>16)return status('Choose between 1 and 16 scenes.',true);
-      invalidate();working=true;const seq=++sequence;controller=new AbortController();
+      invalidate();working=true;activeVision=false;const seq=++sequence;controller=new AbortController();
       refresh();startProgress();
       status('Ollama generation requested. Progress and elapsed time appear above; draft unchanged.');
       try{
@@ -456,6 +634,10 @@
       invalidate();refresh();
       status('AI storyboard staged in the Studio draft. Review the timeline and Save Draft or Apply to Animation when ready.');
     }
+    q('vision-refresh').addEventListener('click',()=>void inspectVisionAsset(true));
+    q('vision-consent').addEventListener('change',refresh);
+    q('vision-analyze').addEventListener('click',()=>void analyzeImage());
+    q('vision-use').addEventListener('click',useImageDescription);
     q('connect').addEventListener('click',()=>void connect());
     q('generate').addEventListener('click',()=>void generate());
     q('cancel').addEventListener('click',cancel);
@@ -482,10 +664,16 @@
       q(key).addEventListener('input',()=>{invalidate();refresh();});
     }
     refresh();
-    return {refresh,invalidate,reset(){cancel();invalidate();forgetModelList();refresh();},
+    return {refresh,invalidate,reset(){
+        cancel();invalidate();forgetModelList();
+        imageAsset=null;imageAssetKey='';imageBusy=false;
+        q('vision-consent').checked=false;clearVisionResult();
+        q('vision-preview').hidden=true;refresh();
+      },
       getPending:()=>pending};
   }
-  const api={validateProposal,changes,setVisibility,readProgressStream,mount};
+  const api={validateProposal,changes,setVisibility,readProgressStream,sourceAsset,
+    appendVisionDescription,mount};
   if(typeof module==='object'&&module.exports)module.exports=api;
   if(root)root.MorphorumPromptStudioAI=api;
 })(typeof window==='object'?window:null);
