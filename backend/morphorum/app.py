@@ -829,6 +829,17 @@ async def api_prompt_studio_ollama_generate(payload: dict[str, Any]) -> dict[str
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
 
+# PS5.2: explicit, project-owned image consent; loopback vision only.
+@app.post("/api/prompt-studio/ollama/analyze-start-image")
+async def api_prompt_studio_analyze_start_image(payload: dict[str, Any]) -> dict[str, Any]:
+    from .prompt_studio_vision import analyze_start_image
+    from .prompt_studio_ollama import OllamaStoryError
+    try:
+        return await analyze_start_image(payload)
+    except OllamaStoryError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
 # PS4.1: incremental Ollama feedback, heartbeats and checked result events.
 @app.post("/api/prompt-studio/ollama/generate-stream")
 async def api_prompt_studio_ollama_generate_stream(
