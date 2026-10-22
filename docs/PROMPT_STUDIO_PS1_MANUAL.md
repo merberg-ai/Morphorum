@@ -92,7 +92,7 @@ The original PS4 `/api/prompt-studio/ollama/generate` endpoint waited until Olla
 
 ## PS5.1 model-family profiles and continuity: Windows/mobile acceptance
 
-**Status:** PS4 streaming Ollama generation passed owner physical tests. PS5.1 is the next experimental gate on `dev-webui`, not merged into `main`.
+**Status:** PS4/PS5.1 passed owner Windows testing. PS5.2 is now implemented on `dev-webui` for physical image/consent acceptance, not merged into `main`.
 
 1. Open **Project → Prompt Studio → AI Story Director**. Import or load a saved Studio draft. The new **Model-aware authoring** section should show the selected project's **SDXL**, **FLUX** or **Z-Image** family profile. Verify the profile description and negative-conditioning caveat match the selected family; no generator settings are changed.
 2. Enter a recurring subject identity, e.g. `the same orange cat with a torn left ear`, and a locked style, e.g. `grainy 1990s VHS footage`. Create a three-scene storyboard and inspect the AI proposal. Missing lock phrases must be repeated literally on each generated positive frame; no new LoRA tags should be invented.
@@ -102,4 +102,15 @@ The original PS4 `/api/prompt-studio/ollama/generate` endpoint waited until Olla
 6. Verify SDXL → FLUX → managed Z-Image project switching shows the correct family guidance and rejects mismatched profiles; cancel in-flight Ollama requests and verify no stale proposal is accepted. Check narrow-screen mobile layout.
 7. Accept a proposal into Studio, Save Draft, reload, and verify the versioned profile provenance survives project ZIP and Save As. Complete **Preview Changes → Apply to Animation → Save Project** and reload. Confirm the normal renderer remains untouched.
 
-**PS5.2 image capability and privacy:** not part of PS5.1. Do not expect image upload/description or automatic screenshots from this milestone. The next gated step will require explicit consent, attachment validation and Ollama vision-capability checks.
+## PS5.2 optional local start-image vision: Windows acceptance (2026-10-22)
+
+**Status:** implemented on `dev-webui`; provider tests mocked and physical Windows acceptance pending. PS5.1 was accepted. This is an *image-to-editable-description* assist, **not** a generated storyboard and not another renderer.
+
+1. Attach a **start image** in the Project Editor and save/verify the attachment. Import prompts (or load a valid saved Studio draft), open **AI Story Director → PS5.2 Analyze attached start image**, and confirm its preview is the correct project image. Use **Refresh Start Image** after replacing it.
+2. Run local Ollama **on the Morphorum host**. Select an installed **vision-capable** model from Test Connection / Models. The chosen model must return `capabilities` containing `vision` from Ollama's `/api/show`; model name/family/size alone does not qualify. The normal text Story Director can target a trusted private LAN Ollama server, but **PS5.2 image analysis is restricted to loopback** (`localhost`, `127.0.0.1`, `::1`).
+3. Review the thumbnail, check **I authorize sending this previewed attached image** for this specific request, and click **Analyze Start Image**. The checkbox resets immediately. The backend checks the image's exact SHA-256 against the preview, rejects symlink/traversal paths, validates PNG format/size/dimensions and sends a bounded downscaled JPEG only after confirming the selected model is vision capable. No other file is eligible; no image is sent by opening Prompt Studio.
+4. Edit the returned description, then click **Add Description to Story**. This only appends text to the editable Story idea field. It **does not** generate a storyboard, touch positive/negative keyframes, persist the description as project metadata or render. Generate Storyboard separately, review the proposal and explicitly Accept → Preview/Apply → Save Project as usual.
+5. Negative-path tests: no image, unchecked consent, image replaced after preview (SHA conflict), corrupt image, offline Ollama, a text-only model or absent `vision` capability, invalid returned JSON, Cancel while analyzing, then switch projects. Confirm no stale results appear and no project/Studio edits or image request are silently applied. Test responsive image preview and checkbox/button controls on Android.
+
+**Privacy:** The WebUI is intended for a trusted host/LAN; keep Ollama private. The endpoint sends a resized project image only after affirmative user consent. Image contents, model output and absolute paths are excluded from Morphorum Console messages. The backend sends no image to a user-entered remote IP, domain, URL or third-party provider. Image description quality and GPU behavior still need real Windows testing. PS5.3 compares models after this gate. PS6 remains the required audio-to-storyboard sync milestone.
+
