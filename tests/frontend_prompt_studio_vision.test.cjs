@@ -41,6 +41,8 @@ test('PS5.2 UI previews managed assets and enforces consent, loopback and sha ch
  assert.match(script,/\/api\/prompt-studio\/ollama\/analyze-start-image/);
  assert.match(script,/source_sha256:sha,consent:true/);
  assert.match(script,/q\('vision-consent'\)\.checked=false/);
+ assert.match(script,/!previewReady/);
+ assert.match(script,/data-p4="vision-preview"/);
  assert.match(script,/isLoopbackEndpoint\(\)/);
  assert.match(script,/latest\.sha256!==sha/);
  assert.match(script,/q\('idea'\)\.value=next/);

@@ -108,6 +108,7 @@
     let elapsedTimer=null,startedAt=0,progressState=null;
     let profileCatalog=null,profileFetchPending=false,profileFetchAttempted=false,profileFamily='';
     let imageAsset=null,imageAssetKey='',imageBusy=false,visionResult=null,activeVision=false;
+    let previewReady=false;
     const node=document.createElement('section');node.className='ps4-director';
     node.innerHTML=`
       <div class="ps4-head"><div><h3>AI Story Director</h3>
@@ -298,7 +299,7 @@
       const key=id+':'+(d.snapshot.context?.sourceImageName||'');
       if(!force&&(imageBusy||imageAssetKey===key))return;
       const old=imageAsset;
-      imageAssetKey=key;imageBusy=true;imageAsset=null;
+      imageAssetKey=key;imageBusy=true;imageAsset=null;previewReady=false;
       q('vision-preview').hidden=true;q('vision-consent').checked=false;
       q('vision-media').textContent='Checking attached start image…';
       clearVisionResult();
@@ -337,7 +338,7 @@
     }
     async function analyzeImage(){
       const d=draft(),asset=imageAsset;
-      if(!d?.ok||working||imageBusy||!connected||!asset||!q('vision-consent').checked||
+      if(!d?.ok||working||imageBusy||!previewReady||!connected||!asset||!q('vision-consent').checked||
          !isLoopbackEndpoint()||!q('model').value)return;
       const id=d.snapshot.projectId,rev=d.revision,sha=asset.sha256;
       q('vision-consent').checked=false;
@@ -461,7 +462,7 @@
       q('accept').disabled=!pending||working;
       q('vision-refresh').disabled=working||imageBusy;
       q('vision-consent').disabled=working||imageBusy||!imageAsset;
-      q('vision-analyze').disabled=working||imageBusy||!imageAsset||!connected||
+      q('vision-analyze').disabled=working||imageBusy||!previewReady||!imageAsset||!connected||
         !q('model').value||!q('vision-consent').checked||!isLoopbackEndpoint();
       q('vision-description').disabled=working;
       q('vision-use').disabled=working||!visionResult;
@@ -634,6 +635,17 @@
       invalidate();refresh();
       status('AI storyboard staged in the Studio draft. Review the timeline and Save Draft or Apply to Animation when ready.');
     }
+    q('vision-preview').addEventListener('load',()=>{
+      previewReady=Boolean(imageAsset&&
+        q('vision-preview').currentSrc.includes('v='+imageAsset.sha256));
+      if(previewReady)visionStatus('Preview loaded. You may consent to a single analysis request.');
+      refresh();
+    });
+    q('vision-preview').addEventListener('error',()=>{
+      previewReady=false;q('vision-consent').checked=false;
+      visionStatus('Start image preview could not load. Refresh or repair the attachment.',true);
+      refresh();
+    });
     q('vision-refresh').addEventListener('click',()=>void inspectVisionAsset(true));
     q('vision-consent').addEventListener('change',refresh);
     q('vision-analyze').addEventListener('click',()=>void analyzeImage());
@@ -666,7 +678,7 @@
     refresh();
     return {refresh,invalidate,reset(){
         cancel();invalidate();forgetModelList();
-        imageAsset=null;imageAssetKey='';imageBusy=false;
+        imageAsset=null;imageAssetKey='';imageBusy=false;previewReady=false;
         q('vision-consent').checked=false;clearVisionResult();
         q('vision-preview').hidden=true;refresh();
       },
