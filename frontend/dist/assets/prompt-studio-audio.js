@@ -45,57 +45,59 @@
   }
   function planAlignment(tracks,events,selectedIds,lockedFrames,maxFrames){
     if(!tracks?.positive?.keyframes||!tracks?.negative?.keyframes||
-       !Array.isArray(events)||!(selectedIds instanceof Set)||!(lockedFrames instanceof Set))
-      throw Error('A valid Studio draft, selected markers and lock set are required.');
+       !Array.isArray(events)||!(selectedIds instanceof Set)||
+       !(lockedFrames instanceof Set)||!Number.isInteger(maxFrames)||maxFrames<1)
+      throw Error('Valid tracks, markers, frame count and a lock set are required.');
     const result=clone(tracks),moves=[],warnings=[];
     const anchors=result.positive.keyframes;
-    const targets=events.filter(e=>selectedIds.has(e.id)&&e.enabled&&
-      Number.isInteger(e.frame)&&e.frame>0&&e.frame<maxFrames);
+    const selected=events.filter(e=>selectedIds.has(e.id)&&e.enabled&&
+      Number.isInteger(e.frame)&&e.frame>0&&e.frame<maxFrames)
+      .sort((a,b)=>a.frame-b.frame||a.time_seconds-b.time_seconds||a.id.localeCompare(b.id));
     const unique=new Map();
-    for(const event of targets){
-      if(!unique.has(event.frame))unique.set(event.frame,event);
-    }
-    if(targets.length!==unique.size)
-      warnings.push('Multiple selected beats resolve to the same frame; only the earliest is eligible.');
-    const occupied=new Set(anchors.filter(p=>p.frame===0||lockedFrames.has(p.frame))
-      .map(p=>p.frame));
-    const available=[...unique.values()].filter(e=>!occupied.has(e.frame));
-    if(anchors.length<=1)warnings.push('Create at least one positive scene after frame 0.');
-    if(!available.length)warnings.push('No available in-range selected beats after protected frames are excluded.');
-    // Assign chronologically, preserving scene order and exact prompt bytes.
-    let previous=0,assigned=0;
-    const movable=anchors.filter(p=>p.frame!==0&&!lockedFrames.has(p.frame));
-    for(let i=0;i<movable.length;i++){
-      const key=movable[i];
-      const candidates=available.filter(e=>e.frame>previous);
-      const remaining=movable.length-i-1;
-      const possible=candidates.slice(0,Math.max(0,candidates.length-remaining));
-      if(!possible.length){
-        warnings.push('Not enough distinct chronological beats for all unlocked positive scenes.');
-        break;
+    for(const event of selected)if(!unique.has(event.frame))unique.set(event.frame,event);
+    if(selected.length!==unique.size)
+      warnings.push('Selected beats sharing one frame are reduced to one candidate.');
+    const protectedFrames=new Set([0,...lockedFrames]);
+    const checkpoints=anchors.map((p,i)=>({...p,index:i,
+      locked:i===0||protectedFrames.has(p.frame)}));
+    let boundary=0;
+    for(let i=1;i<=checkpoints.length;i++){
+      if(i<checkpoints.length&&!checkpoints[i].locked)continue;
+      const end=i===checkpoints.length?maxFrames:checkpoints[i].frame;
+      const movable=checkpoints.slice(boundary+1,i);
+      let candidates=[...unique.values()].filter(e=>
+        e.frame>checkpoints[boundary].frame&&e.frame<end);
+      if(candidates.length<movable.length){
+        if(movable.length)warnings.push('Not enough distinct beats between protected scenes F'+
+          checkpoints[boundary].frame+' and '+(end===maxFrames?'end':'F'+end)+'.');
+        return {ok:false,moves:[],tracks:clone(tracks),warnings};
       }
-      const preferred=possible.reduce((a,b)=>
-        Math.abs(a.frame-key.frame)<=Math.abs(b.frame-key.frame)?a:b);
-      const originalFrame=key.frame;
-      key.frame=preferred.frame;
-      // Identity comes from the original frame, not the (possibly duplicated) text.
-      moves.push({from:originalFrame,to:preferred.frame,beat_id:preferred.id,
-        time_seconds:preferred.time_seconds,drift_seconds:preferred.drift_seconds});
-      previous=preferred.frame;assigned++;
-      available.splice(available.indexOf(preferred),1);
-    }
-    // A shortfall or collision must never generate a partial, silently staged proposal.
-    if(assigned!==movable.length){
-      return {ok:false,moves:[],tracks:clone(tracks),warnings};
+      let prior=checkpoints[boundary].frame;
+      for(let j=0;j<movable.length;j++){
+        const original=movable[j],left=movable.length-j-1;
+        const valid=candidates.filter(e=>e.frame>prior);
+        const choices=valid.slice(0,Math.max(0,valid.length-left));
+        if(!choices.length)return {ok:false,moves:[],tracks:clone(tracks),
+          warnings:[...warnings,'No chronological marker space remains.']};
+        const chosen=choices.reduce((a,b)=>
+          Math.abs(a.frame-original.frame)<=Math.abs(b.frame-original.frame)?a:b);
+        result.positive.keyframes[original.index].frame=chosen.frame;
+        if(chosen.frame!==original.frame)
+          moves.push({from:original.frame,to:chosen.frame,beat_id:chosen.id,
+            time_seconds:chosen.time_seconds,drift_seconds:chosen.drift_seconds});
+        prior=chosen.frame;
+        candidates=valid.filter(e=>e.frame>prior);
+      }
+      boundary=i;
     }
     result.positive.keyframes.sort((a,b)=>a.frame-b.frame);
     const frames=result.positive.keyframes.map(x=>x.frame);
     if(new Set(frames).size!==frames.length||
-       frames.some((f,i)=>i>0&&f<=frames[i-1])){
+       frames.some((x,i)=>i>0&&x<=frames[i-1]))
       return {ok:false,moves:[],tracks:clone(tracks),
-        warnings:[...warnings,'Proposed positions collide with an existing locked scene.']};
-    }
-    return {ok:true,moves,tracks:result,warnings};
+        warnings:[...warnings,'Beat positions would reorder or collide with a protected scene.']};
+    if(!moves.length)warnings.push('Selected beats would not move any unlocked scene.');
+    return {ok:!!moves.length,moves,tracks:result,warnings};
   }
   function mount({panel,getDraft,getLockedFrames}={}){
     if(!panel||!getDraft)throw Error('PS6.1 needs Prompt Studio and a draft supplier.');

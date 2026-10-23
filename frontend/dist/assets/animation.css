@@ -4567,3 +4567,41 @@ dialog#animation-deforum-dialog {
   .ps61-controls button{flex:1 1 100%;min-height:44px}
   .ps13-fold>summary,.ps5-fold>summary{padding:.85rem .7rem;min-height:44px}
 }
+
+
+/* PS6.2 mobile lock/marker fix: input dimensions must not inherit generic
+   full-width form controls; text must never shrink to one-character columns. */
+.ps61-workspace .ps61-locks,.ps61-workspace .ps61-markers{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));
+  min-width:0;max-width:100%;width:100%;box-sizing:border-box;
+}
+.ps61-workspace .ps61-lock,.ps61-workspace .ps61-marker{
+  display:grid;grid-template-columns:20px minmax(0,1fr);
+  align-items:center;column-gap:10px;
+  width:100%;min-width:0;max-width:100%;box-sizing:border-box;
+  padding:9px;min-height:44px;
+  overflow:hidden;overflow-wrap:normal;word-break:normal;
+}
+.ps61-workspace .ps61-lock input[type="checkbox"],
+.ps61-workspace .ps61-marker input[type="checkbox"]{
+  display:block;position:static;transform:none;float:none;
+  width:18px!important;height:18px!important;
+  min-width:18px!important;min-height:18px!important;
+  max-width:18px!important;max-height:18px!important;
+  flex:none;grid-column:1;justify-self:center;align-self:center;
+  margin:0;padding:0;aspect-ratio:1;
+}
+.ps61-workspace .ps61-lock span,.ps61-workspace .ps61-marker span{
+  display:block;grid-column:2;min-width:0;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:.81rem;line-height:1.5;word-break:normal;
+}
+.ps61-workspace .ps61-locks{max-height:320px;overflow-y:auto;overflow-x:hidden}
+.ps61-workspace .ps61-controls>*{min-width:0;max-width:100%}
+.ps61-workspace .ps61-controls input:not([type="checkbox"]),
+.ps61-workspace .ps61-controls select{width:100%;min-width:0;box-sizing:border-box}
+@media(max-width:650px){
+  .ps61-workspace .ps61-locks,.ps61-workspace .ps61-markers{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+}

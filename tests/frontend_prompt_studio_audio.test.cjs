@@ -81,3 +81,23 @@ test('PS6.1 UI only uses existing verified project endpoints, never mutates medi
  assert.doesNotMatch(code,/method:'POST'|method:'PUT'|method:'DELETE'/);
  assert.doesNotMatch(code,/onCommit|onTracks|saveProject|applyPromptStudioTransfer/);
 });
+
+
+test('PS6.2 locked middle scene separates beat candidates and preserves scene order',()=>{
+ const t={
+  positive:{kind:'prompt',interpolation:'blend',keyframes:[
+   {frame:0,value:'start'},{frame:25,value:'scene A'},
+   {frame:50,value:'locked middle'},{frame:75,value:'scene B'}]},
+  negative:{kind:'prompt',interpolation:'hold',keyframes:[{frame:0,value:'unchanged'}]}
+ };
+ const e=[{id:'a',frame:47,enabled:true,time_seconds:47/24,drift_seconds:0},
+  {id:'b',frame:79,enabled:true,time_seconds:79/24,drift_seconds:0},
+  {id:'c',frame:89,enabled:true,time_seconds:89/24,drift_seconds:0}];
+ const valid=sync.planAlignment(t,e,new Set(['a','b','c']),new Set([50]),100);
+ assert.equal(valid.ok,true);
+ assert.deepEqual(valid.tracks.positive.keyframes.map(x=>x.frame),[0,47,50,79]);
+ assert.deepEqual(valid.tracks.negative,t.negative);
+ const bad=sync.planAlignment(t,e,new Set(['b','c']),new Set([50]),100);
+ assert.equal(bad.ok,false);
+ assert.deepEqual(bad.tracks,t);
+});
