@@ -16,7 +16,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
 
-**Status:** **PS0–PS5.3 UI accepted on Windows; PS6.1 Motion Studio cue import, non-destructive scene-alignment preview and collapsible Studio sections implemented on `dev-webui`, Windows test pending; `main` unchanged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS6.1 saved/detected WAV marker and frame-alignment physical acceptance is the next gate; formal cross-model render studies remain optional evidence rather than an untested model default.
+**Status:** **PS0–PS6.1 owner Windows-accepted (PS6.1 preview function); PS6.2 guarded scene-alignment staging, native Undo/Redo, audio fingerprint persistence and mobile layout repair implemented on `dev-webui`, Windows acceptance pending; `main` unchanged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS6.2 staging, saved-draft reload, mobile layout and end-to-end audio render acceptance is the next gate; formal cross-model render studies remain optional evidence rather than an untested model default.
 
 - Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
 - Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
@@ -84,7 +84,7 @@ Setting requires_grad=True on inference tensor outside InferenceMode is not allo
 
 ## Project Editor prompt/keyframe UX
 
-The Prompt Studio PS0–PS9 roadmap supersedes this open-ended item. PS0–PS5.3 have owner UI acceptance; PS6.1 read-only audio preview requires Windows testing, and PS6.2–PS9 require separate implementation/acceptance gates.
+The Prompt Studio PS0–PS9 roadmap supersedes this open-ended item. PS0–PS5.3 have owner UI acceptance; PS6.1 beat preview passed owner functional Windows testing; PS6.2 staging and mobile layout await physical acceptance, and later PS6/PS7–PS9 remain gated.
 
 ### PS1.3 Prompt Studio manual workspace (2026-10-21)
 
@@ -127,3 +127,11 @@ The user observed silent "waiting for Ollama" behavior. Replaced the WebUI's one
 - Filter enabled kick/snare/highs markers by time range, select from an accessible beat timeline or list (up to 120 visible per filter/range), view WAV SHA/source metadata, exact timestamp, snapped integer frame and drift. Frame mapping: `floor(seconds * fps + 0.5)` and **reject** out-of-animation frames rather than clamp. Flag marker collisions and missing/disabled/out-of-range cues.
 - Lock existing positive scenes, keep frame 0 fixed, preview chronological beat-to-scene position changes with exact original prompt/LoRA text and untouched negative lane. Insufficient distinct beat frames, lane locks and destination collisions block previews. This milestone only **previews** and discards: no changes to Studio drafts, camera schedules, project JSON, audio file or Ollama provider requests. PS6.2 must add confirmation-gated staging, audio provenance/revalidation, undo/redo, stale-source handling and actual saved/rendered acceptance.
 - Prompt Studio's Saved Drafts, Composer and Manual Prompt sections, plus AI Director's PS5 authoring/vision/comparison, use native expandable disclosures to reduce clutter while leaving the primary Director accessible. Syntax and frontend regression tests added; acceptance includes Android layout and old workflow regression.
+
+
+### PS6.2 checked audio alignment staging and mobile lock layout (2026-10-23)
+- Implemented on `dev-webui`: reuses PS6.1 beat selection, but **Preview Beat Alignment** now compares a read-only server audio context stamp (verified stored WAV SHA-256, saved-marker sidecar digest, attached soundtrack SHA/offset, project FPS and frame count), and **Stage Alignment in Studio Draft** requires explicit confirmation and **rechecks the same context after confirmation**. A stale or missing source, changed marker edit, new soundtrack/offset or FPS/frames blocks staging. Existing Visual Prompt Timeline history handles Undo/Redo.
+- Protect frame 0, positive scene locks **and ordering across locked scenes**; decline incomplete or colliding proposals. Keep negative lane, prompts/LoRA bytes, source WAV, audio attachment and camera motion unchanged. Stage only prompt keyframe positions in the unsaved Studio draft; reviewed Prompt Studio Apply → Project Editor Save still required.
+- Optional validated `audio_alignment` field in portable v1 Studio drafts records source SHA, stamp, timing, marker mode, selected beat IDs, actual moves and time. Loading older drafts remains compatible. Revalidate before saved draft write, Preview Changes or Apply to Project Editor; subsequent manual track edits/Undo clear no-longer-valid audio provenance. **Nonzero soundtrack export offset is explicitly blocked** pending offset-aware sync, to avoid implying the video will be synchronized when its audio is shifted.
+- Fix reported Android screenshot: PS6 scene-lock/beat-marker rows use two explicit grid columns (18px checkbox and flexible ellipsis text), responsive single-column list, bounded scroll container and no inherited full-width checkboxes. Added JS/CSS behavior checks; owner should verify on phone before final acceptance.
+- Next increment of the broader PS6 milestone: verified waveform timing with export offsets where supported, scene entrances/climaxes and musical sections, final short physical Windows audio-synchronized render; keep `main` untouched.
