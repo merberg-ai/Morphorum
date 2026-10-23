@@ -76,11 +76,10 @@
       }
       const preferred=possible.reduce((a,b)=>
         Math.abs(a.frame-key.frame)<=Math.abs(b.frame-key.frame)?a:b);
+      const originalFrame=key.frame;
       key.frame=preferred.frame;
-      const from=tracks.positive.keyframes.find(p=>p.value===key.value&&
-        !moves.some(m=>m.from===p.frame));
-      // Repeated prompt text is legal. Use original anchor position by order instead.
-      moves.push({from:movable[i].frame,to:preferred.frame,beat_id:preferred.id,
+      // Identity comes from the original frame, not the (possibly duplicated) text.
+      moves.push({from:originalFrame,to:preferred.frame,beat_id:preferred.id,
         time_seconds:preferred.time_seconds,drift_seconds:preferred.drift_seconds});
       previous=preferred.frame;assigned++;
       available.splice(available.indexOf(preferred),1);
