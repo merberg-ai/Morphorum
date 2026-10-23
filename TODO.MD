@@ -16,7 +16,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
 
-**Status:** **PS0–PS5.1 Windows-accepted; PS5.2 optional consent-gated local vision implemented on `dev-webui` for Windows tests, `main` unchanged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS5.2 physical vision and privacy testing is the next gate.
+**Status:** **PS0–PS5.2 owner Windows-accepted; PS5.3 serial Ollama model-comparison UI implemented on `dev-webui` for Windows evaluation, `main` unchanged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS5.3 physical model evaluation and render comparison is the next gate.
 
 - Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
 - Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
@@ -84,7 +84,7 @@ Setting requires_grad=True on inference tensor outside InferenceMode is not allo
 
 ## Project Editor prompt/keyframe UX
 
-The Prompt Studio PS0–PS9 roadmap supersedes this open-ended item. PS1–PS3 are Windows-accepted, PS4 awaits physical acceptance, and PS5–PS9 require separate implementation and test gates.
+The Prompt Studio PS0–PS9 roadmap supersedes this open-ended item. PS0–PS5.2 are owner Windows-accepted; PS5.3 awaits real-model and renderer acceptance. PS6–PS9 require separate implementation and test gates.
 
 ### PS1.3 Prompt Studio manual workspace (2026-10-21)
 
@@ -114,3 +114,9 @@ The user observed silent "waiting for Ollama" behavior. Replaced the WebUI's one
 - Implemented on `dev-webui`: read-only versioned prompt profile catalog (`ps5-sdxl-v1`, `ps5-flux-v1`, `ps5-zimage-v1`), strict family selection, explicit recurring subject/style immutable text locks (max 1000 chars each), targeted Refine one existing positive frame and frame-preserving negative-lane merge when negative generation is explicitly enabled.
 - Existing PS4 streaming Ollama request path, cancellation, provenance, editor/studio isolation, and native rendering unchanged. Old PS4 generic profile remains a valid default for clients without `profile`; only PS5 WebUI opts in. Generated proposals carry heuristic word counts and warning labels, not CLIP tokenizer output.
 - **PS5.1 Windows-accepted (2026-10-22). PS5.2 implemented, Windows testing pending:** project-owned `assets/source.png` only, explicit preview and checkbox consent per request, SHA-256 preview match and bounded PNG decoding/JPEG reduction, loopback-only Ollama endpoint, verified `/api/show` `vision` capability before sending any image, editable response and explicit Add Description to Story. Invalid/unknown capabilities, mismatched images, symlinks, paths/URLs and malformed responses fail closed; no changes to Studio draft, project, audio or renderer. Automated mocked-provider tests added; physical Windows vision and mobile privacy acceptance remain outstanding. **PS5.3** evaluate actual local models on Windows, not assume performance. PS6 audio synchronization remains required. Do not merge `main`.
+
+
+### PS5.3 serial local model evaluation (2026-10-23)
+- On `dev-webui`, **PS5.3 Compare local Ollama models** runs two user-selected installed text models sequentially through one chosen, fixed 96-frame/24-FPS benchmark case (horror, same-character, landscape or synthetic mixed-LoRA refinement). It reuses the PS4.1 bounded `/api/prompt-studio/ollama/generate-stream` contract; it does not send active project prompts, images or audio, automatically load LoRA weights, or modify Studio drafts/renderer.
+- Side-by-side outputs include individual frame prompts, returned Ollama token/evaluation metrics where available, request elapsed time, per-model failures, explicit human fidelity/continuity/clarity ratings and manually recorded *physical* render spot-check status. Exports one JSON report only on user click; no backend/database persistence and **no automatic model winner**. Model name/size alone does not establish quality.
+- Added deterministic JS fixture/result-validation tests and syntax workflow coverage. **Next gate:** owner Windows test two installed local models, four cases, SDXL/FLUX/managed Z-Image family context, repeated runs, cancellation, failure recovery, and same-settings actual image render comparison. Confirm PS5.2 privacy remains unchanged. No `main` promotion without separate approval.

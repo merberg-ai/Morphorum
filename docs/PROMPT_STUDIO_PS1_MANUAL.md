@@ -92,7 +92,7 @@ The original PS4 `/api/prompt-studio/ollama/generate` endpoint waited until Olla
 
 ## PS5.1 model-family profiles and continuity: Windows/mobile acceptance
 
-**Status:** PS4/PS5.1 passed owner Windows testing. PS5.2 is now implemented on `dev-webui` for physical image/consent acceptance, not merged into `main`.
+**Status:** PS4/PS5.1/PS5.2 passed owner Windows testing. PS5.3 model comparisons are implemented on `dev-webui` for owner physical acceptance; not merged into `main`.
 
 1. Open **Project → Prompt Studio → AI Story Director**. Import or load a saved Studio draft. The new **Model-aware authoring** section should show the selected project's **SDXL**, **FLUX** or **Z-Image** family profile. Verify the profile description and negative-conditioning caveat match the selected family; no generator settings are changed.
 2. Enter a recurring subject identity, e.g. `the same orange cat with a torn left ear`, and a locked style, e.g. `grainy 1990s VHS footage`. Create a three-scene storyboard and inspect the AI proposal. Missing lock phrases must be repeated literally on each generated positive frame; no new LoRA tags should be invented.
@@ -104,7 +104,7 @@ The original PS4 `/api/prompt-studio/ollama/generate` endpoint waited until Olla
 
 ## PS5.2 optional local start-image vision: Windows acceptance (2026-10-22)
 
-**Status:** implemented on `dev-webui`; provider tests mocked and physical Windows acceptance pending. PS5.1 was accepted. This is an *image-to-editable-description* assist, **not** a generated storyboard and not another renderer.
+**Status:** owner Windows-accepted (2026-10-23); automated provider/privacy test coverage retained. PS5.1 was accepted. This is an *image-to-editable-description* assist, **not** a generated storyboard and not another renderer.
 
 1. Attach a **start image** in the Project Editor and save/verify the attachment. Import prompts (or load a valid saved Studio draft), open **AI Story Director → PS5.2 Analyze attached start image**, and confirm its preview is the correct project image. Use **Refresh Start Image** after replacing it.
 2. Run local Ollama **on the Morphorum host**. Select an installed **vision-capable** model from Test Connection / Models. The chosen model must return `capabilities` containing `vision` from Ollama's `/api/show`; model name/family/size alone does not qualify. The normal text Story Director can target a trusted private LAN Ollama server, but **PS5.2 image analysis is restricted to loopback** (`localhost`, `127.0.0.1`, `::1`).
@@ -114,3 +114,19 @@ The original PS4 `/api/prompt-studio/ollama/generate` endpoint waited until Olla
 
 **Privacy:** The WebUI is intended for a trusted host/LAN; keep Ollama private. The endpoint sends a resized project image only after affirmative user consent. Image contents, model output and absolute paths are excluded from Morphorum Console messages. The backend sends no image to a user-entered remote IP, domain, URL or third-party provider. Image description quality and GPU behavior still need real Windows testing. PS5.3 compares models after this gate. PS6 remains the required audio-to-storyboard sync milestone.
 
+
+
+## PS5.3 two-model comparison: owner Windows acceptance (2026-10-23)
+
+**Status:** model evaluation tools implemented on `dev-webui`; automated browser tests pass, but physical model-quality and render checks remain pending. PS5.2 image analysis is already owner-accepted.
+
+1. Open **Project → Prompt Studio → AI Story Director** and import or load an editable Studio draft. Choose a project with the family to evaluate (**SDXL**, **FLUX** or **managed Z-Image**). This family selects the appropriate authoring profile; comparison does not change the checkpoint or render anything.
+2. Test Connection / Models with local or explicitly opted-in private-LAN Ollama. Under **PS5.3 Compare local Ollama models**, select a fixed case and **two different installed Ollama models** as candidates A and B. For example, a smaller 4B and larger 9B candidate *if installed*; names and parameters are informational, not evidence of quality.
+3. Press **Compare Models**. Morphorum runs exactly the same built-in case for A then B using PS4.1 streamed generation and strict server frame assignment. Compare happens sequentially to reduce deliberate concurrent VRAM load. Watch progress and elapsed seconds. Each candidate may take up to the existing 240-second generation cap. Cancel discards partial comparison results. An invalid model/response should produce a recorded error without modifying the Studio draft.
+4. Expand each candidate scene to inspect its exact generated positive prompt. Score **Instruction fidelity**, **Scene continuity**, and **Prompt clarity** manually. Ollama-reported evaluation time and token count are *provider metrics*, not render speed or image-quality measures. Cold-model loading, caching, sampling variability and local resources complicate speed comparisons; repeat runs before drawing conclusions.
+5. For **mixed-LoRA**, the case uses synthetic `<lora:EvalInkStyle:0.65>` / `<lora:EvalAtmosphere:0.35>` placeholders. These are *not installed adapters*, and their exact preservation is handled by Morphorum's LoRA refinement logic. Replace these with your own compatible LoRAs if you manually use the prompts in a render. Do not label model correctness or live LoRA effects as verified by this test.
+6. Click **Copy Prompts for Render Spot-check**, then render samples through the normal Morphorum generation workflow. For fair candidate comparisons, hold image checkpoint, seed, resolution, steps, CFG, sampler, LoRA weights and other rendering settings constant per family. Test SDXL, FLUX and managed Z-Image independently where supported. Record whether each actual render passed or had visible errors using **Physical render spot-check** on the evaluation card.
+7. Select **Export JSON Report** to download cases, prompts, metrics, manual ratings and render outcomes. The report is generated only when requested; the comparison panel neither saves it to the server nor applies prompts to Studio. Reports are only comparable when benchmark case, family, model versions and generation settings match.
+8. Negative-path checks: only one model connected, same model A/B, offline Ollama, malformed model JSON, cancelled first/second model, switching projects mid-comparison, mobile responsive cards, return to normal Generate Storyboard, and PS5.2 explicit image consent. Verify no project renders, files or prompt tracks are changed as a side effect.
+
+**Acceptance boundary:** PS5.3 is the tooling for evaluating models, **not an automatic declaration of the best model**. Record real Windows tests and short physical renders before selecting a recommended local model. PS6 remains the separately gated, required Motion Studio audio-to-storyboard synchronization phase.
