@@ -270,10 +270,18 @@
       if(!events||!source)return;
       discard();
       const d=getDraft();
+      const attachmentNote=source.soundtrack_sha256===null?
+        'No attached export soundtrack yet. This preview uses a saved Motion Studio WAV.':
+        source.soundtrack_sha256===source.sha256?
+          'WAV matches attached project soundtrack.':
+          'Attached soundtrack has a different checksum (e.g. converted compressed audio). Verify the WAV matches its content.';
+      const offset=source.soundtrack_offset_seconds||0;
       q('identity').textContent='Verified project WAV '+source.sha256.slice(0,12)+
         '… · '+source.duration.toFixed(3)+'s · '+source.marker_mode+
-        ' · project '+d.snapshot.context.fps+' FPS / '+d.snapshot.context.maxFrames+
-        ' frames. Source timestamps map to nearest frame; out-of-range markers are rejected.';
+        ' · '+d.snapshot.context.fps+' FPS / '+d.snapshot.context.maxFrames+
+        ' frames. Source timestamps snap to nearest frame; out-of-range rejected. '+
+        attachmentNote+(Math.abs(offset)>1e-6?
+          ' Export audio offset '+offset.toFixed(3)+'s requires separate timing correction.':'');
       const warn=q('warnings');warn.replaceChildren();
       for(const message of events.warnings){
         const p=document.createElement('p');p.textContent=message;warn.appendChild(p);
@@ -392,6 +400,11 @@
       const p=pending,d=getDraft();
       if(!p||staging||loading||!liveMatches(d,p.revision,p.original,p.token)||
          p!==pending)return status('Preview is stale. Re-run Preview Beat Alignment.',true);
+      if(source.soundtrack_offset_seconds!==null&&
+         Math.abs(source.soundtrack_offset_seconds)>1e-6)
+        return status('Attached soundtrack has a nonzero export offset. Raw beat frames '+
+          'would not align with exported audio. Set offset to 0 or use the upcoming '+
+          'offset-aware sync before staging.',true);
       if(!root.MorphorumDialog?.confirm)
         return status('Confirmation dialog unavailable. No scenes were moved.',true);
       staging=true;refresh();

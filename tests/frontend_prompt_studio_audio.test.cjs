@@ -106,3 +106,13 @@ test('PS6.2 locked middle scene separates beat candidates and preserves scene or
  assert.equal(bad.ok,false);
  assert.deepEqual(bad.tracks,t);
 });
+
+
+test('PS6.2 nonzero attached soundtrack export offset blocks unsafe staging',()=>{
+ const src=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets',
+   'prompt-studio-audio.js'),'utf8');
+ assert.match(src,/Math\.abs\(source\.soundtrack_offset_seconds\)>1e-6/);
+ assert.match(src,/Raw beat frames/);
+ assert.match(src,/offset-aware sync/);
+ assert.match(src,/soundtrack_sha256===source\.sha256/);
+});
