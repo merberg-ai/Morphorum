@@ -1,4 +1,4 @@
-/* PS6.1: read-only project WAV event import and deterministic alignment preview. */
+/* PS6.2: project-owned beat alignment with consent, source freshness and undoable staging. */
 (function(root){
   'use strict';
   const clone=value=>JSON.parse(JSON.stringify(value));
@@ -99,13 +99,14 @@
     if(!moves.length)warnings.push('Selected beats would not move any unlocked scene.');
     return {ok:!!moves.length,moves,tracks:result,warnings};
   }
-  function mount({panel,getDraft,getLockedFrames}={}){
+  function mount({panel,getDraft,getLockedFrames,onStage,onUndo,onRedo}={}){
     if(!panel||!getDraft)throw Error('PS6.1 needs Prompt Studio and a draft supplier.');
     panel.innerHTML=[
-      '<div class="ps61-head"><div><h3>PS6.1 · Audio beat-to-scene preview</h3>',
-      '<p class="muted">Inspect a WAV already analyzed in Motion Studio. Saved manual',
-      ' marker edits take priority over detected beats. This step previews frame placement',
-      ' only. No audio, prompt, camera motion or project files are changed.</p></div></div>',
+      '<div class="ps61-head"><div><h3>PS6.2 · Audio beat-to-scene synchronization</h3>',
+      '<p class="muted">Import an analyzed project WAV and review the exact beat-to-frame',
+      ' mapping. Saved manual marker edits take priority over detected beats. Staging',
+      ' requires fresh source verification and confirmation. No soundtrack or camera',
+      ' schedules are overwritten.</p></div></div>',
       '<div class="ps61-controls">',
       '<label>Project-owned analyzed WAV<select data-a6="wav"></select></label>',
       '<button type="button" class="secondary-button compact" data-a6="refresh">Refresh WAVs</button>',
@@ -136,20 +137,31 @@
       ' data-a6="plan">Preview Beat Alignment</button>',
       '<button type="button" class="secondary-button compact" data-a6="discard">Discard Preview</button></div>',
       '<section data-a6="review" class="ps61-review" hidden>',
-      '<h4>Proposed scene positions (read-only)</h4><p class="muted"',
+      '<h4>Proposed scene positions</h4><p class="muted"',
       ' data-a6="review-note"></p><div data-a6="diff"></div>',
-      '<p class="muted">PS6.1 does not apply or save positions. PS6.2 will introduce',
-      ' confirmation-gated, revision-safe staging after preview acceptance.</p>',
-      '</section></div>'
+      '<div class="ps4-actions"><button type="button" class="primary-button compact"',
+      ' data-a6="stage" disabled>Stage Alignment in Studio Draft</button></div>',
+      '<p class="muted">Stage changes only the editable Prompt Studio positive lane.',
+      ' Use Undo / Redo below, then Preview Changes → Apply to Animation → Save Project.',
+      ' The actual render is a separate action.</p></section>',
+      '<div class="ps4-actions">',
+      '<button type="button" class="secondary-button compact" data-a6="undo">',
+      'Undo Studio Change</button>',
+      '<button type="button" class="secondary-button compact" data-a6="redo">',
+      'Redo Studio Change</button></div></div>'
     ].join('');
     const q=k=>panel.querySelector('[data-a6="'+k+'"]');
     let items=[],source=null,events=null,signature='',project='',loading=false,requestId=0;
+    let pending=null,staging=false;
     const selection=new Set(),locks=new Set();
     function status(s,error=false){q('status').textContent=s;q('status').dataset.error=error?'1':'0';}
-    function discard(){q('review').hidden=true;q('diff').replaceChildren();}
+    function discard(){
+      pending=null;q('review').hidden=true;q('diff').replaceChildren();
+      q('stage').disabled=true;
+    }
     function invalidate(){discard();if(events)render();}
     function reset(){
-      ++requestId;project='';source=null;events=null;items=[];signature='';
+      ++requestId;project='';source=null;events=null;items=[];signature='';staging=false;
       selection.clear();locks.clear();q('wav').replaceChildren();
       q('loaded').hidden=true;discard();
       status('Choose a project and a Motion Studio analyzed WAV.');refresh();
@@ -158,8 +170,13 @@
       const d=getDraft(),id=d?.snapshot?.projectId||'';
       if(project&&project!==id){reset();return;}
       if(!d?.ok||d.applied){q('loaded').hidden=true;return;}
-      q('load').disabled=loading||!q('wav').value;
-      q('refresh').disabled=loading;
+      q('load').disabled=loading||staging||!q('wav').value;
+      q('refresh').disabled=loading||staging;
+      q('plan').disabled=loading||staging||!events;
+      q('stage').disabled=staging||!pending;
+      q('discard').disabled=staging;
+      q('undo').disabled=staging;
+      q('redo').disabled=staging;
       if(events&&source&&signature!==contextSignature(d)){
         selection.clear();events=null;discard();q('loaded').hidden=true;
         status('Studio FPS, frame count or project changed; reload beats before preview.');
@@ -206,14 +223,20 @@
       loading=true;refresh();status('Loading verified WAV events and saved Motion Studio marker edits…');
       q('loaded').hidden=true;discard();
       try{
-        const [a,m]=await Promise.all([
+        const [a,m,identity]=await Promise.all([
           json(endpoint(id)+'/motion-lab/audio/'+sha+'/analysis'),
-          json(endpoint(id)+'/motion-lab/audio-markers/'+sha)
+          json(endpoint(id)+'/motion-lab/audio-markers/'+sha),
+          json(endpoint(id)+'/prompt-studio/audio-context/'+sha)
         ]);
         if(token!==requestId||getDraft()!==d)return;
         if(a.analysis?.source_sha256!==sha||
-           (m.markers&&m.markers.source_sha256!==sha))
-          throw Error('Audio source identity changed during loading.');
+           (m.markers&&m.markers.source_sha256!==sha)||
+           identity.source_sha256!==sha||
+           identity.project_id!==id||
+           identity.fps!==Number(d.snapshot.context.fps)||
+           identity.max_frames!==Number(d.snapshot.context.maxFrames)||
+           identity.marker_mode!==(m.markers?'saved-edits':'detected'))
+          throw Error('Audio source, markers or saved project timing changed. Reload Project Editor.');
         const analysis=a.analysis,marked=m.markers;
         const duration=Number(analysis.duration_seconds);
         if(marked&&Math.abs(marked.duration_seconds-duration)>.02)
@@ -223,6 +246,9 @@
           Number(d.snapshot.context.maxFrames),{saved:Boolean(marked)});
         source={sha256:sha,duration,project_id:id,
           marker_mode:marked?'saved-edits':'detected',
+          stamp:identity.stamp,markers_sha256:identity.markers_sha256,
+          soundtrack_sha256:identity.soundtrack_sha256,
+          soundtrack_offset_seconds:identity.soundtrack_offset_seconds,
           analysis_version:analysis.events?.analysis_version||null};
         events=e;signature=contextSignature(d);project=id;
         selection.clear();locks.clear();
@@ -285,6 +311,7 @@
       const lockBox=q('locks');lockBox.replaceChildren();
       for(const p of d.tracks.positive.keyframes){
         const row=document.createElement('label');row.className='ps61-lock';
+        row.title='Lock positive scene at frame '+p.frame+' · '+p.value.slice(0,240);
         const input=document.createElement('input');input.type='checkbox';
         input.checked=p.frame===0||locks.has(p.frame);
         input.disabled=p.frame===0;
@@ -292,40 +319,127 @@
           if(input.checked)locks.add(p.frame);else locks.delete(p.frame);
           discard();
         });
-        row.append(input,document.createTextNode('Keep frame '+p.frame+
-          (p.frame===0?' (always fixed)':'')+' · '+p.value.slice(0,65)));
-        lockBox.appendChild(row);
+        const summary=document.createElement('span');summary.className='ps61-lock-text';
+        summary.textContent='Keep F'+p.frame+(p.frame===0?' (fixed)':'')+' · '+
+          p.value.replace(/\s+/g,' ').slice(0,90);
+        row.append(input,summary);lockBox.appendChild(row);
       }
     }
-    function preview(){
-      if(!events||!source)return;
-      const d=getDraft();
+    function liveMatches(d,rev,original,token){
+      return token===requestId&&getDraft()===d&&d?.ok&&!d.applied&&
+        d.revision===rev&&JSON.stringify(d.tracks)===original&&
+        source?.project_id===d.snapshot.projectId&&
+        signature===contextSignature(d)&&
+        !getLockedFrames?.().has('positive');
+    }
+    async function freshContext(id,sha,stamp){
+      const fresh=await json(endpoint(id)+'/prompt-studio/audio-context/'+sha);
+      if(fresh.project_id!==id||fresh.source_sha256!==sha||
+         fresh.stamp!==stamp||fresh.marker_mode!==source?.marker_mode)
+        throw Error('Saved WAV, markers, soundtrack/offset or project timing changed. Reload Beats and preview again.');
+      return fresh;
+    }
+    async function preview(){
+      if(!events||!source||loading||staging)return;
+      const d=getDraft(),revision=d?.revision,token=requestId,
+        original=JSON.stringify(d?.tracks);
       if(!d?.ok||d.applied||signature!==contextSignature(d)||
          source.project_id!==d.snapshot.projectId){
-        discard();return status('Audio mapping became stale. Reload beats.',true);
+        discard();return status('Audio mapping became stale. Reload Beats.',true);
       }
       if(getLockedFrames?.().has('positive')){
-        discard();return status('Positive lane is locked in the Visual Prompt Timeline. Unlock it to preview movement.',true);
+        discard();return status('Positive lane is locked in the Visual Prompt Timeline.',true);
       }
-      const current=filtered();
-      const proposed=planAlignment(d.tracks,current,selection,locks,
-        d.snapshot.context.maxFrames);
-      const diff=q('diff');diff.replaceChildren();q('review').hidden=false;
+      const chosen=filtered(),selected=new Set([...selection].filter(x=>chosen.some(y=>y.id===x)));
+      if(!selected.size||selected.size>120){
+        discard();return status('Select between 1 and 120 visible beats before previewing.',true);
+      }
+      const proposed=planAlignment(d.tracks,chosen,selected,locks,d.snapshot.context.maxFrames);
+      discard();q('review').hidden=false;
+      const diff=q('diff');
       for(const message of proposed.warnings){
-        const p=document.createElement('p');p.className='ps61-warning';p.textContent=message;diff.appendChild(p);
+        const p=document.createElement('p');p.className='ps61-warning';
+        p.textContent=message;diff.appendChild(p);
       }
       for(const move of proposed.moves){
-        const p=document.createElement('p');
+        const p=document.createElement('p');p.className='ps61-move';
         p.textContent='Scene F'+move.from+' → F'+move.to+' · '+move.beat_id+
           ' at '+move.time_seconds.toFixed(3)+'s (drift '+
           (move.drift_seconds*1000).toFixed(1)+'ms)';
         diff.appendChild(p);
       }
       q('review-note').textContent=proposed.ok?
-        proposed.moves.length+' positive scene(s) would move. Frame 0, locked scenes, negative prompts and every prompt character remain intact.':
-        'No safe complete alignment for this selection. Adjust beat selection, locks or project length.';
-      status(proposed.ok?'Read-only alignment preview ready. No project or draft changes.':
-        'Alignment preview blocked by collisions or insufficient beats.',!proposed.ok);
+        proposed.moves.length+' scene(s) will move. Frame 0, locked scenes, negative lane and all LoRA/prompt bytes stay intact. Verification in progress…':
+        'No complete safe alignment. Change the beat selection or locks.';
+      if(!proposed.ok)return status('Alignment preview blocked. No changes made.',true);
+      status('Verifying source WAV, saved markers and project timing…');
+      try{
+        const identity=await freshContext(d.snapshot.projectId,source.sha256,source.stamp);
+        if(!liveMatches(d,revision,original,token)){
+          discard();return status('Draft or audio selection changed while verifying. Preview again.',true);
+        }
+        pending={draft:d,revision,original,token,tracks:proposed.tracks,
+          moves:proposed.moves,selectedIds:[...selected],identity};
+        q('review-note').textContent=proposed.moves.length+
+          ' safe scene movement(s). Source confirmed current. Confirm staging separately.';
+        q('stage').disabled=false;
+        status('Preview verified. Review movements before staging.');
+      }catch(error){
+        discard();status('Source verification failed: '+(error.message||error),true);
+      }
+    }
+    async function stage(){
+      const p=pending,d=getDraft();
+      if(!p||staging||loading||!liveMatches(d,p.revision,p.original,p.token)||
+         p!==pending)return status('Preview is stale. Re-run Preview Beat Alignment.',true);
+      if(!root.MorphorumDialog?.confirm)
+        return status('Confirmation dialog unavailable. No scenes were moved.',true);
+      staging=true;refresh();
+      try{
+        await freshContext(d.snapshot.projectId,source.sha256,p.identity.stamp);
+        if(p!==pending||!liveMatches(d,p.revision,p.original,p.token))
+          throw Error('Draft or project changed before confirmation.');
+        const ok=await root.MorphorumDialog.confirm({
+          title:'Stage audio-aligned scene positions?',
+          message:'Move '+p.moves.length+' positive scene(s) to the previewed beat frames? '+
+            'Original prompt/LoRA text, negative prompts, soundtrack and camera motion remain unchanged. '+
+            'This only changes the unsaved Studio draft and can be undone in the Visual Prompt Timeline.',
+          confirmText:'Stage Alignment',cancelText:'Keep Preview'});
+        if(!ok){status('Staging cancelled. Preview remains unchanged.');return;}
+        // Repeat the server check after the asynchronous user confirmation.
+        await freshContext(d.snapshot.projectId,source.sha256,p.identity.stamp);
+        if(p!==pending||!liveMatches(d,p.revision,p.original,p.token))
+          throw Error('Audio or Studio revision changed while confirming. No prompts moved.');
+        const stamp={
+          schema_version:1,source_sha256:source.sha256,stamp:p.identity.stamp,
+          fps:p.identity.fps,max_frames:p.identity.max_frames,
+          marker_mode:p.identity.marker_mode,selected_event_ids:p.selectedIds,
+          moves:p.moves.map(x=>({from:x.from,to:x.to,beat_id:x.beat_id})),
+          staged_at:new Date().toISOString(),
+        };
+        const result=onStage?.(p.tracks,stamp);
+        if(!result?.ok)throw Error(result?.message||'Studio refused the alignment.');
+        discard();
+        status('Beat alignment staged in Studio draft. Undo/Redo in the Visual Timeline, '+
+          'or Preview Changes → Apply to Animation → Save Project.');
+      }catch(error){
+        discard();status('Staging blocked: '+(error.message||error),true);
+      }finally{staging=false;refresh();}
+    }
+    async function verifyStaged(provenance){
+      if(!provenance)return true;
+      const d=getDraft();
+      if(!d?.ok||d.applied||d.snapshot?.projectId!==source?.project_id &&
+         d.snapshot?.projectId!==project){
+        // Verify even after browser session reload (where audio preview is not loaded).
+        if(!d?.ok||d.applied)throw Error('No editable project for audio alignment.');
+      }
+      const stamp=await json(endpoint(d.snapshot.projectId)+
+        '/prompt-studio/audio-context/'+encodeURIComponent(provenance.source_sha256));
+      if(stamp.stamp!==provenance.stamp||stamp.fps!==provenance.fps||
+         stamp.max_frames!==provenance.max_frames)
+        throw Error('Staged beat alignment is stale: WAV, markers, soundtrack, offset or project timing changed. Undo/reload beats and stage again.');
+      return true;
     }
     q('refresh').addEventListener('click',()=>void refreshList());
     q('load').addEventListener('click',()=>void load());
@@ -340,10 +454,19 @@
       render();
     });
     q('clear').addEventListener('click',()=>{selection.clear();render();});
-    q('plan').addEventListener('click',preview);
+    q('plan').addEventListener('click',()=>void preview());
+    q('stage').addEventListener('click',()=>void stage());
+    q('undo').addEventListener('click',()=>{
+      const result=onUndo?.();
+      status(result?'Undid last Studio change.':'No Studio change to undo.');
+    });
+    q('redo').addEventListener('click',()=>{
+      const result=onRedo?.();
+      status(result?'Redid last Studio change.':'No Studio change to redo.');
+    });
     q('discard').addEventListener('click',discard);
     refresh();
-    return {refresh,reset,refreshList,invalidate};
+    return {refresh,reset,refreshList,invalidate,verifyStaged};
   }
   const api={frameAt,normalizeEvents,planAlignment,mount};
   if(typeof module==='object'&&module.exports)module.exports=api;
