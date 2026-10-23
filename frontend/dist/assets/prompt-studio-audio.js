@@ -159,7 +159,7 @@
       pending=null;q('review').hidden=true;q('diff').replaceChildren();
       q('stage').disabled=true;
     }
-    function invalidate(){discard();if(events)render();}
+    function invalidate(){discard();locks.clear();if(events)render();}
     function reset(){
       ++requestId;project='';source=null;events=null;items=[];signature='';staging=false;
       selection.clear();locks.clear();q('wav').replaceChildren();
@@ -429,11 +429,9 @@
     async function verifyStaged(provenance){
       if(!provenance)return true;
       const d=getDraft();
-      if(!d?.ok||d.applied||d.snapshot?.projectId!==source?.project_id &&
-         d.snapshot?.projectId!==project){
-        // Verify even after browser session reload (where audio preview is not loaded).
-        if(!d?.ok||d.applied)throw Error('No editable project for audio alignment.');
-      }
+      if(!d?.ok||d.applied||!d.snapshot?.projectId)
+        throw Error('No editable project for audio alignment.');
+      // This also works after a browser reload with no PS6 audio preview open.
       const stamp=await json(endpoint(d.snapshot.projectId)+
         '/prompt-studio/audio-context/'+encodeURIComponent(provenance.source_sha256));
       if(stamp.stamp!==provenance.stamp||stamp.fps!==provenance.fps||

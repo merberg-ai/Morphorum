@@ -21,13 +21,14 @@ test('PS6.1 module is loaded before Prompt Studio workspace',()=>{
  assert.match(studio,/audioUI\?\.invalidate\(\)/);
  assert.match(studio,/audioFold\?\.addEventListener\('toggle'/);
 });
-test('PS6.1 audio is isolated from Studio Apply, render, and source mutation',()=>{
+test('PS6.2 stages only Studio prompts and never mutates source audio or camera motion',()=>{
  assert.match(studio,/data-ps="audio"/);
  assert.match(audio,/data-a6="review"/);
- assert.match(audio,/No audio, prompt, camera motion or project files are changed/);
+ assert.match(audio,/No soundtrack or camera/);
  assert.match(audio,/marker_mode:marked\?'saved-edits':'detected'/);
  assert.match(audio,/Math\.floor\(seconds\*fps\+0\.5\)/);
- assert.doesNotMatch(audio,/applyTracks\(|onCommit\(|mutation:|method:'POST'|method:'PUT'/);
+ assert.match(audio,/onStage\?\.\(p\.tracks,stamp\)/);
+ assert.doesNotMatch(audio,/method:'POST'|method:'PUT'|mutation:|\/api\/animation\/render/);
 });
 test('Prompt Studio advanced sections use native disclosure without hiding PS4 Director',()=>{
  assert.match(studio,/fold\('\.ps14-library'/);
@@ -42,4 +43,24 @@ test('Prompt Studio advanced sections use native disclosure without hiding PS4 D
  assert.match(css,/\.ps13-fold/);
  assert.match(css,/\.ps5-fold/);
  assert.match(css,/@media\(max-width:650px\)/);
+});
+
+
+test('PS6.2 UI uses fixed-width mobile checkbox columns and ellipsized summaries',()=>{
+ assert.match(audio,/row\.append\(input,summary\)/);
+ assert.match(css,/\.ps61-workspace \.ps61-locks \.ps61-lock input\[type="checkbox"\]/);
+ assert.match(css,/width:18px!important;height:18px!important/);
+ assert.match(css,/grid-template-columns:20px minmax\(0,1fr\)/);
+ assert.match(css,/\.ps61-workspace \.ps61-lock span/);
+ assert.match(css,/text-overflow:ellipsis;white-space:nowrap/);
+ assert.match(css,/max-height:320px;overflow-y:auto/);
+});
+test('PS6.2 Studio draft Save and Apply reject a stale audio stamp',()=>{
+ assert.match(studio,/audioAlignment:null/);
+ assert.match(studio,/audio_alignment:draft\.audioAlignment\|\|null/);
+ assert.match(studio,/audioAlignment:saved\.audio_alignment\|\|null/);
+ assert.match(studio,/await audioUI\?\.verifyStaged\(draft\.audioAlignment\)/);
+ assert.match(studio,/draft\.audioAlignment=clone\(provenance\)/);
+ assert.match(studio,/audio-beat-alignment/);
+ assert.match(studio,/onUndo:\(\)=>timeline\?\.undo\(\)/);
 });

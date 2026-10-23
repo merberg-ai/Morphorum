@@ -361,12 +361,12 @@
       setFrame(state.frame);
     }
     function restore(kind){
-      const draft=getDraft();if(!draft?.ok||draft.applied)return;
+      const draft=getDraft();if(!draft?.ok||draft.applied)return false;
       const prior=kind==='undo'?history.undo(draft.tracks):history.redo(draft.tracks);
-      if(!prior)return;
+      if(!prior)return false;
       state.selection=[];const result=onTracks?.(prior,kind,null,true);
-      if(!result?.ok){onNotice?.(result?.message||'Could not restore timeline',true);return;}
-      refresh();
+      if(!result?.ok){onNotice?.(result?.message||'Could not restore timeline',true);return false;}
+      refresh();return true;
     }
     find('zoom').addEventListener('input',event=>{state.zoom=Number(event.target.value);refresh();});
     find('snap').addEventListener('change',event=>{state.snap=Number(event.target.value);});

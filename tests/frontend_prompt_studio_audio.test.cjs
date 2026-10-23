@@ -70,16 +70,21 @@ test('PS6.1 honors per-scene locks and rejects same-frame duplicate beat moves',
  assert.deepEqual(locked.tracks.positive.keyframes.map(p=>p.frame),[0,30,74]);
  assert.equal(locked.moves.length,1);
 });
-test('PS6.1 UI only uses existing verified project endpoints, never mutates media or prompts',()=>{
+test('PS6.2 only stages a Studio draft after audio stamp verification and confirmation',()=>{
  const code=fs.readFileSync(path.join(__dirname,'..','frontend','dist','assets',
    'prompt-studio-audio.js'),'utf8');
  assert.match(code,/\/media-inventory/);
  assert.match(code,/\/motion-lab\/audio\/.*\/analysis/);
  assert.match(code,/\/motion-lab\/audio-markers\//);
- assert.match(code,/getLockedFrames/);
- assert.match(code,/read-only alignment preview/i);
+ assert.match(code,/\/prompt-studio\/audio-context\//);
+ assert.match(code,/freshContext\(d\.snapshot\.projectId,source\.sha256,p\.identity\.stamp\)/);
+ assert.match(code,/MorphorumDialog\?\.confirm/);
+ assert.match(code,/onStage\?\.\(p\.tracks,stamp\)/);
+ assert.match(code,/data-a6="stage"/);
+ assert.match(code,/onUndo\?\.\(\)/);
+ assert.match(code,/onRedo\?\.\(\)/);
  assert.doesNotMatch(code,/method:'POST'|method:'PUT'|method:'DELETE'/);
- assert.doesNotMatch(code,/onCommit|onTracks|saveProject|applyPromptStudioTransfer/);
+ assert.doesNotMatch(code,/saveProject|applyPromptStudioTransfer/);
 });
 
 
