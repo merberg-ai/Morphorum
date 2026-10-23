@@ -54,9 +54,9 @@ test('PS6.1 unavailable markers or collisions yield no partial proposal',()=>{
  assert.equal(plan.ok,false);
  assert.deepEqual(plan.tracks,input);
  assert.equal(plan.moves.length,0);
- const reserved=sync.planAlignment(input,[...e,
-  {id:'two',frame:72,enabled:true,time_seconds:3,drift_seconds:0}],
-  new Set(['one','two']),new Set([32,70]),120);
+ const reserved=sync.planAlignment(input,[
+  {id:'blocked',frame:30,enabled:true,time_seconds:1.25,drift_seconds:0}],
+  new Set(['blocked']),new Set([30]),120);
  assert.equal(reserved.ok,false);
 });
 test('PS6.1 honors per-scene locks and rejects same-frame duplicate beat moves',()=>{
