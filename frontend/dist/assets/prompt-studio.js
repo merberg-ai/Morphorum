@@ -133,7 +133,7 @@
     let draft=null,busy=false,invalid=false,previewedRevision=-1,blocked=false;
     let baselineBlocked=false,savedId='',savedEtag='',savedRevision=-1;
     let shownProjectId='',libraryEntries=[];
-    let timeline=null,composerUI=null,aiUI=null;
+    let timeline=null,composerUI=null,aiUI=null,audioUI=null;
     const dom=document.createElement('article');
     dom.className='card glass ps13-workspace';
     dom.innerHTML=`
@@ -168,9 +168,10 @@
         <p class="muted ps14-library-note" data-ps="library-note" role="status" aria-live="polite">Open an animation project to browse its saved drafts.</p>
       </section>
       <div class="ps13-context" data-ps="context">No prompts imported. Open a project in Project Editor, then select Import Existing Prompts.</div>
-      <p class="ps13-notice muted">Import and timeline edits stay in the Studio draft. Preview Changes and confirm Apply before saving in Project Editor. Visual keyframe changes have in-session Undo/Redo; Save Draft persists tracks, not the undo history. Ollama storyboard suggestions require explicit review; audio storyboard synchronization remains planned for PS6.</p>
+      <p class="ps13-notice muted">Studio edits and AI proposals stay in drafts until you review and Apply to Animation. Save Project in the Editor to persist. PS6.1 previews imported audio beats without moving prompts; audio staging follows in the next phase. Expand only the workspaces you need.</p>
       <p class="ps13-status" data-ps="status" role="status" aria-live="polite">Ready to import.</p>
       <section class="ps4-workspace" data-ps="ai" hidden aria-label="Ollama AI Story Director"></section>
+      <section class="ps61-workspace" data-ps="audio" aria-label="Audio-to-storyboard cue preview"></section>
       <section class="ps3-workspace" data-ps="composer" hidden aria-label="Structured Prompt Composer"></section>
       <section class="ps2-workspace" data-ps="timeline" hidden aria-label="Visual Prompt Studio timeline"></section>
       <div class="ps13-lanes" data-ps="lanes" hidden></div>
@@ -180,13 +181,28 @@
         <div data-ps="changes"></div>
       </section>`;
     panel.appendChild(dom);
+    // Disclose advanced workspaces without hiding the PS4 Director's outer panel.
+    function fold(selector,summary,expanded){
+      const inner=dom.querySelector(selector);
+      if(!inner)return null;
+      const details=document.createElement('details');
+      details.className='ps13-fold';details.open=expanded;
+      const label=document.createElement('summary');label.textContent=summary;
+      details.appendChild(label);inner.before(details);details.appendChild(inner);
+      return details;
+    }
+    fold('.ps14-library','Saved drafts · Load, Save and Manage',false);
+    const audioFold=fold('[data-ps="audio"]','Audio → Storyboard · PS6.1 Beat Preview',false);
+    fold('[data-ps="composer"]','LoRA / Text Block Composer',false);
+    fold('[data-ps="timeline"]','Visual Prompt Timeline',true);
+    fold('[data-ps="lanes"]','Manual Positive / Negative Prompt Keyframes',false);
     const find=k=>dom.querySelector('[data-ps="'+k+'"]');
     const importButton=find('import'),resetButton=find('reset'),
       previewButton=find('preview'),applyButton=find('apply'),
       lanes=find('lanes'),review=find('review'),context=find('context');
     const savedSelect=find('saved'),nameInput=find('name'),note=find('library-note');
     const timelinePanel=find('timeline'),composerPanel=find('composer'),
-      aiPanel=find('ai');
+      aiPanel=find('ai'),audioPanel=find('audio');
     const saveButton=find('save'),saveCopyButton=find('save-copy'),
       loadButton=find('load'),deleteButton=find('delete'),refreshButton=find('refresh');
     const projectId=()=>root.MorphorumAnimation?.getPromptStudioProjectId?.()||'';
@@ -227,6 +243,7 @@
       nameInput.disabled=busy||!draft?.ok;
       composerUI?.refresh();
       aiUI?.refresh();
+      audioUI?.refresh();
       lanes.querySelectorAll('button,input,textarea,select').forEach(el=>{
         el.disabled=!can||el.dataset.psFixed==='1';
       });
@@ -264,6 +281,7 @@
       timeline?.refresh();
       composerUI?.invalidate();composerUI?.refresh();
       aiUI?.invalidate();aiUI?.refresh();
+      audioUI?.invalidate();
     }
     function makeLane(name){
       const track=draft.tracks[name];
@@ -373,7 +391,7 @@
         const snapshot=await editor.getPromptStudioEditorSnapshot();
         const result=beginDraft(snapshot,bridge);
         if(!result.ok){status(result.message,true);return;}
-        draft=result;timeline?.reset();composerUI?.reset();aiUI?.reset();invalid=false;blocked=false;baselineBlocked=false;
+        draft=result;timeline?.reset();composerUI?.reset();aiUI?.reset();audioUI?.reset();invalid=false;blocked=false;baselineBlocked=false;
         savedId='';savedEtag='';savedRevision=-1;
         nameInput.value=(result.snapshot.context.name||'Storyboard')+' Prompt Draft';
         previewClear();showContext();renderLanes();
@@ -388,7 +406,7 @@
       draft.composer=psComposer?.blank()||{schema_version:1,blocks:[]};
       draft.aiProvenance=null;
       draft.revision+=1;
-      timeline?.reset();composerUI?.reset();aiUI?.reset();
+      timeline?.reset();composerUI?.reset();aiUI?.reset();audioUI?.reset();
       invalid=false;blocked=false;previewClear();renderLanes();
       status('Prompt Studio draft restored to its imported baseline. Project Editor unchanged.');
     }
@@ -434,7 +452,7 @@
         const result=await root.MorphorumAnimation?.applyPromptStudioTransfer?.(draft.snapshot,draft.tracks);
         if(!result?.ok){blocked=result?.code!=='CANCELLED';status(result?.message||'Apply failed.',true);return;}
         if(result.applied){
-          draft.applied=true;timeline?.reset();composerUI?.reset();aiUI?.reset();previewClear();renderLanes();
+          draft.applied=true;timeline?.reset();composerUI?.reset();aiUI?.reset();audioUI?.reset();previewClear();renderLanes();
           status('Prompts staged in Project Editor. Save Project there to persist.');
           onEditor?.();
         }else status(result.message||'No prompt changes to apply.');
@@ -492,7 +510,7 @@
         if(projectId()!==id)throw new Error('Project changed while loading draft.');
         const value=restoreDraft(loaded.data.draft,live,bridge);
         if(!value.ok)throw new Error(value.message);
-        draft=value;timeline?.reset();composerUI?.reset();aiUI?.reset();
+        draft=value;timeline?.reset();composerUI?.reset();aiUI?.reset();audioUI?.reset();
         invalid=false;blocked=false;baselineBlocked=!value.compatible;
         savedId=identifier;savedEtag=loaded.etag;savedRevision=0;
         nameInput.value=loaded.data.draft.name;
@@ -567,6 +585,15 @@
       },
       onNotice:(message,error)=>{if(error)status(message,true);}
     })||null;
+    audioUI=root.MorphorumPromptStudioAudio?.mount({
+      panel:audioPanel,getDraft:()=>draft,
+      getLockedFrames:()=>timeline?.locks||new Set(),
+    })||null;
+    if(!audioUI)audioPanel.textContent=
+      'PS6.1 audio preview unavailable. Update the branch and refresh the browser.';
+    audioFold?.addEventListener('toggle',()=>{
+      if(audioFold.open&&draft?.ok)void audioUI?.refreshList();
+    });
     composerUI=psComposer?.mount({
       panel:composerPanel,getDraft:()=>draft,
       onChange:next=>{

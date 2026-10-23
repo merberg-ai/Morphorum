@@ -145,6 +145,7 @@
     const selection=new Set(),locks=new Set();
     function status(s,error=false){q('status').textContent=s;q('status').dataset.error=error?'1':'0';}
     function discard(){q('review').hidden=true;q('diff').replaceChildren();}
+    function invalidate(){discard();if(events)render();}
     function reset(){
       ++requestId;project='';source=null;events=null;items=[];signature='';
       selection.clear();locks.clear();q('wav').replaceChildren();
@@ -340,7 +341,7 @@
     q('plan').addEventListener('click',preview);
     q('discard').addEventListener('click',discard);
     refresh();
-    return {refresh,reset,refreshList};
+    return {refresh,reset,refreshList,invalidate};
   }
   const api={frameAt,normalizeEvents,planAlignment,mount};
   if(typeof module==='object'&&module.exports)module.exports=api;

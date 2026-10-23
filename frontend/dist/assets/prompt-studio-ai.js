@@ -232,6 +232,17 @@
     empty.innerHTML='<h3>AI Story Director</h3>'+
       '<p class="muted">Open an animation project, then select <strong>Import Existing Prompts</strong> or <strong>Load Draft</strong> to enable Ollama storyboard authoring. No model download or remote service is required for manual editing.</p>';
     panel.append(empty,node);
+    // Keep the primary storyboard form visible and tuck secondary tools away.
+    function fold(section,label,expanded){
+      if(!section)return;
+      const details=document.createElement('details');
+      details.className='ps5-fold';details.open=expanded;
+      const heading=document.createElement('summary');heading.textContent=label;
+      section.before(details);details.append(heading,section);
+    }
+    fold(node.querySelector('.ps5-profile'),'Model-aware authoring · PS5.1',false);
+    fold(node.querySelector('.ps5-vision'),'Start-image vision · PS5.2',false);
+    fold(node.querySelector('[data-p4="evaluation"]'),'Compare Ollama models · PS5.3',false);
     const q=name=>node.querySelector('[data-p4="'+name+'"]');
     const draft=()=>getDraft?.();
     // Browser-local, non-secret connection preferences. LAN permission is
