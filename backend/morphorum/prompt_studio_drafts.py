@@ -166,6 +166,47 @@ def _validate_ai_provenance(value: Any) -> dict[str, Any] | None:
     return dict(value)
 
 
+def _validate_audio_alignment(value: Any, frames: int, fps: float) -> dict | None:
+    """Optional, portable PS6.2 source stamp. No project path or raw audio."""
+    if value is None:
+        return None
+    keys = {"schema_version", "source_sha256", "stamp", "fps", "max_frames",
+            "marker_mode", "selected_event_ids", "moves", "staged_at"}
+    if not isinstance(value, dict) or set(value) != keys or value.get("schema_version") != 1:
+        raise PromptDraftError("Invalid audio alignment provenance.")
+    digest = re.compile(r"^[0-9a-f]{64}$")
+    if any(not isinstance(value.get(k), str) or not digest.fullmatch(value[k])
+           for k in ("source_sha256", "stamp")):
+        raise PromptDraftError("Audio alignment source or stamp is invalid.")
+    if (type(value.get("fps")) not in (int, float) or float(value["fps"]) != float(fps)
+            or type(value.get("max_frames")) is not int
+            or value["max_frames"] != frames
+            or value.get("marker_mode") not in ("saved-edits", "detected")):
+        raise PromptDraftError("Audio alignment project timing or marker mode has changed.")
+    ids = value.get("selected_event_ids")
+    moves = value.get("moves")
+    if (not isinstance(ids, list) or not 1 <= len(ids) <= 120
+            or len(ids) != len(set(str(x) for x in ids))
+            or any(not isinstance(x, str) or not 1 <= len(x) <= 96 for x in ids)
+            or not isinstance(moves, list) or not 1 <= len(moves) <= 120
+            or not isinstance(value.get("staged_at"), str)
+            or not 1 <= len(value["staged_at"]) <= 64):
+        raise PromptDraftError("Audio alignment marker selection is invalid.")
+    clean = []
+    for move in moves:
+        if not isinstance(move, dict) or set(move) != {"from", "to", "beat_id"}:
+            raise PromptDraftError("Audio alignment move is malformed.")
+        if (type(move["from"]) is not int or type(move["to"]) is not int
+                or not 0 < move["from"] < frames or not 0 < move["to"] < frames
+                or move["beat_id"] not in ids):
+            raise PromptDraftError("Audio alignment move references an invalid frame or beat.")
+        clean.append(dict(move))
+    return {"schema_version": 1, "source_sha256": value["source_sha256"],
+            "stamp": value["stamp"], "fps": float(fps), "max_frames": frames,
+            "marker_mode": value["marker_mode"], "selected_event_ids": list(ids),
+            "moves": clean, "staged_at": value["staged_at"]}
+
+
 def validate_draft(value: Any, project_id: str, *, draft_id: str | None = None,
                    stored: bool = False) -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("format") != FORMAT:
@@ -209,6 +250,7 @@ def validate_draft(value: Any, project_id: str, *, draft_id: str | None = None,
         "prompt_tracks": edited,
         "composer": _validate_composer(value.get("composer"), frames),
         "ai_provenance": _validate_ai_provenance(value.get("ai_provenance")),
+        "audio_alignment": _validate_audio_alignment(value.get("audio_alignment"), frames, fps),
     }
     if stored:
         identifier = value.get("draft_id")

@@ -208,3 +208,31 @@ def test_ps3_invalid_composer_is_rejected_before_disk_write(project):
         family="zimage",weight=1,triggers=["test"])
     assert_bad({"schema_version":1,"blocks":[dict(lora,lane="negative")]})
     assert client.get(url).json()["drafts"]==[]
+
+
+
+def test_ps62_audio_alignment_provenance_round_trip_is_optional_and_checked(project):
+    client, pid, _ = project
+    path = f"/api/animation/projects/{pid}/prompt-studio/drafts"
+    item = payload(pid)
+    item["audio_alignment"] = {
+        "schema_version": 1,
+        "source_sha256": "a" * 64,
+        "stamp": "b" * 64,
+        "fps": 24.0,
+        "max_frames": 120,
+        "marker_mode": "saved-edits",
+        "selected_event_ids": ["kick-1", "snare-1"],
+        "moves": [{"from": 80, "to": 86, "beat_id": "kick-1"}],
+        "staged_at": "2026-10-23T14:00:00.000Z",
+    }
+    saved = client.post(path, json=item)
+    assert saved.status_code == 201, saved.text
+    assert saved.json()["draft"]["audio_alignment"] == item["audio_alignment"]
+    malformed = payload(pid)
+    malformed["audio_alignment"] = {**item["audio_alignment"], "stamp": "evil"}
+    assert client.post(path, json=malformed).status_code == 400
+    malformed = payload(pid)
+    malformed["audio_alignment"] = {**item["audio_alignment"], "fps": 30}
+    assert client.post(path, json=malformed).status_code == 400
+    assert client.post(path, json=payload(pid)).json()["draft"]["audio_alignment"] is None
