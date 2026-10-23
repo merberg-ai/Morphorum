@@ -15,7 +15,7 @@
     if(!validation.ok) return validation;
     return {ok:true,snapshot:clone(snapshot),original:clone(validation.tracks),
       tracks:clone(validation.tracks),composer:psComposer?.blank()||{schema_version:1,blocks:[]},
-      aiProvenance:null,revision:0,applied:false};
+      aiProvenance:null,audioAlignment:null,revision:0,applied:false};
   }
   function updateDraft(draft,bridge,lane,operation,frame,value) {
     if(!draft?.ok||draft.applied) return problem('NO_DRAFT','Import editable prompts first.');
@@ -94,7 +94,8 @@
       project_context:{model:clone(context.model),max_frames:frames,fps:Number(context.fps),
         start_mode:context.startMode||'prompt',source_image_name:context.sourceImageName||''},
       original_tracks:original.tracks,prompt_tracks:edited.tracks,composer:composed.composer,
-      ai_provenance:draft.aiProvenance||null
+      ai_provenance:draft.aiProvenance||null,
+      audio_alignment:draft.audioAlignment||null
     }};
   }
   function restoreDraft(saved,live,bridge) {
@@ -125,6 +126,7 @@
     if(!composed?.ok)return composed||problem('COMPOSER','Composer validation unavailable.');
     return {ok:true,original:original.tracks,tracks:edited.tracks,
       composer:composed.composer,aiProvenance:saved.ai_provenance||null,
+      audioAlignment:saved.audio_alignment||null,
       snapshot,revision:0,applied:false,compatible};
   }
   function mount({panel,onEditor}={}) {
@@ -168,7 +170,7 @@
         <p class="muted ps14-library-note" data-ps="library-note" role="status" aria-live="polite">Open an animation project to browse its saved drafts.</p>
       </section>
       <div class="ps13-context" data-ps="context">No prompts imported. Open a project in Project Editor, then select Import Existing Prompts.</div>
-      <p class="ps13-notice muted">Studio edits and AI proposals stay in drafts until you review and Apply to Animation. Save Project in the Editor to persist. PS6.1 previews imported audio beats without moving prompts; audio staging follows in the next phase. Expand only the workspaces you need.</p>
+      <p class="ps13-notice muted">Studio edits and AI proposals remain drafts until reviewed. PS6.2 can stage beat-aligned positive scene positions after source verification and confirmation. Undo/Redo in the Visual Prompt Timeline, then Preview Changes → Apply to Animation → Save Project. Advanced workspaces are collapsible.</p>
       <p class="ps13-status" data-ps="status" role="status" aria-live="polite">Ready to import.</p>
       <section class="ps4-workspace" data-ps="ai" hidden aria-label="Ollama AI Story Director"></section>
       <section class="ps61-workspace" data-ps="audio" aria-label="Audio-to-storyboard cue preview"></section>
@@ -192,7 +194,7 @@
       return details;
     }
     fold('.ps14-library','Saved drafts · Load, Save and Manage',false);
-    const audioFold=fold('[data-ps="audio"]','Audio → Storyboard · PS6.1 Beat Preview',false);
+    const audioFold=fold('[data-ps="audio"]','Audio → Storyboard · PS6.2 Align Scenes',false);
     fold('[data-ps="composer"]','LoRA / Text Block Composer',false);
     fold('[data-ps="timeline"]','Visual Prompt Timeline',true);
     fold('[data-ps="lanes"]','Manual Positive / Negative Prompt Keyframes',false);
@@ -266,13 +268,16 @@
       const before=old||clone(draft.tracks);
       if(!historyReplay&&JSON.stringify(before)!==JSON.stringify(valid.tracks))
         timeline?.record(before,key);
-      draft.tracks=valid.tracks;draft.revision+=1;
+      draft.tracks=valid.tracks;draft.audioAlignment=null;draft.revision+=1;
       onEdit({ok:true,revision:draft.revision},true);
       return {ok:true};
     }
     function onEdit(result,redraw=false){
       if(!result.ok){invalid=true;status(result.message,true);controls();return;}
       invalid=false;blocked=false;previewClear();
+      // Any later track edit/undo invalidates a formerly staged alignment stamp.
+      // PS6.2 onStage reinstates it only after the guarded move has succeeded.
+      draft.audioAlignment=null;
       status(baselineBlocked
         ? 'Edited saved draft. Its original Project Editor baseline has changed; Apply remains blocked. Save the draft, or manually reimport current prompts.'
         : count()+' staged change(s). Preview Changes before applying.');
@@ -404,7 +409,7 @@
       if(!draft?.ok||draft.applied)return;
       draft.tracks=clone(draft.original);
       draft.composer=psComposer?.blank()||{schema_version:1,blocks:[]};
-      draft.aiProvenance=null;
+      draft.aiProvenance=null;draft.audioAlignment=null;
       draft.revision+=1;
       timeline?.reset();composerUI?.reset();aiUI?.reset();audioUI?.reset();
       invalid=false;blocked=false;previewClear();renderLanes();
@@ -434,6 +439,14 @@
         status('This draft belongs to an older Editor baseline. Apply is blocked; reimport current prompts before transferring.',true);
         return;
       }
+      const current=draft,revision=draft.revision;
+      if(draft.audioAlignment){
+        try{await audioUI?.verifyStaged(draft.audioAlignment);}
+        catch(error){previewClear();status(error.message||String(error),true);return;}
+        if(draft!==current||draft.revision!==revision){
+          previewClear();status('Studio changed during audio verification. Preview again.',true);return;
+        }
+      }
       const editor=root.MorphorumAnimation;
       const result=editor?.previewPromptStudioTransfer?.(draft.snapshot,draft.tracks);
       if(!result?.ok){blocked=true;previewClear();status(result?.message||'Project Editor changed. Reimport its prompts.',true);controls();return;}
@@ -449,6 +462,10 @@
       busy=true;controls();
       status('Confirm the prompt-only transfer to Project Editor…');
       try {
+        const current=draft,revision=draft.revision;
+        if(draft.audioAlignment)await audioUI?.verifyStaged(draft.audioAlignment);
+        if(current!==draft||revision!==draft.revision)
+          throw Error('Studio changed during audio freshness validation. Preview again.');
         const result=await root.MorphorumAnimation?.applyPromptStudioTransfer?.(draft.snapshot,draft.tracks);
         if(!result?.ok){blocked=result?.code!=='CANCELLED';status(result?.message||'Apply failed.',true);return;}
         if(result.applied){
@@ -529,8 +546,12 @@
       }
       const serialized=serializeDraft(draft,nameInput.value,bridge);
       if(!serialized.ok){status(serialized.message,true);return;}
+      const current=draft,revision=draft.revision;
       busy=true;controls();
       try{
+        if(draft.audioAlignment)await audioUI?.verifyStaged(draft.audioAlignment);
+        if(current!==draft||revision!==draft.revision)
+          throw Error('Studio changed while verifying the audio alignment. Save again.');
         const overwrite=!asNew&&Boolean(savedId);
         if(overwrite&&!/^"[a-f0-9]{64}"$/.test(savedEtag))
           throw new Error('Saved draft revision is unknown. Reload it before overwrite.');
@@ -588,9 +609,15 @@
     audioUI=root.MorphorumPromptStudioAudio?.mount({
       panel:audioPanel,getDraft:()=>draft,
       getLockedFrames:()=>timeline?.locks||new Set(),
+      onStage:(tracks,provenance)=>{
+        const result=applyTracks(tracks,'audio-beat-alignment');
+        if(result?.ok)draft.audioAlignment=clone(provenance);
+        return result;
+      },
+      onUndo:()=>timeline?.undo(),onRedo:()=>timeline?.redo(),
     })||null;
     if(!audioUI)audioPanel.textContent=
-      'PS6.1 audio preview unavailable. Update the branch and refresh the browser.';
+      'PS6.2 audio alignment unavailable. Update the branch and refresh the browser.';
     audioFold?.addEventListener('toggle',()=>{
       if(audioFold.open&&draft?.ok)void audioUI?.refreshList();
     });
@@ -598,7 +625,8 @@
       panel:composerPanel,getDraft:()=>draft,
       onChange:next=>{
         if(!draft?.ok||draft.applied)return problem('NO_DRAFT','No editable Studio draft.');
-        draft.composer=next;draft.revision+=1;previewClear();controls();return {ok:true};
+        draft.composer=next;draft.audioAlignment=null;
+        draft.revision+=1;previewClear();controls();return {ok:true};
       },
       onCommit:next=>applyTracks(next,'composer'),
       onNotice:(message,error)=>{if(error)status(message,true);}
