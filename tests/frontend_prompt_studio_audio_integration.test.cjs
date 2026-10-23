@@ -48,7 +48,7 @@ test('Prompt Studio advanced sections use native disclosure without hiding PS4 D
 
 test('PS6.2 UI uses fixed-width mobile checkbox columns and ellipsized summaries',()=>{
  assert.match(audio,/row\.append\(input,summary\)/);
- assert.match(css,/\.ps61-workspace \.ps61-locks \.ps61-lock input\[type="checkbox"\]/);
+ assert.match(css,/\.ps61-workspace \.ps61-lock input\[type="checkbox"\]/);
  assert.match(css,/width:18px!important;height:18px!important/);
  assert.match(css,/grid-template-columns:20px minmax\(0,1fr\)/);
  assert.match(css,/\.ps61-workspace \.ps61-lock span/);
