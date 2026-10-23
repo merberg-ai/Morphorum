@@ -108,6 +108,7 @@
     let elapsedTimer=null,startedAt=0,progressState=null;
     let profileCatalog=null,profileFetchPending=false,profileFetchAttempted=false,profileFamily='';
     let imageAsset=null,imageAssetKey='',imageBusy=false,visionResult=null,activeVision=false;
+    let evalUI=null,evalBusy=false;
     let previewReady=false;
     const node=document.createElement('section');node.className='ps4-director';
     node.innerHTML=`
@@ -224,7 +225,8 @@
             Accept into Studio Draft</button>
           <button type="button" data-p4="discard" class="secondary-button compact">Discard Proposal</button>
         </div>
-      </section>`;
+      </section>
+      <section data-p4="evaluation" aria-label="PS5.3 local model evaluation"></section>`;
     const empty=document.createElement('div');
     empty.className='ps4-empty';
     empty.innerHTML='<h3>AI Story Director</h3>'+
@@ -338,7 +340,7 @@
     }
     async function analyzeImage(){
       const d=draft(),asset=imageAsset;
-      if(!d?.ok||working||imageBusy||!previewReady||!connected||!asset||!q('vision-consent').checked||
+      if(!d?.ok||working||evalBusy||imageBusy||!previewReady||!connected||!asset||!q('vision-consent').checked||
          !isLoopbackEndpoint()||!q('model').value)return;
       const id=d.snapshot.projectId,rev=d.revision,sha=asset.sha256;
       q('vision-consent').checked=false;
@@ -439,36 +441,38 @@
         item.textContent='Only frame '+point.frame;target.appendChild(item);
       }
       if([...target.options].some(x=>x.value===before))target.value=before;
-      target.disabled=working||q('mode').value!=='refine';
+      target.disabled=working||evalBusy||q('mode').value!=='refine';
     }
     function refresh(){
       const d=draft(),usable=context();
       setVisibility(panel,node,empty,usable);
-      if(!usable){invalidate();return;}
+      if(!usable){invalidate();evalUI?.reset();return;}
       if(!profileCatalog&&!profileFetchPending&&!profileFetchAttempted)void ensureProfiles();
       refreshProfile(d);
-      // Freeze all request inputs while Ollama is evaluating a snapshot.
+      // Do not start competing Ollama requests during serial model evaluations.
+      const occupied=working||evalBusy;
       for(const field of ['endpoint','lan','model','idea','negative','profile','subject','style'])
-        q(field).disabled=working;
-      q('mode').disabled=working;
-      q('scenes').disabled=working||q('mode').value==='refine';
+        q(field).disabled=occupied;
+      q('mode').disabled=occupied;
+      q('scenes').disabled=occupied||q('mode').value==='refine';
       if(q('mode').value==='refine')
         q('scenes').value=q('target').value!==''?'1':String(d.tracks.positive.keyframes.length);
-      q('generate').disabled=working||!models.length||!q('model').value||!q('idea').value.trim()||
+      q('generate').disabled=occupied||!models.length||!q('model').value||!q('idea').value.trim()||
         q('idea').value.trim().length<8||(q('mode').value==='refine'&&
         d.tracks.positive.keyframes.length>16);
       q('cancel').disabled=!working;
-      q('connect').disabled=working;
-      q('accept').disabled=!pending||working;
-      q('vision-refresh').disabled=working||imageBusy;
-      q('vision-consent').disabled=working||imageBusy||!imageAsset;
-      q('vision-analyze').disabled=working||imageBusy||!previewReady||!imageAsset||!connected||
+      q('connect').disabled=occupied;
+      q('accept').disabled=!pending||occupied;
+      q('vision-refresh').disabled=occupied||imageBusy;
+      q('vision-consent').disabled=occupied||imageBusy||!imageAsset;
+      q('vision-analyze').disabled=occupied||imageBusy||!previewReady||!imageAsset||!connected||
         !q('model').value||!q('vision-consent').checked||!isLoopbackEndpoint();
-      q('vision-description').disabled=working;
-      q('vision-use').disabled=working||!visionResult;
+      q('vision-description').disabled=occupied;
+      q('vision-use').disabled=occupied||!visionResult;
       // Project-owned attached images may be added after the Studio draft import.
       if(!imageBusy&&imageAssetKey!==d.snapshot.projectId+':'+
          (d.snapshot.context?.sourceImageName||''))void inspectVisionAsset();
+      evalUI?.refresh();
     }
     function forgetModelList(){
       models=[];connected=false;invalidate();
@@ -524,7 +528,7 @@
         'Ollama returned the same prompts; nothing to apply.');
     }
     async function connect(){
-      if(working||!context())return;
+      if(working||evalBusy||!context())return;
       ++sequence;invalidate();working=true;refresh();status('Testing Ollama connection…');
       const id=draft().snapshot.projectId;
       try{
@@ -559,7 +563,7 @@
     }
     async function generate(){
       const d=draft();
-      if(!d?.ok||working||!connected||!q('model').value)return;
+      if(!d?.ok||working||evalBusy||!connected||!q('model').value)return;
       const id=d.snapshot.projectId,rev=d.revision,sourceTracks=copy(d.tracks);
       const mode=q('mode').value;
       const target=q('target').value;
@@ -675,8 +679,15 @@
     for(const key of ['subject','style']){
       q(key).addEventListener('input',()=>{invalidate();refresh();});
     }
+    evalUI=root.MorphorumPromptStudioEvaluation?.mount({
+      container:q('evaluation'),readStream:readProgressStream,
+      getContext:()=>({draft:draft(),models,connected,
+        endpoint:q('endpoint').value,allowLan:q('lan').checked,parentBusy:working}),
+      onBusy:value=>{evalBusy=value;refresh();}
+    })||null;
+    if(!evalUI)q('evaluation').textContent='PS5.3 comparison module unavailable. Refresh after updating.';
     refresh();
-    return {refresh,invalidate,reset(){
+    return {refresh,invalidate,reset(){evalUI?.reset();
         cancel();invalidate();forgetModelList();
         imageAsset=null;imageAssetKey='';imageBusy=false;previewReady=false;
         q('vision-consent').checked=false;clearVisionResult();

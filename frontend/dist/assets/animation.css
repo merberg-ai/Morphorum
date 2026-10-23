@@ -4494,3 +4494,26 @@ dialog#animation-deforum-dialog {
   .ps5-vision-media img{max-width:100%}
   .ps5-vision .ps4-actions button{flex:1 1 100%;min-height:44px}
 }
+
+
+/* PS5.3 manual side-by-side comparison. Never mirrors renderer status. */
+.ps53-panel{border:1px solid var(--border);border-radius:10px;min-width:0;padding:.8rem;margin:1rem 0}
+.ps53-panel legend{font-size:.86rem;font-weight:650;padding:0 .4rem}
+.ps53-panel>p{font-size:.81rem;line-height:1.55}
+.ps53-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin:.7rem 0}
+.ps53-fields label,.ps53-grade{display:flex;flex-direction:column;gap:.3rem;min-width:0;font-size:.82rem}
+.ps53-fields select,.ps53-grade select{width:100%;min-width:0;max-width:100%}
+.ps53-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin:.8rem 0}
+.ps53-candidate{min-width:0;border:1px solid var(--border);border-radius:9px;padding:.7rem}
+.ps53-candidate h4{margin:.1rem 0 .5rem;overflow-wrap:anywhere}
+.ps53-candidate p{font-size:.79rem;overflow-wrap:anywhere}
+.ps53-candidate details{border-bottom:1px solid var(--border);padding:.4rem 0}
+.ps53-candidate summary{font-size:.82rem;cursor:pointer}
+.ps53-candidate pre{font-family:inherit;font-size:.8rem;white-space:pre-wrap;
+  overflow-wrap:anywhere;max-height:240px;overflow:auto}
+.ps53-candidate button{margin:.6rem 0;min-height:40px}
+.ps53-ratings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin:.5rem 0}
+@media(max-width:760px){
+  .ps53-fields,.ps53-results,.ps53-ratings{grid-template-columns:minmax(0,1fr)}
+  .ps53-candidate button{min-height:44px}
+}
