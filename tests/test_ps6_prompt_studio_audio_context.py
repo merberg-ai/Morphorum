@@ -41,7 +41,7 @@ def test_ps62_verified_stamp_changes_with_saved_markers(project):
         assert doc["source_sha256"] == sha
         assert doc["marker_mode"] == "detected"
         assert doc["markers_sha256"] is None
-        assert doc["fps"] == 12
+        assert doc["fps"] == 24
         assert client.get(path).json()["stamp"] == doc["stamp"]
 
         write_marker_overrides(project, {"source_sha256": sha, "duration_seconds": 1.0,
@@ -66,7 +66,7 @@ def test_ps62_frame_context_and_corrupt_wav_invalidate_stamp(project):
         endpoint = f"/api/animation/projects/{project}/prompt-studio/audio-context/{sha}"
         original = client.get(endpoint).json()
         saved = projects.load_animation_project(project)
-        saved["animation"]["fps"] = 24
+        saved["animation"]["fps"] = 12
         projects.save_animation_project(project, saved)
         result = client.get(endpoint)
         assert result.status_code == 200, result.text
