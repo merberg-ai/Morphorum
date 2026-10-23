@@ -92,7 +92,7 @@ The original PS4 `/api/prompt-studio/ollama/generate` endpoint waited until Olla
 
 ## PS5.1 model-family profiles and continuity: Windows/mobile acceptance
 
-**Status:** PS4/PS5.1/PS5.2 passed owner Windows testing. PS5.3 model comparisons are implemented on `dev-webui` for owner physical acceptance; not merged into `main`.
+**Status:** PS4–PS5.3 core UI passed owner Windows testing. PS6.1 read-only audio beat preview and reorganized Studio panels are on `dev-webui` for physical acceptance; not merged into `main`.
 
 1. Open **Project → Prompt Studio → AI Story Director**. Import or load a saved Studio draft. The new **Model-aware authoring** section should show the selected project's **SDXL**, **FLUX** or **Z-Image** family profile. Verify the profile description and negative-conditioning caveat match the selected family; no generator settings are changed.
 2. Enter a recurring subject identity, e.g. `the same orange cat with a torn left ear`, and a locked style, e.g. `grainy 1990s VHS footage`. Create a three-scene storyboard and inspect the AI proposal. Missing lock phrases must be repeated literally on each generated positive frame; no new LoRA tags should be invented.
@@ -130,3 +130,17 @@ The original PS4 `/api/prompt-studio/ollama/generate` endpoint waited until Olla
 8. Negative-path checks: only one model connected, same model A/B, offline Ollama, malformed model JSON, cancelled first/second model, switching projects mid-comparison, mobile responsive cards, return to normal Generate Storyboard, and PS5.2 explicit image consent. Verify no project renders, files or prompt tracks are changed as a side effect.
 
 **Acceptance boundary:** PS5.3 is the tooling for evaluating models, **not an automatic declaration of the best model**. Record real Windows tests and short physical renders before selecting a recommended local model. PS6 remains the separately gated, required Motion Studio audio-to-storyboard synchronization phase.
+
+
+## PS6.1 Motion Studio beats → Prompt Studio: preview-only Windows acceptance (2026-10-23)
+
+**Status:** implemented on `dev-webui`; requires real WAV/browser owner acceptance. There is **no Apply** in PS6.1. It is the auditable mapping foundation before PS6.2 stages or saves any synchronized prompts.
+
+1. Update `dev-webui`, hard-refresh the browser and open a project with positive prompt keyframes at frame 0 and two or more later frames. In **Motion Lab → Motion Studio**, load/analyze a WAV (or **Use Saved Project Soundtrack** first). In **Detect Beats**, review kick/snare/highs markers. **Save marker edits** if you adjusted them, because unsaved in-browser Motion Studio edits are not imported into Prompt Studio.
+2. Go to **Project → Prompt Studio → Import Existing Prompts**, expand **Audio → Storyboard · PS6.1 Beat Preview**, select **Refresh WAVs** and pick the project-owned analyzed WAV. Click **Load Beats**. Confirm it displays the WAV SHA prefix and duration, marker source (saved edits versus detector), project FPS/max frames, and correct events. If no WAV appears, analyze it in Motion Studio first, then refresh.
+3. Filter by beat **type** and **From/To seconds**. Select enabled markers with the marker checkboxes/timeline or **Select Visible Beats**. Only the first 120 enabled markers within the selected time range are displayed; narrow the filter/range for later markers. Inspect the timestamp, snapped frame and drift. Try non-24 FPS if available.
+4. Under **Scene placement and locks**, leave frame 0 fixed and optionally lock a later positive scene. Click **Preview Beat Alignment**. Check the proposed `Fbefore → Fafter` movements and the exact marker timestamp. It moves **nothing**: changes are an informational preview only. The negative lane, positive prompt text, LoRA tag bytes, audio attachment, and Motion Studio motion schedules remain unchanged.
+5. Negative paths: a WAV with no saved marker edits (use detector), saved disabled edits, multiple beats quantizing to the same frame, beats beyond the final animation frame, too few selected distinct beats, all scenes locked, changing project FPS/max frames, a different project or WAV and a locked Visual Timeline positive lane. No partial or unsafe proposal should be silently accepted. Test narrow-screen Android scrolling and controls.
+6. Test the reorganized disclosures for **Saved drafts**, **Model-aware authoring**, **Start-image vision**, **Compare Ollama models**, **LoRA/Text Composer**, **Visual Prompt Timeline** and **Manual Positive/Negative Prompts**. Confirm the main AI Story Director remains available, and previously accepted PS5 generation, review and Apply → Save still work. The Prompt Studio shortcut should still reveal the Director before prompts are imported.
+
+**PS6.2** will add explicit confirmation, fresh audio provenance validation, revision-aware staging, Undo/Redo and final renderer tests. Do not infer successful audio synchronization from a preview alone. PS6.1 requires no Ollama server and does not send waveform/audio to a language model.

@@ -16,7 +16,7 @@ Deferred investigations and improvements. These entries are **not** release bloc
 
 ## PS: Native Prompt Studio and AI storyboard authoring (planned 2026-10-21)
 
-**Status:** **PS0–PS5.2 owner Windows-accepted; PS5.3 serial Ollama model-comparison UI implemented on `dev-webui` for Windows evaluation, `main` unchanged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS5.3 physical model evaluation and render comparison is the next gate.
+**Status:** **PS0–PS5.3 UI accepted on Windows; PS6.1 Motion Studio cue import, non-destructive scene-alignment preview and collapsible Studio sections implemented on `dev-webui`, Windows test pending; `main` unchanged.** [PS0 baseline and gaps](docs/PROMPT_STUDIO_PS0_CONTRACT.md) · [PS0–PS9 roadmap](docs/PROMPT_STUDIO_ROADMAP.md). Keep native renders/project saves and `main` unchanged; PS6.1 saved/detected WAV marker and frame-alignment physical acceptance is the next gate; formal cross-model render studies remain optional evidence rather than an untested model default.
 
 - Standalone/manual Prompt Studio that reads the active animation project (model/family, max frames, FPS, start image, current positive/negative prompts, LoRAs) and optionally imports existing prompt keyframes into an isolated editable draft.
 - Visual frame timeline, structured LoRA/trigger-word placement, scene continuity, exact resolved-frame inspection and supported Hold/Blend/advanced transitions; never invent unsupported family-specific render semantics.
@@ -84,7 +84,7 @@ Setting requires_grad=True on inference tensor outside InferenceMode is not allo
 
 ## Project Editor prompt/keyframe UX
 
-The Prompt Studio PS0–PS9 roadmap supersedes this open-ended item. PS0–PS5.2 are owner Windows-accepted; PS5.3 awaits real-model and renderer acceptance. PS6–PS9 require separate implementation and test gates.
+The Prompt Studio PS0–PS9 roadmap supersedes this open-ended item. PS0–PS5.3 have owner UI acceptance; PS6.1 read-only audio preview requires Windows testing, and PS6.2–PS9 require separate implementation/acceptance gates.
 
 ### PS1.3 Prompt Studio manual workspace (2026-10-21)
 
@@ -120,3 +120,10 @@ The user observed silent "waiting for Ollama" behavior. Replaced the WebUI's one
 - On `dev-webui`, **PS5.3 Compare local Ollama models** runs two user-selected installed text models sequentially through one chosen, fixed 96-frame/24-FPS benchmark case (horror, same-character, landscape or synthetic mixed-LoRA refinement). It reuses the PS4.1 bounded `/api/prompt-studio/ollama/generate-stream` contract; it does not send active project prompts, images or audio, automatically load LoRA weights, or modify Studio drafts/renderer.
 - Side-by-side outputs include individual frame prompts, returned Ollama token/evaluation metrics where available, request elapsed time, per-model failures, explicit human fidelity/continuity/clarity ratings and manually recorded *physical* render spot-check status. Exports one JSON report only on user click; no backend/database persistence and **no automatic model winner**. Model name/size alone does not establish quality.
 - Added deterministic JS fixture/result-validation tests and syntax workflow coverage. **Next gate:** owner Windows test two installed local models, four cases, SDXL/FLUX/managed Z-Image family context, repeated runs, cancellation, failure recovery, and same-settings actual image render comparison. Confirm PS5.2 privacy remains unchanged. No `main` promotion without separate approval.
+
+
+### PS6.1 read-only Motion Studio beat-alignment preview + Studio organization (2026-10-23)
+- **Implemented on `dev-webui`, owner Windows acceptance pending.** Audio → Storyboard is an expandable Prompt Studio section. It lists only verified `motion_lab_wav` assets belonging to the open project; **Load Beats** reuses Motion Studio's existing `GET /motion-lab/audio/{sha}/analysis` and source-bound `GET /motion-lab/audio-markers/{sha}` APIs. Saved manual marker edits take precedence; otherwise use existing transient detection. No new detector, uploaded media, camera motion edits or audio overwrite.
+- Filter enabled kick/snare/highs markers by time range, select from an accessible beat timeline or list (up to 120 visible per filter/range), view WAV SHA/source metadata, exact timestamp, snapped integer frame and drift. Frame mapping: `floor(seconds * fps + 0.5)` and **reject** out-of-animation frames rather than clamp. Flag marker collisions and missing/disabled/out-of-range cues.
+- Lock existing positive scenes, keep frame 0 fixed, preview chronological beat-to-scene position changes with exact original prompt/LoRA text and untouched negative lane. Insufficient distinct beat frames, lane locks and destination collisions block previews. This milestone only **previews** and discards: no changes to Studio drafts, camera schedules, project JSON, audio file or Ollama provider requests. PS6.2 must add confirmation-gated staging, audio provenance/revalidation, undo/redo, stale-source handling and actual saved/rendered acceptance.
+- Prompt Studio's Saved Drafts, Composer and Manual Prompt sections, plus AI Director's PS5 authoring/vision/comparison, use native expandable disclosures to reduce clutter while leaving the primary Director accessible. Syntax and frontend regression tests added; acceptance includes Android layout and old workflow regression.
