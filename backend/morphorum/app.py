@@ -1354,6 +1354,22 @@ def api_save_audio_cues(project_id: str, payload: dict[str, Any]) -> dict[str, A
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.get("/api/animation/projects/{project_id}/prompt-studio/audio-context/{source_sha256}")
+def api_prompt_studio_audio_context(project_id: str, source_sha256: str) -> dict[str, Any]:
+    """Read-only signed audio/marker/timing fingerprint for PS6.2 guarded staging."""
+    from .prompt_studio_audio_context import audio_alignment_context
+    from .imported_soundtrack import ImportedSoundtrackError
+    try:
+        return audio_alignment_context(project_id, source_sha256)
+    except AnimationProjectError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (ProjectAssetError, AudioMotionError, ImportedSoundtrackError,
+            OSError, ValueError, KeyError, TypeError) as exc:
+        message = str(exc)
+        status = 400 if message == "Invalid analyzed WAV identifier." else 409
+        raise HTTPException(status_code=status, detail=message) from exc
+
+
 @app.get("/api/animation/projects/{project_id}/motion-lab/audio-markers/{source_sha256}")
 def api_get_audio_markers(project_id: str, source_sha256: str) -> dict[str, Any]:
     from .audio_marker_overrides import read_marker_overrides
