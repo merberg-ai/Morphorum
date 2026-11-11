@@ -27,7 +27,7 @@ test('ML1b numeric/drag curve keyframe editing stays inside Motion Lab', () => {
     'animation-motion-lab-key-list',
   ]) assert.equal((html.match(new RegExp('id="' + id + '"', 'g')) || []).length, 1);
   assert.match(animation, /type: 'keyframes'/);
-  assert.match(animation, /function motionLabCurveModify\(\{frame, value, replaceFrame = null\}\)/);
+  assert.match(animation, /function motionLabCurveModify\(\{\s*frame, value, replaceFrame = null,/);
   assert.match(animation, /commitMotionLabDraft\(\)/);
   assert.match(animation, /motionLabVisual\?\.configureEditor/);
   assert.match(animation, /motionLabPreviewOrApply\(false, \{curvesOnly:true\}\)/);
@@ -163,9 +163,10 @@ test('ML1b smooth interpolation options and compact desktop checkboxes are avail
   }
   assert.match(html, /Ease In \/ Out \(smooth\)/);
   assert.match(html, /Smooth Cubic \(through keyframes\)/);
-  assert.match(css, /#animation-panel-motion \.animation-motion-lab-edit-toggle input\[type="checkbox"\]/);
-  assert.match(css, /#animation-panel-motion \.animation-motion-lab-loop input\[type="checkbox"\]/);
-  assert.match(css, /#animation-panel-motion \.animation-motion-lab-layer-toggle input\[type="checkbox"\]/);
+  // Scoped to the whole animation view: these controls moved out of #animation-panel-motion.
+  assert.match(css, /#view-animation \.animation-motion-lab-edit-toggle input\[type="checkbox"\]/);
+  assert.match(css, /#view-animation \.animation-motion-lab-loop input\[type="checkbox"\]/);
+  assert.match(css, /#view-animation \.animation-motion-lab-layer-toggle input\[type="checkbox"\]/);
   assert.match(css, /width:16px;/);
   assert.match(css, /height:16px;/);
   assert.match(css, /flex:0 0 16px;/);

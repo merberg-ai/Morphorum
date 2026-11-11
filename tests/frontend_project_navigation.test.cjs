@@ -22,7 +22,7 @@ test('UX2.4 primary nav reuses project panels and existing workspace navigation'
   assert.match(app,/\.main-nav \[data-project-nav\]/);
   assert.match(app,/switchView\('animation'\)/);
   assert.match(app,/button\.dataset\.projectNav/);
-  assert.match(animation,/qs\('#animation-tab-' \+ name\)/);
+  assert.match(animation,/qs\('#animation-tab-' \+ keys\[next\]\)/);
   assert.match(animation,/panels\.editor\.appendChild\(layout\)/);
   assert.match(animation,/button\.hidden = true/);
   assert.match(animation,/button\.style\.display = 'none'/);

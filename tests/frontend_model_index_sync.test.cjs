@@ -37,7 +37,10 @@ function setup(project={id:'project-x',model:{model_id:'saved-model'},generation
   const env={
     state,document:{createElement:created},
     qs:sel=>nodes.get(sel)||null,
-    populateSamplerSelect(preferred) {this.lastPreferredSampler=preferred;},
+    // Called as a bare function from the extracted source, so `this` is unbound.
+    populateSamplerSelect(preferred) {env.lastPreferredSampler=preferred;},
+    resetRenderPreflight(){},
+    populateAnimationScheduleTypes(){},
     populateResolutionPresets(){resolutionCalls++;},
     renderEditorGuidance(){guidanceCalls++;},
     toast(){throw Error('Unexpected toast')},

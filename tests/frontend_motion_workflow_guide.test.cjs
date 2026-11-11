@@ -33,7 +33,8 @@ test('No-project workflow points to creation and selection, never a locked Edito
 test('Project workflow routes keep existing tool destinations and do not perform actions', () => {
   const {plan} = makePlanner();
   const expectations = {
-    editor:'composer', composer:'curves', recording:'curves',
+    editor:'prompt-studio', 'prompt-studio':'editor',
+    composer:'curves', recording:'curves',
     curves:'preview', preview:'monitor', monitor:'outputs',
     outputs:'editor', audio:'curves', 'motion-import':'curves',
   };

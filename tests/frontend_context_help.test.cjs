@@ -18,7 +18,9 @@ test('context help uses accessible real button triggers outside labels', () => {
   }
   assert.match(js, /function addHelpButton\(label\)/);
   assert.match(js, /wrapper\.append\(label, button\)/);
-  assert.match(js, /label\.classList\.remove\('animation-span-2'\)/);
+  // Spanning layout classes are mirrored onto the wrapper so the field keeps its grid column.
+  assert.match(js, /for \(const layoutClass of \['animation-span-2', 'image-resolution-preset-field'\]\)/);
+  assert.match(js, /if \(label\.classList\.contains\(layoutClass\)\) wrapper\.classList\.add\(layoutClass\)/);
   assert.match(js, /'role', 'tooltip'/);
   assert.match(js, /'aria-label', 'Help: '/);
   assert.match(js, /'aria-describedby', HELP_PANEL_ID/);

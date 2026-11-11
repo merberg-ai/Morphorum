@@ -89,12 +89,16 @@ test('MS6.4 review without base model warns before explicit create and editor',a
   assert.equal(h.creates,0);
   const notices=all(h.host,n=>n.className==='first-run-example-warning');
   assert.ok(notices.some(n=>/NOT render-ready/.test(n.textContent)));
+  // Click handlers are fire-and-forget (`void perform(...)`), so drain the
+  // pending work before asserting or clicking again while it is still busy.
   h.allow=false;
-  await h.findButton('Create Example & Open Editor').listeners.click();
+  h.findButton('Create Example & Open Editor').listeners.click();
+  await h.flush();
   assert.equal(h.creates,0);
   assert.equal(h.completions,0);
   h.allow=true;
-  await h.findButton('Create Example & Open Editor').listeners.click();
+  h.findButton('Create Example & Open Editor').listeners.click();
+  await h.flush();
   assert.equal(h.creates,1);
   assert.equal(h.opened,1);
   assert.equal(h.completions,1);
@@ -106,7 +110,8 @@ test('MS6.4 failed editor handoff keeps setup incomplete',async()=>{
   const h=harness();
   await h.showFinish({revision:7,example_template_id:'gentle-dolly-out',example_model_id:''});
   h.openOK=false;
-  await h.findButton('Create Example & Open Editor').listeners.click();
+  h.findButton('Create Example & Open Editor').listeners.click();
+  await h.flush();
   assert.equal(h.creates,1);
   assert.equal(h.completions,0);
   assert.ok(h.toast.some(x=>/saved but the Project Editor could not open/.test(x[1])));
@@ -115,7 +120,8 @@ test('MS6.4 failed editor handoff keeps setup incomplete',async()=>{
 test('MS6.4 Finish Without Example completes without creating a project',async()=>{
   const h=harness();
   await h.showFinish({revision:7,example_template_id:'gentle-dolly-out',example_model_id:''});
-  await h.findButton('Finish Without Example').listeners.click();
+  h.findButton('Finish Without Example').listeners.click();
+  await h.flush();
   assert.equal(h.creates,0);
   assert.equal(h.completions,1);
 });
@@ -139,7 +145,8 @@ test('MS6.5 vanished selected model blocks example creation, not falsely treated
   assert.equal(h.findButton('Create Example & Open Editor').disabled,true);
   assert.ok(all(h.host,e=>/no longer indexed/i.test(e.textContent||'')).length>0);
   assert.equal(h.creates,0);
-  await h.findButton('Finish Without Example').listeners.click();
+  h.findButton('Finish Without Example').listeners.click();
+  await h.flush();
   assert.equal(h.completions,1);
   assert.equal(h.creates,0);
 });

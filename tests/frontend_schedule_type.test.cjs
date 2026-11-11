@@ -53,7 +53,11 @@ test('non-SDXL projects hide schedule type even for an indexed model',()=>{
 });
 test('DDIM prevents Karras option from being offered',()=>{
   const n=render('sdxl',true,'ddim');
-  assert.equal(n['#animation-schedule-type'].options.some(x=>x.value==='karras'),false);
+  // Karras is not offered as a normal choice; the saved value is kept only as
+  // an explicitly labelled unsupported entry so it is not silently discarded.
+  const karras=n['#animation-schedule-type'].options.filter(x=>x.value==='karras');
+  assert.equal(karras.some(x=>x.text==='Karras'),false);
+  assert.deepEqual(karras.map(x=>x.text),['Unsupported schedule · karras']);
 });
 test('schedule control exists in project editor markup',()=>{
   assert.match(html,/id="animation-schedule-type-field"/);

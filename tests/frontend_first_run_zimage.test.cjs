@@ -96,13 +96,16 @@ test('MS6.3 accepted confirmation launches only one explicit POST and resumes po
   assert.equal(h.posted,1);
   assert.equal(h.confirms[0].confirmText,'Resume Download');
   assert.ok(h.urls.some(x=>x.url.endsWith('/download') && x.options.method==='POST'));
+  // The follow-up status reload that schedules polling is fire-and-forget.
+  await h.flush();
   assert.ok(h.timers.length>=1);
   assert.equal(h.find('Download In Progress').disabled,true);
   h.state.status='installed';
   h.state.installed=true;
   h.state.progress_percent=100;
   const refresh=h.find('Refresh Status');
-  await refresh.listeners.click();
+  refresh.listeners.click();
+  await h.flush();
   assert.ok(h.find('Use Existing Model'));
   assert.equal(h.posted,1);
   await h.find('Use Existing Model').listeners.click();

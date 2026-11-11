@@ -85,7 +85,9 @@ def test_b54_export_validates_identity_fps_codec_quality_and_install(
     with pytest.raises(video.VideoExportError, match="FPS must"):
         manager.start(project, render, fps=121)
     monkeypatch.setattr(video, "ffmpeg_executable", lambda: None)
-    from backend.morphorum import ffmpeg_tools
+    # Patch the module object the application imports. ``backend.morphorum`` is
+    # a separate copy, so patching it left a real host FFmpeg install visible.
+    from morphorum import ffmpeg_tools
     monkeypatch.setattr(ffmpeg_tools, "ffmpeg_status", lambda: {
         "available": False, "ffmpeg_path": None,
         "message": "FFmpeg not found on host.",
