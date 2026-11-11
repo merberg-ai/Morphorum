@@ -6,6 +6,7 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
 
 # Morphorum-managed runtime
 .runtime/
@@ -22,6 +23,8 @@ config/local.yaml
 config/user.yaml
 data/
 models/
+# Default managed model location (managed_models.locations, e.g. ckpts/z-image)
+ckpts/
 projects/
 outputs/
 renders/
