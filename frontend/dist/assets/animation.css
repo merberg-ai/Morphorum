@@ -562,7 +562,7 @@
 .animation-render-progress .progress-fill {
   width: 0;
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), rgba(124,103,255,.7));
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent-2) 70%, transparent));
   transition: width .2s ease;
 }
 .animation-render-stats {
@@ -721,7 +721,7 @@
 .animation-model-load-progress .progress-fill {
   width: 0;
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), rgba(124,103,255,.72));
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent-2) 72%, transparent));
   transition: width .22s ease;
 }
 .animation-model-load-detail {
@@ -1351,9 +1351,9 @@
 .animation-render-frame-telemetry {
   margin-top: 10px;
   padding: 10px;
-  border: 1px solid rgba(124,103,255,.2);
+  border: 1px solid color-mix(in srgb, var(--accent-2) 20%, transparent);
   border-radius: var(--radius-sm);
-  background: rgba(124,103,255,.035);
+  background: color-mix(in srgb, var(--accent-2) 3.5%, transparent);
 }
 .animation-render-state-grid {
   display: grid;
@@ -2114,7 +2114,7 @@ dialog#animation-deforum-dialog {
   position:sticky;bottom:8px;z-index:16;
   display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px;
   margin:12px auto 8px;padding:10px 12px;width:max-content;max-width:calc(100% - 16px);
-  border:1px solid rgba(110,195,225,.48);border-radius:12px;
+  border:1px solid color-mix(in srgb,var(--accent) 48%,transparent);border-radius:12px;
   background:color-mix(in srgb,var(--bg) 96%,transparent);box-shadow:0 5px 22px rgba(0,0,0,.38);
   backdrop-filter:blur(12px);
 }
@@ -2185,7 +2185,7 @@ dialog#animation-deforum-dialog {
 /* Duration-match checkbox is a compact boolean control, never an auto-sized grid input. */
 .animation-motion-audio-length {display:flex;flex-direction:column;gap:7px;align-self:start;min-width:0;}
 .animation-motion-audio-length > label {display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:7px;min-width:0;}
-.animation-motion-audio-length input[type="checkbox"] {display:inline-block;flex:0 0 17px;width:17px!important;height:17px!important;min-width:17px;max-width:17px;min-height:17px;max-height:17px;margin:0;accent-color:#5ed4ee;vertical-align:middle;}
+.animation-motion-audio-length input[type="checkbox"] {display:inline-block;flex:0 0 17px;width:17px!important;height:17px!important;min-width:17px;max-width:17px;min-height:17px;max-height:17px;margin:0;accent-color:var(--accent);vertical-align:middle;}
 .animation-motion-audio-length .motion-audio-help {flex:0 0 auto;}
 #animation-motion-lab-visual .animation-motion-audio-playback {margin:10px 0 15px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;}
 
@@ -4131,17 +4131,17 @@ dialog#animation-deforum-dialog {
 /* P5 cyber-glass: overview only; honors theme and reduced-motion settings. */
 .animation-p5-project-summary {
   position:relative;isolation:isolate;overflow:hidden;padding:1.1rem;
-  border:1px solid rgba(114,185,255,.28);border-radius:16px;
-  background:radial-gradient(circle at 4% 0%,rgba(66,189,255,.16),transparent 42%),
-    radial-gradient(circle at 100% 8%,rgba(167,102,255,.14),transparent 42%),
-    linear-gradient(155deg,rgba(25,39,66,.92),rgba(12,17,32,.94));
+  border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:var(--radius);
+  background:radial-gradient(circle at 4% 0%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 42%),
+    radial-gradient(circle at 100% 8%,color-mix(in srgb,var(--accent-2) 14%,transparent),transparent 42%),
+    linear-gradient(155deg,color-mix(in srgb,var(--accent) 9%,var(--panel-strong)),var(--panel-strong));
   box-shadow:inset 0 1px rgba(255,255,255,.08),0 14px 34px rgba(0,0,0,.24),
-    0 0 25px rgba(82,163,255,.09);
+    0 0 25px color-mix(in srgb,var(--accent) 9%,transparent);
 }
 .animation-p5-project-summary::before {
   content:"";position:absolute;top:0;left:0;right:0;height:2px;pointer-events:none;
-  background:linear-gradient(90deg,transparent,#63daff,#a878ff,transparent);
-  box-shadow:0 0 13px rgba(96,211,255,.5);
+  background:linear-gradient(90deg,transparent,var(--accent),var(--accent-2),transparent);
+  box-shadow:0 0 13px color-mix(in srgb,var(--accent) 50%,transparent);
 }
 .animation-p5-project-summary > * {position:relative;z-index:1;}
 .animation-p5-summary-grid {
@@ -4150,53 +4150,62 @@ dialog#animation-deforum-dialog {
 }
 .animation-p5-summary-grid > div {
   min-width:0;gap:.32rem;padding:.8rem .85rem;border-radius:12px;
-  background:linear-gradient(165deg,rgba(124,177,255,.075),rgba(255,255,255,.018));
-  border:1px solid rgba(139,185,255,.12);
+  background:linear-gradient(165deg,color-mix(in srgb,var(--accent) 7.5%,transparent),rgba(255,255,255,.018));
+  border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);
   box-shadow:inset 0 1px rgba(255,255,255,.04);
   transition:border-color .18s ease,box-shadow .18s ease;
 }
 .animation-p5-summary-grid > div:hover {
-  border-color:rgba(120,202,255,.36);box-shadow:0 0 16px rgba(74,170,255,.10);
+  border-color:color-mix(in srgb,var(--accent) 36%,transparent);
+  box-shadow:0 0 16px color-mix(in srgb,var(--accent) 10%,transparent);
 }
 .animation-p5-summary-grid strong {
   font-size:.73rem;font-weight:800;letter-spacing:.085em;line-height:1.3;
-  text-transform:uppercase;color:#9edaff;opacity:1;
-  text-shadow:0 0 10px rgba(81,192,255,.18);
+  text-transform:uppercase;color:color-mix(in srgb,var(--accent) 62%,var(--text));opacity:1;
+  text-shadow:0 0 10px color-mix(in srgb,var(--accent) 18%,transparent);
 }
 .animation-p5-summary-grid span {
   font-size:1rem;font-weight:700;line-height:1.42;overflow-wrap:anywhere;
-  color:#f3f7ff;
+  color:var(--text);
 }
-.animation-p5-summary-grid .summary-value-primary {color:#fff;font-weight:800;}
-.animation-p5-summary-grid .summary-good {color:#8cf0b5;text-shadow:0 0 10px rgba(93,244,165,.17);}
-.animation-p5-summary-grid .summary-info {color:#95d6ff;text-shadow:0 0 10px rgba(98,191,255,.16);}
-.animation-p5-summary-grid .summary-muted-info {color:#c2d4eb;font-weight:600;}
-.animation-p5-summary-grid .summary-warn {color:#ffda86;text-shadow:0 0 10px rgba(255,196,95,.18);}
-.animation-p5-summary-grid .summary-error {color:#ff9d9d;}
-.animation-p52-workflow {border-top-color:rgba(131,192,255,.22);}
+.animation-p5-summary-grid .summary-value-primary {color:var(--text);font-weight:800;}
+.animation-p5-summary-grid .summary-good {color:var(--ok);text-shadow:0 0 10px color-mix(in srgb,var(--ok) 17%,transparent);}
+.animation-p5-summary-grid .summary-info {color:color-mix(in srgb,var(--accent) 68%,var(--text));text-shadow:0 0 10px color-mix(in srgb,var(--accent) 16%,transparent);}
+.animation-p5-summary-grid .summary-muted-info {color:color-mix(in srgb,var(--muted) 45%,var(--text));font-weight:600;}
+.animation-p5-summary-grid .summary-warn {color:var(--warn);text-shadow:0 0 10px color-mix(in srgb,var(--warn) 18%,transparent);}
+.animation-p5-summary-grid .summary-error {color:var(--danger);}
+.animation-p52-workflow {border-top-color:color-mix(in srgb,var(--accent) 22%,transparent);}
 .animation-p52-workflow h3 {
-  font-size:1rem;letter-spacing:.05em;text-transform:uppercase;font-weight:800;color:#addfff;
+  font-size:1rem;letter-spacing:.05em;text-transform:uppercase;font-weight:800;
+  color:color-mix(in srgb,var(--accent) 55%,var(--text));
 }
 .animation-p52-notice {
-  background:linear-gradient(110deg,rgba(63,144,244,.09),rgba(153,90,238,.06));
-  border-color:rgba(116,179,255,.2);border-radius:12px;color:#e2edff;
+  background:linear-gradient(110deg,color-mix(in srgb,var(--accent) 9%,transparent),color-mix(in srgb,var(--accent-2) 6%,transparent));
+  border-color:color-mix(in srgb,var(--accent) 20%,transparent);border-radius:var(--radius-sm);color:var(--text);
 }
-.animation-p52-notice.summary-info-glow {box-shadow:0 0 18px rgba(75,165,255,.1);}
-.animation-p52-notice.summary-warn-glow {border-color:rgba(255,201,101,.35);box-shadow:0 0 18px rgba(255,196,94,.11);}
-.animation-p52-steps > div {background:rgba(103,152,231,.05);border-color:rgba(127,180,255,.17);border-radius:12px;}
+.animation-p52-notice.summary-info-glow {box-shadow:0 0 18px color-mix(in srgb,var(--accent) 10%,transparent);}
+.animation-p52-notice.summary-warn-glow {
+  border-color:color-mix(in srgb,var(--warn) 35%,transparent);
+  box-shadow:0 0 18px color-mix(in srgb,var(--warn) 11%,transparent);
+}
+.animation-p52-steps > div {
+  background:color-mix(in srgb,var(--accent) 5%,transparent);
+  border-color:color-mix(in srgb,var(--accent) 17%,transparent);border-radius:var(--radius-sm);
+}
 .animation-p5-summary-links .secondary-button.compact,
 .animation-p52-steps .secondary-button.compact {
-  background:linear-gradient(180deg,rgba(105,181,255,.18),rgba(94,105,224,.07));
-  border-color:rgba(122,191,255,.34);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 18%,transparent),color-mix(in srgb,var(--accent-2) 7%,transparent));
+  border-color:color-mix(in srgb,var(--accent) 34%,transparent);
   box-shadow:inset 0 1px rgba(255,255,255,.07);
 }
 .animation-p5-summary-links .secondary-button.compact:hover,
 .animation-p52-steps .secondary-button.compact:hover {
-  border-color:rgba(139,218,255,.6);box-shadow:0 0 15px rgba(86,187,255,.19);
+  border-color:color-mix(in srgb,var(--accent) 60%,transparent);
+  box-shadow:0 0 15px color-mix(in srgb,var(--accent) 19%,transparent);
 }
 .animation-p5-summary-links .secondary-button.compact:focus-visible,
 .animation-p52-steps .secondary-button.compact:focus-visible {
-  outline:2px solid #83dcff;outline-offset:3px;
+  outline:2px solid var(--accent);outline-offset:3px;
 }
 @media (max-width:720px) {
   .animation-p5-project-summary {padding:.85rem;}
@@ -4521,7 +4530,7 @@ dialog#animation-deforum-dialog {
 
 /* PS6.1: native accessible disclosure hierarchy for a crowded Studio. */
 .ps13-fold,.ps5-fold{min-width:0;margin:.65rem 0;border:1px solid var(--border);
-  border-radius:11px;background:rgba(130,150,210,.035)}
+  border-radius:11px;background:color-mix(in srgb,var(--accent) 3.5%,transparent)}
 .ps13-fold>summary,.ps5-fold>summary{cursor:pointer;user-select:none;
   font-size:.88rem;font-weight:650;padding:.75rem .85rem;line-height:1.5}
 .ps13-fold[open]>summary,.ps5-fold[open]>summary{border-bottom:1px solid var(--border);
@@ -4546,7 +4555,7 @@ dialog#animation-deforum-dialog {
 .ps61-warnings p,.ps61-warning{color:var(--warning,#f0b15f);margin:.3rem 0}
 .ps61-beat-lane{position:relative;min-height:35px;margin:.75rem 0;
   border-radius:8px;border:1px solid var(--border);
-  background:linear-gradient(90deg,rgba(120,170,220,.11),rgba(120,170,220,.025))}
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 11%,transparent),color-mix(in srgb,var(--accent) 2.5%,transparent))}
 .ps61-tick{position:absolute;top:4px;transform:translateX(-50%);border:0;
   width:9px;min-width:9px;padding:0;height:26px;border-radius:4px;
   background:var(--muted);cursor:pointer}

@@ -76,7 +76,7 @@
 .first-run-example-cards{min-width:0}
 .first-run-example-choice-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .first-run-example-card{display:flex;flex-direction:column;gap:10px;min-width:0;padding:17px;text-align:left;align-items:flex-start;border:1px solid var(--border,rgba(160,160,160,.35));border-radius:12px;background:rgba(128,128,128,.075);color:inherit;cursor:pointer;white-space:normal}
-.first-run-example-card[aria-pressed="true"]{outline:2px solid var(--accent,#8c9dff);outline-offset:-3px;background:rgba(140,157,255,.11)}
+.first-run-example-card[aria-pressed="true"]{outline:2px solid var(--accent,#8c9dff);outline-offset:-3px;background:color-mix(in srgb,var(--accent,#8c9dff) 11%,transparent)}
 .first-run-example-card strong{font-size:1rem}
 .first-run-example-card span{font-size:.91rem;line-height:1.45}
 .first-run-example-card small{opacity:.77;line-height:1.55}

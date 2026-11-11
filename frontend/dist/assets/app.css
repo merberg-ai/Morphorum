@@ -1153,8 +1153,8 @@ html[data-help-hints="off"] .morphorum-help-field > label > span:first-child {pa
 .console-inner-tab { border:1px solid var(--border); border-radius:12px; padding:12px 18px;
   background:rgba(255,255,255,.035); color:var(--muted); font-weight:750; cursor:pointer;
   min-width:130px; letter-spacing:.025em; }
-.console-inner-tab.active { color:var(--text); background:linear-gradient(135deg,rgba(97,161,255,.20),rgba(178,94,255,.13));
-  border-color:var(--accent); box-shadow:0 0 0 1px rgba(138,132,255,.10),0 7px 24px rgba(70,64,160,.10); }
+.console-inner-tab.active { color:var(--text); background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 20%,transparent),color-mix(in srgb,var(--accent-2) 13%,transparent));
+  border-color:var(--accent); box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 10%,transparent),0 7px 24px color-mix(in srgb,var(--accent) 10%,transparent); }
 #console-panel-logs[hidden],#console-panel-diagnostics[hidden] { display:none!important; }
 .diagnostic-card { min-width:0; overflow:hidden; }
 .diagnostic-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
