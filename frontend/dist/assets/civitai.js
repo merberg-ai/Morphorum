@@ -111,6 +111,8 @@
     state.layout = config.layout === 'list' ? 'list' : 'grid';
     const nav = byId('civitai-nav');
     if (nav) nav.hidden = !state.enabled;
+    const moreEntry = byId('civitai-more');
+    if (moreEntry) moreEntry.hidden = !state.enabled;
     byId('civitai-results')?.classList.toggle('civitai-list', state.layout === 'list');
     if (!state.enabled) {
       if (state.downloadTimer) clearInterval(state.downloadTimer);

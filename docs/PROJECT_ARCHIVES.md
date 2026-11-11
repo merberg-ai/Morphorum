@@ -10,7 +10,7 @@ In **Project → Project Manager**, select a project, then:
 - **Import Project ZIP:** Select a ZIP. Morphorum validates its format, manifest, paths, lengths, SHA-256 digests, and attached media. Confirm import, then choose whether to load the imported project.
 - **Save Project As:** Enter a new name in Morphorum's modal. Create a new project ID with the full configuration and all attached inputs; the original is unchanged. If it is open in Editor, current unsaved Editor settings are included in the new copy only. Morphorum asks whether to load it.
 
-**Project Editor** also has a **Save Project As** button beside **Save Project**.
+**Project Editor** also has **Save Project As**, in the **More** menu beside **Save Project**.
 
 ## Included and excluded media
 

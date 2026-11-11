@@ -851,7 +851,18 @@
     const nodes = [
       qs('#animation-workspace-save-state'),
       qs('#animation-editor-save-state'),
+      qs('#topbar-project-state'),
     ];
+    // The top bar names the open project on every screen.
+    const topbarProject = qs('#topbar-project');
+    if (topbarProject) {
+      topbarProject.hidden = !state.project;
+      topbarProject.title = state.project
+        ? (state.project.name || 'Untitled project') + (state.path ? ' · ' + state.path : '')
+        : '';
+      const topbarName = qs('#topbar-project-name');
+      if (topbarName) topbarName.textContent = state.project?.name || '';
+    }
     const label = !state.project ? 'No project open'
       : (state.dirty ? 'Unsaved changes' : 'Saved');
     for (const node of nodes) {
@@ -10612,6 +10623,7 @@
     const viewActive = Boolean(qs('#view-animation')?.classList.contains('active'));
     qs('.main-nav .nav-button[data-view="animation"]')?.classList.toggle('active', viewActive && !projectDestination);
     qs('#project-nav-toggle')?.classList.toggle('active', viewActive && projectDestination);
+    globalThis.MorphorumNav?.syncSections?.();
     qsa('.main-nav [data-project-nav]').forEach(button => {
       const selected = viewActive && button.dataset.projectNav === name;
       button.classList.toggle('active', selected);

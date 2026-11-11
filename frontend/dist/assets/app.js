@@ -14,6 +14,8 @@
 
   // Workspace tabs that belong to the Project menu, not Motion Lab.
   const PROJECT_WORKSPACE_TABS = ['wizard', 'projects', 'editor', 'prompt-studio'];
+  // Destinations the phone tab bar reaches through its More menu.
+  const MORE_MENU_VIEWS = ['loras', 'civitai', 'settings', 'console', 'help', 'about'];
 
   const THEME_OPTIONS = [
     ['midnight-glass', 'Midnight Glass · Black'],
@@ -167,9 +169,30 @@
   }
   function refreshNavMore(name) {
     const more = qs('#nav-more-toggle');
-    if (more) more.classList.toggle('active', name === 'settings' || name === 'console' || name === 'about');
+    if (more) more.classList.toggle('active', MORE_MENU_VIEWS.includes(name));
     closeNavMore();
   }
+
+  // Wide fine-pointer layouts show a persistent sidebar: the section you are
+  // in keeps its sub-pages listed beneath it. Narrower and touch layouts use
+  // popups instead, which closeTouchSubmenus() dismisses.
+  const POPUP_NAV_LAYOUT = '(max-width: 1180px), (min-width: 1181px) and (pointer: coarse)';
+  function sidebarNavLayout() {
+    return !window.matchMedia?.(POPUP_NAV_LAYOUT).matches;
+  }
+  function syncNavSections() {
+    if (!sidebarNavLayout()) return;
+    for (const [menuId, toggleId] of [
+      ['project-nav-submenu', 'project-nav-toggle'],
+      ['motion-lab-sidebar', 'motion-nav-toggle'],
+    ]) {
+      const menu = qs('#' + menuId), toggle = qs('#' + toggleId);
+      if (!menu || !toggle) continue;
+      menu.hidden = !toggle.classList.contains('active');
+      toggle.setAttribute('aria-expanded', String(!menu.hidden));
+    }
+  }
+  window.MorphorumNav = { syncSections: syncNavSections };
 
   // Phone/tablet submenus are popups over the workspace, unlike the persistent
   // fine-pointer desktop sidebar. Dismiss them after choosing a destination.
@@ -204,6 +227,7 @@
     const projectDestination = name === 'animation' && PROJECT_WORKSPACE_TABS.includes(openTab);
     qs('#project-nav-toggle')?.classList.toggle('active', projectDestination);
     qs('.main-nav .nav-button[data-view="animation"]')?.classList.toggle('active', name === 'animation' && !projectDestination);
+    syncNavSections();
     if (name === 'civitai') window.MorphorumCivitai?.activate?.();
     if (name === 'loras') window.MorphorumLoras?.refreshRuntime?.();
     try { history.replaceState(null, '', `#${name}`); } catch (_) {}
@@ -1877,8 +1901,38 @@
     });
     qs('#motion-nav-toggle')?.addEventListener('click', () => {
       const menu = qs('#motion-lab-sidebar');
-      menu.hidden = !menu.hidden;
+      // In the sidebar this button opens Motion Lab, whose pages are already
+      // listed beneath it; only the popup layouts toggle the list.
+      menu.hidden = sidebarNavLayout() ? false : !menu.hidden;
       qs('#motion-nav-toggle').setAttribute('aria-expanded', String(!menu.hidden));
+    });
+    const telemetryToggle = qs('#telemetry-toggle');
+    telemetryToggle?.addEventListener('click', () => {
+      const open = !qs('.topbar')?.classList.contains('telemetry-open');
+      qs('.topbar')?.classList.toggle('telemetry-open', open);
+      telemetryToggle.setAttribute('aria-expanded', String(open));
+    });
+    const toolbarMore = qs('#animation-toolbar-more'), toolbarMenu = qs('#animation-toolbar-menu');
+    const closeToolbarMenu = () => {
+      if (!toolbarMenu || toolbarMenu.hidden) return;
+      toolbarMenu.hidden = true;
+      toolbarMore?.setAttribute('aria-expanded', 'false');
+    };
+    toolbarMore?.addEventListener('click', () => {
+      if (!toolbarMenu) return;
+      toolbarMenu.hidden = !toolbarMenu.hidden;
+      toolbarMore.setAttribute('aria-expanded', String(!toolbarMenu.hidden));
+    });
+    toolbarMenu?.addEventListener('click', event => {
+      if (event.target.closest('button')) closeToolbarMenu();
+    });
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.animation-project-actions')) closeToolbarMenu();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || !toolbarMenu || toolbarMenu.hidden) return;
+      closeToolbarMenu();
+      toolbarMore?.focus();
     });
     qsa('.main-nav [data-project-nav]').forEach(button => button.addEventListener('click', () => {
       switchView('animation');

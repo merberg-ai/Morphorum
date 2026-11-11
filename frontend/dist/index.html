@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/assets/desktop.css?v=__MORPHORUM_ASSET_VERSION__" media="(min-width: 1181px) and (hover: hover) and (pointer: fine)">
   <link rel="stylesheet" href="/assets/about.css?v=__MORPHORUM_ASSET_VERSION__">
   <link rel="stylesheet" href="/assets/ux-polish.css?v=__MORPHORUM_ASSET_VERSION__">
+  <link rel="stylesheet" href="/assets/shell.css?v=__MORPHORUM_ASSET_VERSION__">
 </head>
 <body>
   <div class="app-shell">
@@ -31,7 +32,12 @@
           <div class="subtitle">Local image & animation studio</div>
         </div>
       </div>
+      <div class="topbar-project" id="topbar-project" title="" hidden>
+        <span class="topbar-project-name" id="topbar-project-name"></span>
+        <span class="topbar-project-state" id="topbar-project-state" data-save-state="empty"></span>
+      </div>
       <div class="topbar-right">
+        <button class="telemetry-toggle" id="telemetry-toggle" type="button" aria-expanded="false" aria-controls="telemetry-strip" title="Show or hide CPU, memory and GPU meters"><span class="telemetry-toggle-icon" aria-hidden="true"></span><span class="telemetry-toggle-label">Meters</span></button>
         <div class="telemetry-strip" id="telemetry-strip" aria-label="System telemetry">
           <div class="telemetry-item" title="CPU utilization">
             <div class="telemetry-head"><span>CPU</span><strong id="telemetry-cpu-value">--%</strong></div>
@@ -102,35 +108,41 @@
     </dialog>
 
     <nav class="main-nav glass" aria-label="Primary">
-      <button class="nav-button active" data-view="image"><span class="nav-icon">▣</span><span>Image</span></button>
-      <button class="nav-button" id="project-nav-toggle" type="button" aria-expanded="false" aria-controls="project-nav-submenu"><span class="nav-icon">▤</span><span>Project</span><span class="project-nav-chevron">▾</span></button>
+      <span class="nav-group-label" aria-hidden="true">Create</span>
+      <button class="nav-button active" data-view="image" title="Image"><span class="nav-icon">▣</span><span>Image</span></button>
+      <button class="nav-button" id="project-nav-toggle" type="button" title="Project" aria-expanded="false" aria-controls="project-nav-submenu"><span class="nav-icon">▤</span><span>Project</span><span class="project-nav-chevron">▾</span></button>
       <div class="project-nav-submenu" id="project-nav-submenu" hidden>
         <button type="button" data-project-nav="projects">Project Manager</button>
         <button type="button" data-project-nav="wizard">New Project</button>
         <button type="button" data-project-nav="editor">Project Editor</button>
         <button type="button" data-project-nav="prompt-studio">Prompt Studio</button>
       </div>
-      <button class="nav-button" data-view="civitai" id="civitai-nav" hidden><span class="nav-icon">◈</span><span>Civitai Hub</span></button>
-      <button class="nav-button" data-view="animation" id="motion-nav-toggle" type="button" aria-expanded="false" aria-controls="motion-lab-sidebar"><span class="nav-icon">◈</span><span>Motion Lab</span><span class="project-nav-chevron">▾</span></button>
+      <button class="nav-button" data-view="animation" id="motion-nav-toggle" type="button" title="Motion Lab" aria-expanded="false" aria-controls="motion-lab-sidebar"><span class="nav-icon">◈</span><span>Motion Lab</span><span class="project-nav-chevron">▾</span></button>
       <div class="motion-lab-sidebar" id="motion-lab-sidebar" role="group" aria-label="Motion Lab workspaces" hidden>
         <button type="button" data-motion-nav="motion">Overview</button>
         <button type="button" data-motion-nav="audio">Motion Studio</button>
         <button type="button" data-motion-nav="composer">Camera Composer</button>
         <button type="button" data-motion-nav="recording">Live Recording</button>
         <button type="button" data-motion-nav="curves">Motion Curves &amp; Path</button>
-        <button type="button" data-motion-nav="preview">Camera Preview</button>
         <button type="button" data-motion-nav="motion-import">Import Motion Settings</button>
+        <span class="nav-sub-label" aria-hidden="true">Render</span>
+        <button type="button" data-motion-nav="preview">Camera Preview</button>
         <button type="button" data-motion-nav="monitor">Render Monitor</button>
         <button type="button" data-motion-nav="outputs">Outputs</button>
       </div>
-      <button class="nav-button" data-view="models"><span class="nav-icon">◫</span><span>Models</span></button>
-      <button class="nav-button" data-view="loras"><span class="nav-icon">◇</span><span>LoRAs</span></button>
-      <button class="nav-button" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
-      <button class="nav-button" data-view="console"><span class="nav-icon">›_</span><span>Console</span></button>
-      <button class="nav-button" data-view="help"><span class="nav-icon">?</span><span>Help</span></button>
-      <button class="nav-button" data-view="about"><span class="nav-icon">ⓘ</span><span>About</span></button>
+      <span class="nav-group-label" aria-hidden="true">Library</span>
+      <button class="nav-button" data-view="models" title="Models"><span class="nav-icon">◫</span><span>Models</span></button>
+      <button class="nav-button" data-view="loras" title="LoRAs"><span class="nav-icon">◇</span><span>LoRAs</span></button>
+      <button class="nav-button" data-view="civitai" id="civitai-nav" title="Civitai Hub" hidden><span class="nav-icon">◈</span><span>Civitai Hub</span></button>
+      <span class="nav-group-label" aria-hidden="true">System</span>
+      <button class="nav-button" data-view="settings" title="Settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
+      <button class="nav-button" data-view="console" title="Console"><span class="nav-icon">›_</span><span>Console</span></button>
+      <button class="nav-button" data-view="help" title="Help"><span class="nav-icon">?</span><span>Help</span></button>
+      <button class="nav-button" data-view="about" title="About"><span class="nav-icon">ⓘ</span><span>About</span></button>
       <button class="nav-more-toggle" type="button" id="nav-more-toggle" aria-expanded="false" aria-controls="nav-more-menu"><span class="nav-icon">⋯</span><span>More</span></button>
       <div class="nav-more-menu" id="nav-more-menu" hidden>
+        <button type="button" data-more-view="loras">◇ LoRAs</button>
+        <button type="button" data-more-view="civitai" id="civitai-more" hidden>◈ Civitai Hub</button>
         <button type="button" data-more-view="settings">⚙ Settings</button>
         <button type="button" data-more-view="console">›_ Console</button>
         <button type="button" data-more-view="help">? Help</button>
@@ -243,14 +255,17 @@
             <p class="muted" id="animation-page-description">Create animation projects, compose camera movement, edit curves, and monitor renders in focused workspaces.</p>
           </div>
           <div class="button-row animation-project-actions">
-            <button class="secondary-button compact" id="animation-collapse-all" type="button">Collapse Sections</button>
-            <button class="secondary-button compact" id="animation-expand-all" type="button">Expand Sections</button>
-            <button class="secondary-button busy-button" id="animation-reload" type="button" disabled><span class="spinner"></span><span class="button-label">Reload</span></button>
-            <button class="secondary-button busy-button" id="animation-import-deforum" type="button"><span class="spinner"></span><span class="button-label">Import Deforum</span></button>
-            <input id="animation-deforum-file" type="file" accept=".json,.txt,application/json,text/plain" hidden>
-            <button class="secondary-button busy-button" id="animation-new" type="button"><span class="spinner"></span><span class="button-label">New Project</span></button>
             <button class="primary-button busy-button" id="animation-save" type="button" disabled><span class="spinner"></span><span class="button-label">Save Project</span></button>
-            <button class="secondary-button" id="animation-save-as" type="button" disabled>Save Project As</button>
+            <button class="secondary-button" id="animation-toolbar-more" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="animation-toolbar-menu">More <span aria-hidden="true">▾</span></button>
+            <div class="animation-toolbar-menu" id="animation-toolbar-menu" role="group" aria-label="More project actions" hidden>
+              <button class="secondary-button" id="animation-save-as" type="button" disabled>Save Project As</button>
+              <button class="secondary-button busy-button" id="animation-new" type="button"><span class="spinner"></span><span class="button-label">New Project</span></button>
+              <button class="secondary-button busy-button" id="animation-reload" type="button" disabled><span class="spinner"></span><span class="button-label">Reload</span></button>
+              <button class="secondary-button busy-button" id="animation-import-deforum" type="button"><span class="spinner"></span><span class="button-label">Import Deforum</span></button>
+              <input id="animation-deforum-file" type="file" accept=".json,.txt,application/json,text/plain" hidden>
+              <button class="secondary-button compact" id="animation-collapse-all" type="button">Collapse Sections</button>
+              <button class="secondary-button compact" id="animation-expand-all" type="button">Expand Sections</button>
+            </div>
           </div>
         </div>
 

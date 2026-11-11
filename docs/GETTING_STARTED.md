@@ -116,7 +116,7 @@ After saving your first animation, open **Project → Project Manager** to manag
 
 - **Export ZIP** downloads the selected project's saved configuration and attached inputs, including a start image, soundtrack, and Motion Lab WAVs. Save any unsaved Editor changes first.
 - **Import Project ZIP** accepts a verified Morphorum archive, confirms the project name and input count, and offers to load it in Project Editor. If its project ID already exists, you must confirm replacement by typing the **existing project's name**; the old folder moves to managed Trash.
-- **Save Project As** makes an independent copy under a new name, including attached inputs. It also appears beside **Save Project** in Project Editor, where it copies unsaved Editor configuration into the **new** project without modifying the original.
+- **Save Project As** makes an independent copy under a new name, including attached inputs. It is also in the **More** menu beside **Save Project** in Project Editor, where it copies unsaved Editor configuration into the **new** project without modifying the original.
 
 Generated images/videos and installed models/LoRAs are never part of the archive. For the ZIP's format, integrity checks and size limits, see [Project archives and Save As](PROJECT_ARCHIVES.md).
 

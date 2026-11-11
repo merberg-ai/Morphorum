@@ -41,11 +41,12 @@ function harness(openTab) {
   const many = { '.nav-button': buttons, '.main-nav [data-project-nav]': [], '.view': [] };
   const switchView = Function(
     'qs', 'qsa', 'refreshNavMore', 'renderConsole', 'window', 'history', 'PROJECT_WORKSPACE_TABS',
+    'syncNavSections',
     app.slice(start, end) + '; return switchView;',
   )(
     selector => single[selector] ?? null, selector => many[selector] || [],
     () => {}, () => {}, {}, { replaceState() {} },
-    ['wizard', 'projects', 'editor', 'prompt-studio'],
+    ['wizard', 'projects', 'editor', 'prompt-studio'], () => {},
   );
   const active = () => [
     ...buttons.filter(b => b.classList.contains('active')).map(b => b.dataset.view),

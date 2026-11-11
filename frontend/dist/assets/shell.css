@@ -1,0 +1,506 @@
+/* Application shell: slim top bar, grouped navigation and one page header.
+   Loaded last. It layers the current shell over the phone, tablet and desktop
+   stylesheets without changing their feature rules.
+
+   Three navigation layouts share one set of buttons:
+   - sidebar: 1181px and wider with a mouse; sub-pages listed under the section
+   - rail:    641-1180px, and wide touch screens; icons with flyout menus
+   - tabs:    640px and narrower; a docked bottom bar with popup menus */
+:root {
+  --topbar-h: 52px;
+  --sidebar-w: 218px;
+  --rail-w: 62px;
+  --tabbar-h: 58px;
+  --actionbar-h: 58px;
+}
+
+/* ------------------------------------------------------------------ top bar */
+.app-shell > .topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-height: var(--topbar-h);
+  padding: 7px 14px;
+  top: 8px;
+  z-index: 60;
+  border-radius: var(--radius-sm);
+}
+.topbar .brand-block { gap: 10px; flex: 0 0 auto; }
+.topbar .brand-mark { width: 32px; height: 32px; border-radius: 9px; font-size: .95rem; box-shadow: none; }
+.topbar .brand { font-size: 1.02rem; }
+.topbar .subtitle { display: none; }
+
+.topbar-project {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 0 1 auto;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
+.topbar-project[hidden] { display: none; }
+.topbar-project-name {
+  min-width: 0;
+  max-width: min(34vw, 420px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .88rem;
+  font-weight: 600;
+}
+.topbar-project-state {
+  flex: 0 0 auto;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: .7rem;
+  font-weight: 650;
+  white-space: nowrap;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+}
+.topbar-project-state[data-save-state="saved"] {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+.topbar-project-state[data-save-state="dirty"] {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+}
+
+.app-shell > .topbar .topbar-right { margin-left: auto; gap: 8px; flex: 0 1 auto; }
+.topbar .telemetry-strip { display: flex; gap: 6px; }
+.topbar .telemetry-item { min-width: 96px; padding: 5px 9px; border-radius: 8px; }
+.topbar .telemetry-head { margin-bottom: 4px; }
+.topbar .telemetry-track { height: 3px; }
+.topbar .runtime-pill { padding: 5px 10px; gap: 7px; }
+.topbar .runtime-meta { gap: 1px; }
+.topbar .global-job-status { order: 20; flex: 1 1 100%; }
+
+.telemetry-toggle {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: .76rem;
+  cursor: pointer;
+}
+.telemetry-toggle:hover { color: var(--text); border-color: var(--button-hover-border); }
+.telemetry-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.telemetry-toggle[aria-expanded="true"] { color: var(--accent); border-color: var(--border-strong); }
+.telemetry-toggle-icon {
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  -webkit-mask: var(--icon-activity) center / contain no-repeat;
+  mask: var(--icon-activity) center / contain no-repeat;
+}
+
+/* ------------------------------------------------------------ nav: shared */
+:root {
+  --icon-activity: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h4l3-8 4 16 3-8h4'/></svg>");
+}
+.main-nav .nav-icon {
+  flex: 0 0 20px;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  font-size: 0;
+  background: currentColor;
+  -webkit-mask: var(--nav-icon) center / contain no-repeat;
+  mask: var(--nav-icon) center / contain no-repeat;
+}
+.main-nav [data-view="image"] { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2.5'/><circle cx='8.5' cy='9.5' r='1.6'/><path d='M21 15.5l-4.6-4.6L7 20'/></svg>"); }
+.main-nav #project-nav-toggle { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2.5'/><path d='M8 4v16M16 4v16M3 9h5M3 15h5M16 9h5M16 15h5'/></svg>"); }
+.main-nav [data-view="animation"] { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='2.5' y='6' width='13' height='12' rx='2.5'/><path d='M15.5 10.5l6-3.5v10l-6-3.5'/></svg>"); }
+.main-nav [data-view="models"] { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3l8.5 4.8v8.4L12 21l-8.5-4.8V7.8z'/><path d='M3.5 7.8L12 12.6l8.5-4.8M12 12.6V21'/></svg>"); }
+.main-nav [data-view="loras"] { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3l9 4.8-9 4.8-9-4.8z'/><path d='M3 12.2l9 4.8 9-4.8M3 16.6l9 4.8 9-4.8'/></svg>"); }
+.main-nav [data-view="civitai"] { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18'/></svg>"); }
+.main-nav [data-view="settings"] { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1'/><circle cx='15' cy='6' r='2'/><circle cx='9' cy='12' r='2'/><circle cx='17' cy='18' r='2'/></svg>"); }
+.main-nav [data-view="console"] { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2.5'/><path d='M7.5 9.5l3 2.5-3 2.5M13 15h4'/></svg>"); }
+.main-nav [data-view="help"] { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M9.6 9.4a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2 1-1.2 1.9M12 17v.2'/></svg>"); }
+.main-nav [data-view="about"] { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 11v5.5M12 7.5v.2'/></svg>"); }
+.main-nav #nav-more-toggle { --nav-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round'><path d='M5 12h.1M12 12h.1M19 12h.1'/></svg>"); }
+
+/* A tinted row with an accent marker replaces the solid filled button. */
+.app-shell > .main-nav > .nav-button.active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.app-shell > .main-nav > .nav-button.active .nav-icon { color: var(--accent); }
+.main-nav .project-nav-chevron { font-size: .7rem; opacity: .7; transition: transform .16s ease; }
+.main-nav [aria-expanded="true"] > .project-nav-chevron { transform: rotate(180deg); }
+.nav-group-label, .nav-sub-label { display: none; }
+
+/* ------------------------------------------------------- layout: sidebar */
+@media (min-width: 1181px) and (hover: hover) and (pointer: fine) {
+  .app-shell {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    gap: 14px 18px;
+    padding: 8px 18px 64px;
+  }
+  .app-shell > .main-nav {
+    top: calc(var(--topbar-h) + 22px);
+    max-height: calc(100dvh - var(--topbar-h) - 38px);
+    padding: 8px;
+    gap: 2px;
+  }
+  .app-shell > .main-nav > .nav-button {
+    min-height: 38px;
+    padding: 8px 10px;
+    gap: 10px;
+    font-size: .88rem;
+    border-radius: 8px;
+  }
+  .nav-group-label {
+    display: block;
+    padding: 12px 10px 5px;
+    font-size: .64rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .nav-group-label:first-child { padding-top: 4px; }
+  .nav-sub-label {
+    display: block;
+    padding: 9px 9px 3px;
+    font-size: .6rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .app-shell > .main-nav #project-nav-submenu:not([hidden]),
+  .app-shell > .main-nav #motion-lab-sidebar:not([hidden]) {
+    display: grid;
+    gap: 1px;
+    margin: 1px 0 6px 19px;
+    padding: 2px 0 2px 9px;
+    border-left: 1px solid var(--border);
+  }
+  .app-shell > .main-nav #project-nav-submenu button,
+  .app-shell > .main-nav #motion-lab-sidebar button {
+    min-height: 32px;
+    padding: 6px 9px;
+    border: 0;
+    border-radius: 7px;
+    font-size: .82rem;
+    line-height: 1.25;
+  }
+  .app-shell > .main-nav #project-nav-submenu button.active,
+  .app-shell > .main-nav #motion-lab-sidebar button.active {
+    color: var(--text);
+    font-weight: 650;
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+  }
+}
+
+/* ---------------------------------------------------------- layout: rail */
+@media (min-width: 641px) and (max-width: 1180px), (min-width: 1181px) and (pointer: coarse) {
+  .app-shell {
+    display: grid;
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    grid-template-areas: "top top" "nav main";
+    align-content: start;
+    gap: 12px 14px;
+    width: 100%;
+    padding: 8px 14px 64px;
+  }
+  .app-shell:has(> .model-setup-banner:not([hidden])) {
+    grid-template-areas: "top top" "banner banner" "nav main";
+  }
+  .app-shell > .topbar { grid-area: top; }
+  .app-shell > .model-setup-banner { grid-area: banner; margin: 0; min-width: 0; }
+  .app-shell > .workspace { grid-area: main; margin-top: 0; min-width: 0; }
+  .app-shell > .main-nav {
+    grid-area: nav;
+    position: sticky;
+    top: calc(var(--topbar-h) + 20px);
+    align-self: start;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    width: 100%;
+    margin: 0;
+    padding: 6px;
+    gap: 3px;
+  }
+  .app-shell > .main-nav > .nav-button {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 9px;
+  }
+  .app-shell > .main-nav > .nav-button > span:not(.nav-icon) { display: none; }
+  /* Group labels become thin dividers between icon groups. */
+  .nav-group-label {
+    display: block;
+    height: 1px;
+    margin: 4px 9px;
+    font-size: 0;
+    background: var(--border);
+  }
+  .nav-group-label:first-child { display: none; }
+  .nav-sub-label {
+    display: block;
+    padding: 8px 12px 2px;
+    font-size: .62rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  /* Sub-pages open as a flyout beside the rail. */
+  .app-shell > .main-nav #project-nav-submenu:not([hidden]),
+  .app-shell > .main-nav #motion-lab-sidebar:not([hidden]) {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 44px;
+    z-index: 70;
+    display: grid;
+    gap: 2px;
+    width: 236px;
+    max-width: 70vw;
+    max-height: min(70vh, 540px);
+    margin: 0;
+    padding: 8px;
+    overflow: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--panel-strong);
+    box-shadow: var(--shadow);
+  }
+  .app-shell > .main-nav #motion-lab-sidebar:not([hidden]) { top: 92px; }
+  .app-shell > .main-nav #project-nav-submenu button { min-height: 42px; padding: 10px 12px; }
+
+  .app-shell > .topbar .topbar-right { display: contents; }
+  .telemetry-toggle { display: inline-flex; margin-left: auto; }
+  .app-shell > .topbar .telemetry-strip { display: none; }
+  .app-shell > .topbar.telemetry-open .telemetry-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    order: 10;
+    flex: 1 1 100%;
+  }
+  .app-shell > .topbar .telemetry-item { min-width: 0; }
+  .topbar .runtime-build { margin-left: 0; }
+}
+@media (min-width: 641px) and (max-height: 560px) {
+  /* Short landscape windows: let a tall rail scroll with the page. */
+  .app-shell > .main-nav { position: static; }
+}
+
+/* ---------------------------------------------------------- layout: tabs */
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 0 10px calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom, 0px) + var(--mobile-viewport-inset, 0px));
+  }
+  .app-shell:has(> .workspace > #view-animation.active) {
+    padding-bottom: calc(var(--tabbar-h) + var(--actionbar-h) + 18px + env(safe-area-inset-bottom, 0px) + var(--mobile-viewport-inset, 0px));
+  }
+  .app-shell > .topbar {
+    top: 0;
+    min-height: 48px;
+    margin: 0 -10px;
+    padding: 6px 12px;
+    gap: 6px 9px;
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
+  .topbar .brand-mark { width: 30px; height: 30px; }
+  .topbar .brand-block { grid-column: auto; grid-row: auto; }
+  /* With a project open, its name takes the place of the app name. */
+  .topbar:has(#topbar-project:not([hidden])) .brand-block > div:last-child { display: none; }
+  .topbar-project { padding-left: 0; border-left: 0; flex: 1 1 0; }
+  .topbar-project-name { max-width: none; }
+  .app-shell > .topbar .topbar-right { display: contents; }
+  .telemetry-toggle { display: inline-flex; margin-left: auto; padding: 5px 8px; }
+  .telemetry-toggle-label { display: none; }
+  .app-shell > .topbar .telemetry-strip { display: none; }
+  .app-shell > .topbar.telemetry-open .telemetry-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    order: 10;
+    flex: 1 1 100%;
+    width: auto;
+  }
+  .app-shell > .topbar .runtime-build { flex: 0 1 auto; width: auto; max-width: 96px; }
+  .app-shell > .topbar .runtime-branch { display: none !important; }
+  .app-shell > .workspace { margin-top: 12px; }
+
+  /* A docked tab bar: flush to the edges, never floating over content. */
+  .app-shell > .main-nav {
+    left: 0;
+    right: 0;
+    bottom: var(--mobile-viewport-inset, 0px);
+    min-height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+    margin: 0;
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
+    gap: 2px;
+    align-items: stretch;
+    border-width: 1px 0 0;
+    border-radius: 0;
+    background: var(--panel-strong);
+    box-shadow: 0 -8px 26px rgba(0, 0, 0, .32);
+  }
+  .app-shell > .main-nav > .nav-button,
+  .app-shell > .main-nav > .nav-more-toggle {
+    padding: 6px 2px;
+    gap: 3px;
+    font-size: .66rem;
+    border-radius: 9px;
+  }
+  .app-shell > .main-nav > .nav-button.active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    box-shadow: none;
+  }
+  .main-nav .project-nav-chevron { display: none; }
+  /* Five tabs: Image, Project, Motion Lab, Models and More. */
+  .app-shell > .main-nav > .nav-button[data-view="loras"],
+  .app-shell > .main-nav > .nav-button[data-view="civitai"] { display: none; }
+}
+
+/* ----------------------------------------------------------- page header */
+.page-heading { align-items: center; margin-bottom: 14px; }
+.page-heading h1 { margin: 0; font-size: clamp(1.25rem, 2.1vw, 1.6rem); line-height: 1.15; }
+.page-heading > div > .eyebrow { display: none; }
+.page-heading > div > p.muted { margin-top: 3px; font-size: .82rem; line-height: 1.4; }
+@media (max-width: 1180px) {
+  .page-heading > div > p.muted { display: none; }
+}
+
+/* Project and Motion Lab pages: title on the left, Save and More on the right. */
+#view-animation .animation-heading {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+#view-animation .animation-heading > div:first-child { min-width: 0; }
+#view-animation .animation-project-actions {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 8px;
+  width: auto;
+}
+#view-animation .animation-project-actions > button { flex: 0 0 auto; white-space: nowrap; }
+.animation-toolbar-menu:not([hidden]) {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 45;
+  display: grid;
+  gap: 2px;
+  min-width: 214px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+#view-animation .animation-toolbar-menu button {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 11px;
+  justify-content: flex-start;
+  text-align: left;
+  font-size: .84rem;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+#view-animation .animation-toolbar-menu button:hover:not(:disabled) { background: var(--button-secondary-hover); }
+
+/* The sidebar, rail flyouts and tab popups replace the in-page tab strip. */
+#view-animation .animation-workspace-nav { display: none; }
+
+#view-animation .animation-status-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  margin: 0 0 10px;
+  min-width: 0;
+  font-size: .76rem;
+}
+#view-animation .animation-status-row code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Next-step guide: one slim row. The page title and top bar already name
+   the workspace and project, so that line is not repeated here. */
+#view-animation .animation-workflow-guide {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+}
+#view-animation .animation-workflow-guide-breadcrumb { display: none; }
+#view-animation .animation-workflow-guide-context { flex: 1 1 auto; min-width: 0; }
+#view-animation .animation-workflow-guide-context > p { margin: 0; font-size: .82rem; line-height: 1.35; }
+#view-animation .animation-workflow-guide-actions { flex: 0 0 auto; display: flex; gap: 7px; }
+
+@media (max-width: 640px) {
+  /* Save stays reachable: a fixed action bar sits above the tab bar. */
+  #view-animation .animation-project-actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + var(--mobile-viewport-inset, 0px));
+    z-index: 70;
+    min-height: var(--actionbar-h);
+    padding: 8px 10px;
+    align-items: center;
+    border-top: 1px solid var(--border);
+    background: var(--panel-strong);
+  }
+  #view-animation .animation-project-actions > #animation-save { flex: 1 1 auto; grid-column: auto; }
+  #view-animation .animation-project-actions > button { min-height: var(--control-h); }
+  .animation-toolbar-menu:not([hidden]) { top: auto; right: 10px; bottom: calc(100% + 6px); }
+  #view-animation .animation-toolbar-menu button { min-height: 44px; }
+  body.mobile-keyboard-open #view-animation .animation-project-actions { display: none; }
+  #view-animation .animation-workflow-guide { flex-wrap: wrap; }
+  #view-animation .animation-workflow-guide-actions { flex: 1 1 100%; }
+  #view-animation .animation-workflow-guide-actions > button { flex: 1 1 0; }
+}
+
+/* Menus that open over page content are fully opaque so text behind them
+   cannot show through the translucent panel color. */
+.app-shell > .main-nav #project-nav-submenu:not([hidden]),
+.app-shell > .main-nav #motion-lab-sidebar:not([hidden]),
+.app-shell > .main-nav .nav-more-menu:not([hidden]),
+.animation-toolbar-menu:not([hidden]) {
+  background: var(--bg-soft);
+}
+@media (min-width: 1181px) and (hover: hover) and (pointer: fine) {
+  /* In the sidebar these lists sit inline, not over content. */
+  .app-shell > .main-nav #project-nav-submenu:not([hidden]),
+  .app-shell > .main-nav #motion-lab-sidebar:not([hidden]) { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-nav .project-nav-chevron { transition: none; }
+}
