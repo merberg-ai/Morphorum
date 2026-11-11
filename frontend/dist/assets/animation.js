@@ -9199,8 +9199,8 @@
       }
       return;
     }
-    if (file.size > 20 * 1024 * 1024) {
-      report('WAV exceeds the 20 MiB analysis limit. Select a smaller PCM WAV.');
+    if (file.size > 64 * 1024 * 1024) {
+      report('WAV exceeds the 64 MiB analysis limit. Select a smaller PCM WAV.');
       return;
     }
     // A manual selection wins over any in-flight automatic project restore.

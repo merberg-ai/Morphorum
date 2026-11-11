@@ -12,12 +12,14 @@ import os
 from pathlib import Path
 import wave
 
-from .audio_motion import AudioMotionError, frame_envelope, spectral_band_envelopes
+from .audio_motion import (
+    MAX_AUDIO_BYTES, MAX_AUDIO_MEBIBYTES, MAX_AUDIO_SECONDS,
+    AudioMotionError, frame_envelope_array, spectral_band_envelopes,
+)
 from .audio_events import detect_audio_events
 from .animation_projects import animation_project_directory
 
-MAX_AUDIO_BYTES = 20 * 1024 * 1024
-MAX_SECONDS = 180
+MAX_SECONDS = MAX_AUDIO_SECONDS
 MAX_PROJECT_FRAMES = 3000
 FPS_CHOICES = (12, 24, 30, 60)
 
@@ -47,8 +49,9 @@ def audio_fps_recommendations(duration_seconds: float, *, current_fps: float) ->
 
 
 def analyze_managed_wav(project_id: str, data: bytes, *, fps: float, frames: int) -> dict:
+    import numpy as np
     if not data or len(data) > MAX_AUDIO_BYTES:
-        raise AudioMotionError("WAV must be nonempty and at most 20 MiB.")
+        raise AudioMotionError(f"WAV must be nonempty and at most {MAX_AUDIO_MEBIBYTES} MiB.")
     try:
         with wave.open(io.BytesIO(data), "rb") as input_file:
             channels = input_file.getnchannels()
@@ -65,21 +68,30 @@ def analyze_managed_wav(project_id: str, data: bytes, *, fps: float, frames: int
     stride = channels * width
     if len(audio_bytes) != count * stride:
         raise AudioMotionError("Incomplete WAV audio data.")
-    pcm = []
-    stereo_samples = [[] for _ in range(channels)]
-    for index in range(count):
-        total = 0.0
-        for channel in range(channels):
-            i = index * stride + channel * width
-            segment = audio_bytes[i:i + width]
-            if width == 1:
-                value = (segment[0] - 128) / 128
-            else:
-                value = int.from_bytes(segment, "little", signed=True) / (2 ** (width * 8 - 1))
-            stereo_samples[channel].append(value)
-            total += value
-        pcm.append(total / channels)
-    result = frame_envelope(pcm, sample_rate=rate, fps=fps, max_frames=frames)
+    if not count:
+        raise AudioMotionError("PCM input must be a nonempty list or tuple.")
+    if isinstance(fps, bool) or not isinstance(fps, (int, float)) or not 1 <= fps <= 240:
+        raise AudioMotionError("Project FPS must be between 1 and 240.")
+    if type(frames) is not int or not 1 <= frames <= MAX_PROJECT_FRAMES:
+        raise AudioMotionError("max_frames must be 1–3000.")
+    # Vectorized decode in float64 so every sample, and the mono mix, is
+    # bit-identical to exact integer/scale division (and to earlier analyses).
+    if width == 1:
+        integers = np.frombuffer(audio_bytes, dtype=np.uint8).astype(np.int64) - 128
+    elif width == 2:
+        integers = np.frombuffer(audio_bytes, dtype="<i2").astype(np.int64)
+    elif width == 4:
+        integers = np.frombuffer(audio_bytes, dtype="<i4").astype(np.int64)
+    else:  # signed 24-bit PCM, sign-extended
+        packed = np.frombuffer(audio_bytes, dtype=np.uint8).reshape(-1, 3).astype(np.int64)
+        integers = packed[:, 0] | (packed[:, 1] << 8) | (packed[:, 2] << 16)
+        integers = (integers ^ 0x800000) - 0x800000
+    samples = integers.reshape(count, channels).astype(np.float64) / float(2 ** (width * 8 - 1))
+    del integers
+    stereo_samples = [np.ascontiguousarray(samples[:, channel]) for channel in range(channels)]
+    pcm = stereo_samples[0] if channels == 1 else (stereo_samples[0] + stereo_samples[1]) / 2
+    del samples
+    result = frame_envelope_array(pcm, sample_rate=rate, fps=float(fps), max_frames=frames)
     result["bands"] = spectral_band_envelopes(pcm, sample_rate=rate, fps=fps, max_frames=frames)
     source_sha256 = hashlib.sha256(data).hexdigest()
     folder = animation_project_directory(project_id) / "motion_lab_audio"
@@ -100,15 +112,15 @@ def analyze_managed_wav(project_id: str, data: bytes, *, fps: float, frames: int
     # Display-only waveform overview: bounded min/max bins retain transients,
     # never send raw PCM or use these bins for drum detection.
     bin_count = min(1200, max(1, count))
+    # bin_count never exceeds count, so bin starts strictly increase and each
+    # bin runs up to the next start: exactly what reduceat computes.
+    starts = np.arange(bin_count, dtype=np.int64) * count // bin_count
     waveform = []
     for channel in stereo_samples:
-        bounds = []
-        for index in range(bin_count):
-            begin = index * count // bin_count
-            end = max(begin + 1, (index + 1) * count // bin_count)
-            window = channel[begin:end]
-            bounds.append([round(min(window), 5), round(max(window), 5)])
-        waveform.append(bounds)
+        lows = np.minimum.reduceat(channel, starts)
+        highs = np.maximum.reduceat(channel, starts)
+        waveform.append([[round(float(low), 5), round(float(high), 5)]
+                         for low, high in zip(lows, highs)])
     result["waveform"] = {"version": 1, "channels": waveform,
                           "bins": bin_count, "duration_seconds": count / rate}
     result["events"] = detect_audio_events(pcm, sample_rate=rate)

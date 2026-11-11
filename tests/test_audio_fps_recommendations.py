@@ -42,7 +42,7 @@ def test_wav_analysis_retains_legacy_envelope_and_adds_events(tmp_path, monkeypa
     result = analyze_managed_wav("test", make_wav(), fps=12, frames=12)
     assert len(result["values"]) == 12
     assert set(result["bands"]) == {"kick", "bass", "snare", "highs"}
-    assert result["events"]["analysis_version"] == 2
+    assert result["events"]["analysis_version"] == 3
     assert any(e["kind"] == "kick" and abs(e["time_seconds"] - .25) < .05
                for e in result["events"]["events"])
     assert any(e["kind"] == "snare" and abs(e["time_seconds"] - .7) < .05

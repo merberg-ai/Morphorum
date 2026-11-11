@@ -18,7 +18,7 @@ def burst_track(rate=12000, seconds=1.5):
 
 def test_detects_timestamped_kick_and_snare_candidates_independent_of_video_fps():
     result = detect_audio_events(burst_track(), sample_rate=12000, sensitivity=0.2)
-    assert result["analysis_version"] == 2
+    assert result["analysis_version"] == 3
     assert result["duration_seconds"] == 1.5
     kicks = [e["time_seconds"] for e in result["events"] if e["kind"] == "kick"]
     snares = [e["time_seconds"] for e in result["events"] if e["kind"] == "snare"]
@@ -59,6 +59,37 @@ def test_invalid_frame_mapping_is_rejected():
         event_frame_index(float("nan"), fps=30, max_frames=100)
     with pytest.raises(AudioMotionError):
         event_frame_index(0.25, fps=0, max_frames=100)
+
+
+def _kick_track(rate=44100, seconds=8, period=0.5):
+    t = np.arange(seconds * rate) / rate
+    return (np.sin(2 * np.pi * 60 * t) * np.exp(-((t % period) * 18)) * 0.8), t
+
+
+def _offbeat_hats(t, amplitude=0.1, period=0.5, offset=0.25):
+    rng = np.random.default_rng(7)
+    noise = np.diff(np.diff(rng.standard_normal(t.size), prepend=0), prepend=0)
+    noise /= np.abs(noise).max()
+    return noise * np.exp(-(((t - offset) % period) * 120)) * (t >= offset) * amplitude
+
+
+def test_kick_only_track_does_not_report_spill_as_snare_or_highs():
+    """A band with no attacks of its own must not echo every low-band hit."""
+    track, _ = _kick_track()
+    kinds = [e["kind"] for e in detect_audio_events(track, sample_rate=44100)["events"]]
+    assert kinds.count("kick") == 16
+    assert kinds.count("snare") == 0
+    assert kinds.count("highs") == 0
+
+
+def test_spill_suppression_keeps_bands_with_independent_attacks():
+    """Quiet off-beat hats stay, even far below the kick's level."""
+    kick, t = _kick_track()
+    events = detect_audio_events(kick + _offbeat_hats(t), sample_rate=44100)["events"]
+    highs = [e["time_seconds"] for e in events if e["kind"] == "highs"]
+    assert sum(1 for e in events if e["kind"] == "kick") == 16
+    offbeat = [s for s in highs if abs(((s - 0.25) % 0.5 + 0.25) % 0.5 - 0.25) < 0.05]
+    assert len(offbeat) >= 15
 
 
 def test_short_valid_audio_uses_bounded_stft_overlap():

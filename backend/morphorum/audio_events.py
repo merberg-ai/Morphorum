@@ -14,9 +14,16 @@ from scipy.signal import find_peaks, stft
 
 from .audio_motion import AudioMotionError
 
-ANALYSIS_VERSION = 2
+ANALYSIS_VERSION = 3
+# Ordered low to high: spill suppression compares a band against lower ones.
 BANDS_HZ = {"kick": (35.0, 150.0), "snare": (180.0, 4000.0),
             "highs": (2500.0, 10000.0)}
+# Version 3 spill suppression: an event counts as spill when it lies within
+# BLEED_WINDOW_MS of a lower band's event and is at least 30 dB weaker per
+# FFT bin. A band's spill is dropped only if it makes up nearly all of it.
+BLEED_WINDOW_MS = 25.0
+BLEED_RATIO = 10 ** (-30 / 20)
+BLEED_SHARE = 0.9
 MAX_SECONDS = 180
 MAX_EVENTS = 12000
 
@@ -86,6 +93,7 @@ def detect_audio_events(
     magnitude = np.abs(transform)
     events = []
     gap = max(1, math.ceil(float(min_interval_ms) * sample_rate / (1000 * hop)))
+    detected: list[tuple[str, np.ndarray, np.ndarray]] = []
     for name, (low, high) in BANDS_HZ.items():
         band = magnitude[(freqs >= low) & (freqs < min(high, sample_rate / 2))]
         if band.size == 0:
@@ -103,7 +111,35 @@ def detect_audio_events(
             normalized, height=height, prominence=max(0.035, height * 0.4),
             distance=gap,
         )
-        for idx, strength in zip(positions, props["peak_heights"]):
+        # Mean flux per FFT bin is comparable between bands of different width.
+        per_bin = novelty[positions] / band.shape[0]
+        keep = np.ones(len(positions), dtype=bool)
+        # Each band is normalized to its own loudest attack, so a band with no
+        # content of its own would otherwise report the faint spill of a lower
+        # band's hit as full-strength events. Treat a band as spill only when
+        # nearly all of its events sit on a lower band's event and are far
+        # weaker there; a band with independent attacks is never touched.
+        if len(positions) and detected:
+            window = max(1, round(BLEED_WINDOW_MS * sample_rate / (1000 * hop)))
+            lower_positions = np.concatenate([item[1] for item in detected])
+            lower_per_bin = np.concatenate([item[2] for item in detected])
+            if lower_positions.size:
+                order = np.argsort(lower_positions, kind="stable")
+                lower_positions, lower_per_bin = lower_positions[order], lower_per_bin[order]
+                right = np.clip(np.searchsorted(lower_positions, positions), 0, lower_positions.size - 1)
+                left = np.clip(right - 1, 0, lower_positions.size - 1)
+                nearest = np.where(
+                    np.abs(lower_positions[left] - positions)
+                    <= np.abs(lower_positions[right] - positions), left, right,
+                )
+                spill = (
+                    (np.abs(lower_positions[nearest] - positions) <= window)
+                    & (per_bin < lower_per_bin[nearest] * BLEED_RATIO)
+                )
+                if spill.sum() >= BLEED_SHARE * len(positions):
+                    keep = ~spill
+        detected.append((name, positions[keep], per_bin[keep]))
+        for idx, strength in zip(positions[keep], props["peak_heights"][keep]):
             seconds = float(times[int(idx)])
             if seconds >= length / sample_rate:
                 continue

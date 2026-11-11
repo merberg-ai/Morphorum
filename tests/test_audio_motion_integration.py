@@ -39,8 +39,8 @@ def test_wav_analysis_project_bound_and_frame_aligned(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(
     "content",
-    [b"", b"not a wav", b"x" * (20 * 1024 * 1024 + 1)],
-    # Explicit IDs: pytest would otherwise embed the 20 MB payload in the test
+    [b"", b"not a wav", b"x" * (64 * 1024 * 1024 + 1)],
+    # Explicit IDs: pytest would otherwise embed the oversized payload in the test
     # ID, which overflows the Windows 32,767-character environment limit.
     ids=["empty", "not-a-wav", "oversized"],
 )

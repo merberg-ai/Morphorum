@@ -77,8 +77,10 @@ from .motion_studio_presets import (
     list_custom_presets, create_custom_preset, update_custom_preset,
     delete_custom_preset,
 )
-from .audio_motion import AudioMotionError
-from .audio_motion_upload import MAX_AUDIO_BYTES, analyze_managed_wav
+from starlette.concurrency import run_in_threadpool
+
+from .audio_motion import MAX_AUDIO_BYTES, MAX_AUDIO_MEBIBYTES, AudioMotionError
+from .audio_motion_upload import analyze_managed_wav
 from .animation_hybrid_extract import hybrid_extraction_manager
 from .animation_hybrid_source import (
     HybridSourceError, managed_video_path, probe_managed_video, store_managed_video,
@@ -1425,14 +1427,17 @@ async def api_motion_lab_audio_analyze(project_id: str, request: Request) -> dic
         project = load_animation_project(project_id)
         if request.headers.get("content-length"):
             if int(request.headers["content-length"]) > MAX_AUDIO_BYTES:
-                raise AudioMotionError("Audio file exceeds 20 MiB.")
+                raise AudioMotionError(f"Audio file exceeds {MAX_AUDIO_MEBIBYTES} MiB.")
         data = bytearray()
         async for chunk in request.stream():
             data.extend(chunk)
             if len(data) > MAX_AUDIO_BYTES:
-                raise AudioMotionError("Audio file exceeds 20 MiB.")
+                raise AudioMotionError(f"Audio file exceeds {MAX_AUDIO_MEBIBYTES} MiB.")
         animation = project.get("animation") or {}
-        analysis = analyze_managed_wav(
+        # CPU-bound analysis must not run on the event loop: it would stall
+        # every other request (render progress, telemetry) until it finished.
+        analysis = await run_in_threadpool(
+            analyze_managed_wav,
             project_id, bytes(data), fps=float(animation.get("fps", 12)),
             frames=int(animation.get("max_frames", 120)),
         )

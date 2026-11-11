@@ -3263,7 +3263,9 @@ class GenerationManager:
                 "app": "Morphorum",
                 "job_id": job.id,
                 "model": job.model["name"],
-                "model_path": job.model["path"],
+                # File name only: the absolute path would expose local folder
+                # names to anyone the image is shared with.
+                "model_file": Path(str(job.model["path"])).name,
                 "family": job.model["family"],
                 "variant": self._model_variant(job.model),
                 "prompt": job.request.prompt,
@@ -3275,6 +3277,7 @@ class GenerationManager:
                 "steps": job.request.steps,
                 "guidance_scale": job.request.guidance_scale,
                 "sampler": job.request.sampler,
+                "schedule_type": job.request.schedule_type,
                 "max_sequence_length": (
                     self._effective_capability(job.model).get("max_sequence_length")
                     if job.model.get("family") == "flux"

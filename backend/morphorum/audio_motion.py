@@ -7,12 +7,19 @@ from __future__ import annotations
 
 import hashlib
 import math
-import struct
 from typing import Sequence
 
 
 class AudioMotionError(ValueError):
     """Malformed or unsafe audio-motion configuration."""
+
+
+# Shared Motion Lab WAV bounds. 64 MiB holds the full three minutes of common
+# material (48 kHz stereo at 16 or 24 bit); the earlier 20 MiB cap cut a
+# 44.1 kHz stereo 16-bit file off at about two minutes.
+MAX_AUDIO_SECONDS = 180
+MAX_AUDIO_BYTES = 64 * 1024 * 1024
+MAX_AUDIO_MEBIBYTES = MAX_AUDIO_BYTES // (1024 * 1024)
 
 
 def _finite(value: object, name: str, minimum: float, maximum: float) -> float:
@@ -46,22 +53,35 @@ def frame_envelope(
         raise AudioMotionError("PCM input must be a nonempty list or tuple.")
     if len(samples) > 192000 * 600:
         raise AudioMotionError("PCM input exceeds 10 minutes at 192 kHz.")
-    pcm = [_finite(v, "PCM sample", -1, 1) for v in samples]
+    import numpy as np
+    pcm = np.asarray(
+        [_finite(v, "PCM sample", -1, 1) for v in samples], dtype=np.float64,
+    )
+    return frame_envelope_array(pcm, sample_rate=rate, fps=clock, max_frames=max_frames)
+
+
+def frame_envelope_array(pcm, *, sample_rate: int, fps: float, max_frames: int) -> dict:
+    """Vectorized envelope for already-validated mono float64 PCM in [-1, 1].
+
+    The managed WAV decoder calls this directly so a three-minute upload is not
+    validated, hashed and summed one Python float at a time.
+    """
+    import numpy as np
+    pcm = np.ascontiguousarray(pcm, dtype=np.float64)
+    if pcm.ndim != 1 or not pcm.size:
+        raise AudioMotionError("PCM input must be a nonempty list or tuple.")
+    rate, clock, total = int(sample_rate), float(fps), int(pcm.size)
     # Stable digest on canonical little-endian float32 samples.
-    digest = hashlib.sha256()
-    for value in pcm:
-        digest.update(struct.pack("<f", value))
+    digest = hashlib.sha256(pcm.astype("<f4").tobytes())
     envelope = []
     for frame in range(max_frames):
         begin = math.floor(frame * rate / clock)
-        end = min(len(pcm), math.floor((frame + 1) * rate / clock))
-        if begin >= len(pcm):
-            envelope.append(0.0)
-        elif end <= begin:
+        end = min(total, math.floor((frame + 1) * rate / clock))
+        if begin >= total or end <= begin:
             envelope.append(0.0)
         else:
-            energy = sum(v * v for v in pcm[begin:end]) / (end - begin)
-            envelope.append(math.sqrt(energy))
+            segment = pcm[begin:end]
+            envelope.append(math.sqrt(float(np.dot(segment, segment)) / (end - begin)))
     return {
         "analysis_version": 1,
         "kind": "fullband-rms",

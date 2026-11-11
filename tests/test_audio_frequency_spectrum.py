@@ -67,4 +67,4 @@ def test_missing_or_unsafe_audio_is_rejected():
     with pytest.raises(AudioMotionError):
         analyze_frequency_spectrum(b"not-a-wav")
     with pytest.raises(AudioMotionError):
-        analyze_frequency_spectrum(b"x" * (20 * 1024 * 1024 + 1))
+        analyze_frequency_spectrum(b"x" * (64 * 1024 * 1024 + 1))

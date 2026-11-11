@@ -10,8 +10,8 @@ import subprocess
 import tempfile
 
 from .ffmpeg_tools import ffmpeg_executable
-from .audio_motion import AudioMotionError
-from .audio_motion_upload import MAX_AUDIO_BYTES, analyze_managed_wav
+from .audio_motion import MAX_AUDIO_BYTES, MAX_AUDIO_MEBIBYTES, AudioMotionError
+from .audio_motion_upload import analyze_managed_wav
 from .imported_soundtrack import MAX_IMPORT_AUDIO_BYTES
 from .project_assets import ProjectAssetError, digest_file, soundtrack_path
 
@@ -26,7 +26,9 @@ def _convert_attached_audio(source: Path) -> bytes:
         )
     # A maximum of 181 seconds is decoded so a track exceeding 3 minutes
     # fails normal analysis rather than silently cutting off a longer track.
-    # 22.05 kHz, stereo, 16-bit is under 20 MiB for that full duration.
+    # 22.05 kHz, stereo, 16-bit is about 15 MiB for that full duration, well
+    # under the Motion Lab limit. The rate is kept so converted WAVs (and the
+    # cues bound to their checksums) stay identical for existing projects.
     with tempfile.TemporaryDirectory(prefix=".motion-audio-", dir=source.parent) as directory:
         output = Path(directory) / "converted.wav"
         args = [
@@ -49,7 +51,7 @@ def _convert_attached_audio(source: Path) -> bytes:
             )
         if not 0 < output.stat().st_size <= MAX_AUDIO_BYTES:
             raise AudioMotionError(
-                "The saved soundtrack exceeds Motion Studio's 20 MiB PCM WAV limit."
+                f"The saved soundtrack exceeds Motion Studio's {MAX_AUDIO_MEBIBYTES} MiB PCM WAV limit."
             )
         return output.read_bytes()
 

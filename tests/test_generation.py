@@ -2247,6 +2247,17 @@ def test_sdxl_token_diagnostics_are_not_applied_to_flowmatch() -> None:
     assert "_warn_sdxl_prompt_truncation" in source
 
 
+def test_image_metadata_is_reproducible_and_omits_local_paths() -> None:
+    """PNG info records the schedule type and only the model's file name."""
+    import inspect
+
+    source = inspect.getsource(GenerationManager._run_job)
+    metadata = source.split("metadata = {", 1)[1].split("pnginfo.add_text", 1)[0]
+    assert '"schedule_type": job.request.schedule_type' in metadata
+    assert '"model_file": Path(str(job.model["path"])).name' in metadata
+    assert '"model_path"' not in metadata
+
+
 def test_repeated_clip_warning_filter_preserves_first_and_lora_reports() -> None:
     import logging
 

@@ -6,18 +6,21 @@ import math
 import re
 import wave
 
-from .audio_motion import AudioMotionError
+from .audio_motion import (
+    MAX_AUDIO_BYTES, MAX_AUDIO_MEBIBYTES, MAX_AUDIO_SECONDS, AudioMotionError,
+)
 from .audio_motion_channels import MAX_CHANNELS
 
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
-MAX_AUDIO_BYTES = 20 * 1024 * 1024
-MAX_SECONDS = 180
+MAX_SECONDS = MAX_AUDIO_SECONDS
 
 
 def _decode_pcm(data: bytes):
     import numpy as np
     if not data or len(data) > MAX_AUDIO_BYTES:
-        raise AudioMotionError("Stored WAV must be nonempty and at most 20 MiB.")
+        raise AudioMotionError(
+            f"Stored WAV must be nonempty and at most {MAX_AUDIO_MEBIBYTES} MiB."
+        )
     try:
         with wave.open(io.BytesIO(data), "rb") as file:
             channels, width, rate, count = (

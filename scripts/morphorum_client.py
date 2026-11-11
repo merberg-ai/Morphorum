@@ -166,7 +166,7 @@ class MorphorumClient:
         """Stream a bounded project-owned upload via HTTP(S), never redirect."""
         kinds = {
             "source-image": ("source-image", 32 * 1024 * 1024),
-            "motion-lab-wav": ("motion-lab/audio-analyze", 20 * 1024 * 1024),
+            "motion-lab-wav": ("motion-lab/audio-analyze", 64 * 1024 * 1024),
             "soundtrack": ("motion-import/soundtrack", 40 * 1024 * 1024),
         }
         if kind not in kinds:

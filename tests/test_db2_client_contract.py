@@ -76,7 +76,7 @@ def test_standard_client_capabilities_and_backward_compatible_error():
         assert info["features"]["soundtrack_attachment_download"] is True
         assert info["features"]["project_asset_listing"] is True
         assert info["features"]["conditional_project_saves"] is True
-        assert info["transfers"]["motion_lab_audio"]["max_bytes"] == 20 * 1024 * 1024
+        assert info["transfers"]["motion_lab_audio"]["max_bytes"] == 64 * 1024 * 1024
         assert info["transfers"]["soundtrack_attachment"]["max_bytes"] == 40 * 1024 * 1024
         assert info["transfers"]["soundtrack_attachment"]["download"].endswith("/soundtrack/file")
         assert info["features"]["video_export"] == info["video"]["available"]
