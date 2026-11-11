@@ -242,7 +242,7 @@ def performance_record(
             key: round(_finite_seconds(timings.get(key)), 4)
             for key in (
                 "total", "prepare", "conditioning", "diffusion",
-                "warp", "depth", "temporal", "save", "manifest", "memory",
+                "warp", "depth", "color", "temporal", "save", "manifest", "memory",
             )
         },
         "cuda_before": _memory_fields(cuda_before),

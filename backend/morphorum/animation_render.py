@@ -34,6 +34,10 @@ from .animation_motion import (
 )
 from .animation_resolution import resolve_project_frame, validate_project_schedules
 from .animation_temporal import blend_future_anchor
+from .animation_color import (
+    ColorCoherenceError, apply_color_coherence, build_color_reference,
+    normalize_color_settings,
+)
 from .animation_performance import (
     AnimationPerformance, append_performance_record, load_performance_records,
     performance_record, summarize_records,
@@ -1845,6 +1849,27 @@ class AnimationRenderManager:
             with Image.open(previous_path) as opened:
                 frame_image = opened.convert("RGB").copy()
 
+        # Color coherence pulls each diffusion input back toward the first
+        # frame's color distribution. Frame 0 is re-read from disk so a resumed
+        # render uses exactly the same reference as the original run.
+        color_settings = normalize_color_settings(project.get("color"))
+        color_reference = None
+        if color_settings["coherence"] != "none" and color_settings["amount"] > 0:
+            try:
+                with Image.open(_frame_path(job.project_id, job.id, 0)) as opened:
+                    color_reference = build_color_reference(
+                        opened.convert("RGB"), color_settings["coherence"],
+                    )
+            except (OSError, ColorCoherenceError) as exc:
+                raise AnimationRenderError(
+                    f"Color coherence could not read frame 0 as its reference: {exc}"
+                ) from exc
+            emit_console(
+                "info", "animation",
+                f"{job.id}: color coherence {color_settings['coherence'].upper()} "
+                f"at {color_settings['amount']:g}, matched to frame 0.",
+            )
+
         previous_diffusion_anchor = _last_diffused_anchor(
             job.project_id, job.id, start_frame,
         )
@@ -2041,6 +2066,26 @@ class AnimationRenderManager:
                 # B6.3.2 will introduce blend/composite controls.
                 with Image.open(hybrid_sample[0]) as opened:
                     transformed = _prepare_source(opened, width, height)
+            # Hybrid anchors take their color from the source video, so only
+            # frames fed back from the previous render are matched.
+            color_applied = (
+                should_diffuse and color_reference is not None and hybrid_sample is None
+            )
+            if color_applied:
+                color_started = time.monotonic()
+                transformed = apply_color_coherence(
+                    transformed, color_reference, amount=color_settings["amount"],
+                )
+                timings["color"] = max(0.0, time.monotonic() - color_started)
+                noise_started = time.monotonic()
+            if color_reference is not None:
+                with self._lock:
+                    job.current_frame_state["color_coherence"] = {
+                        "mode": color_settings["coherence"],
+                        "amount": color_settings["amount"],
+                        "reference_frame": 0,
+                        "applied": bool(color_applied),
+                    }
             if should_diffuse:
                 transformed = _add_uniform_noise(
                     transformed,

@@ -774,6 +774,68 @@ def test_render_loop_changes_sdxl_prompt_conditioning_across_keyframes(
 
 
 
+class DriftingSDXLPipe(FakeSDXLPipe):
+    """Returns its input with a red tint added, like compounding color drift."""
+
+    def __init__(self) -> None:
+        self.input_means = []
+
+    def __call__(self, **kwargs):
+        pixels = np.asarray(kwargs["image"].convert("RGB"), dtype=np.float64)
+        self.input_means.append(pixels.reshape(-1, 3).mean(axis=0))
+        tinted = np.clip(pixels + np.array([18.0, 0.0, -12.0]), 0, 255).astype(np.uint8)
+        return SimpleNamespace(images=[Image.fromarray(tinted, mode="RGB")])
+
+
+def _run_drifting_render(tmp_path: Path, monkeypatch, color: dict | None):
+    fake_generation = RecordingSDXLGenerationManager()
+    fake_generation.pipe = DriftingSDXLPipe()
+    monkeypatch.setattr(animation_render, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(animation_render, "get_model", lambda _model_id: fake_model())
+    monkeypatch.setattr(animation_render, "generation_manager", fake_generation)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_DIMENSION", 64)
+    monkeypatch.setattr(animation_render, "PREVIEW_MAX_FRAMES", 8)
+
+    source = tmp_path / "source.png"
+    y, x = np.mgrid[0:64, 0:64]
+    gradient = np.stack([x * 2 + 40, y * 2 + 30, (x + y) + 60], axis=-1).astype(np.uint8)
+    Image.fromarray(gradient, mode="RGB").save(source)
+
+    project = sample_project(max_frames=6)
+    project["generation"]["strength"] = "0:(0.5)"
+    project["motion"]["translation_x"] = "0:(0)"
+    if color is not None:
+        project["color"] = color
+    manager = AnimationRenderManager()
+    started = manager.submit(project=project, source_path=source)
+    finished = wait_for(manager, started["id"])
+    assert finished["status"] == "completed", finished
+    reference_mean = gradient.reshape(-1, 3).astype(np.float64).mean(axis=0)
+    return finished, fake_generation.pipe.input_means, reference_mean
+
+
+def test_color_coherence_stops_feedback_color_drift(tmp_path: Path, monkeypatch) -> None:
+    finished, inputs, reference = _run_drifting_render(
+        tmp_path, monkeypatch, {"coherence": "lab", "amount": 1.0},
+    )
+    assert len(inputs) == 5
+    # Every diffusion input is pulled back to frame 0's colors.
+    for mean in inputs:
+        assert np.abs(mean - reference).max() < 3.0
+    assert finished["current_frame_state"]["color_coherence"] == {
+        "mode": "lab", "amount": 1.0, "reference_frame": 0, "applied": True,
+    }
+
+
+def test_color_coherence_is_off_unless_selected(tmp_path: Path, monkeypatch) -> None:
+    finished, inputs, reference = _run_drifting_render(tmp_path, monkeypatch, None)
+    # Without it the same render drifts further from frame 0 on every frame.
+    drift = [float(np.abs(mean - reference).max()) for mean in inputs]
+    assert drift == sorted(drift)
+    assert drift[-1] > 40
+    assert "color_coherence" not in finished["current_frame_state"]
+
+
 def test_render_loop_respects_hold_prompt_transition(
     tmp_path: Path,
     monkeypatch,

@@ -175,6 +175,10 @@ def _default_project(name: str, project_id: str | None = None) -> dict[str, Any]
             "mix": 0.65,
             "contrast_threshold": 96,
         },
+        "color": {
+            "coherence": "none",
+            "amount": 1.0,
+        },
         "hybrid": {
             "enabled": False,
             "offset_frames": 0,
@@ -491,6 +495,12 @@ def normalize_animation_project(
         "mix": temporal_mix,
         "contrast_threshold": contrast_threshold,
     }
+
+    # Off by default so existing projects keep rendering exactly as before.
+    from .animation_color import normalize_color_settings
+    project["color"] = normalize_color_settings(
+        payload.get("color", project.get("color"))
+    )
 
     project["notes"] = str(payload.get("notes", project.get("notes", "")) or "")
 

@@ -440,6 +440,8 @@
     "animation-translation-x": {title: "2D pan X", body: "Signed horizontal shift in pixels per frame. Motion accumulates over successive frames."},
     "animation-translation-y": {title: "2D pan Y", body: "Signed vertical shift in pixels per frame. Use the camera preview to confirm direction."},
     "animation-noise": {title: "Animation noise", body: "Uniform noise amount in the generation schedule. Try subtle values such as 0:(0.02) to maintain frame continuity."},
+    "animation-color-coherence": {title: "Color coherence", body: "Matches each frame's diffusion input to the colors of frame 0, so color and contrast do not drift over a long render. LAB is the usual choice; RGB matches each channel directly. Off leaves frames unchanged."},
+    "animation-color-amount": {title: "Color match amount", body: "From 0 to 1: how fully each frame is pulled back to frame 0's colors. Lower it if a scene is meant to change color over time."},
     "animation-seed-increment": {title: "Frame seed increment", body: "Signed integer added to the per-frame seed when Seed behavior is Increment. Fixed and Random ignore it."},
     "animation-3d-preset": {title: "3D camera preset", body: "Applying a preset replaces six camera schedules with gentle per-frame values; it does not change FOV or automatically save."},
     "animation-3d-translation-x": {title: "3D translation X", body: "Signed horizontal movement in scene units per frame, based on estimated depth rather than pixel positions."},

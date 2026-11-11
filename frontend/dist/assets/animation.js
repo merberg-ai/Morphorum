@@ -2486,6 +2486,8 @@
       syncCadencePreset();
       qs('#animation-seed').value = project.generation?.seed ?? -1;
       qs('#animation-seed-behavior').value = project.generation?.seed_behavior || 'fixed';
+      qs('#animation-color-coherence').value = project.color?.coherence || 'none';
+      qs('#animation-color-amount').value = project.color?.amount ?? 1;
       qs('#animation-seed-increment').value = project.generation?.seed_increment ?? 1;
       qs('#animation-notes').value = project.notes || '';
       qs('#animation-hybrid-render-enabled').checked = project.hybrid?.enabled === true;
@@ -2619,6 +2621,10 @@
         mode: qs('#animation-temporal-mode')?.value || 'forward',
         mix: Number(qs('#animation-temporal-mix')?.value ?? 0.65),
         contrast_threshold: Number(qs('#animation-temporal-contrast')?.value ?? 96),
+      },
+      color: {
+        coherence: qs('#animation-color-coherence')?.value || 'none',
+        amount: Number(qs('#animation-color-amount')?.value ?? 1),
       },
       hybrid: {
         enabled: Boolean(qs('#animation-hybrid-render-enabled')?.checked),

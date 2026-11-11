@@ -90,7 +90,7 @@ The wizard has seven guided pages, with explanations and **?** hints beside indi
 3. **Animation Setup:** choose 2D/3D, frame count, FPS, and dimensions. The wizard displays approximate duration.
 4. **Prompts & Keyframes:** write an opening prompt and, optionally, a second scene starting at a later frame.
 5. **Camera Motion:** start with Still, Pan, Zoom, Orbit, or Spiral. Orbit/Spiral select 3D.
-6. **Generation Settings:** review sampler, steps, guidance, img2img denoising strength, cadence, and seeds.
+6. **Generation Settings:** review sampler, steps, guidance, img2img denoising strength, cadence, and seeds. **Color coherence** (off by default) matches each frame's diffusion input to the colors of frame 0 so color and contrast do not drift over a long render; choose **Match frame 0 · LAB** to turn it on, and lower **Color match amount** if the scene is meant to change color over time.
 7. **Review & Save:** examine your choices, see guidance about optional advanced import workflows, then select **Save Project & Open Editor**.
 
 Use **Back** and **Next** freely; the wizard preserves your choices and can restore a modified draft after a browser refresh in the same session. **Nothing is created until the final Save**. The server validates the schedules first and prevents replacing unsaved Editor edits without confirmation.

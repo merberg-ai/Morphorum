@@ -634,6 +634,8 @@
               <label data-help-topic="animation-seed"><span>Seed</span><input id="animation-seed" type="number" min="-1" max="4294967295" value="-1" disabled></label>
               <label data-help-topic="animation-seed-behavior"><span>Seed behavior</span><select id="animation-seed-behavior" disabled><option value="fixed">Fixed</option><option value="increment">Increment</option><option value="random">Random</option></select></label>
               <label data-help-topic="animation-seed-increment"><span>Seed increment <small class="muted">(per frame)</small></span><input id="animation-seed-increment" type="number" value="1" disabled></label>
+              <label data-help-topic="animation-color-coherence"><span>Color coherence</span><select id="animation-color-coherence" disabled><option value="none">Off</option><option value="lab">Match frame 0 · LAB</option><option value="rgb">Match frame 0 · RGB</option></select></label>
+              <label data-help-topic="animation-color-amount"><span>Color match amount <small class="muted">(0–1)</small></span><input id="animation-color-amount" type="number" min="0" max="1" step="0.05" value="1" disabled></label>
             </div>
             <p class="field-help animation-schedule-syntax-help">Schedule example: <code>0:(0.65), 48:(0.5)</code> defines values at frame 0 and frame 48. Keyframe interpolation follows your timeline settings. Editing a schedule does not automatically apply Motion Lab drafts.</p>
           </article>
