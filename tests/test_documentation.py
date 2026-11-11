@@ -52,7 +52,7 @@ def test_readme_matches_actual_shipped_bootstrap_and_run_scripts() -> None:
     assert r"C:\Morphorum" in bootstrap
     assert r"data\server-port.txt" in runner
     for theme in ("Midnight Glass", "Deep Ocean", "Amethyst Night",
-                  "Slate Graphite"):
+                  "Slate Graphite", "FilmLab Studio"):
         assert theme in readme
 
 

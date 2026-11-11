@@ -78,6 +78,28 @@ html[data-theme="slate-graphite"] {
   --shadow: 0 18px 55px rgba(0, 0, 0, .46);
   --button-primary-text: #171b20;
 }
+/* FilmLab Studio: near-black glass with a single amber accent, flat primary
+   buttons with dark ink, and tighter corners than the other palettes. */
+html[data-theme="filmlab-studio"] {
+  --bg: #090a0e;
+  --bg-soft: #111319;
+  --panel: rgba(24, 27, 35, .58);
+  --panel-strong: rgba(17, 19, 25, .94);
+  --border: rgba(255, 255, 255, .09);
+  --border-strong: rgba(217, 164, 65, .36);
+  --text: #e8e9ec;
+  --muted: #8f95a3;
+  --accent: #d9a441;
+  --accent-2: #e8c06c;
+  --ok: #4fb57a;
+  --warn: #e58f4a;
+  --danger: #e0605a;
+  --shadow: 0 10px 40px rgba(0, 0, 0, .38);
+  --radius: 12px;
+  --radius-sm: 7px;
+  --button-primary-text: #1a1306;
+  --button-primary-bg: var(--accent);
+}
 html[data-font-style="modern"] {
   --font-ui: "Inter", "Segoe UI Variable", "Segoe UI", Roboto, ui-sans-serif, system-ui, sans-serif;
 }

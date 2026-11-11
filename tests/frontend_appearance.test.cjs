@@ -11,9 +11,9 @@ const css = fs.readFileSync(path.join(root, 'assets', 'app.css'), 'utf8');
 const motionCss = fs.readFileSync(path.join(root, 'assets', 'animation.css'), 'utf8');
 const otherCss = ['models.css','image.css','mobile.css','tablet.css','desktop.css']
   .map(n => fs.readFileSync(path.join(root,'assets',n),'utf8'));
-const choices = ['midnight-glass','deep-ocean','amethyst-night','slate-graphite'];
+const choices = ['midnight-glass','deep-ocean','amethyst-night','slate-graphite','filmlab-studio'];
 
-test('Appearance settings advertise four themed palettes and working font choices', () => {
+test('Appearance settings advertise five themed palettes and working font choices', () => {
   for (const id of choices) {
     assert.match(app, new RegExp("'"+id+"'"));
     if (id !== 'midnight-glass') {
@@ -92,7 +92,8 @@ test('Fonts cover native controls, code, graphics and dialogs', () => {
 });
 
 test('No stale original cyan accent tint remains in major CSS bundles', () => {
-  for (const sheet of [css,motionCss,...otherCss]) {
+  const civitaiCss = fs.readFileSync(path.join(root,'assets','civitai.css'),'utf8');
+  for (const sheet of [css,motionCss,civitaiCss,...otherCss]) {
     assert.doesNotMatch(sheet,/rgba\(\s*65\s*,\s*217\s*,\s*255\s*,/i);
     assert.doesNotMatch(sheet,/rgba\(\s*164\s*,\s*108\s*,\s*255\s*,/i);
   }

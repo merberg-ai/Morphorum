@@ -1,0 +1,28 @@
+{
+  "id": "filmlab-studio",
+  "name": "FilmLab Studio",
+  "appearance": "dark",
+  "colors": {
+    "background": "#090A0E",
+    "surface": "rgba(24,27,35,0.58)",
+    "surfaceStrong": "rgba(17,19,25,0.94)",
+    "border": "rgba(255,255,255,0.09)",
+    "text": "#E8E9EC",
+    "textMuted": "#8F95A3",
+    "accent": "#D9A441",
+    "accentSecondary": "#E8C06C",
+    "success": "#4FB57A",
+    "warning": "#E58F4A",
+    "danger": "#E0605A"
+  },
+  "glass": {
+    "enabled": true,
+    "blurPx": 18,
+    "opacity": 0.58
+  },
+  "radiusPx": 12,
+  "motion": {
+    "enabled": true,
+    "durationMs": 170
+  }
+}

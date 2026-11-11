@@ -49,7 +49,7 @@
 .project-nav-submenu { display: flex; flex-direction: column; margin: -2px 0 4px 15px; padding-left: 13px; border-left: 1px solid var(--border, #38404d); gap: 3px; }
 .project-nav-submenu[hidden] { display: none !important; }
 .project-nav-submenu button { background: transparent; border: 0; border-radius: 9px; color: var(--muted); text-align: left; padding: 10px 12px; cursor: pointer; font: inherit; }
-.project-nav-submenu button:hover, .project-nav-submenu button.active { background: rgba(65,217,255,.11); color: var(--text); }
+.project-nav-submenu button:hover, .project-nav-submenu button.active { background: color-mix(in srgb,var(--accent) 11%,transparent); color: var(--text); }
 .project-nav-chevron { margin-left: auto; }
 @media(max-width: 640px) { .civitai-detail-dialog { padding: 14px; } .civitai-detail-images { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 

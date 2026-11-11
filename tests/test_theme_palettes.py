@@ -10,7 +10,9 @@ import pytest
 from morphorum import settings as settings_module
 
 ROOT = Path(__file__).resolve().parents[1]
-THEMES = ("midnight-glass", "deep-ocean", "amethyst-night", "slate-graphite")
+THEMES = (
+    "midnight-glass", "deep-ocean", "amethyst-night", "slate-graphite", "filmlab-studio",
+)
 
 
 def test_all_theme_configs_match_backend_options_and_css() -> None:

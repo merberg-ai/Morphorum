@@ -110,7 +110,7 @@ must be enabled and its thumbnail/mature-content preferences still apply.
 | FFmpeg Manager | Auto-detect host FFmpeg/FFprobe, choose a custom executable, or opt in to a verified local managed download, update and removal |
 | Project transfer & duplication | Verified ZIP export/import of full project settings and attached input media; explicit overwrite confirmation and recoverable Trash backup; Save Project As from Manager or Editor |
 | Import Motion Settings | Compatible Deforum Motion Studio camera schedules, optional soundtrack attachment |
-| Interface | Responsive browser layout, built-in console and telemetry, About page with project credits and current-branch update checks, themes: **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite** |
+| Interface | Responsive browser layout, built-in console and telemetry, About page with project credits and current-branch update checks, themes: **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite**, **FilmLab Studio** |
 
 ### Video encoding: FFmpeg Manager
 

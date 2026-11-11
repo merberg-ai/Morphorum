@@ -17,6 +17,7 @@
     ['deep-ocean', 'Deep Ocean · Dark Blue'],
     ['amethyst-night', 'Amethyst Night · Dark Purple'],
     ['slate-graphite', 'Slate Graphite · Grey'],
+    ['filmlab-studio', 'FilmLab Studio · Amber'],
   ];
   const FONT_STYLE_OPTIONS = [
     ['modern', 'Modern'],

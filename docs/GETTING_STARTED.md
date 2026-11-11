@@ -166,7 +166,7 @@ For **Deforum Motion Settings Import**, explicitly attach the selected soundtrac
 
 Open **Settings** to select the UI theme, interface font, console font, and model directories. Under **Appearance → Contextual Help**, the **Show (?) help buttons** checkbox controls explanations beside common generation and camera settings. Hover, focus or tap a help button; press **Escape** or click elsewhere to dismiss it. Saving Settings remembers the choice without disabling warnings or errors.
 
-The four themes are **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, and **Slate Graphite**. Your choices are saved and reused when you reopen the app.
+The five themes are **Midnight Glass**, **Deep Ocean**, **Amethyst Night**, **Slate Graphite**, and **FilmLab Studio** (near-black with an amber accent). Your choices are saved and reused when you reopen the app.
 
 To update the installed source:
 
