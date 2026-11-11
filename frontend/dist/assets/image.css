@@ -21,7 +21,7 @@
 }
 .generation-card { align-self: start; }
 .inline-input { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px; }
-.inline-input .icon-button { min-height: 43px; }
+.inline-input .icon-button { min-height: var(--control-h); }
 .generation-actions { display: flex; gap: 9px; align-items: stretch; }
 .generation-actions .full-width { flex: 1; }
 .generation-progress {
@@ -130,11 +130,11 @@
 
 .image-prompt-heading { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; }
 .image-prompt-heading label { margin:0; }
-.image-prompt-heading button { min-height:32px; }
+.image-prompt-heading button { min-height:var(--control-h-compact); }
 .image-history-controls { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:9px; align-items:center; margin-bottom:12px; }
 .image-history-controls label { color:var(--muted); font-size:.78rem; }
 .image-history-controls select { min-width:0; }
-.image-history-controls button { min-height:40px; }
+.image-history-controls button { min-height:var(--control-h); }
 .result-image-wrap button { padding:0; border:0; background:transparent; display:block; width:100%; cursor:zoom-in; }
 .image-result-lightbox { padding:14px; width:min(1080px,calc(100vw - 18px));max-width:calc(100vw - 18px);max-height:calc(100dvh - 18px);border:1px solid var(--border);border-radius:14px;background:var(--panel-strong);color:var(--text);overflow:auto; }
 .image-result-lightbox::backdrop { background:rgba(0,0,0,.84); }
@@ -144,7 +144,7 @@
 @media(max-width:640px) { .image-history-controls { grid-template-columns:minmax(0,1fr) auto; } .image-history-controls label { grid-column:1/-1; } }
 
 .image-prompt-tools {display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end;}
-.image-prompt-tools button {min-height:32px;}
+.image-prompt-tools button {min-height:var(--control-h-compact);}
 @media(max-width:460px) {.image-prompt-heading {flex-wrap:wrap;}.image-prompt-tools {width:100%;justify-content:flex-start;}}
 
 /* Give model-specific preset labels room without squeezing numeric fields. */

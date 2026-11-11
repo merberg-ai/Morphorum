@@ -130,7 +130,7 @@
 .model-family-badge { color: var(--accent); border-color: color-mix(in srgb,var(--accent) 18%,transparent); }
 .model-path { color: var(--muted); font-family: var(--font-mono); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-size { color: var(--muted); font-size: .72rem; white-space: nowrap; text-align: right; }
-.use-model-button { min-height: 33px; padding: 5px 10px; font-size: .74rem; }
+.use-model-button { min-height: var(--control-h-compact); padding: 5px 10px; font-size: .74rem; }
 .model-count-note { color: var(--muted); font-size: .72rem; padding: 9px 13px; border-top: 1px solid var(--border); background: rgba(255,255,255,.012); }
 
 @media (max-width: 900px) {
@@ -306,7 +306,7 @@
 #view-models .model-entry-summary .model-path-details { grid-column:auto;grid-row:auto;order:unset;width:100%;font-size:.75rem; }
 #view-models .model-entry-summary .model-path-details > summary {padding:4px 0;min-height:30px; }
 #view-models .model-entry-actions { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px;max-width:100%; }
-#view-models .model-entry-actions > button { width:100%;min-width:0;max-width:none;min-height:40px;font-size:.75rem;white-space:normal;overflow-wrap:anywhere;line-height:1.2;padding:8px; }
+#view-models .model-entry-actions > button { width:100%;min-width:0;max-width:none;min-height:var(--control-h);font-size:.75rem;white-space:normal;overflow-wrap:anywhere;line-height:1.2;padding:8px; }
 #view-models .model-entry-actions > .use-model-button {grid-column:1 / -1;grid-row:auto;align-self:auto;font-size:.87rem;font-weight:700; }
 #view-models .model-row .model-civitai-metadata {font-size:.74rem;line-height:1.4;margin-top:8px;max-width:none;}
 #view-models .model-count-note {grid-column:1/-1;padding:10px 2px;border:0;background:transparent;}
@@ -326,7 +326,7 @@
 @media(max-width:640px) {
   #view-models .model-list {grid-template-columns:minmax(0,1fr);padding:9px;gap:10px;}
   #view-models .model-row {grid-template-columns:20px minmax(75px,100px) minmax(0,1fr);gap:9px;padding:10px;}
-  #view-models .model-entry-actions > button {min-height:43px;}
+  #view-models .model-entry-actions > button {min-height:var(--control-h);}
   #view-loras .lora-manager-preview > .lora-detail-art {height:200px;}
 }
 @media(max-width:380px) {

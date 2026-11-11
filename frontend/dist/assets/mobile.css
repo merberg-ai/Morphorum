@@ -95,7 +95,7 @@
   .nav-more-toggle.active {color:var(--accent);background:var(--button-secondary-active);}
   .nav-more-toggle .nav-icon {font-size:1.2rem;}
   .nav-more-menu:not([hidden]) {position:absolute;display:grid;gap:4px;right:3px;bottom:calc(100% + 8px);min-width:160px;padding:7px;border:1px solid var(--border);border-radius:12px;background:var(--panel-strong);box-shadow:var(--shadow);}
-  .nav-more-menu button {min-height:43px;border:0;border-radius:7px;background:transparent;color:var(--text);text-align:left;padding:8px 12px;cursor:pointer;}
+  .nav-more-menu button {min-height:var(--control-h);border:0;border-radius:7px;background:transparent;color:var(--text);text-align:left;padding:8px 12px;cursor:pointer;}
   .nav-more-menu button:hover:not(:disabled) {background:var(--button-secondary-hover);color:var(--text);}
 }
 

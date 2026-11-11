@@ -12,6 +12,9 @@
     ['loras', 'LoRA directories'],
   ];
 
+  // Workspace tabs that belong to the Project menu, not Motion Lab.
+  const PROJECT_WORKSPACE_TABS = ['wizard', 'projects', 'editor', 'prompt-studio'];
+
   const THEME_OPTIONS = [
     ['midnight-glass', 'Midnight Glass · Black'],
     ['deep-ocean', 'Deep Ocean · Dark Blue'],
@@ -195,8 +198,12 @@
     if (name === 'console') renderConsole();
     if (name === 'help') window.MorphorumHelp?.activate?.();
     if (name === 'about') window.MorphorumAbout?.activate?.();
-    const projectToggle = qs('#project-nav-toggle');
-    if (projectToggle) projectToggle.classList.toggle('active', name === 'animation' && !qs('.main-nav.motion-section-active [data-motion-nav].active'));
+    // Project and Motion Lab share one view. Highlight whichever section owns
+    // the workspace tab currently open, never both.
+    const openTab = qs('#animation-workspace-nav [data-animation-tab].active')?.dataset.animationTab || '';
+    const projectDestination = name === 'animation' && PROJECT_WORKSPACE_TABS.includes(openTab);
+    qs('#project-nav-toggle')?.classList.toggle('active', projectDestination);
+    qs('.main-nav .nav-button[data-view="animation"]')?.classList.toggle('active', name === 'animation' && !projectDestination);
     if (name === 'civitai') window.MorphorumCivitai?.activate?.();
     if (name === 'loras') window.MorphorumLoras?.refreshRuntime?.();
     try { history.replaceState(null, '', `#${name}`); } catch (_) {}

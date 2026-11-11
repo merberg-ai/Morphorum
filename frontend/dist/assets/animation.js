@@ -10606,9 +10606,14 @@
     });
     const projectDestination = ['wizard','projects','editor','prompt-studio'].includes(name);
     if (name === 'prompt-studio') promptStudioWorkspace?.onShow?.();
-    qs('.main-nav .nav-button[data-view="animation"]')?.classList.toggle('active', !projectDestination);
+    // Exactly one main-menu section is highlighted, and only while this view
+    // is showing: a tab restored in the background must not light up Motion Lab
+    // or Project beside the section the user is actually in.
+    const viewActive = Boolean(qs('#view-animation')?.classList.contains('active'));
+    qs('.main-nav .nav-button[data-view="animation"]')?.classList.toggle('active', viewActive && !projectDestination);
+    qs('#project-nav-toggle')?.classList.toggle('active', viewActive && projectDestination);
     qsa('.main-nav [data-project-nav]').forEach(button => {
-      const selected = button.dataset.projectNav === name;
+      const selected = viewActive && button.dataset.projectNav === name;
       button.classList.toggle('active', selected);
       if (selected) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');
@@ -11213,7 +11218,7 @@
       stage.setAttribute('role', 'tabpanel');
       stage.setAttribute('aria-labelledby', button.id);
       stage.innerHTML = '<div class="motion-studio-stage-heading">' +
-        '<div><p class="eyebrow">STEP ' + (index + 1) + ' OF 5</p>' +
+        '<div><p class="eyebrow">STEP ' + (index + 1) + ' OF ' + MOTION_STUDIO_STAGES.length + '</p>' +
         '<h3></h3><p class="muted"></p></div></div>';
       stage.querySelector('h3').textContent = label;
       stage.querySelector('.muted').textContent = description;
@@ -11742,13 +11747,6 @@
         </div>
         <button class="secondary-button compact" type="button"
           id="animation-audio-back-motion">← Motion Lab</button>
-      </div>
-      <div class="animation-audio-workflow">
-        <span><strong>1</strong> Load audio</span>
-        <span><strong>2</strong> Analyze WAV</span>
-        <span><strong>3</strong> Edit beat markers</span>
-        <span><strong>4</strong> Create motion</span>
-        <span><strong>5</strong> Preview and apply</span>
       </div>
       <div class="animation-audio-workspace-actions">
         <button class="secondary-button compact" type="button"
