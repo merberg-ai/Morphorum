@@ -12,9 +12,21 @@
     else records.delete(key);
   }
 
-  async function refresh(ids) {
+  // Several managers ask for the same catalog while the page loads. Share one
+  // request between identical overlapping calls instead of sending each again.
+  const inFlight = new Map();
+  function refresh(ids) {
     const unique = [...new Set((Array.isArray(ids) ? ids : [])
       .filter(id => typeof id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(id)))];
+    const key = [...unique].sort().join(',');
+    const pending = inFlight.get(key);
+    if (pending) return pending;
+    const request = load(unique).finally(() => inFlight.delete(key));
+    inFlight.set(key, request);
+    return request;
+  }
+
+  async function load(unique) {
     // Local cache reads only. The server caps each request to 120 IDs.
     for (let at = 0; at < unique.length; at += 120) {
       const subset = unique.slice(at, at + 120);

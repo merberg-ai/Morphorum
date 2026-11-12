@@ -45,11 +45,18 @@ def _read(model_id: str):
     except (OSError, ValueError, TypeError):
         return {"synced": False, "model_id": model_id}
 
-def cached_metadata(model_id: str):
-    if not load_settings().get("civitai", {}).get("enabled"):
+def cached_metadata(model_id: str, *, cfg: dict | None = None):
+    """Cached summary for one model.
+
+    ``cfg`` lets a caller that already loaded the Civitai settings pass them
+    in. Loading settings parses two YAML files, so the catalog must not do it
+    once (let alone twice) for every model it lists.
+    """
+    if cfg is None:
+        cfg = load_settings().get("civitai", {})
+    if not cfg.get("enabled"):
         raise CivitaiSearchError("Civitai Hub is disabled.", 403)
     data = _read(model_id)
-    cfg = load_settings()["civitai"]
     if not cfg.get("load_previews", True):
         data.pop("preview", None)
         data.pop("preview_url", None)
@@ -80,12 +87,16 @@ def cached_catalog(model_ids: list[str]) -> dict:
     if any(not isinstance(mid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", mid)
            for mid in model_ids):
         raise CivitaiSearchError("Invalid indexed model ID.", 422)
-    if not load_settings().get("civitai", {}).get("enabled", False):
+    # Settings are read once per request, not per model: with a few hundred
+    # models the repeated YAML parsing made each request take several seconds
+    # and several of them run at once when the page loads.
+    cfg = load_settings().get("civitai", {})
+    if not cfg.get("enabled", False):
         raise CivitaiSearchError("Civitai Hub is disabled.", 403)
     result = {}
     for model_id in dict.fromkeys(model_ids):
         try:
-            data = cached_metadata(model_id)
+            data = cached_metadata(model_id, cfg=cfg)
         except CivitaiSearchError as exc:
             if exc.status == 404:  # An indexed file disappeared during a rescan.
                 continue

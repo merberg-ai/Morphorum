@@ -93,6 +93,39 @@ def test_cached_catalog_batches_only_valid_local_metadata(monkeypatch, tmp_path)
     assert "path" not in found["entries"]["adapter1"]
 
 
+def test_cached_catalog_loads_settings_once_per_request(monkeypatch, tmp_path):
+    """Settings parsing is the costly part; it must not scale with the model count.
+
+    Loading settings per model made a full library take seconds per request and
+    froze the page while several such requests ran at once.
+    """
+    model = tmp_path / "adapter.safetensors"
+    model.write_bytes(b"weights")
+    stat = model.stat()
+    loads = []
+    monkeypatch.setattr(lib, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(lib, "get_model", lambda _mid: {"path": str(model)})
+
+    def counted_settings():
+        loads.append(1)
+        return {"civitai": {"enabled": True, "load_previews": True, "allow_mature": False}}
+
+    monkeypatch.setattr(lib, "load_settings", counted_settings)
+    ids = [f"model{index}" for index in range(120)]
+    for model_id in ids[:3]:
+        lib._atomic_json(lib._directory(model_id) / "metadata.json", {
+            "synced": True, "model_id": model_id, "name": model_id,
+            "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
+        })
+    found = lib.cached_catalog(ids)
+    assert sorted(found["entries"]) == ids[:3]
+    assert len(loads) == 1
+    # A single-model lookup still reads its own settings, exactly once.
+    loads.clear()
+    assert lib.cached_metadata("model0")["synced"]
+    assert len(loads) == 1
+
+
 def test_cached_catalog_obeys_preview_settings_and_invalidates(monkeypatch, tmp_path):
     model = tmp_path / "checkpoint.safetensors"
     model.write_bytes(b"weights")

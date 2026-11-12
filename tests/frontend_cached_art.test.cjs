@@ -21,6 +21,36 @@ test('cached art is shared and opt-in remote downloads stay distinct',()=>{
   assert.match(shared,/img\.addEventListener\('error'/);
 });
 
+test('overlapping catalog refreshes for the same models share one request',async()=>{
+  const vm=require('node:vm');
+  const sent=[];
+  const pending=[];
+  const window={};
+  const fetch=(url,options)=>new Promise(resolve=>{
+    sent.push(JSON.parse(options.body).model_ids);
+    pending.push(()=>resolve({ok:true,status:200,json:async()=>({entries:{a:{synced:true,name:'A'}}})}));
+  });
+  vm.runInNewContext(shared,{window,fetch,document:{}});
+  const thumbs=window.MorphorumThumbnails;
+  // Models and LoRA managers ask for the same library while the page loads.
+  const first=thumbs.refresh(['a','b']);
+  const second=thumbs.refresh(['b','a','a']);
+  const other=thumbs.refresh(['c']);
+  assert.equal(first,second);
+  assert.notEqual(first,other);
+  assert.equal(sent.length,2);
+  pending.splice(0).forEach(done=>done());
+  await Promise.all([first,other]);
+  assert.equal(thumbs.get('a').name,'A');
+  assert.equal(thumbs.get('b'),null);
+  // Once it has finished, a later refresh fetches fresh data again.
+  const later=thumbs.refresh(['a','b']);
+  assert.notEqual(later,first);
+  assert.equal(sent.length,3);
+  pending.splice(0).forEach(done=>done());
+  await later;
+});
+
 test('models manager uses cards with prominent thumbnails and bulk sync',()=>{
   assert.match(html,/id="model-bulk-sync"/);
   assert.match(models,/window\.MorphorumThumbnails\?\.refresh\(ids\)/);
