@@ -590,6 +590,8 @@ def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
     temp = path.with_name(path.name + ".tmp")
     temp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     os.replace(temp, path)
+    # Never rely on timestamps alone after our own write.
+    _forget_loaded_project(path)
 
 
 def new_animation_project_template() -> dict[str, Any]:
@@ -636,10 +638,60 @@ def create_animation_project_once(
         return project
 
 
+# Normalized projects, keyed by file path and reused while the file on disk is
+# unchanged. Nearly every project endpoint loads the project first, and
+# normalizing a long animation (thousands of camera keyframes) costs hundreds
+# of milliseconds each time; a page load does it about ten times over.
+_LOADED_PROJECTS: dict[str, tuple[tuple[int, int, int], str]] = {}
+_LOADED_PROJECTS_LOCK = threading.Lock()
+_LOADED_PROJECTS_MAX = 128
+
+
+def _project_file_signature(path: Path) -> tuple[int, int, int] | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size, stat.st_ctime_ns)
+
+
+def _forget_loaded_project(path: Path) -> None:
+    with _LOADED_PROJECTS_LOCK:
+        _LOADED_PROJECTS.pop(str(path), None)
+
+
+def _remember_loaded_project(
+    path: Path, signature: tuple[int, int, int], project: dict[str, Any],
+) -> None:
+    try:
+        serialized = json.dumps(project, ensure_ascii=False)
+        # Only cache what survives a JSON round trip unchanged, so a cached
+        # load returns exactly what a fresh load would.
+        if json.loads(serialized) != project:
+            return
+    except (TypeError, ValueError):
+        return
+    # The file must not have changed while it was being read and normalized.
+    if _project_file_signature(path) != signature:
+        return
+    with _LOADED_PROJECTS_LOCK:
+        _LOADED_PROJECTS.pop(str(path), None)
+        _LOADED_PROJECTS[str(path)] = (signature, serialized)
+        while len(_LOADED_PROJECTS) > _LOADED_PROJECTS_MAX:
+            _LOADED_PROJECTS.pop(next(iter(_LOADED_PROJECTS)))
+
+
 def load_animation_project(project_id: str) -> dict[str, Any]:
     path = _project_file(project_id)
     if not path.is_file():
         raise AnimationProjectError("Animation project not found.")
+    signature = _project_file_signature(path)
+    if signature is not None:
+        with _LOADED_PROJECTS_LOCK:
+            cached = _LOADED_PROJECTS.get(str(path))
+        if cached is not None and cached[0] == signature:
+            # A fresh object every time: callers are free to mutate it.
+            return json.loads(cached[1])
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError) as exc:
@@ -669,6 +721,8 @@ def load_animation_project(project_id: str) -> dict[str, Any]:
             "animation",
             f"Migrated animation project {project_id} to schema {ANIMATION_PROJECT_SCHEMA}.",
         )
+    elif signature is not None:
+        _remember_loaded_project(path, signature, project)
     return project
 
 
