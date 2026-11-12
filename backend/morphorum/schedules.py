@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import ast
 import math
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Callable, Iterable
 
 
@@ -195,6 +197,12 @@ class _ExpressionEvaluator(ast.NodeVisitor):
         )
 
 
+@lru_cache(maxsize=8192)
+def _compiled_expression(source: str) -> ast.Expression:
+    """Parse an expression once. The evaluator only reads the tree."""
+    return ast.parse(source, mode="eval")
+
+
 def evaluate_expression(
     expression: str,
     *,
@@ -226,7 +234,7 @@ def evaluate_expression(
                 context[key] = float(value)
 
     try:
-        tree = ast.parse(source, mode="eval")
+        tree = _compiled_expression(source)
     except SyntaxError as exc:
         raise ScheduleError(f"Invalid schedule expression '{source}': {exc.msg}.") from exc
 
@@ -314,12 +322,42 @@ def parse_schedule(
     seed: int = 0,
     fps: float = 24,
 ) -> list[ScheduleKeyframe]:
+    return list(_parsed_schedule(schedule, max_frames=max_frames, seed=seed, fps=fps)[0])
+
+
+def _parsed_schedule(
+    schedule: str, *, max_frames: int, seed: int, fps: float,
+) -> tuple[tuple[ScheduleKeyframe, ...], tuple[int, ...]]:
+    """Keyframes and their frame numbers, parsed once per distinct schedule.
+
+    Parsing is a pure function of its arguments, but a schedule written by
+    Motion Lab can hold one keyframe per frame. Resolving every frame used to
+    re-parse the whole text each time, so validating a 1,500-frame project
+    evaluated millions of expressions and took minutes.
+    """
     text = str(schedule or "").strip()
     if not text:
         raise ScheduleError("Schedule is empty.")
     if max_frames < 1:
         raise ScheduleError("max_frames must be at least 1.")
+    try:
+        return _parse_schedule_cached(text, max_frames, seed, fps)
+    except TypeError:  # an unhashable seed or fps: parse without the cache
+        keyframes = tuple(_parse_schedule_text(text, max_frames, seed, fps))
+        return keyframes, tuple(keyframe.frame for keyframe in keyframes)
 
+
+@lru_cache(maxsize=256)
+def _parse_schedule_cached(
+    text: str, max_frames: int, seed: int, fps: float,
+) -> tuple[tuple[ScheduleKeyframe, ...], tuple[int, ...]]:
+    keyframes = tuple(_parse_schedule_text(text, max_frames, seed, fps))
+    return keyframes, tuple(keyframe.frame for keyframe in keyframes)
+
+
+def _parse_schedule_text(
+    text: str, max_frames: int, seed: int, fps: float,
+) -> list[ScheduleKeyframe]:
     max_f = max_frames - 1
     position = 0
     parsed: dict[int, ScheduleKeyframe] = {}
@@ -417,7 +455,7 @@ def resolve_numeric_schedule(
             f"Frame {frame} is outside the animation range 0..{max_frames - 1}."
         )
 
-    keyframes = parse_schedule(
+    keyframes, frames = _parsed_schedule(
         schedule,
         max_frames=max_frames,
         seed=seed,
@@ -428,15 +466,9 @@ def resolve_numeric_schedule(
     if mode not in {"linear", "hold"}:
         raise ScheduleError(f"Unsupported schedule interpolation mode '{interpolation}'.")
 
-    previous = keyframes[0]
-    following = keyframes[-1]
-
-    for keyframe in keyframes:
-        if keyframe.frame <= frame:
-            previous = keyframe
-        if keyframe.frame >= frame:
-            following = keyframe
-            break
+    # Last keyframe at or before the frame, and first at or after it.
+    previous = keyframes[max(0, bisect_right(frames, frame) - 1)]
+    following = keyframes[min(len(keyframes) - 1, bisect_left(frames, frame))]
 
     if frame <= keyframes[0].frame:
         return _expression_value(
